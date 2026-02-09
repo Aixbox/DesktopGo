@@ -24,7 +24,7 @@ export function Icon({ icon }: IconProps) {
       title={icon.name}
     >
       <div className="icon-image w-16 h-16 flex items-center justify-center
-                      rounded-[14px] overflow-hidden
+                      overflow-hidden
                       group-hover:scale-105
                       group-active:scale-95
                       transition-all duration-200">
