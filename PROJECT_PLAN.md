@@ -20,6 +20,7 @@
 ## 技术栈
 
 ### 后端技术
+
 - **框架**: Tauri 1.5+
 - **语言**: Rust
 - **依赖库**:
@@ -32,6 +33,7 @@
   - `image`: 图像处理
 
 ### 前端技术
+
 - **框架**: React 18+
 - **语言**: TypeScript
 - **UI库**: Tailwind CSS
@@ -42,6 +44,7 @@
 - **拖拽**: @dnd-kit/core
 
 ### 开发工具
+
 - **包管理**: pnpm
 - **代码规范**: ESLint + Prettier
 - **版本控制**: Git
@@ -51,6 +54,7 @@
 ### 1. 核心功能
 
 #### 1.1 全局快捷键
+
 - 默认快捷键: `Ctrl+Space` 或 `Win+Space`
 - 支持自定义快捷键
 - 按快捷键显示/隐藏启动台
@@ -58,6 +62,7 @@
 - 点击空白区域关闭启动台
 
 #### 1.2 图标展示
+
 - 读取用户桌面快捷方式
 - 读取公共桌面快捷方式
 - 可选：读取开始菜单程序
@@ -66,6 +71,7 @@
 - 网格布局（默认7列×5行）
 
 #### 1.3 图标操作
+
 - 单击图标启动应用
 - 右键菜单：
   - 打开文件位置
@@ -75,6 +81,7 @@
 - 拖拽图标到文件夹
 
 #### 1.4 文件夹功能
+
 - 创建文件夹
 - 拖拽图标到文件夹
 - 点击文件夹展开内容
@@ -83,6 +90,7 @@
 - 删除文件夹
 
 #### 1.5 搜索功能
+
 - 实时搜索过滤
 - 模糊匹配应用名称
 - 拼音首字母搜索
@@ -90,6 +98,7 @@
 - 键盘导航搜索结果
 
 #### 1.6 分页功能
+
 - 自动分页（每页35个图标）
 - 分页指示器
 - 左右箭头键切换页面
@@ -98,6 +107,7 @@
 ### 2. 系统集成
 
 #### 2.1 系统托盘
+
 - 托盘图标常驻
 - 右键菜单：
   - 显示启动台
@@ -106,10 +116,12 @@
 - 左键点击显示启动台
 
 #### 2.2 开机自启动
+
 - 支持开机自启动
 - 可在设置中开启/关闭
 
 #### 2.3 配置持久化
+
 - 保存图标布局
 - 保存文件夹结构
 - 保存用户设置
@@ -200,6 +212,7 @@ DesktopGo/
 ### 阶段一：项目初始化（第1周）
 
 #### 任务清单
+
 - [ ] 安装Tauri开发环境
 - [ ] 创建Tauri项目脚手架
 - [ ] 配置TypeScript和ESLint
@@ -209,6 +222,7 @@ DesktopGo/
 - [ ] 实现全局快捷键注册
 
 #### 验收标准
+
 - 项目可以正常启动
 - 按快捷键可以显示/隐藏窗口
 - 系统托盘图标正常显示
@@ -216,16 +230,18 @@ DesktopGo/
 ### 阶段二：图标读取与显示（第2周）
 
 #### 任务清单
+
 - [ ] 实现桌面目录扫描
 - [ ] 解析.lnk快捷方式文件
 - [ ] 提取应用图标（Windows API）
 - [ ] 图标转Base64编码
 - [ ] 实现Tauri命令：get_desktop_icons
-- [ ] 前端实现图标网格布局
+- [ ] 前端实现图标网格布局，使用macos26的液态玻璃风格
 - [ ] 实现图标组件UI
 - [ ] 实现图标点击启动功能
 
 #### 验收标准
+
 - 能够读取并显示桌面所有快捷方式
 - 图标显示正确
 - 点击图标能够启动对应程序
@@ -234,6 +250,7 @@ DesktopGo/
 ### 阶段三：搜索功能（第3周）
 
 #### 任务清单
+
 - [ ] 实现搜索栏UI
 - [ ] 集成Fuse.js模糊搜索
 - [ ] 实现实时搜索过滤
@@ -243,6 +260,7 @@ DesktopGo/
 - [ ] 实现Enter键启动选中项
 
 #### 验收标准
+
 - 搜索响应流畅
 - 支持中英文搜索
 - 支持拼音首字母
@@ -251,6 +269,7 @@ DesktopGo/
 ### 阶段四：分页功能（第4周）
 
 #### 任务清单
+
 - [ ] 实现分页逻辑
 - [ ] 实现分页指示器UI
 - [ ] 实现左右箭头键切换页面
@@ -259,6 +278,7 @@ DesktopGo/
 - [ ] 优化大量图标性能
 
 #### 验收标准
+
 - 分页切换流畅
 - 动画效果自然
 - 支持键盘切换
@@ -266,6 +286,7 @@ DesktopGo/
 ### 阶段五：文件夹功能（第5周）
 
 #### 任务清单
+
 - [ ] 设计文件夹数据结构
 - [ ] 实现创建文件夹功能
 - [ ] 实现文件夹UI组件
@@ -276,6 +297,7 @@ DesktopGo/
 - [ ] 实现删除文件夹
 
 #### 验收标准
+
 - 可以创建和删除文件夹
 - 可以拖拽图标到文件夹
 - 文件夹展开动画流畅
@@ -284,6 +306,7 @@ DesktopGo/
 ### 阶段六：拖拽排序（第6周）
 
 #### 任务清单
+
 - [ ] 集成@dnd-kit/core
 - [ ] 实现图标拖拽
 - [ ] 实现拖拽排序逻辑
@@ -293,6 +316,7 @@ DesktopGo/
 - [ ] 保存拖拽后的布局
 
 #### 验收标准
+
 - 拖拽操作流畅
 - 排序逻辑正确
 - 布局保存正确
@@ -300,6 +324,7 @@ DesktopGo/
 ### 阶段七：配置持久化（第7周）
 
 #### 任务清单
+
 - [ ] 设计配置文件结构
 - [ ] 实现配置读取/保存
 - [ ] 实现图标布局保存
@@ -309,6 +334,7 @@ DesktopGo/
 - [ ] 实现配置迁移机制
 
 #### 验收标准
+
 - 配置正确保存和读取
 - 重启后布局保持
 - 配置文件格式正确
@@ -316,6 +342,7 @@ DesktopGo/
 ### 阶段八：设置界面（第8周）
 
 #### 任务清单
+
 - [ ] 设计设置界面UI
 - [ ] 实现快捷键设置
 - [ ] 实现网格布局设置
@@ -326,6 +353,7 @@ DesktopGo/
 - [ ] 实现数据导入/导出
 
 #### 验收标准
+
 - 设置界面美观易用
 - 所有设置项生效
 - 设置正确保存
@@ -333,6 +361,7 @@ DesktopGo/
 ### 阶段九：优化与测试（第9周）
 
 #### 任务清单
+
 - [ ] 性能优化（启动速度、内存占用）
 - [ ] 动画优化（流畅度）
 - [ ] 图标加载优化（懒加载、缓存）
@@ -343,6 +372,7 @@ DesktopGo/
 - [ ] 修复已知Bug
 
 #### 验收标准
+
 - 启动速度<1秒
 - 内存占用<50MB
 - 无明显卡顿
@@ -351,6 +381,7 @@ DesktopGo/
 ### 阶段十：打包发布（第10周）
 
 #### 任务清单
+
 - [ ] 配置应用图标
 - [ ] 配置应用信息
 - [ ] 打包Windows安装程序
@@ -361,6 +392,7 @@ DesktopGo/
 - [ ] 发布第一个版本
 
 #### 验收标准
+
 - 安装程序正常工作
 - 文档完整清晰
 - 可以正式发布
@@ -372,6 +404,7 @@ DesktopGo/
 **难点**: .lnk文件格式复杂，需要解析二进制数据
 
 **解决方案**:
+
 - 使用`windows-rs`库调用Windows Shell API
 - 使用`IShellLink`接口获取目标路径
 - 使用`IPersistFile`接口加载.lnk文件
@@ -381,6 +414,7 @@ DesktopGo/
 **难点**: 从exe文件或快捷方式提取图标
 
 **解决方案**:
+
 - 使用`ExtractIconEx` Windows API
 - 将图标转换为PNG格式
 - Base64编码传递给前端
@@ -391,6 +425,7 @@ DesktopGo/
 **难点**: 快捷键可能被其他程序占用
 
 **解决方案**:
+
 - 提供快捷键冲突检测
 - 允许用户自定义快捷键
 - 提供备选快捷键方案
@@ -400,6 +435,7 @@ DesktopGo/
 **难点**: 确保启动台窗口始终在最前
 
 **解决方案**:
+
 - 设置`alwaysOnTop: true`
 - 显示时调用`set_focus()`
 - 监听窗口失焦事件
@@ -409,6 +445,7 @@ DesktopGo/
 **难点**: 图标过多时渲染性能下降
 
 **解决方案**:
+
 - 实现虚拟滚动
 - 图标懒加载
 - 图标缓存
@@ -419,6 +456,7 @@ DesktopGo/
 **难点**: 拖拽时动画卡顿
 
 **解决方案**:
+
 - 使用CSS transform而非position
 - 使用`will-change`优化
 - 减少重排重绘
@@ -462,14 +500,14 @@ pnpm tauri build
 
 ```typescript
 interface AppIcon {
-  id: string;              // 唯一标识
-  name: string;            // 显示名称
-  path: string;            // 文件路径
-  icon: string;            // Base64图标
-  iconType: 'shortcut' | 'folder' | 'file';
-  page: number;            // 所在页码
-  position: number;        // 页内位置
-  folderId?: string;       // 所属文件夹ID
+  id: string // 唯一标识
+  name: string // 显示名称
+  path: string // 文件路径
+  icon: string // Base64图标
+  iconType: 'shortcut' | 'folder' | 'file'
+  page: number // 所在页码
+  position: number // 页内位置
+  folderId?: string // 所属文件夹ID
 }
 ```
 
@@ -477,12 +515,12 @@ interface AppIcon {
 
 ```typescript
 interface Folder {
-  id: string;              // 唯一标识
-  name: string;            // 文件夹名称
-  items: string[];         // 包含的图标ID列表
-  page: number;            // 所在页码
-  position: number;        // 页内位置
-  color?: string;          // 文件夹颜色
+  id: string // 唯一标识
+  name: string // 文件夹名称
+  items: string[] // 包含的图标ID列表
+  page: number // 所在页码
+  position: number // 页内位置
+  color?: string // 文件夹颜色
 }
 ```
 
@@ -490,25 +528,25 @@ interface Folder {
 
 ```typescript
 interface Config {
-  version: string;         // 配置版本
+  version: string // 配置版本
   shortcuts: {
-    toggle: string;        // 显示/隐藏快捷键
-  };
+    toggle: string // 显示/隐藏快捷键
+  }
   layout: {
-    columns: number;       // 列数
-    rows: number;          // 行数
-    iconSize: number;      // 图标大小
-  };
+    columns: number // 列数
+    rows: number // 行数
+    iconSize: number // 图标大小
+  }
   appearance: {
-    theme: 'light' | 'dark';
-    enableAnimations: boolean;
-  };
+    theme: 'light' | 'dark'
+    enableAnimations: boolean
+  }
   system: {
-    autoStart: boolean;    // 开机自启
-    minimizeToTray: boolean;
-  };
-  icons: AppIcon[];        // 图标列表
-  folders: Folder[];       // 文件夹列表
+    autoStart: boolean // 开机自启
+    minimizeToTray: boolean
+  }
+  icons: AppIcon[] // 图标列表
+  folders: Folder[] // 文件夹列表
 }
 ```
 
@@ -555,22 +593,26 @@ interface Config {
 ## 发布计划
 
 ### v0.1.0 - MVP版本
+
 - 基础图标展示
 - 图标启动功能
 - 搜索功能
 - 全局快捷键
 
 ### v0.2.0 - 增强版本
+
 - 文件夹功能
 - 拖拽排序
 - 配置持久化
 
 ### v0.3.0 - 完整版本
+
 - 设置界面
 - 主题切换
 - 性能优化
 
 ### v1.0.0 - 正式版本
+
 - 完整功能
 - 稳定性保证
 - 完整文档
@@ -615,11 +657,13 @@ interface Config {
 ## 参考资源
 
 ### 官方文档
+
 - Tauri: https://tauri.app/
 - React: https://react.dev/
 - Tailwind CSS: https://tailwindcss.com/
 
 ### 相关项目
+
 - Wox: Windows启动器
 - Listary: 文件搜索工具
 - Rainmeter: 桌面定制工具
