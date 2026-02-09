@@ -13,6 +13,7 @@ pub struct DesktopIcon {
     pub path: String,
     pub target_path: String,
     pub icon_base64: String,
+    pub item_type: String, // "shortcut", "folder", "file", "executable", "special"
 }
 
 #[tauri::command]
@@ -52,19 +53,69 @@ fn get_desktop_dirs() -> Vec<PathBuf> {
 }
 
 #[cfg(windows)]
-fn scan_lnk_files(dirs: &[PathBuf]) -> Vec<PathBuf> {
-    let mut lnk_files = Vec::new();
+fn scan_desktop_items(dirs: &[PathBuf]) -> Vec<PathBuf> {
+    let mut items = Vec::new();
     for dir in dirs {
         if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) == Some("lnk") {
-                    lnk_files.push(path);
+                // 跳过隐藏文件和系统文件（如 desktop.ini）
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    if name.starts_with('.') || name.eq_ignore_ascii_case("desktop.ini") {
+                        continue;
+                    }
                 }
+                items.push(path);
             }
         }
     }
-    lnk_files
+    items
+}
+
+#[cfg(windows)]
+fn create_recycle_bin_icon() -> Option<DesktopIcon> {
+    use windows::core::GUID;
+
+    // 回收站的 CLSID: {645FF040-5081-101B-9F08-00AA002F954E}
+    const CLSID_RECYCLE_BIN: GUID = GUID::from_u128(0x645FF040_5081_101B_9F08_00AA002F954E);
+
+    unsafe {
+        let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED);
+
+        // 使用 SHGetSpecialFolderLocation 获取回收站路径
+        let icon_base64 = extract_special_folder_icon(&CLSID_RECYCLE_BIN, 128).unwrap_or_default();
+
+        Some(DesktopIcon {
+            id: uuid::Uuid::new_v4().to_string(),
+            name: "回收站".to_string(),
+            path: "::{645FF040-5081-101B-9F08-00AA002F954E}".to_string(), // Shell 命名空间路径
+            target_path: "::{645FF040-5081-101B-9F08-00AA002F954E}".to_string(),
+            icon_base64,
+            item_type: "special".to_string(),
+        })
+    }
+}
+
+#[cfg(windows)]
+unsafe fn extract_special_folder_icon(_clsid: &windows::core::GUID, size: i32) -> Option<String> {
+    use windows::core::HSTRING;
+    use windows::Win32::UI::Shell::*;
+    use windows::Win32::System::Com::*;
+    use windows::core::Interface;
+
+    let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+
+    // 直接使用回收站的 Shell 命名空间路径
+    let path = "::{645FF040-5081-101B-9F08-00AA002F954E}";
+    let path_hstring = HSTRING::from(path);
+
+    let shell_item: IShellItem = SHCreateItemFromParsingName(&path_hstring, None).ok()?;
+    let factory: IShellItemImageFactory = shell_item.cast().ok()?;
+
+    let icon_size = windows::Win32::Foundation::SIZE { cx: size, cy: size };
+    let hbitmap = factory.GetImage(icon_size, SIIGBF_ICONONLY).ok()?;
+
+    hbitmap_to_base64(hbitmap)
 }
 
 #[cfg(windows)]
@@ -96,54 +147,6 @@ fn resolve_lnk(lnk_path: &PathBuf) -> Option<String> {
         let target = String::from_utf16_lossy(&target_buf);
         let target = target.trim_end_matches('\0').to_string();
         if target.is_empty() { None } else { Some(target) }
-    }
-}
-
-// PLACEHOLDER_EXTRACT
-
-#[cfg(windows)]
-fn extract_icon_base64(target_path: &str, lnk_path: &PathBuf) -> String {
-    use windows::core::PCWSTR;
-    use windows::Win32::UI::Shell::*;
-    use windows::Win32::UI::WindowsAndMessaging::*;
-    use windows::Win32::System::Com::*;
-
-    unsafe {
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-
-        // 根据 DPI 选择合适的图标尺寸
-        // 基础显示尺寸 56px，考虑 2x DPI 场景，使用 128x128 是最佳平衡点
-        // - 1x DPI: 128 缩放到 56，清晰
-        // - 2x DPI: 128 对应 64 逻辑像素，显示 56px 时依然清晰
-        // - 3x DPI: 可能略有损失，但 256x256 文件太大影响性能
-        let icon_size = 128;
-
-        let paths_to_try = [target_path.to_string(), lnk_path.to_string_lossy().to_string()];
-
-        for path in &paths_to_try {
-            if path.is_empty() {
-                continue;
-            }
-
-            // 优先使用 IShellItemImageFactory 获取指定尺寸的高质量图标
-            if let Some(b64) = extract_high_res_icon(path, icon_size) {
-                return b64;
-            }
-
-            // 回退到 ExtractIconEx（通常只能获取 32x32）
-            // 然后放大到目标尺寸
-            let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
-            let mut large_icon = HICON::default();
-            let result = ExtractIconExW(PCWSTR(wide.as_ptr()), 0, Some(&mut large_icon), None, 1);
-            if result > 0 && !large_icon.is_invalid() {
-                if let Some(b64) = hicon_to_base64(large_icon, icon_size) {
-                    let _ = DestroyIcon(large_icon);
-                    return b64;
-                }
-                let _ = DestroyIcon(large_icon);
-            }
-        }
-        String::new()
     }
 }
 
@@ -243,105 +246,98 @@ unsafe fn hbitmap_to_base64(hbitmap: windows::Win32::Graphics::Gdi::HBITMAP) -> 
 }
 
 #[cfg(windows)]
-unsafe fn hicon_to_base64(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, size: i32) -> Option<String> {
-    use windows::Win32::Graphics::Gdi::*;
-    use windows::Win32::UI::WindowsAndMessaging::*;
-
-    let mut icon_info = ICONINFO::default();
-    if GetIconInfo(hicon, &mut icon_info).is_err() {
-        return None;
-    }
-
-    let hdc_screen = GetDC(None);
-    let hdc_mem = CreateCompatibleDC(Some(hdc_screen));
-
-    let bmi = BITMAPINFO {
-        bmiHeader: BITMAPINFOHEADER {
-            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-            biWidth: size,
-            biHeight: -size,
-            biPlanes: 1,
-            biBitCount: 32,
-            biCompression: 0,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-
-    let mut bits: *mut std::ffi::c_void = std::ptr::null_mut();
-    let hbm_dib = CreateDIBSection(
-        Some(hdc_mem), &bmi, DIB_RGB_COLORS, &mut bits, None, 0,
-    ).ok()?;
-
-    let old_bm = SelectObject(hdc_mem, hbm_dib.into());
-    let _ = DrawIconEx(hdc_mem, 0, 0, hicon, size, size, 0, None, DI_NORMAL);
-
-    let pixel_count = (size * size) as usize;
-    let slice = std::slice::from_raw_parts(bits as *const u8, pixel_count * 4);
-
-    let mut rgba = vec![0u8; pixel_count * 4];
-    for i in 0..pixel_count {
-        let o = i * 4;
-        rgba[o] = slice[o + 2];
-        rgba[o + 1] = slice[o + 1];
-        rgba[o + 2] = slice[o];
-        rgba[o + 3] = slice[o + 3];
-    }
-
-    if rgba.iter().skip(3).step_by(4).all(|&a| a == 0) {
-        for i in 0..pixel_count { rgba[i * 4 + 3] = 255; }
-    }
-
-    SelectObject(hdc_mem, old_bm);
-    let _ = DeleteObject(hbm_dib.into());
-    let _ = DeleteDC(hdc_mem);
-    ReleaseDC(None, hdc_screen);
-
-    if !icon_info.hbmColor.is_invalid() {
-        let _ = DeleteObject(icon_info.hbmColor.into());
-    }
-    if !icon_info.hbmMask.is_invalid() {
-        let _ = DeleteObject(icon_info.hbmMask.into());
-    }
-
-    let mut png_buf = Vec::new();
-    {
-        use image::ImageEncoder;
-        let encoder = image::codecs::png::PngEncoder::new(&mut png_buf);
-        encoder
-            .write_image(&rgba, size as u32, size as u32, image::ExtendedColorType::Rgba8)
-            .ok()?;
-    }
-
-    let b64 = base64::engine::general_purpose::STANDARD.encode(&png_buf);
-    Some(format!("data:image/png;base64,{}", b64))
-}
-
-// PLACEHOLDER_MAIN_FUNCS
-
-#[cfg(windows)]
 fn get_desktop_icons_windows() -> Vec<DesktopIcon> {
     let dirs = get_desktop_dirs();
-    let lnk_files = scan_lnk_files(&dirs);
+    let items = scan_desktop_items(&dirs);
     let mut icons = Vec::new();
-    for lnk_path in &lnk_files {
-        let name = lnk_path.file_stem().and_then(|s| s.to_str())
-            .unwrap_or("Unknown").to_string();
-        let target_path = resolve_lnk(lnk_path).unwrap_or_default();
-        let icon_base64 = extract_icon_base64(&target_path, lnk_path);
+
+    // 添加回收站（特殊系统图标）
+    if let Some(recycle_bin) = create_recycle_bin_icon() {
+        icons.push(recycle_bin);
+    }
+
+    for item_path in &items {
+        let name = item_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Unknown")
+            .to_string();
+
+        let (target_path, item_type) = if item_path.extension().and_then(|e| e.to_str()) == Some("lnk") {
+            // 快捷方式
+            (resolve_lnk(item_path).unwrap_or_default(), "shortcut".to_string())
+        } else if item_path.is_dir() {
+            // 文件夹
+            (item_path.to_string_lossy().to_string(), "folder".to_string())
+        } else if item_path.extension().and_then(|e| e.to_str()) == Some("exe") {
+            // 可执行文件
+            (item_path.to_string_lossy().to_string(), "executable".to_string())
+        } else {
+            // 普通文件
+            (item_path.to_string_lossy().to_string(), "file".to_string())
+        };
+
+        let icon_base64 = extract_icon_for_item(item_path, &target_path, &item_type);
+
         icons.push(DesktopIcon {
             id: uuid::Uuid::new_v4().to_string(),
-            name, path: lnk_path.to_string_lossy().to_string(),
-            target_path, icon_base64,
+            name,
+            path: item_path.to_string_lossy().to_string(),
+            target_path,
+            icon_base64,
+            item_type,
         });
     }
+
     icons.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     icons
 }
 
 #[cfg(windows)]
+fn extract_icon_for_item(item_path: &PathBuf, target_path: &str, item_type: &str) -> String {
+    let icon_size = 128;
+
+    unsafe {
+        let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED);
+
+        match item_type {
+            "shortcut" => {
+                // 快捷方式：优先从目标提取图标
+                if !target_path.is_empty() {
+                    if let Some(b64) = extract_high_res_icon(target_path, icon_size) {
+                        return b64;
+                    }
+                }
+                // 回退到从 .lnk 文件提取
+                if let Some(b64) = extract_high_res_icon(&item_path.to_string_lossy(), icon_size) {
+                    return b64;
+                }
+            }
+            "folder" => {
+                // 文件夹：使用系统文件夹图标
+                if let Some(b64) = extract_high_res_icon(&item_path.to_string_lossy(), icon_size) {
+                    return b64;
+                }
+            }
+            "executable" | "file" => {
+                // 可执行文件或普通文件：从文件本身提取图标
+                if let Some(b64) = extract_high_res_icon(&item_path.to_string_lossy(), icon_size) {
+                    return b64;
+                }
+            }
+            _ => {}
+        }
+
+        String::new()
+    }
+}
+
+#[cfg(windows)]
 fn launch_app_windows(path: &str) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
+
+    // 使用 Windows shell 打开文件/文件夹/快捷方式
+    // start 命令可以处理所有类型：.lnk, .exe, 文件夹, 文件等
     std::process::Command::new("cmd")
         .args(["/C", "start", "", path])
         .creation_flags(0x08000000)
