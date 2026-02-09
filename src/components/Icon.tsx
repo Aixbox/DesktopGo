@@ -16,7 +16,8 @@ export function Icon({ icon }: IconProps) {
   return (
     <button
       className="icon-item flex flex-col items-center gap-2 p-3 rounded-2xl
-                 bg-transparent hover:bg-white/10 active:bg-white/20
+                 bg-transparent border-none shadow-none
+                 hover:bg-white/10 active:bg-white/20
                  transition-all duration-200 cursor-pointer
                  w-[100px] group"
       onClick={handleClick}
@@ -24,9 +25,7 @@ export function Icon({ icon }: IconProps) {
     >
       <div className="icon-image w-16 h-16 flex items-center justify-center
                       rounded-[14px] overflow-hidden
-                      bg-white/5 backdrop-blur-sm
-                      shadow-lg shadow-black/20
-                      group-hover:scale-105 group-hover:shadow-xl
+                      group-hover:scale-105
                       group-active:scale-95
                       transition-all duration-200">
         {icon.icon_base64 ? (
