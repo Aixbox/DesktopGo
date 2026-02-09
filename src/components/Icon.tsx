@@ -16,7 +16,7 @@ export function Icon({ icon }: IconProps) {
   return (
     <button
       className="icon-item flex flex-col items-center gap-2 p-3 rounded-2xl
-                 hover:bg-white/10 active:bg-white/20
+                 bg-transparent hover:bg-white/10 active:bg-white/20
                  transition-all duration-200 cursor-pointer
                  w-[100px] group"
       onClick={handleClick}
