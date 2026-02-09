@@ -38,5 +38,6 @@ windows = { version = "0.61", features = [
     "Win32_Graphics_Gdi",
     "Win32_Storage_FileSystem",
     "Win32_System_Ole",
+    "Win32_Foundation",
 ] }
 

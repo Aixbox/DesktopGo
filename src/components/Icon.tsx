@@ -22,18 +22,18 @@ export function Icon({ icon }: IconProps) {
       onClick={handleClick}
       title={icon.name}
     >
-      <div className="icon-image w-14 h-14 flex items-center justify-center
+      <div className="icon-image w-16 h-16 flex items-center justify-center
                       rounded-[14px] overflow-hidden
                       bg-white/5 backdrop-blur-sm
                       shadow-lg shadow-black/20
-                      group-hover:scale-110 group-hover:shadow-xl
+                      group-hover:scale-105 group-hover:shadow-xl
                       group-active:scale-95
                       transition-all duration-200">
         {icon.icon_base64 ? (
           <img
             src={icon.icon_base64}
             alt={icon.name}
-            className="w-11 h-11 object-contain"
+            className="w-14 h-14 max-w-[56px] max-h-[56px] object-contain"
             draggable={false}
           />
         ) : (

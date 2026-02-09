@@ -104,17 +104,39 @@ fn resolve_lnk(lnk_path: &PathBuf) -> Option<String> {
 #[cfg(windows)]
 fn extract_icon_base64(target_path: &str, lnk_path: &PathBuf) -> String {
     use windows::core::PCWSTR;
-    use windows::Win32::UI::Shell::ExtractIconExW;
+    use windows::Win32::UI::Shell::*;
     use windows::Win32::UI::WindowsAndMessaging::*;
+    use windows::Win32::System::Com::*;
 
     unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+
+        // 根据 DPI 选择合适的图标尺寸
+        // 基础显示尺寸 56px，考虑 2x DPI 场景，使用 128x128 是最佳平衡点
+        // - 1x DPI: 128 缩放到 56，清晰
+        // - 2x DPI: 128 对应 64 逻辑像素，显示 56px 时依然清晰
+        // - 3x DPI: 可能略有损失，但 256x256 文件太大影响性能
+        let icon_size = 128;
+
         let paths_to_try = [target_path.to_string(), lnk_path.to_string_lossy().to_string()];
+
         for path in &paths_to_try {
+            if path.is_empty() {
+                continue;
+            }
+
+            // 优先使用 IShellItemImageFactory 获取指定尺寸的高质量图标
+            if let Some(b64) = extract_high_res_icon(path, icon_size) {
+                return b64;
+            }
+
+            // 回退到 ExtractIconEx（通常只能获取 32x32）
+            // 然后放大到目标尺寸
             let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
             let mut large_icon = HICON::default();
             let result = ExtractIconExW(PCWSTR(wide.as_ptr()), 0, Some(&mut large_icon), None, 1);
             if result > 0 && !large_icon.is_invalid() {
-                if let Some(b64) = hicon_to_base64(large_icon) {
+                if let Some(b64) = hicon_to_base64(large_icon, icon_size) {
                     let _ = DestroyIcon(large_icon);
                     return b64;
                 }
@@ -126,7 +148,102 @@ fn extract_icon_base64(target_path: &str, lnk_path: &PathBuf) -> String {
 }
 
 #[cfg(windows)]
-unsafe fn hicon_to_base64(hicon: windows::Win32::UI::WindowsAndMessaging::HICON) -> Option<String> {
+unsafe fn extract_high_res_icon(path: &str, size: i32) -> Option<String> {
+    use windows::core::HSTRING;
+    use windows::Win32::UI::Shell::*;
+    use windows::Win32::System::Com::*;
+    use windows::core::Interface;
+
+    let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+
+    let path_hstring = HSTRING::from(path);
+    let shell_item: IShellItem = SHCreateItemFromParsingName(&path_hstring, None).ok()?;
+
+    let factory: IShellItemImageFactory = shell_item.cast().ok()?;
+
+    // 使用传入的尺寸参数请求图标
+    let icon_size = windows::Win32::Foundation::SIZE { cx: size, cy: size };
+    let hbitmap = factory.GetImage(icon_size, SIIGBF_ICONONLY).ok()?;
+
+    // 将 HBITMAP 转换为 Base64
+    hbitmap_to_base64(hbitmap)
+}
+
+#[cfg(windows)]
+unsafe fn hbitmap_to_base64(hbitmap: windows::Win32::Graphics::Gdi::HBITMAP) -> Option<String> {
+    use windows::Win32::Graphics::Gdi::*;
+
+    let mut bm = BITMAP::default();
+    if GetObjectW(hbitmap.into(), std::mem::size_of::<BITMAP>() as i32, Some(&mut bm as *mut _ as *mut _)) == 0 {
+        return None;
+    }
+
+    let width = bm.bmWidth as u32;
+    let height = bm.bmHeight as u32;
+
+    let hdc_screen = GetDC(None);
+    let hdc_mem = CreateCompatibleDC(Some(hdc_screen));
+
+    let bmi = BITMAPINFO {
+        bmiHeader: BITMAPINFOHEADER {
+            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+            biWidth: width as i32,
+            biHeight: -(height as i32),
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: 0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let mut bits: *mut std::ffi::c_void = std::ptr::null_mut();
+    let hbm_dib = CreateDIBSection(Some(hdc_mem), &bmi, DIB_RGB_COLORS, &mut bits, None, 0).ok()?;
+
+    let old_bm = SelectObject(hdc_mem, hbm_dib.into());
+
+    let hdc_src = CreateCompatibleDC(Some(hdc_screen));
+    let old_src = SelectObject(hdc_src, hbitmap.into());
+
+    let _ = BitBlt(hdc_mem, 0, 0, width as i32, height as i32, Some(hdc_src), 0, 0, SRCCOPY);
+
+    SelectObject(hdc_src, old_src);
+    let _ = DeleteDC(hdc_src);
+
+    let pixel_count = (width * height) as usize;
+    let slice = std::slice::from_raw_parts(bits as *const u8, pixel_count * 4);
+
+    let mut rgba = vec![0u8; pixel_count * 4];
+    for i in 0..pixel_count {
+        let o = i * 4;
+        rgba[o] = slice[o + 2];
+        rgba[o + 1] = slice[o + 1];
+        rgba[o + 2] = slice[o];
+        rgba[o + 3] = slice[o + 3];
+    }
+
+    if rgba.iter().skip(3).step_by(4).all(|&a| a == 0) {
+        for i in 0..pixel_count { rgba[i * 4 + 3] = 255; }
+    }
+
+    SelectObject(hdc_mem, old_bm);
+    let _ = DeleteObject(hbm_dib.into());
+    let _ = DeleteDC(hdc_mem);
+    ReleaseDC(None, hdc_screen);
+
+    let mut png_buf = Vec::new();
+    {
+        use image::ImageEncoder;
+        let encoder = image::codecs::png::PngEncoder::new(&mut png_buf);
+        encoder.write_image(&rgba, width, height, image::ExtendedColorType::Rgba8).ok()?;
+    }
+
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&png_buf);
+    Some(format!("data:image/png;base64,{}", b64))
+}
+
+#[cfg(windows)]
+unsafe fn hicon_to_base64(hicon: windows::Win32::UI::WindowsAndMessaging::HICON, size: i32) -> Option<String> {
     use windows::Win32::Graphics::Gdi::*;
     use windows::Win32::UI::WindowsAndMessaging::*;
 
@@ -138,7 +255,6 @@ unsafe fn hicon_to_base64(hicon: windows::Win32::UI::WindowsAndMessaging::HICON)
     let hdc_screen = GetDC(None);
     let hdc_mem = CreateCompatibleDC(Some(hdc_screen));
 
-    let size = 48i32;
     let bmi = BITMAPINFO {
         bmiHeader: BITMAPINFOHEADER {
             biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
@@ -151,8 +267,6 @@ unsafe fn hicon_to_base64(hicon: windows::Win32::UI::WindowsAndMessaging::HICON)
         },
         ..Default::default()
     };
-
-// PLACEHOLDER_HICON2
 
     let mut bits: *mut std::ffi::c_void = std::ptr::null_mut();
     let hbm_dib = CreateDIBSection(
