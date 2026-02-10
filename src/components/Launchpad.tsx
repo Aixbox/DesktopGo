@@ -35,8 +35,11 @@ export function Launchpad() {
       setContextMenu(null)
       return
     }
-    if (e.target === e.currentTarget) {
-      invoke('toggle_window')
+    if (windowMode === 'fullscreen') {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-icon]')) {
+        invoke('toggle_window')
+      }
     }
   }
 

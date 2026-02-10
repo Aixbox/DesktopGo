@@ -17,6 +17,7 @@ export function Icon({ icon }: IconProps) {
 
   return (
     <button
+      data-icon
       className="icon-item flex flex-col items-center gap-2 p-3 rounded-2xl
                  bg-transparent border-none shadow-none
                  hover:bg-white/10 active:bg-white/20
