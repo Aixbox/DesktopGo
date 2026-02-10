@@ -22,6 +22,19 @@ fn toggle_window(window: tauri::Window) {
 }
 
 #[tauri::command]
+fn set_window_mode(window: tauri::Window, mode: String, width: Option<u32>, height: Option<u32>) {
+    if mode == "fullscreen" {
+        let _ = window.maximize();
+    } else {
+        let _ = window.unmaximize();
+        if let (Some(w), Some(h)) = (width, height) {
+            let _ = window.set_size(tauri::LogicalSize::new(w, h));
+            let _ = window.center();
+        }
+    }
+}
+
+#[tauri::command]
 fn get_desktop_icons(icon_size: i32) -> Vec<DesktopIcon> {
     #[cfg(windows)]
     { get_desktop_icons_windows(icon_size) }
@@ -415,7 +428,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![toggle_window, get_desktop_icons, launch_app])
+        .invoke_handler(tauri::generate_handler![toggle_window, get_desktop_icons, launch_app, set_window_mode])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

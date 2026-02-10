@@ -1,16 +1,19 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
-import type { DesktopIcon, IconSize } from '../types'
-import { ICON_SIZE_CONFIG } from '../types'
+import type { DesktopIcon, IconSize, WindowMode } from '../types'
+import { ICON_SIZE_CONFIG, WINDOW_SIZE_CONFIG } from '../types'
 
 interface IconStore {
   icons: DesktopIcon[]
   loading: boolean
   error: string | null
   iconSize: IconSize
+  windowMode: WindowMode
   fetchIcons: () => Promise<void>
   launchApp: (path: string) => Promise<void>
   setIconSize: (size: IconSize) => void
+  setWindowMode: (mode: WindowMode) => void
+  applyWindowMode: (mode: WindowMode) => Promise<void>
 }
 
 const getSavedIconSize = (): IconSize => {
@@ -19,11 +22,18 @@ const getSavedIconSize = (): IconSize => {
   return 'medium'
 }
 
+const getSavedWindowMode = (): WindowMode => {
+  const saved = localStorage.getItem('windowMode')
+  if (saved === 'fullscreen' || saved === 'large' || saved === 'medium' || saved === 'small') return saved
+  return 'fullscreen'
+}
+
 export const useIconStore = create<IconStore>((set, get) => ({
   icons: [],
   loading: false,
   error: null,
   iconSize: getSavedIconSize(),
+  windowMode: getSavedWindowMode(),
 
   fetchIcons: async () => {
     set({ loading: true, error: null })
@@ -50,5 +60,24 @@ export const useIconStore = create<IconStore>((set, get) => ({
     localStorage.setItem('iconSize', size)
     set({ iconSize: size })
     get().fetchIcons()
+  },
+
+  setWindowMode: (mode: WindowMode) => {
+    localStorage.setItem('windowMode', mode)
+    set({ windowMode: mode })
+    get().applyWindowMode(mode)
+  },
+
+  applyWindowMode: async (mode: WindowMode) => {
+    try {
+      if (mode === 'fullscreen') {
+        await invoke('set_window_mode', { mode })
+      } else {
+        const config = WINDOW_SIZE_CONFIG[mode]
+        await invoke('set_window_mode', { mode, width: config.width, height: config.height })
+      }
+    } catch (e) {
+      console.error('Failed to set window mode:', e)
+    }
   },
 }))
