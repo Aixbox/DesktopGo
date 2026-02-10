@@ -22,11 +22,11 @@ fn toggle_window(window: tauri::Window) {
 }
 
 #[tauri::command]
-fn get_desktop_icons() -> Vec<DesktopIcon> {
+fn get_desktop_icons(icon_size: i32) -> Vec<DesktopIcon> {
     #[cfg(windows)]
-    { get_desktop_icons_windows() }
+    { get_desktop_icons_windows(icon_size) }
     #[cfg(not(windows))]
-    { Vec::new() }
+    { let _ = icon_size; Vec::new() }
 }
 
 #[tauri::command]
@@ -38,6 +38,16 @@ fn launch_app(path: String) -> Result<(), String> {
 }
 
 // ===== Windows implementations =====
+
+#[cfg(windows)]
+fn get_dpi_scale() -> f64 {
+    unsafe {
+        let hdc = windows::Win32::Graphics::Gdi::GetDC(None);
+        let dpi = windows::Win32::Graphics::Gdi::GetDeviceCaps(Some(hdc), windows::Win32::Graphics::Gdi::LOGPIXELSX);
+        windows::Win32::Graphics::Gdi::ReleaseDC(None, hdc);
+        dpi as f64 / 96.0
+    }
+}
 
 #[cfg(windows)]
 fn get_desktop_dirs() -> Vec<PathBuf> {
@@ -73,7 +83,7 @@ fn scan_desktop_items(dirs: &[PathBuf]) -> Vec<PathBuf> {
 }
 
 #[cfg(windows)]
-fn create_recycle_bin_icon() -> Option<DesktopIcon> {
+fn create_recycle_bin_icon(icon_size: i32) -> Option<DesktopIcon> {
     use windows::core::GUID;
 
     // 回收站的 CLSID: {645FF040-5081-101B-9F08-00AA002F954E}
@@ -82,8 +92,7 @@ fn create_recycle_bin_icon() -> Option<DesktopIcon> {
     unsafe {
         let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED);
 
-        // 使用 SHGetSpecialFolderLocation 获取回收站路径
-        let icon_base64 = extract_special_folder_icon(&CLSID_RECYCLE_BIN, 128).unwrap_or_default();
+        let icon_base64 = extract_special_folder_icon(&CLSID_RECYCLE_BIN, icon_size).unwrap_or_default();
 
         Some(DesktopIcon {
             id: uuid::Uuid::new_v4().to_string(),
@@ -246,13 +255,16 @@ unsafe fn hbitmap_to_base64(hbitmap: windows::Win32::Graphics::Gdi::HBITMAP) -> 
 }
 
 #[cfg(windows)]
-fn get_desktop_icons_windows() -> Vec<DesktopIcon> {
+fn get_desktop_icons_windows(icon_size: i32) -> Vec<DesktopIcon> {
     let dirs = get_desktop_dirs();
     let items = scan_desktop_items(&dirs);
     let mut icons = Vec::new();
 
+    // 计算实际请求尺寸：逻辑尺寸 × DPI 缩放
+    let actual_size = (icon_size as f64 * get_dpi_scale()) as i32;
+
     // 添加回收站（特殊系统图标）
-    if let Some(recycle_bin) = create_recycle_bin_icon() {
+    if let Some(recycle_bin) = create_recycle_bin_icon(actual_size) {
         icons.push(recycle_bin);
     }
 
@@ -277,7 +289,7 @@ fn get_desktop_icons_windows() -> Vec<DesktopIcon> {
             (item_path.to_string_lossy().to_string(), "file".to_string())
         };
 
-        let icon_base64 = extract_icon_for_item(item_path, &target_path, &item_type);
+        let icon_base64 = extract_icon_for_item(item_path, &target_path, &item_type, actual_size);
 
         icons.push(DesktopIcon {
             id: uuid::Uuid::new_v4().to_string(),
@@ -294,9 +306,7 @@ fn get_desktop_icons_windows() -> Vec<DesktopIcon> {
 }
 
 #[cfg(windows)]
-fn extract_icon_for_item(item_path: &PathBuf, target_path: &str, item_type: &str) -> String {
-    let icon_size = 128;
-
+fn extract_icon_for_item(item_path: &PathBuf, target_path: &str, item_type: &str, icon_size: i32) -> String {
     unsafe {
         let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_APARTMENTTHREADED);
 

@@ -1,24 +1,36 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
-import type { DesktopIcon } from '../types'
+import type { DesktopIcon, IconSize } from '../types'
+import { ICON_SIZE_CONFIG } from '../types'
 
 interface IconStore {
   icons: DesktopIcon[]
   loading: boolean
   error: string | null
+  iconSize: IconSize
   fetchIcons: () => Promise<void>
   launchApp: (path: string) => Promise<void>
+  setIconSize: (size: IconSize) => void
 }
 
-export const useIconStore = create<IconStore>(set => ({
+const getSavedIconSize = (): IconSize => {
+  const saved = localStorage.getItem('iconSize')
+  if (saved === 'large' || saved === 'medium' || saved === 'small') return saved
+  return 'medium'
+}
+
+export const useIconStore = create<IconStore>((set, get) => ({
   icons: [],
   loading: false,
   error: null,
+  iconSize: getSavedIconSize(),
 
   fetchIcons: async () => {
     set({ loading: true, error: null })
     try {
-      const icons = await invoke<DesktopIcon[]>('get_desktop_icons')
+      const { iconSize } = get()
+      const iconSizeValue = ICON_SIZE_CONFIG[iconSize].logicalSize
+      const icons = await invoke<DesktopIcon[]>('get_desktop_icons', { iconSize: iconSizeValue })
       set({ icons, loading: false })
     } catch (e) {
       set({ error: String(e), loading: false })
@@ -32,5 +44,11 @@ export const useIconStore = create<IconStore>(set => ({
     } catch (e) {
       console.error('Failed to launch app:', e)
     }
+  },
+
+  setIconSize: (size: IconSize) => {
+    localStorage.setItem('iconSize', size)
+    set({ iconSize: size })
+    get().fetchIcons()
   },
 }))
