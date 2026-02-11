@@ -22,14 +22,16 @@ fn toggle_window(window: tauri::Window) {
 }
 
 #[tauri::command]
-fn set_window_mode(window: tauri::Window, mode: String, width: Option<u32>, height: Option<u32>) {
-    if mode == "fullscreen" {
-        let _ = window.maximize();
-    } else {
-        let _ = window.unmaximize();
-        if let (Some(w), Some(h)) = (width, height) {
-            let _ = window.set_size(tauri::LogicalSize::new(w, h));
-            let _ = window.center();
+fn set_window_mode(app_handle: tauri::AppHandle, mode: String, width: Option<u32>, height: Option<u32>) {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        if mode == "fullscreen" {
+            let _ = window.maximize();
+        } else {
+            let _ = window.unmaximize();
+            if let (Some(w), Some(h)) = (width, height) {
+                let _ = window.set_size(tauri::LogicalSize::new(w, h));
+                let _ = window.center();
+            }
         }
     }
 }
@@ -384,10 +386,7 @@ pub fn run() {
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
+                        show_or_create_main_window(app);
                     }
                     "quit" => app.exit(0),
                     _ => {}
@@ -397,31 +396,18 @@ pub fn run() {
                         button: tauri::tray::MouseButton::Left, ..
                     } = event {
                         let app = tray.app_handle();
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
+                        show_or_create_main_window(app);
                     }
                 })
                 .build(app)?;
 
-            // 窗口失去焦点时自动隐藏
-            if let Some(window) = app.get_webview_window("main") {
-                let window_clone = window.clone();
-                window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::Focused(false) = event {
-                        let _ = window_clone.hide();
-                    }
-                });
-            }
+            // 初始窗口绑定失去焦点自动隐藏
+            attach_blur_handler(app.handle());
 
             let shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
             let handle = app.handle().clone();
             app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, _event| {
-                if let Some(w) = handle.get_webview_window("main") {
-                    let _ = w.show();
-                    let _ = w.set_focus();
-                }
+                show_or_create_main_window(&handle);
             })?;
             if let Err(e) = app.global_shortcut().register(shortcut) {
                 eprintln!("Warning: Failed to register Ctrl+Space: {}", e);
@@ -431,4 +417,48 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![toggle_window, get_desktop_icons, launch_app, set_window_mode])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn show_or_create_main_window(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.set_focus();
+    } else {
+        // 主窗口已关闭，重新创建
+        let builder = tauri::WebviewWindowBuilder::new(
+            app,
+            "main",
+            tauri::WebviewUrl::App("index.html".into()),
+        )
+        .title("DesktopGo")
+        .inner_size(1920.0, 1080.0)
+        .fullscreen(false)
+        .resizable(false)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .visible(true)
+        .center();
+
+        match builder.build() {
+            Ok(_) => {
+                attach_blur_handler(app);
+            }
+            Err(e) => {
+                eprintln!("Failed to create main window: {}", e);
+            }
+        }
+    }
+}
+
+fn attach_blur_handler(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let window_clone = window.clone();
+        window.on_window_event(move |event| {
+            if let tauri::WindowEvent::Focused(false) = event {
+                let _ = window_clone.hide();
+            }
+        });
+    }
 }

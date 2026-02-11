@@ -58,6 +58,27 @@ export function Launchpad() {
     applyWindowMode(currentWindowMode);
   }, []);
 
+  // 主窗口重新显示时，从 localStorage 同步设置（处理被隐藏期间 Settings 改动的情况）
+  useEffect(() => {
+    const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+      if (focused) {
+        const state = useIconStore.getState();
+        const savedIconSize = localStorage.getItem("iconSize") as IconSize | null;
+        const savedTitleLineCount = localStorage.getItem("titleLineCount") as TitleLineCount | null;
+        if (savedIconSize && savedIconSize !== state.iconSize) {
+          useIconStore.setState({ iconSize: savedIconSize });
+          state.fetchIcons();
+        }
+        if (savedTitleLineCount && savedTitleLineCount !== state.titleLineCount) {
+          useIconStore.setState({ titleLineCount: savedTitleLineCount });
+        }
+      }
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
   const handleBackgroundClick = (e: React.MouseEvent) => {
     if (windowMode === "fullscreen") {
       const target = e.target as HTMLElement;
