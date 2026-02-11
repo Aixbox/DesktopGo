@@ -1,10 +1,14 @@
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ContextMenu,
   ContextMenuContent,
+  ContextMenuItem,
   ContextMenuRadioGroup,
   ContextMenuRadioItem,
+  ContextMenuSeparator,
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
@@ -61,6 +65,24 @@ export function Launchpad() {
         void invoke("toggle_window");
       }
     }
+  };
+
+  const openSettings = async () => {
+    const settingsWindow = new WebviewWindow("settings", {
+      url: "index.html?page=settings",
+      title: "设置",
+      width: 800,
+      height: 600,
+      center: true,
+      resizable: true,
+      decorations: true,
+    });
+    settingsWindow.once("tauri://created", async () => {
+      await getCurrentWindow().hide();
+    });
+    settingsWindow.once("tauri://error", (e) => {
+      console.error("Failed to create settings window:", e);
+    });
   };
 
   return (
@@ -131,6 +153,9 @@ export function Launchpad() {
             </ContextMenuRadioGroup>
           </ContextMenuSubContent>
         </ContextMenuSub>
+
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={openSettings}>设置</ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );
