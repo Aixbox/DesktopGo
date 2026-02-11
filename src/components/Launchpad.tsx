@@ -68,6 +68,15 @@ export function Launchpad() {
   };
 
   const openSettings = async () => {
+    const existing = await WebviewWindow.getByLabel("settings");
+    if (existing) {
+      await existing.unminimize();
+      await existing.show();
+      await existing.setFocus();
+      await getCurrentWindow().hide();
+      return;
+    }
+
     const settingsWindow = new WebviewWindow("settings", {
       url: "index.html?page=settings",
       title: "设置",
