@@ -1,7 +1,11 @@
 import { Launchpad } from './components/Launchpad'
 
 function App() {
-  return <Launchpad />
+  return (
+    <>
+      <Launchpad />
+    </>
+  )
 }
 
 export default App
