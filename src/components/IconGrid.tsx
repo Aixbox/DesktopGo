@@ -14,7 +14,7 @@ export function IconGrid({ icons }: IconGridProps) {
   return (
     <div className="w-full h-full flex items-center justify-center px-16 py-12">
       <div
-        className="grid gap-x-2 gap-y-4 justify-items-center content-start"
+        className="grid gap-x-2 gap-y-2 justify-items-center content-start"
         style={{
           gridTemplateColumns: `repeat(auto-fill, ${columnWidth}px)`,
           maxHeight: 'calc(100vh - 96px)',

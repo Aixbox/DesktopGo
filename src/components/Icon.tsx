@@ -47,8 +47,17 @@ export function Icon({ icon }: IconProps) {
         )}
       </div>
       <span
-        className="icon-label text-[11px] text-white text-center leading-tight truncate drop-shadow-md"
-        style={{ maxWidth: config.containerWidth - 10 }}
+        className="icon-label text-[11px] text-white text-center leading-tight drop-shadow-md"
+        style={{
+          maxWidth: config.containerWidth - 10,
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'normal',
+          overflowWrap: 'anywhere',
+        }}
       >
         {icon.name}
       </span>
