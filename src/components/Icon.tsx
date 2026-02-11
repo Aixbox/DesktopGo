@@ -8,8 +8,9 @@ interface IconProps {
 }
 
 export function Icon({ icon }: IconProps) {
-  const { launchApp, iconSize } = useIconStore()
+  const { launchApp, iconSize, titleLineCount } = useIconStore()
   const config = ICON_SIZE_CONFIG[iconSize]
+  const isSingleLineTitle = titleLineCount === 'one'
 
   const handleClick = () => {
     launchApp(icon.path)
@@ -50,12 +51,12 @@ export function Icon({ icon }: IconProps) {
         className="icon-label text-[11px] text-white text-center leading-tight drop-shadow-md"
         style={{
           maxWidth: config.containerWidth - 10,
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
+          display: isSingleLineTitle ? 'block' : '-webkit-box',
+          WebkitLineClamp: isSingleLineTitle ? 1 : 2,
+          WebkitBoxOrient: isSingleLineTitle ? undefined : 'vertical',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
-          whiteSpace: 'normal',
+          whiteSpace: isSingleLineTitle ? 'nowrap' : 'normal',
           overflowWrap: 'anywhere',
         }}
       >

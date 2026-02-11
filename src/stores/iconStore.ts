@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
-import type { DesktopIcon, IconSize, WindowMode } from '../types'
+import type { DesktopIcon, IconSize, TitleLineCount, WindowMode } from '../types'
 import { ICON_SIZE_CONFIG, WINDOW_SIZE_CONFIG } from '../types'
 
 interface IconStore {
@@ -9,10 +9,12 @@ interface IconStore {
   error: string | null
   iconSize: IconSize
   windowMode: WindowMode
+  titleLineCount: TitleLineCount
   fetchIcons: () => Promise<void>
   launchApp: (path: string) => Promise<void>
   setIconSize: (size: IconSize) => void
   setWindowMode: (mode: WindowMode) => void
+  setTitleLineCount: (count: TitleLineCount) => void
   applyWindowMode: (mode: WindowMode) => Promise<void>
 }
 
@@ -28,12 +30,19 @@ const getSavedWindowMode = (): WindowMode => {
   return 'fullscreen'
 }
 
+const getSavedTitleLineCount = (): TitleLineCount => {
+  const saved = localStorage.getItem('titleLineCount')
+  if (saved === 'one' || saved === 'two') return saved
+  return 'two'
+}
+
 export const useIconStore = create<IconStore>((set, get) => ({
   icons: [],
   loading: false,
   error: null,
   iconSize: getSavedIconSize(),
   windowMode: getSavedWindowMode(),
+  titleLineCount: getSavedTitleLineCount(),
 
   fetchIcons: async () => {
     set({ loading: true, error: null })
@@ -66,6 +75,11 @@ export const useIconStore = create<IconStore>((set, get) => ({
     localStorage.setItem('windowMode', mode)
     set({ windowMode: mode })
     get().applyWindowMode(mode)
+  },
+
+  setTitleLineCount: (count: TitleLineCount) => {
+    localStorage.setItem('titleLineCount', count)
+    set({ titleLineCount: count })
   },
 
   applyWindowMode: async (mode: WindowMode) => {

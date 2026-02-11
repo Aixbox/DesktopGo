@@ -11,7 +11,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { useIconStore } from "@/stores/iconStore";
-import type { IconSize, WindowMode } from "@/types";
+import type { IconSize, TitleLineCount, WindowMode } from "@/types";
 import { IconGrid } from "./IconGrid";
 
 const ICON_SIZE_OPTIONS: { label: string; value: IconSize }[] = [
@@ -27,9 +27,23 @@ const WINDOW_MODE_OPTIONS: { label: string; value: WindowMode }[] = [
   { label: "小窗口", value: "small" },
 ];
 
+const TITLE_LINE_OPTIONS: { label: string; value: TitleLineCount }[] = [
+  { label: "一行标题", value: "one" },
+  { label: "两行标题", value: "two" },
+];
+
 export function Launchpad() {
-  const { icons, loading, fetchIcons, iconSize, setIconSize, windowMode, setWindowMode } =
-    useIconStore();
+  const {
+    icons,
+    loading,
+    fetchIcons,
+    iconSize,
+    setIconSize,
+    windowMode,
+    setWindowMode,
+    titleLineCount,
+    setTitleLineCount,
+  } = useIconStore();
 
   useEffect(() => {
     fetchIcons();
@@ -94,6 +108,22 @@ export function Launchpad() {
               onValueChange={(value) => setWindowMode(value as WindowMode)}
             >
               {WINDOW_MODE_OPTIONS.map((option) => (
+                <ContextMenuRadioItem key={option.value} value={option.value}>
+                  {option.label}
+                </ContextMenuRadioItem>
+              ))}
+            </ContextMenuRadioGroup>
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>标题行数</ContextMenuSubTrigger>
+          <ContextMenuSubContent className="w-40">
+            <ContextMenuRadioGroup
+              value={titleLineCount}
+              onValueChange={(value) => setTitleLineCount(value as TitleLineCount)}
+            >
+              {TITLE_LINE_OPTIONS.map((option) => (
                 <ContextMenuRadioItem key={option.value} value={option.value}>
                   {option.label}
                 </ContextMenuRadioItem>

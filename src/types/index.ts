@@ -22,3 +22,5 @@ export const WINDOW_SIZE_CONFIG: Record<Exclude<WindowMode, 'fullscreen'>, { wid
   medium: { width: 1280, height: 720 },
   small:  { width: 800,  height: 600 },
 }
+
+export type TitleLineCount = 'one' | 'two'
