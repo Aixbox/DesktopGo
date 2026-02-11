@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { applyTheme, getSavedTheme } from "@/lib/theme";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -72,6 +73,8 @@ export function Launchpad() {
         if (savedTitleLineCount && savedTitleLineCount !== state.titleLineCount) {
           useIconStore.setState({ titleLineCount: savedTitleLineCount });
         }
+        // 同步主题
+        applyTheme(getSavedTheme());
       }
     });
     return () => {
@@ -124,11 +127,11 @@ export function Launchpad() {
         >
           {loading ? (
             <div className="flex items-center gap-3">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-              <span className="text-lg text-white/70">Loading...</span>
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/40 border-t-foreground" />
+              <span className="text-lg text-foreground/70">Loading...</span>
             </div>
           ) : icons.length === 0 ? (
-            <div className="text-lg text-white/50">No desktop shortcuts found</div>
+            <div className="text-lg text-foreground/50">No desktop shortcuts found</div>
           ) : (
             <IconGrid icons={icons} />
           )}

@@ -21,7 +21,8 @@ export function Icon({ icon }: IconProps) {
       data-icon
       className="icon-item flex flex-col items-center gap-2 p-3 rounded-2xl
                  bg-transparent border-none shadow-none
-                 hover:bg-white/10 active:bg-white/20
+                 hover:bg-black/10 active:bg-black/20
+                 dark:hover:bg-white/10 dark:active:bg-white/20
                  transition-all duration-200 cursor-pointer group"
       style={{ width: config.containerWidth }}
       onClick={handleClick}
@@ -44,11 +45,11 @@ export function Icon({ icon }: IconProps) {
             draggable={false}
           />
         ) : (
-          <AppWindow className="w-8 h-8 text-white/60" />
+          <AppWindow className="w-8 h-8 text-foreground/60" />
         )}
       </div>
       <span
-        className="icon-label text-[11px] text-white text-center leading-tight drop-shadow-md"
+        className="icon-label text-[11px] text-foreground text-center leading-tight drop-shadow-md"
         style={{
           maxWidth: config.containerWidth - 10,
           display: isSingleLineTitle ? 'block' : '-webkit-box',
