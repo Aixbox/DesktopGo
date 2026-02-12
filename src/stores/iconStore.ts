@@ -11,11 +11,18 @@ interface IconStore {
   iconSize: IconSize
   windowMode: WindowMode
   titleLineCount: TitleLineCount
+  selectionMode: boolean
+  selectedIconIds: string[]
   fetchIcons: () => Promise<void>
   launchApp: (path: string) => Promise<void>
   setIconSize: (size: IconSize) => void
   setWindowMode: (mode: WindowMode) => void
   setTitleLineCount: (count: TitleLineCount) => void
+  enterSelectionMode: (initialId?: string) => void
+  toggleSelectIcon: (id: string) => void
+  clearSelection: () => void
+  hideSelectedIcons: () => Promise<void>
+  deleteSelectedIcons: () => Promise<void>
   applyWindowMode: (mode: WindowMode) => Promise<void>
   hydrateSettings: () => Promise<void>
 }
@@ -27,6 +34,8 @@ export const useIconStore = create<IconStore>((set, get) => ({
   iconSize: 'medium',
   windowMode: 'fullscreen',
   titleLineCount: 'two',
+  selectionMode: false,
+  selectedIconIds: [],
 
   fetchIcons: async () => {
     set({ loading: true, error: null })
@@ -34,7 +43,15 @@ export const useIconStore = create<IconStore>((set, get) => ({
       const { iconSize } = get()
       const iconSizeValue = ICON_SIZE_CONFIG[iconSize].logicalSize
       const icons = await invoke<DesktopIcon[]>('get_desktop_icons', { iconSize: iconSizeValue })
-      set({ icons, loading: false })
+      const iconIdSet = new Set(icons.map(icon => icon.id))
+      const { selectedIconIds, selectionMode } = get()
+      const nextSelectedIds = selectedIconIds.filter(id => iconIdSet.has(id))
+      set({
+        icons,
+        loading: false,
+        selectedIconIds: nextSelectedIds,
+        selectionMode: selectionMode && nextSelectedIds.length > 0,
+      })
     } catch (e) {
       set({ error: String(e), loading: false })
     }
@@ -50,7 +67,7 @@ export const useIconStore = create<IconStore>((set, get) => ({
   },
 
   setIconSize: (size: IconSize) => {
-    set({ iconSize: size })
+    set({ iconSize: size, selectionMode: false, selectedIconIds: [] })
     void setSetting('iconSize', size).catch((e) => {
       console.error('Failed to persist icon size:', e)
     })
@@ -70,6 +87,66 @@ export const useIconStore = create<IconStore>((set, get) => ({
     void setSetting('titleLineCount', count).catch((e) => {
       console.error('Failed to persist title line count:', e)
     })
+  },
+
+  enterSelectionMode: (initialId?: string) => {
+    set(state => {
+      if (!initialId) {
+        return { selectionMode: true }
+      }
+      if (state.selectedIconIds.includes(initialId)) {
+        return { selectionMode: true }
+      }
+      return {
+        selectionMode: true,
+        selectedIconIds: [...state.selectedIconIds, initialId],
+      }
+    })
+  },
+
+  toggleSelectIcon: (id: string) => {
+    set(state => {
+      if (!state.selectionMode) {
+        return {}
+      }
+      const selected = state.selectedIconIds.includes(id)
+      const nextSelectedIds = selected
+        ? state.selectedIconIds.filter(currentId => currentId !== id)
+        : [...state.selectedIconIds, id]
+
+      return {
+        selectedIconIds: nextSelectedIds,
+        selectionMode: nextSelectedIds.length > 0,
+      }
+    })
+  },
+
+  clearSelection: () => {
+    set({ selectionMode: false, selectedIconIds: [] })
+  },
+
+  hideSelectedIcons: async () => {
+    const ids = get().selectedIconIds
+    if (ids.length === 0) return
+    try {
+      await invoke<number>('hide_desktop_icons', { ids })
+      set({ selectionMode: false, selectedIconIds: [] })
+      await get().fetchIcons()
+    } catch (e) {
+      console.error('Failed to hide icons:', e)
+    }
+  },
+
+  deleteSelectedIcons: async () => {
+    const ids = get().selectedIconIds
+    if (ids.length === 0) return
+    try {
+      await invoke<number>('delete_desktop_icons', { ids })
+      set({ selectionMode: false, selectedIconIds: [] })
+      await get().fetchIcons()
+    } catch (e) {
+      console.error('Failed to delete icons:', e)
+    }
   },
 
   applyWindowMode: async (mode: WindowMode) => {

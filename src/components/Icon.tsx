@@ -1,39 +1,121 @@
+import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import type { DesktopIcon } from '../types'
 import { ICON_SIZE_CONFIG } from '../types'
 import { useIconStore } from '../stores/iconStore'
-import { AppWindow } from 'lucide-react'
+import { AppWindow, Check } from 'lucide-react'
 
 interface IconProps {
   icon: DesktopIcon
+  selectionMode: boolean
+  selected: boolean
+  onEnterSelectionMode: (id: string) => void
+  onToggleSelect: (id: string) => void
 }
 
-export function Icon({ icon }: IconProps) {
+const LONG_PRESS_MS = 420
+
+export function Icon({
+  icon,
+  selectionMode,
+  selected,
+  onEnterSelectionMode,
+  onToggleSelect,
+}: IconProps) {
   const { launchApp, iconSize, titleLineCount } = useIconStore()
   const config = ICON_SIZE_CONFIG[iconSize]
   const isSingleLineTitle = titleLineCount === 'one'
+  const longPressTimerRef = useRef<number | null>(null)
+  const longPressTriggeredRef = useRef(false)
+
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      clearLongPressTimer()
+    }
+  }, [])
+
+  const handlePointerDown = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (selectionMode || e.button !== 0) return
+    longPressTriggeredRef.current = false
+    clearLongPressTimer()
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressTriggeredRef.current = true
+      onEnterSelectionMode(icon.id)
+    }, LONG_PRESS_MS)
+  }
+
+  const handlePointerUp = () => {
+    clearLongPressTimer()
+  }
+
+  const handlePointerCancel = () => {
+    clearLongPressTimer()
+  }
+
+  const handlePointerLeave = () => {
+    clearLongPressTimer()
+  }
 
   const handleClick = () => {
+    if (longPressTriggeredRef.current) {
+      longPressTriggeredRef.current = false
+      return
+    }
+
+    if (selectionMode) {
+      onToggleSelect(icon.id)
+      return
+    }
+
     launchApp(icon.path)
   }
+
+  const buttonStateClass = selectionMode
+    ? selected
+      ? 'bg-blue-500/20 ring-1 ring-blue-500/70'
+      : 'bg-black/10 dark:bg-white/5'
+    : 'bg-transparent hover:bg-black/10 active:bg-black/20 dark:hover:bg-white/10 dark:active:bg-white/20'
+  const layerClass = selectionMode
+    ? selected
+      ? 'z-30'
+      : 'z-10'
+    : 'z-10 hover:z-20'
+  const imageMotionClass = selectionMode ? '' : 'group-hover:scale-105 group-active:scale-95'
 
   return (
     <button
       data-icon
-      className="icon-item flex flex-col items-center gap-2 p-3 rounded-2xl
-                 bg-transparent border-none shadow-none
-                 hover:bg-black/10 active:bg-black/20
-                 dark:hover:bg-white/10 dark:active:bg-white/20
-                 transition-all duration-200 cursor-pointer group"
+      data-selection-mode={selectionMode ? 'on' : 'off'}
+      className={`icon-item relative flex flex-col items-center gap-2 rounded-2xl border-none p-3 shadow-none transition-all duration-200 cursor-pointer group ${buttonStateClass} ${layerClass}`}
       style={{ width: config.containerWidth }}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
+      onPointerLeave={handlePointerLeave}
       onClick={handleClick}
       title={icon.name}
+      aria-pressed={selectionMode ? selected : undefined}
     >
+      {selectionMode ? (
+        <span
+          className={`absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full border text-xs ${
+            selected
+              ? 'border-blue-500 bg-blue-500 text-white'
+              : 'border-white/60 bg-black/30 text-transparent'
+          }`}
+        >
+          {selected ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
+        </span>
+      ) : null}
+
       <div
-        className="icon-image flex items-center justify-center
-                    overflow-hidden
-                    group-hover:scale-105
-                    group-active:scale-95
-                    transition-all duration-200"
+        className={`icon-image flex items-center justify-center overflow-hidden transition-all duration-200 ${imageMotionClass}`}
         style={{ width: config.imgSize, height: config.imgSize }}
       >
         {icon.icon_base64 ? (
@@ -49,7 +131,9 @@ export function Icon({ icon }: IconProps) {
         )}
       </div>
       <span
-        className="icon-label text-[11px] text-foreground text-center leading-tight drop-shadow-md"
+        className={`icon-label text-[11px] text-center leading-tight drop-shadow-md ${
+          selectionMode && selected ? 'text-blue-200' : 'text-foreground'
+        }`}
         style={{
           maxWidth: config.containerWidth - 10,
           display: isSingleLineTitle ? 'block' : '-webkit-box',

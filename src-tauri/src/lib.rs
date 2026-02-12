@@ -32,6 +32,8 @@ struct SnapshotIconItem {
     path: String,
     target_path: String,
     item_type: String,
+    #[serde(default)]
+    hidden: bool,
     icons: SnapshotIconPaths,
 }
 
@@ -159,6 +161,34 @@ fn sync_full_desktop_icons(app_handle: tauri::AppHandle) -> Result<IconSyncResul
 }
 
 #[tauri::command]
+fn hide_desktop_icons(app_handle: tauri::AppHandle, ids: Vec<String>) -> Result<usize, String> {
+    #[cfg(windows)]
+    {
+        hide_desktop_icons_windows(&app_handle, &ids)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app_handle;
+        let _ = ids;
+        Err("Not supported on this platform".to_string())
+    }
+}
+
+#[tauri::command]
+fn delete_desktop_icons(app_handle: tauri::AppHandle, ids: Vec<String>) -> Result<usize, String> {
+    #[cfg(windows)]
+    {
+        delete_desktop_icons_windows(&app_handle, &ids)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app_handle;
+        let _ = ids;
+        Err("Not supported on this platform".to_string())
+    }
+}
+
+#[tauri::command]
 fn launch_app(path: String) -> Result<(), String> {
     #[cfg(windows)]
     { launch_app_windows(&path) }
@@ -228,6 +258,22 @@ fn clear_icon_cache_dirs(app_handle: &tauri::AppHandle) -> Result<(), String> {
             .map_err(|e| format!("Failed to clear icon cache directory {:?}: {}", icon_root, e))?;
     }
     ensure_icon_cache_dirs(app_handle)?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn remove_cached_icon_file(app_handle: &tauri::AppHandle, rel_path: &str) -> Result<(), String> {
+    if rel_path.is_empty() {
+        return Ok(());
+    }
+
+    let abs_path = snapshot_base_dir(app_handle)?.join(rel_path);
+    if !abs_path.exists() {
+        return Ok(());
+    }
+
+    std::fs::remove_file(&abs_path)
+        .map_err(|e| format!("Failed to remove icon cache file {:?}: {}", abs_path, e))?;
     Ok(())
 }
 
@@ -382,6 +428,7 @@ fn build_snapshot_item(
         path: item.path.clone(),
         target_path: item.target_path.clone(),
         item_type: item.item_type.clone(),
+        hidden: false,
         icons,
     })
 }
@@ -404,6 +451,7 @@ fn snapshot_to_desktop_icons(
     snapshot
         .icons
         .iter()
+        .filter(|item| !item.hidden)
         .map(|item| {
             let rel_path = match bucket {
                 IconBucket::Small => &item.icons.small,
@@ -518,6 +566,62 @@ fn sync_full_desktop_icons_windows(app_handle: &tauri::AppHandle) -> Result<Icon
         added_count: total_count,
         total_count,
     })
+}
+
+#[cfg(windows)]
+fn hide_desktop_icons_windows(app_handle: &tauri::AppHandle, ids: &[String]) -> Result<usize, String> {
+    if ids.is_empty() {
+        return Ok(0);
+    }
+
+    let id_set = ids.iter().cloned().collect::<HashSet<_>>();
+    let mut snapshot = match read_icon_snapshot(app_handle)? {
+        Some(snapshot) => snapshot,
+        None => return Ok(0),
+    };
+
+    let mut hidden_count = 0usize;
+    for item in &mut snapshot.icons {
+        if id_set.contains(&item.id) && !item.hidden {
+            item.hidden = true;
+            hidden_count += 1;
+        }
+    }
+
+    write_icon_snapshot(app_handle, &snapshot)?;
+    Ok(hidden_count)
+}
+
+#[cfg(windows)]
+fn delete_desktop_icons_windows(app_handle: &tauri::AppHandle, ids: &[String]) -> Result<usize, String> {
+    if ids.is_empty() {
+        return Ok(0);
+    }
+
+    let id_set = ids.iter().cloned().collect::<HashSet<_>>();
+    let mut snapshot = match read_icon_snapshot(app_handle)? {
+        Some(snapshot) => snapshot,
+        None => return Ok(0),
+    };
+
+    let mut removed_items = Vec::new();
+    snapshot.icons.retain(|item| {
+        if id_set.contains(&item.id) {
+            removed_items.push(item.clone());
+            false
+        } else {
+            true
+        }
+    });
+
+    for item in &removed_items {
+        remove_cached_icon_file(app_handle, &item.icons.small)?;
+        remove_cached_icon_file(app_handle, &item.icons.medium)?;
+        remove_cached_icon_file(app_handle, &item.icons.large)?;
+    }
+
+    write_icon_snapshot(app_handle, &snapshot)?;
+    Ok(removed_items.len())
 }
 
 #[cfg(windows)]
@@ -836,7 +940,9 @@ pub fn run() {
             launch_app,
             set_window_mode,
             sync_new_desktop_icons,
-            sync_full_desktop_icons
+            sync_full_desktop_icons,
+            hide_desktop_icons,
+            delete_desktop_icons
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

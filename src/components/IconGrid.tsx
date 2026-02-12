@@ -26,7 +26,14 @@ const fitCount = (container: number, item: number) => {
 }
 
 export function IconGrid({ icons }: IconGridProps) {
-  const { iconSize } = useIconStore()
+  const {
+    iconSize,
+    selectionMode,
+    selectedIconIds,
+    enterSelectionMode,
+    toggleSelectIcon,
+  } = useIconStore()
+
   const containerRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const columnWidth = ICON_SIZE_CONFIG[iconSize].columnWidth
@@ -54,11 +61,8 @@ export function IconGrid({ icons }: IconGridProps) {
 
       setItemWidth(iconWidth)
       setItemHeight(iconHeight)
-
-      const nextColumns = fitCount(width, iconWidth)
-      const nextRows = fitCount(height, iconHeight)
-      setColumns(nextColumns)
-      setRows(nextRows)
+      setColumns(fitCount(width, iconWidth))
+      setRows(fitCount(height, iconHeight))
     }
 
     const scheduleRecalc = () => {
@@ -104,11 +108,13 @@ export function IconGrid({ icons }: IconGridProps) {
     const start = currentPage * pageSize
     return icons.slice(start, start + pageSize)
   }, [icons, currentPage, pageSize])
+
+  const selectedIconSet = useMemo(() => new Set(selectedIconIds), [selectedIconIds])
   const gridWidth = columns * itemWidth + Math.max(0, columns - 1) * GRID_GAP
   const gridHeight = rows * itemHeight + Math.max(0, rows - 1) * GRID_GAP
 
   return (
-    <div className="relative h-full w-full px-16 pt-24 pb-20">
+    <div className="relative h-full w-full px-16 pb-20 pt-24">
       <div ref={containerRef} className="flex h-full w-full items-center justify-center">
         <div
           className="relative"
@@ -127,7 +133,14 @@ export function IconGrid({ icons }: IconGridProps) {
             }}
           >
             {pagedIcons.map(icon => (
-              <Icon key={icon.id} icon={icon} />
+              <Icon
+                key={icon.id}
+                icon={icon}
+                selectionMode={selectionMode}
+                selected={selectedIconSet.has(icon.id)}
+                onEnterSelectionMode={enterSelectionMode}
+                onToggleSelect={toggleSelectIcon}
+              />
             ))}
           </div>
 
@@ -137,34 +150,32 @@ export function IconGrid({ icons }: IconGridProps) {
             style={{ top: `calc(100% + ${PAGINATION_OFFSET}px)` }}
             onMouseLeave={() => setHoverPage(null)}
           >
-            <div
-              className="flex items-center"
-              style={{ columnGap: `${PAGINATION_DOT_GAP}px` }}
-            >
+            <div className="flex items-center" style={{ columnGap: `${PAGINATION_DOT_GAP}px` }}>
               {Array.from({ length: pageCount }, (_, index) => {
                 const isCurrent = currentPage === index
                 const isHovered = hoverPage === index
                 const shouldExpand = isCurrent || isHovered
+
                 return (
-                <button
-                  key={index}
-                  data-pagination
-                  type="button"
-                  aria-label={`切换到第 ${index + 1} 页`}
-                  onMouseEnter={() => setHoverPage(index)}
-                  onClick={() => setCurrentPage(index)}
-                  className={`relative rounded-full transition-all duration-250 ease-out ${
-                    isCurrent
-                      ? 'bg-white/95 shadow-[0_0_10px_rgba(255,255,255,0.75)]'
-                      : isHovered
-                        ? 'bg-white/55'
-                        : 'bg-white/35 hover:bg-white/45'
-                  }`}
-                  style={{
-                    width: `${shouldExpand ? PAGINATION_ACTIVE_WIDTH : PAGINATION_DOT_SIZE}px`,
-                    height: `${PAGINATION_DOT_SIZE}px`,
-                  }}
-                />
+                  <button
+                    key={index}
+                    data-pagination
+                    type="button"
+                    aria-label={`切换到第 ${index + 1} 页`}
+                    onMouseEnter={() => setHoverPage(index)}
+                    onClick={() => setCurrentPage(index)}
+                    className={`relative rounded-full transition-all duration-250 ease-out ${
+                      isCurrent
+                        ? 'bg-white/95 shadow-[0_0_10px_rgba(255,255,255,0.75)]'
+                        : isHovered
+                          ? 'bg-white/55'
+                          : 'bg-white/35 hover:bg-white/45'
+                    }`}
+                    style={{
+                      width: `${shouldExpand ? PAGINATION_ACTIVE_WIDTH : PAGINATION_DOT_SIZE}px`,
+                      height: `${PAGINATION_DOT_SIZE}px`,
+                    }}
+                  />
                 )
               })}
             </div>

@@ -28,7 +28,7 @@ const ICON_SIZE_OPTIONS: { label: string; value: IconSize }[] = [
 const WINDOW_MODE_OPTIONS: { label: string; value: WindowMode }[] = [
   { label: "全屏", value: "fullscreen" },
   { label: "大窗口", value: "large" },
-  { label: "中等窗口", value: "medium" },
+  { label: "中窗口", value: "medium" },
   { label: "小窗口", value: "small" },
 ];
 
@@ -49,6 +49,11 @@ export function Launchpad() {
     setWindowMode,
     titleLineCount,
     setTitleLineCount,
+    selectionMode,
+    selectedIconIds,
+    clearSelection,
+    hideSelectedIcons,
+    deleteSelectedIcons,
   } = useIconStore();
 
   useEffect(() => {
@@ -65,7 +70,6 @@ export function Launchpad() {
     })();
   }, [fetchIcons, hydrateSettings]);
 
-  // 主窗口重新显示时，从 plugin-store 同步设置（处理被隐藏期间 Settings 改动的情况）
   useEffect(() => {
     const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
       if (focused) {
@@ -87,8 +91,21 @@ export function Launchpad() {
   }, []);
 
   const handleBackgroundClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+
+    if (selectionMode) {
+      if (
+        !target.closest("[data-icon]") &&
+        !target.closest("[data-search-placeholder]") &&
+        !target.closest("[data-pagination]") &&
+        !target.closest("[data-selection-toolbar]")
+      ) {
+        clearSelection();
+      }
+      return;
+    }
+
     if (windowMode === "fullscreen") {
-      const target = e.target as HTMLElement;
       if (
         !target.closest("[data-icon]") &&
         !target.closest("[data-search-placeholder]") &&
@@ -97,6 +114,18 @@ export function Launchpad() {
         void invoke("toggle_window");
       }
     }
+  };
+
+  const handleHideSelected = () => {
+    if (selectedIconIds.length === 0) return;
+    void hideSelectedIcons();
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedIconIds.length === 0) return;
+    const confirmed = window.confirm(`确定删除已选中的 ${selectedIconIds.length} 个图标吗？`);
+    if (!confirmed) return;
+    void deleteSelectedIcons();
   };
 
   const openSettings = async () => {
@@ -146,6 +175,36 @@ export function Launchpad() {
               className="h-11 w-full rounded-full border border-white/20 bg-black/25 px-4 text-sm text-white/80 shadow-lg backdrop-blur-md placeholder:text-white/50"
             />
           </div>
+
+          {selectionMode ? (
+            <div
+              data-selection-toolbar
+              className="absolute left-1/2 top-20 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-black/55 px-3 py-2 text-sm text-white/90 backdrop-blur-md"
+            >
+              <span className="px-2">已选 {selectedIconIds.length}</span>
+              <button
+                type="button"
+                onClick={handleHideSelected}
+                className="rounded-full border border-white/25 px-3 py-1 text-xs hover:bg-white/15"
+              >
+                隐藏
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteSelected}
+                className="rounded-full border border-red-300/40 px-3 py-1 text-xs text-red-200 hover:bg-red-500/25"
+              >
+                删除
+              </button>
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="rounded-full border border-white/25 px-3 py-1 text-xs hover:bg-white/15"
+              >
+                取消
+              </button>
+            </div>
+          ) : null}
 
           {loading ? (
             <div className="flex items-center gap-3">
