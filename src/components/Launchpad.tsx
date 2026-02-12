@@ -89,7 +89,7 @@ export function Launchpad() {
   const handleBackgroundClick = (e: React.MouseEvent) => {
     if (windowMode === "fullscreen") {
       const target = e.target as HTMLElement;
-      if (!target.closest("[data-icon]")) {
+      if (!target.closest("[data-icon]") && !target.closest("[data-search-placeholder]")) {
         void invoke("toggle_window");
       }
     }
@@ -126,9 +126,23 @@ export function Launchpad() {
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
-          className="launchpad-bg flex h-screen w-screen select-none flex-col items-center justify-center"
+          className="launchpad-bg relative flex h-screen w-screen select-none flex-col items-center justify-center"
           onClick={handleBackgroundClick}
         >
+          <div
+            data-search-placeholder
+            className="absolute left-1/2 top-6 z-10 w-full max-w-xl -translate-x-1/2 px-6"
+          >
+            <input
+              data-search-placeholder
+              type="text"
+              placeholder="搜索（功能开发中）"
+              readOnly
+              aria-label="搜索框占位"
+              className="h-11 w-full rounded-full border border-white/20 bg-black/25 px-4 text-sm text-white/80 shadow-lg backdrop-blur-md placeholder:text-white/50"
+            />
+          </div>
+
           {loading ? (
             <div className="flex items-center gap-3">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/40 border-t-foreground" />
