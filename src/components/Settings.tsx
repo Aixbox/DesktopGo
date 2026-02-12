@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useIconStore } from "@/stores/iconStore";
 import { applyTheme, saveTheme } from "@/lib/theme";
@@ -38,6 +39,41 @@ const THEME_OPTIONS: { label: string; value: ThemeMode }[] = [
     { label: "深色模式", value: "dark" },
     { label: "浅色模式", value: "light" },
 ];
+
+type IconSyncAction = "incremental" | "full";
+
+type IconSyncResult = {
+    mode: string;
+    scanned_count: number;
+    added_count: number;
+    total_count: number;
+};
+
+const ICON_SYNC_ACTIONS: Record<
+    IconSyncAction,
+    {
+        label: string;
+        command: "sync_new_desktop_icons" | "sync_full_desktop_icons";
+        desc: string;
+        confirmTitle: string;
+        confirmDesc: string;
+    }
+> = {
+    incremental: {
+        label: "桌面新增图标同步",
+        command: "sync_new_desktop_icons",
+        desc: "仅追加桌面上新增的图标，已有图标保持不变。",
+        confirmTitle: "确认执行新增图标同步",
+        confirmDesc: "该操作会扫描桌面并仅新增快照中不存在的图标，不会删除或覆盖已有图标记录。",
+    },
+    full: {
+        label: "桌面全量图标同步",
+        command: "sync_full_desktop_icons",
+        desc: "按当前桌面重建图标快照，覆盖现有快照结果。",
+        confirmTitle: "确认执行全量图标同步",
+        confirmDesc: "该操作会重新扫描整个桌面并重建图标快照，旧快照中已不存在的图标会被移除。",
+    },
+};
 
 function SettingGroup({
     title,
@@ -191,11 +227,89 @@ function UpdatePanel() {
 }
 
 function IconManagerPanel() {
+    const [pendingAction, setPendingAction] = useState<IconSyncAction | null>(null);
+    const [syncing, setSyncing] = useState(false);
+    const [resultText, setResultText] = useState<string>("");
+
+    const handleConfirmSync = async () => {
+        if (!pendingAction) return;
+        setSyncing(true);
+        setResultText("");
+
+        try {
+            const action = ICON_SYNC_ACTIONS[pendingAction];
+            const result = await invoke<IconSyncResult>(action.command);
+            const modeText = result.mode === "full" ? "全量同步" : "新增同步";
+            setResultText(
+                `${modeText}完成：扫描 ${result.scanned_count} 项，新增 ${result.added_count} 项，当前快照共 ${result.total_count} 项。`,
+            );
+        } catch (e) {
+            setResultText(`同步失败：${String(e)}`);
+        } finally {
+            setSyncing(false);
+            setPendingAction(null);
+        }
+    };
+
     return (
-        <div className="space-y-2">
-            <h2 className="text-lg font-semibold">图标管理</h2>
-            <p className="text-sm text-muted-foreground">这里将用于管理桌面图标的显示和组织。</p>
-        </div>
+        <>
+            <div className="space-y-6">
+                <div className="space-y-2">
+                    <h2 className="text-lg font-semibold">图标管理</h2>
+                    <p className="text-sm text-muted-foreground">
+                        首次进入主页面会自动扫描并保存图标快照，后续不会主动扫描。你可以在这里手动同步。
+                    </p>
+                </div>
+
+                <div className="grid gap-3">
+                    {(Object.keys(ICON_SYNC_ACTIONS) as IconSyncAction[]).map((actionKey) => {
+                        const action = ICON_SYNC_ACTIONS[actionKey];
+                        return (
+                            <button
+                                key={actionKey}
+                                onClick={() => setPendingAction(actionKey)}
+                                disabled={syncing}
+                                className="rounded-lg border border-border bg-secondary px-4 py-3 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <p className="text-sm font-medium">{action.label}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">{action.desc}</p>
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {resultText ? <p className="text-sm text-muted-foreground">{resultText}</p> : null}
+            </div>
+
+            {pendingAction ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+                    <div className="w-full max-w-md rounded-xl border border-border bg-background p-5 shadow-xl">
+                        <h3 className="text-base font-semibold">
+                            {ICON_SYNC_ACTIONS[pendingAction].confirmTitle}
+                        </h3>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                            {ICON_SYNC_ACTIONS[pendingAction].confirmDesc}
+                        </p>
+                        <div className="mt-5 flex justify-end gap-2">
+                            <button
+                                onClick={() => setPendingAction(null)}
+                                disabled={syncing}
+                                className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                取消
+                            </button>
+                            <button
+                                onClick={handleConfirmSync}
+                                disabled={syncing}
+                                className="rounded-md bg-blue-500 px-3 py-1.5 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {syncing ? "同步中..." : "开始同步"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+        </>
     );
 }
 

@@ -72,11 +72,8 @@ export function Launchpad() {
         void (async () => {
           try {
             const state = useIconStore.getState();
-            const prevIconSize = state.iconSize;
             await state.hydrateSettings();
-            if (useIconStore.getState().iconSize !== prevIconSize) {
-              await useIconStore.getState().fetchIcons();
-            }
+            await useIconStore.getState().fetchIcons();
             applyTheme(await getSavedTheme());
           } catch (e) {
             console.error("Failed to sync settings on focus:", e);
