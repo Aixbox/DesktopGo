@@ -3,12 +3,13 @@ import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useIconStore } from "@/stores/iconStore";
 import { applyTheme, getSavedTheme } from "@/lib/theme";
 import type { IconSize, TitleLineCount, WindowMode, ThemeMode } from "@/types";
-import { Settings as SettingsIcon, RefreshCw, Info } from "lucide-react";
+import { Settings as SettingsIcon, RefreshCw, Info, Images } from "lucide-react";
 
-type NavItem = "settings" | "update" | "about";
+type NavItem = "settings" | "iconManager" | "update" | "about";
 
 const NAV_ITEMS: { key: NavItem; label: string; icon: React.ReactNode }[] = [
     { key: "settings", label: "设置", icon: <SettingsIcon className="w-4 h-4" /> },
+    { key: "iconManager", label: "图标管理", icon: <Images className="w-4 h-4" /> },
     { key: "update", label: "更新", icon: <RefreshCw className="w-4 h-4" /> },
     { key: "about", label: "关于", icon: <Info className="w-4 h-4" /> },
 ];
@@ -160,6 +161,15 @@ function UpdatePanel() {
     );
 }
 
+function IconManagerPanel() {
+    return (
+        <div className="space-y-2">
+            <h2 className="text-lg font-semibold">图标管理</h2>
+            <p className="text-sm text-muted-foreground">这里将用于管理桌面图标的显示和组织。</p>
+        </div>
+    );
+}
+
 function AboutPanel() {
     return (
         <div className="flex h-full items-center justify-center">
@@ -197,6 +207,7 @@ export function Settings() {
             {/* 右侧内容区 */}
             <main className="flex-1 overflow-y-auto p-8">
                 {activeNav === "settings" && <SettingsPanel />}
+                {activeNav === "iconManager" && <IconManagerPanel />}
                 {activeNav === "update" && <UpdatePanel />}
                 {activeNav === "about" && <AboutPanel />}
             </main>
