@@ -1,7 +1,7 @@
 use base64::Engine;
 use std::path::PathBuf;
 
-use super::models::DesktopIcon;
+use super::models::{DesktopIcon, ICON_SOURCE_DESKTOP};
 pub(super) fn get_dpi_scale() -> f64 {
     unsafe {
         let hdc = windows::Win32::Graphics::Gdi::GetDC(None);
@@ -68,6 +68,7 @@ pub(super) fn create_recycle_bin_icon(icon_size: i32) -> Option<DesktopIcon> {
             target_path: "::{645FF040-5081-101B-9F08-00AA002F954E}".to_string(),
             icon_base64,
             item_type: "special".to_string(),
+            source: ICON_SOURCE_DESKTOP.to_string(),
         })
     }
 }

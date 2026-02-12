@@ -1,5 +1,12 @@
 use serde::{Deserialize, Serialize};
 
+pub(crate) const ICON_SOURCE_DESKTOP: &str = "desktop";
+pub(crate) const ICON_SOURCE_CUSTOMAPP: &str = "customapp";
+
+pub(crate) fn default_icon_source() -> String {
+    ICON_SOURCE_DESKTOP.to_string()
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct DesktopIcon {
     pub id: String,
@@ -8,6 +15,14 @@ pub struct DesktopIcon {
     pub target_path: String,
     pub icon_base64: String,
     pub item_type: String,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct IconMutationTarget {
+    pub id: String,
+    #[serde(default = "default_icon_source")]
+    pub source: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,6 +42,8 @@ pub(crate) struct SnapshotIconItem {
     pub(crate) item_type: String,
     #[serde(default)]
     pub(crate) hidden: bool,
+    #[serde(default = "default_icon_source")]
+    pub(crate) source: String,
     pub(crate) icons: SnapshotIconPaths,
 }
 

@@ -4,21 +4,64 @@ use std::path::PathBuf;
 use tauri::Manager;
 
 use super::models::{
-    DesktopIcon, IconBucket, IconSnapshot, IconSyncResult, ScannedDesktopItem, SnapshotIconItem,
-    SnapshotIconPaths,
+    DesktopIcon, IconBucket, IconMutationTarget, IconSnapshot, IconSyncResult, ScannedDesktopItem,
+    SnapshotIconItem, SnapshotIconPaths, ICON_SOURCE_CUSTOMAPP, ICON_SOURCE_DESKTOP,
 };
 #[cfg(windows)]
 use super::platform_windows::{
     create_recycle_bin_icon, extract_icon_for_item, get_desktop_dirs, get_dpi_scale,
     launch_app_windows, resolve_lnk, scan_desktop_items,
 };
-pub fn get_desktop_icons(app_handle: tauri::AppHandle, icon_size: i32) -> Vec<DesktopIcon> {
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IconSource {
+    Desktop,
+    CustomApp,
+}
+
+impl IconSource {
+    fn from_value(value: &str) -> Self {
+        let normalized = value.trim().to_lowercase();
+        if normalized == ICON_SOURCE_CUSTOMAPP
+            || normalized == "custom_app"
+            || normalized == "custom-app"
+        {
+            Self::CustomApp
+        } else {
+            Self::Desktop
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Desktop => ICON_SOURCE_DESKTOP,
+            Self::CustomApp => ICON_SOURCE_CUSTOMAPP,
+        }
+    }
+
+    fn snapshot_file_name(self) -> &'static str {
+        match self {
+            Self::Desktop => "icons_snapshot.json",
+            Self::CustomApp => "customapp_icons_snapshot.json",
+        }
+    }
+
+    fn cache_folder_name(self) -> &'static str {
+        self.as_str()
+    }
+}
+
+pub fn get_desktop_icons(
+    app_handle: tauri::AppHandle,
+    icon_size: i32,
+    custom_app_dir: Option<String>,
+) -> Vec<DesktopIcon> {
     #[cfg(windows)]
     {
-        match load_or_init_icons_snapshot_windows(&app_handle, icon_size) {
+        match get_all_icons_windows(&app_handle, icon_size, custom_app_dir) {
             Ok(icons) => icons,
             Err(e) => {
-                eprintln!("Failed to load icon snapshot: {}", e);
+                eprintln!("Failed to load icon snapshots: {}", e);
                 Vec::new()
             }
         }
@@ -27,6 +70,7 @@ pub fn get_desktop_icons(app_handle: tauri::AppHandle, icon_size: i32) -> Vec<De
     {
         let _ = app_handle;
         let _ = icon_size;
+        let _ = custom_app_dir;
         Vec::new()
     }
 }
@@ -34,7 +78,7 @@ pub fn get_desktop_icons(app_handle: tauri::AppHandle, icon_size: i32) -> Vec<De
 pub fn sync_new_desktop_icons(app_handle: tauri::AppHandle) -> Result<IconSyncResult, String> {
     #[cfg(windows)]
     {
-        sync_new_desktop_icons_windows(&app_handle)
+        sync_new_icons_windows(&app_handle, IconSource::Desktop, || Ok(collect_desktop_items()))
     }
     #[cfg(not(windows))]
     {
@@ -46,7 +90,7 @@ pub fn sync_new_desktop_icons(app_handle: tauri::AppHandle) -> Result<IconSyncRe
 pub fn sync_full_desktop_icons(app_handle: tauri::AppHandle) -> Result<IconSyncResult, String> {
     #[cfg(windows)]
     {
-        sync_full_desktop_icons_windows(&app_handle)
+        sync_full_icons_windows(&app_handle, IconSource::Desktop, || Ok(collect_desktop_items()))
     }
     #[cfg(not(windows))]
     {
@@ -55,31 +99,72 @@ pub fn sync_full_desktop_icons(app_handle: tauri::AppHandle) -> Result<IconSyncR
     }
 }
 
-pub fn hide_desktop_icons(app_handle: tauri::AppHandle, ids: Vec<String>) -> Result<usize, String> {
+pub fn sync_new_customapp_icons(
+    app_handle: tauri::AppHandle,
+    custom_app_dir: Option<String>,
+) -> Result<IconSyncResult, String> {
     #[cfg(windows)]
     {
-        hide_desktop_icons_windows(&app_handle, &ids)
+        let custom_dir = resolve_customapp_dir_windows(&app_handle, custom_app_dir)?;
+        sync_new_icons_windows(&app_handle, IconSource::CustomApp, || {
+            collect_items_from_single_dir(&custom_dir)
+        })
     }
     #[cfg(not(windows))]
     {
         let _ = app_handle;
-        let _ = ids;
+        let _ = custom_app_dir;
+        Err("Not supported on this platform".to_string())
+    }
+}
+
+pub fn sync_full_customapp_icons(
+    app_handle: tauri::AppHandle,
+    custom_app_dir: Option<String>,
+) -> Result<IconSyncResult, String> {
+    #[cfg(windows)]
+    {
+        let custom_dir = resolve_customapp_dir_windows(&app_handle, custom_app_dir)?;
+        sync_full_icons_windows(&app_handle, IconSource::CustomApp, || {
+            collect_items_from_single_dir(&custom_dir)
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app_handle;
+        let _ = custom_app_dir;
+        Err("Not supported on this platform".to_string())
+    }
+}
+
+pub fn hide_desktop_icons(
+    app_handle: tauri::AppHandle,
+    targets: Vec<IconMutationTarget>,
+) -> Result<usize, String> {
+    #[cfg(windows)]
+    {
+        hide_icons_windows(&app_handle, &targets)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app_handle;
+        let _ = targets;
         Err("Not supported on this platform".to_string())
     }
 }
 
 pub fn delete_desktop_icons(
     app_handle: tauri::AppHandle,
-    ids: Vec<String>,
+    targets: Vec<IconMutationTarget>,
 ) -> Result<usize, String> {
     #[cfg(windows)]
     {
-        delete_desktop_icons_windows(&app_handle, &ids)
+        delete_icons_windows(&app_handle, &targets)
     }
     #[cfg(not(windows))]
     {
         let _ = app_handle;
-        let _ = ids;
+        let _ = targets;
         Err("Not supported on this platform".to_string())
     }
 }
@@ -95,6 +180,19 @@ pub fn launch_app(path: String) -> Result<(), String> {
     }
 }
 
+pub fn get_default_customapp_dir(app_handle: tauri::AppHandle) -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        let path = default_customapp_dir_windows(&app_handle)?;
+        Ok(path.to_string_lossy().to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app_handle;
+        Err("Not supported on this platform".to_string())
+    }
+}
+
 // ===== Windows implementations =====
 
 #[cfg(windows)]
@@ -106,30 +204,39 @@ fn snapshot_base_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 #[cfg(windows)]
-fn snapshot_file_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
-    Ok(snapshot_base_dir(app_handle)?.join("icons_snapshot.json"))
+fn snapshot_file_path(app_handle: &tauri::AppHandle, source: IconSource) -> Result<PathBuf, String> {
+    Ok(snapshot_base_dir(app_handle)?.join(source.snapshot_file_name()))
 }
 
 #[cfg(windows)]
-fn read_icon_snapshot(app_handle: &tauri::AppHandle) -> Result<Option<IconSnapshot>, String> {
-    let path = snapshot_file_path(app_handle)?;
+fn read_icon_snapshot(
+    app_handle: &tauri::AppHandle,
+    source: IconSource,
+) -> Result<Option<IconSnapshot>, String> {
+    let path = snapshot_file_path(app_handle, source)?;
     if !path.exists() {
         return Ok(None);
     }
 
     let content = std::fs::read_to_string(&path)
         .map_err(|e| format!("Failed to read icon snapshot file: {}", e))?;
-    let snapshot: IconSnapshot = serde_json::from_str(&content)
+    let mut snapshot: IconSnapshot = serde_json::from_str(&content)
         .map_err(|e| format!("Failed to parse icon snapshot JSON: {}", e))?;
+
+    for item in &mut snapshot.icons {
+        item.source = IconSource::from_value(&item.source).as_str().to_string();
+    }
+
     Ok(Some(snapshot))
 }
 
 #[cfg(windows)]
 fn write_icon_snapshot(
     app_handle: &tauri::AppHandle,
+    source: IconSource,
     snapshot: &IconSnapshot,
 ) -> Result<(), String> {
-    let path = snapshot_file_path(app_handle)?;
+    let path = snapshot_file_path(app_handle, source)?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create snapshot directory: {}", e))?;
@@ -142,10 +249,13 @@ fn write_icon_snapshot(
 }
 
 #[cfg(windows)]
-fn ensure_icon_cache_dirs(app_handle: &tauri::AppHandle) -> Result<(), String> {
+fn ensure_icon_cache_dirs(app_handle: &tauri::AppHandle, source: IconSource) -> Result<(), String> {
     let base_dir = snapshot_base_dir(app_handle)?;
     for bucket in [IconBucket::Small, IconBucket::Medium, IconBucket::Large] {
-        let dir = base_dir.join("icons").join(bucket.folder_name());
+        let dir = base_dir
+            .join("icons")
+            .join(source.cache_folder_name())
+            .join(bucket.folder_name());
         std::fs::create_dir_all(&dir)
             .map_err(|e| format!("Failed to create icon cache directory {:?}: {}", dir, e))?;
     }
@@ -153,8 +263,10 @@ fn ensure_icon_cache_dirs(app_handle: &tauri::AppHandle) -> Result<(), String> {
 }
 
 #[cfg(windows)]
-fn clear_icon_cache_dirs(app_handle: &tauri::AppHandle) -> Result<(), String> {
-    let icon_root = snapshot_base_dir(app_handle)?.join("icons");
+fn clear_icon_cache_dirs(app_handle: &tauri::AppHandle, source: IconSource) -> Result<(), String> {
+    let icon_root = snapshot_base_dir(app_handle)?
+        .join("icons")
+        .join(source.cache_folder_name());
     if icon_root.exists() {
         std::fs::remove_dir_all(&icon_root).map_err(|e| {
             format!(
@@ -163,7 +275,7 @@ fn clear_icon_cache_dirs(app_handle: &tauri::AppHandle) -> Result<(), String> {
             )
         })?;
     }
-    ensure_icon_cache_dirs(app_handle)?;
+    ensure_icon_cache_dirs(app_handle, source)?;
     Ok(())
 }
 
@@ -184,8 +296,13 @@ fn remove_cached_icon_file(app_handle: &tauri::AppHandle, rel_path: &str) -> Res
 }
 
 #[cfg(windows)]
-fn icon_file_rel_path(id: &str, bucket: IconBucket) -> String {
-    format!("icons/{}/{}.png", bucket.folder_name(), id)
+fn icon_file_rel_path(id: &str, bucket: IconBucket, source: IconSource) -> String {
+    format!(
+        "icons/{}/{}/{}.png",
+        source.cache_folder_name(),
+        bucket.folder_name(),
+        id
+    )
 }
 
 #[cfg(windows)]
@@ -214,7 +331,15 @@ fn read_icon_file_as_data_uri(path: &PathBuf) -> String {
 }
 
 #[cfg(windows)]
-fn stable_desktop_item_key(item: &ScannedDesktopItem) -> String {
+fn has_extension(path: &PathBuf, ext: &str) -> bool {
+    path.extension()
+        .and_then(|v| v.to_str())
+        .map(|v| v.eq_ignore_ascii_case(ext))
+        .unwrap_or(false)
+}
+
+#[cfg(windows)]
+fn stable_item_key(item: &ScannedDesktopItem) -> String {
     format!(
         "{}|{}|{}",
         item.item_type.to_lowercase(),
@@ -242,25 +367,21 @@ fn collect_desktop_items() -> Vec<ScannedDesktopItem> {
             .unwrap_or("Unknown")
             .to_string();
 
-        let (target_path, item_type) =
-            if item_path.extension().and_then(|e| e.to_str()) == Some("lnk") {
-                (
-                    resolve_lnk(&item_path).unwrap_or_default(),
-                    "shortcut".to_string(),
-                )
-            } else if item_path.is_dir() {
-                (
-                    item_path.to_string_lossy().to_string(),
-                    "folder".to_string(),
-                )
-            } else if item_path.extension().and_then(|e| e.to_str()) == Some("exe") {
-                (
-                    item_path.to_string_lossy().to_string(),
-                    "executable".to_string(),
-                )
-            } else {
-                (item_path.to_string_lossy().to_string(), "file".to_string())
-            };
+        let (target_path, item_type) = if has_extension(&item_path, "lnk") {
+            (
+                resolve_lnk(&item_path).unwrap_or_default(),
+                "shortcut".to_string(),
+            )
+        } else if item_path.is_dir() {
+            (item_path.to_string_lossy().to_string(), "folder".to_string())
+        } else if has_extension(&item_path, "exe") {
+            (
+                item_path.to_string_lossy().to_string(),
+                "executable".to_string(),
+            )
+        } else {
+            (item_path.to_string_lossy().to_string(), "file".to_string())
+        };
 
         items.push(ScannedDesktopItem {
             name,
@@ -272,6 +393,53 @@ fn collect_desktop_items() -> Vec<ScannedDesktopItem> {
 
     items.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     items
+}
+
+#[cfg(windows)]
+fn collect_items_from_single_dir(dir: &PathBuf) -> Result<Vec<ScannedDesktopItem>, String> {
+    if !dir.exists() {
+        std::fs::create_dir_all(dir)
+            .map_err(|e| format!("Failed to create customapp directory {:?}: {}", dir, e))?;
+    }
+
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| format!("Failed to read customapp directory {:?}: {}", dir, e))?;
+
+    let mut items = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+            if name.starts_with('.') || name.eq_ignore_ascii_case("desktop.ini") {
+                continue;
+            }
+        }
+
+        let name = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Unknown")
+            .to_string();
+
+        let (target_path, item_type) = if has_extension(&path, "lnk") {
+            (resolve_lnk(&path).unwrap_or_default(), "shortcut".to_string())
+        } else if path.is_dir() {
+            (path.to_string_lossy().to_string(), "folder".to_string())
+        } else if has_extension(&path, "exe") {
+            (path.to_string_lossy().to_string(), "executable".to_string())
+        } else {
+            (path.to_string_lossy().to_string(), "file".to_string())
+        };
+
+        items.push(ScannedDesktopItem {
+            name,
+            path: path.to_string_lossy().to_string(),
+            target_path,
+            item_type,
+        });
+    }
+
+    items.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(items)
 }
 
 #[cfg(windows)]
@@ -298,6 +466,7 @@ fn save_scanned_icon_for_bucket(
     item: &ScannedDesktopItem,
     id: &str,
     bucket: IconBucket,
+    source: IconSource,
 ) -> Result<String, String> {
     let icon_data_uri = extract_icon_for_scanned_item(item, bucket_actual_size(bucket));
     if icon_data_uri.is_empty() {
@@ -309,7 +478,7 @@ fn save_scanned_icon_for_bucket(
         Err(_) => return Ok(String::new()),
     };
 
-    let rel_path = icon_file_rel_path(id, bucket);
+    let rel_path = icon_file_rel_path(id, bucket, source);
     let abs_path = snapshot_base_dir(app_handle)?.join(&rel_path);
     if let Some(parent) = abs_path.parent() {
         std::fs::create_dir_all(parent)
@@ -324,13 +493,14 @@ fn save_scanned_icon_for_bucket(
 fn build_snapshot_item(
     app_handle: &tauri::AppHandle,
     item: &ScannedDesktopItem,
+    source: IconSource,
 ) -> Result<SnapshotIconItem, String> {
     let id = uuid::Uuid::new_v4().to_string();
-    let key = stable_desktop_item_key(item);
+    let key = stable_item_key(item);
     let icons = SnapshotIconPaths {
-        small: save_scanned_icon_for_bucket(app_handle, item, &id, IconBucket::Small)?,
-        medium: save_scanned_icon_for_bucket(app_handle, item, &id, IconBucket::Medium)?,
-        large: save_scanned_icon_for_bucket(app_handle, item, &id, IconBucket::Large)?,
+        small: save_scanned_icon_for_bucket(app_handle, item, &id, IconBucket::Small, source)?,
+        medium: save_scanned_icon_for_bucket(app_handle, item, &id, IconBucket::Medium, source)?,
+        large: save_scanned_icon_for_bucket(app_handle, item, &id, IconBucket::Large, source)?,
     };
 
     Ok(SnapshotIconItem {
@@ -341,6 +511,7 @@ fn build_snapshot_item(
         target_path: item.target_path.clone(),
         item_type: item.item_type.clone(),
         hidden: false,
+        source: source.as_str().to_string(),
         icons,
     })
 }
@@ -383,6 +554,7 @@ fn snapshot_to_desktop_icons(
                 target_path: item.target_path.clone(),
                 icon_base64,
                 item_type: item.item_type.clone(),
+                source: IconSource::from_value(&item.source).as_str().to_string(),
             }
         })
         .collect()
@@ -391,34 +563,40 @@ fn snapshot_to_desktop_icons(
 #[cfg(windows)]
 fn build_full_snapshot(
     app_handle: &tauri::AppHandle,
+    source: IconSource,
     scanned_items: &[ScannedDesktopItem],
 ) -> Result<IconSnapshot, String> {
-    ensure_icon_cache_dirs(app_handle)?;
+    ensure_icon_cache_dirs(app_handle, source)?;
     let mut seen_keys = HashSet::new();
     let mut icons = Vec::new();
 
     for item in scanned_items {
-        let key = stable_desktop_item_key(item);
+        let key = stable_item_key(item);
         if !seen_keys.insert(key) {
             continue;
         }
-        icons.push(build_snapshot_item(app_handle, item)?);
+        icons.push(build_snapshot_item(app_handle, item, source)?);
     }
 
     Ok(IconSnapshot { version: 1, icons })
 }
 
 #[cfg(windows)]
-fn load_or_init_icons_snapshot_windows(
+fn load_or_init_icons_snapshot_windows<F>(
     app_handle: &tauri::AppHandle,
     icon_size: i32,
-) -> Result<Vec<DesktopIcon>, String> {
-    let snapshot = match read_icon_snapshot(app_handle)? {
+    source: IconSource,
+    collect_items: F,
+) -> Result<Vec<DesktopIcon>, String>
+where
+    F: FnOnce() -> Result<Vec<ScannedDesktopItem>, String>,
+{
+    let snapshot = match read_icon_snapshot(app_handle, source)? {
         Some(snapshot) => snapshot,
         None => {
-            let scanned_items = collect_desktop_items();
-            let snapshot = build_full_snapshot(app_handle, &scanned_items)?;
-            write_icon_snapshot(app_handle, &snapshot)?;
+            let scanned_items = collect_items()?;
+            let snapshot = build_full_snapshot(app_handle, source, &scanned_items)?;
+            write_icon_snapshot(app_handle, source, &snapshot)?;
             snapshot
         }
     };
@@ -427,14 +605,21 @@ fn load_or_init_icons_snapshot_windows(
 }
 
 #[cfg(windows)]
-fn sync_new_desktop_icons_windows(app_handle: &tauri::AppHandle) -> Result<IconSyncResult, String> {
-    ensure_icon_cache_dirs(app_handle)?;
-    let mut snapshot = read_icon_snapshot(app_handle)?.unwrap_or(IconSnapshot {
+fn sync_new_icons_windows<F>(
+    app_handle: &tauri::AppHandle,
+    source: IconSource,
+    collect_items: F,
+) -> Result<IconSyncResult, String>
+where
+    F: FnOnce() -> Result<Vec<ScannedDesktopItem>, String>,
+{
+    ensure_icon_cache_dirs(app_handle, source)?;
+    let mut snapshot = read_icon_snapshot(app_handle, source)?.unwrap_or(IconSnapshot {
         version: 1,
         icons: Vec::new(),
     });
 
-    let scanned_items = collect_desktop_items();
+    let scanned_items = collect_items()?;
     let mut known_keys = snapshot
         .icons
         .iter()
@@ -443,18 +628,18 @@ fn sync_new_desktop_icons_windows(app_handle: &tauri::AppHandle) -> Result<IconS
 
     let mut added_count = 0usize;
     for item in &scanned_items {
-        let key = stable_desktop_item_key(item);
+        let key = stable_item_key(item);
         if known_keys.contains(&key) {
             continue;
         }
 
-        let snapshot_item = build_snapshot_item(app_handle, item)?;
+        let snapshot_item = build_snapshot_item(app_handle, item, source)?;
         known_keys.insert(snapshot_item.key.clone());
         snapshot.icons.push(snapshot_item);
         added_count += 1;
     }
 
-    write_icon_snapshot(app_handle, &snapshot)?;
+    write_icon_snapshot(app_handle, source, &snapshot)?;
 
     Ok(IconSyncResult {
         mode: "incremental".to_string(),
@@ -465,14 +650,19 @@ fn sync_new_desktop_icons_windows(app_handle: &tauri::AppHandle) -> Result<IconS
 }
 
 #[cfg(windows)]
-fn sync_full_desktop_icons_windows(
+fn sync_full_icons_windows<F>(
     app_handle: &tauri::AppHandle,
-) -> Result<IconSyncResult, String> {
-    clear_icon_cache_dirs(app_handle)?;
-    let scanned_items = collect_desktop_items();
-    let snapshot = build_full_snapshot(app_handle, &scanned_items)?;
+    source: IconSource,
+    collect_items: F,
+) -> Result<IconSyncResult, String>
+where
+    F: FnOnce() -> Result<Vec<ScannedDesktopItem>, String>,
+{
+    clear_icon_cache_dirs(app_handle, source)?;
+    let scanned_items = collect_items()?;
+    let snapshot = build_full_snapshot(app_handle, source, &scanned_items)?;
     let total_count = snapshot.icons.len();
-    write_icon_snapshot(app_handle, &snapshot)?;
+    write_icon_snapshot(app_handle, source, &snapshot)?;
 
     Ok(IconSyncResult {
         mode: "full".to_string(),
@@ -483,16 +673,35 @@ fn sync_full_desktop_icons_windows(
 }
 
 #[cfg(windows)]
-fn hide_desktop_icons_windows(
+fn split_targets_by_source(targets: &[IconMutationTarget]) -> (HashSet<String>, HashSet<String>) {
+    let mut desktop_ids = HashSet::new();
+    let mut customapp_ids = HashSet::new();
+
+    for target in targets {
+        if target.id.trim().is_empty() {
+            continue;
+        }
+        if IconSource::from_value(&target.source) == IconSource::CustomApp {
+            customapp_ids.insert(target.id.clone());
+        } else {
+            desktop_ids.insert(target.id.clone());
+        }
+    }
+
+    (desktop_ids, customapp_ids)
+}
+
+#[cfg(windows)]
+fn hide_icons_in_snapshot_windows(
     app_handle: &tauri::AppHandle,
-    ids: &[String],
+    source: IconSource,
+    id_set: &HashSet<String>,
 ) -> Result<usize, String> {
-    if ids.is_empty() {
+    if id_set.is_empty() {
         return Ok(0);
     }
 
-    let id_set = ids.iter().cloned().collect::<HashSet<_>>();
-    let mut snapshot = match read_icon_snapshot(app_handle)? {
+    let mut snapshot = match read_icon_snapshot(app_handle, source)? {
         Some(snapshot) => snapshot,
         None => return Ok(0),
     };
@@ -505,21 +714,24 @@ fn hide_desktop_icons_windows(
         }
     }
 
-    write_icon_snapshot(app_handle, &snapshot)?;
+    if hidden_count > 0 {
+        write_icon_snapshot(app_handle, source, &snapshot)?;
+    }
+
     Ok(hidden_count)
 }
 
 #[cfg(windows)]
-fn delete_desktop_icons_windows(
+fn delete_icons_in_snapshot_windows(
     app_handle: &tauri::AppHandle,
-    ids: &[String],
+    source: IconSource,
+    id_set: &HashSet<String>,
 ) -> Result<usize, String> {
-    if ids.is_empty() {
+    if id_set.is_empty() {
         return Ok(0);
     }
 
-    let id_set = ids.iter().cloned().collect::<HashSet<_>>();
-    let mut snapshot = match read_icon_snapshot(app_handle)? {
+    let mut snapshot = match read_icon_snapshot(app_handle, source)? {
         Some(snapshot) => snapshot,
         None => return Ok(0),
     };
@@ -534,12 +746,118 @@ fn delete_desktop_icons_windows(
         }
     });
 
+    if removed_items.is_empty() {
+        return Ok(0);
+    }
+
     for item in &removed_items {
         remove_cached_icon_file(app_handle, &item.icons.small)?;
         remove_cached_icon_file(app_handle, &item.icons.medium)?;
         remove_cached_icon_file(app_handle, &item.icons.large)?;
     }
 
-    write_icon_snapshot(app_handle, &snapshot)?;
+    write_icon_snapshot(app_handle, source, &snapshot)?;
     Ok(removed_items.len())
+}
+
+#[cfg(windows)]
+fn hide_icons_windows(
+    app_handle: &tauri::AppHandle,
+    targets: &[IconMutationTarget],
+) -> Result<usize, String> {
+    if targets.is_empty() {
+        return Ok(0);
+    }
+
+    let (desktop_ids, customapp_ids) = split_targets_by_source(targets);
+    let desktop_hidden =
+        hide_icons_in_snapshot_windows(app_handle, IconSource::Desktop, &desktop_ids)?;
+    let customapp_hidden =
+        hide_icons_in_snapshot_windows(app_handle, IconSource::CustomApp, &customapp_ids)?;
+
+    Ok(desktop_hidden + customapp_hidden)
+}
+
+#[cfg(windows)]
+fn delete_icons_windows(
+    app_handle: &tauri::AppHandle,
+    targets: &[IconMutationTarget],
+) -> Result<usize, String> {
+    if targets.is_empty() {
+        return Ok(0);
+    }
+
+    let (desktop_ids, customapp_ids) = split_targets_by_source(targets);
+    let desktop_removed =
+        delete_icons_in_snapshot_windows(app_handle, IconSource::Desktop, &desktop_ids)?;
+    let customapp_removed =
+        delete_icons_in_snapshot_windows(app_handle, IconSource::CustomApp, &customapp_ids)?;
+
+    Ok(desktop_removed + customapp_removed)
+}
+
+#[cfg(windows)]
+fn default_customapp_dir_windows(_app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let exe_path =
+        std::env::current_exe().map_err(|e| format!("Failed to resolve executable path: {}", e))?;
+    let exe_dir = exe_path
+        .parent()
+        .ok_or_else(|| format!("Failed to resolve executable parent directory: {:?}", exe_path))?;
+    let custom_dir = exe_dir.join("customapp");
+    if !custom_dir.exists() {
+        std::fs::create_dir_all(&custom_dir).map_err(|e| {
+            format!(
+                "Failed to create default customapp directory {:?}: {}",
+                custom_dir, e
+            )
+        })?;
+    }
+    Ok(custom_dir)
+}
+
+#[cfg(windows)]
+fn resolve_customapp_dir_windows(
+    app_handle: &tauri::AppHandle,
+    custom_app_dir: Option<String>,
+) -> Result<PathBuf, String> {
+    let trimmed = custom_app_dir.unwrap_or_default().trim().to_string();
+    let dir = if trimmed.is_empty() {
+        default_customapp_dir_windows(app_handle)?
+    } else {
+        PathBuf::from(trimmed)
+    };
+
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| format!("Failed to create customapp directory {:?}: {}", dir, e))?;
+    }
+    Ok(dir)
+}
+
+#[cfg(windows)]
+fn get_all_icons_windows(
+    app_handle: &tauri::AppHandle,
+    icon_size: i32,
+    custom_app_dir: Option<String>,
+) -> Result<Vec<DesktopIcon>, String> {
+    let desktop_icons = load_or_init_icons_snapshot_windows(
+        app_handle,
+        icon_size,
+        IconSource::Desktop,
+        || Ok(collect_desktop_items()),
+    )?;
+
+    let custom_dir = resolve_customapp_dir_windows(app_handle, custom_app_dir)?;
+    let custom_icons = load_or_init_icons_snapshot_windows(
+        app_handle,
+        icon_size,
+        IconSource::CustomApp,
+        || collect_items_from_single_dir(&custom_dir),
+    )?;
+
+    let mut all_icons = Vec::with_capacity(desktop_icons.len() + custom_icons.len());
+    all_icons.extend(desktop_icons);
+    all_icons.extend(custom_icons);
+    all_icons.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(all_icons)
 }

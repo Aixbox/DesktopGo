@@ -1,3 +1,5 @@
+export type IconSource = 'desktop' | 'customapp'
+
 export interface DesktopIcon {
   id: string
   name: string
@@ -5,6 +7,12 @@ export interface DesktopIcon {
   target_path: string
   icon_base64: string
   item_type: 'shortcut' | 'folder' | 'file' | 'executable' | 'special'
+  source: IconSource
+}
+
+export interface IconMutationTarget {
+  id: string
+  source: IconSource
 }
 
 export type IconSize = 'large' | 'medium' | 'small'

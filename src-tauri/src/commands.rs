@@ -1,4 +1,4 @@
-use crate::icons::{self, DesktopIcon, IconSyncResult};
+use crate::icons::{self, DesktopIcon, IconMutationTarget, IconSyncResult};
 use tauri::Manager;
 
 #[tauri::command]
@@ -27,8 +27,12 @@ pub fn set_window_mode(
 }
 
 #[tauri::command]
-pub fn get_desktop_icons(app_handle: tauri::AppHandle, icon_size: i32) -> Vec<DesktopIcon> {
-    icons::get_desktop_icons(app_handle, icon_size)
+pub fn get_desktop_icons(
+    app_handle: tauri::AppHandle,
+    icon_size: i32,
+    custom_app_dir: Option<String>,
+) -> Vec<DesktopIcon> {
+    icons::get_desktop_icons(app_handle, icon_size, custom_app_dir)
 }
 
 #[tauri::command]
@@ -42,16 +46,40 @@ pub fn sync_full_desktop_icons(app_handle: tauri::AppHandle) -> Result<IconSyncR
 }
 
 #[tauri::command]
-pub fn hide_desktop_icons(app_handle: tauri::AppHandle, ids: Vec<String>) -> Result<usize, String> {
-    icons::hide_desktop_icons(app_handle, ids)
+pub fn sync_new_customapp_icons(
+    app_handle: tauri::AppHandle,
+    custom_app_dir: Option<String>,
+) -> Result<IconSyncResult, String> {
+    icons::sync_new_customapp_icons(app_handle, custom_app_dir)
+}
+
+#[tauri::command]
+pub fn sync_full_customapp_icons(
+    app_handle: tauri::AppHandle,
+    custom_app_dir: Option<String>,
+) -> Result<IconSyncResult, String> {
+    icons::sync_full_customapp_icons(app_handle, custom_app_dir)
+}
+
+#[tauri::command]
+pub fn hide_desktop_icons(
+    app_handle: tauri::AppHandle,
+    targets: Vec<IconMutationTarget>,
+) -> Result<usize, String> {
+    icons::hide_desktop_icons(app_handle, targets)
 }
 
 #[tauri::command]
 pub fn delete_desktop_icons(
     app_handle: tauri::AppHandle,
-    ids: Vec<String>,
+    targets: Vec<IconMutationTarget>,
 ) -> Result<usize, String> {
-    icons::delete_desktop_icons(app_handle, ids)
+    icons::delete_desktop_icons(app_handle, targets)
+}
+
+#[tauri::command]
+pub fn get_default_customapp_dir(app_handle: tauri::AppHandle) -> Result<String, String> {
+    icons::get_default_customapp_dir(app_handle)
 }
 
 #[tauri::command]

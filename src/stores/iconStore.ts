@@ -1,8 +1,17 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
-import type { DesktopIcon, IconSize, TitleLineCount, WindowMode } from '../types'
+import type {
+  DesktopIcon,
+  IconMutationTarget,
+  IconSize,
+  TitleLineCount,
+  WindowMode,
+} from '../types'
 import { ICON_SIZE_CONFIG, WINDOW_SIZE_CONFIG } from '../types'
 import { getSetting, setSetting, syncLegacySettingsFromLocalStorage } from '../lib/settingsStore'
+
+export const buildIconSelectionKey = (icon: Pick<DesktopIcon, 'id' | 'source'>): string =>
+  `${icon.source}:${icon.id}`
 
 interface IconStore {
   icons: DesktopIcon[]
@@ -12,14 +21,14 @@ interface IconStore {
   windowMode: WindowMode
   titleLineCount: TitleLineCount
   selectionMode: boolean
-  selectedIconIds: string[]
+  selectedIconKeys: string[]
   fetchIcons: () => Promise<void>
   launchApp: (path: string) => Promise<void>
   setIconSize: (size: IconSize) => void
   setWindowMode: (mode: WindowMode) => void
   setTitleLineCount: (count: TitleLineCount) => void
-  enterSelectionMode: (initialId?: string) => void
-  toggleSelectIcon: (id: string) => void
+  enterSelectionMode: (initialKey?: string) => void
+  toggleSelectIcon: (key: string) => void
   clearSelection: () => void
   hideSelectedIcons: () => Promise<void>
   deleteSelectedIcons: () => Promise<void>
@@ -35,22 +44,26 @@ export const useIconStore = create<IconStore>((set, get) => ({
   windowMode: 'fullscreen',
   titleLineCount: 'two',
   selectionMode: false,
-  selectedIconIds: [],
+  selectedIconKeys: [],
 
   fetchIcons: async () => {
     set({ loading: true, error: null })
     try {
       const { iconSize } = get()
       const iconSizeValue = ICON_SIZE_CONFIG[iconSize].logicalSize
-      const icons = await invoke<DesktopIcon[]>('get_desktop_icons', { iconSize: iconSizeValue })
-      const iconIdSet = new Set(icons.map(icon => icon.id))
-      const { selectedIconIds, selectionMode } = get()
-      const nextSelectedIds = selectedIconIds.filter(id => iconIdSet.has(id))
+      const customAppDir = (await getSetting('customAppDir')).trim()
+      const icons = await invoke<DesktopIcon[]>('get_desktop_icons', {
+        iconSize: iconSizeValue,
+        customAppDir: customAppDir || null,
+      })
+      const iconKeySet = new Set(icons.map(icon => buildIconSelectionKey(icon)))
+      const { selectedIconKeys, selectionMode } = get()
+      const nextSelectedKeys = selectedIconKeys.filter(key => iconKeySet.has(key))
       set({
         icons,
         loading: false,
-        selectedIconIds: nextSelectedIds,
-        selectionMode: selectionMode && nextSelectedIds.length > 0,
+        selectedIconKeys: nextSelectedKeys,
+        selectionMode: selectionMode && nextSelectedKeys.length > 0,
       })
     } catch (e) {
       set({ error: String(e), loading: false })
@@ -67,7 +80,7 @@ export const useIconStore = create<IconStore>((set, get) => ({
   },
 
   setIconSize: (size: IconSize) => {
-    set({ iconSize: size, selectionMode: false, selectedIconIds: [] })
+    set({ iconSize: size, selectionMode: false, selectedIconKeys: [] })
     void setSetting('iconSize', size).catch((e) => {
       console.error('Failed to persist icon size:', e)
     })
@@ -89,48 +102,56 @@ export const useIconStore = create<IconStore>((set, get) => ({
     })
   },
 
-  enterSelectionMode: (initialId?: string) => {
+  enterSelectionMode: (initialKey?: string) => {
     set(state => {
-      if (!initialId) {
+      if (!initialKey) {
         return { selectionMode: true }
       }
-      if (state.selectedIconIds.includes(initialId)) {
+      if (state.selectedIconKeys.includes(initialKey)) {
         return { selectionMode: true }
       }
       return {
         selectionMode: true,
-        selectedIconIds: [...state.selectedIconIds, initialId],
+        selectedIconKeys: [...state.selectedIconKeys, initialKey],
       }
     })
   },
 
-  toggleSelectIcon: (id: string) => {
+  toggleSelectIcon: (key: string) => {
     set(state => {
       if (!state.selectionMode) {
         return {}
       }
-      const selected = state.selectedIconIds.includes(id)
-      const nextSelectedIds = selected
-        ? state.selectedIconIds.filter(currentId => currentId !== id)
-        : [...state.selectedIconIds, id]
+      const selected = state.selectedIconKeys.includes(key)
+      const nextSelectedKeys = selected
+        ? state.selectedIconKeys.filter(currentKey => currentKey !== key)
+        : [...state.selectedIconKeys, key]
 
       return {
-        selectedIconIds: nextSelectedIds,
-        selectionMode: nextSelectedIds.length > 0,
+        selectedIconKeys: nextSelectedKeys,
+        selectionMode: nextSelectedKeys.length > 0,
       }
     })
   },
 
   clearSelection: () => {
-    set({ selectionMode: false, selectedIconIds: [] })
+    set({ selectionMode: false, selectedIconKeys: [] })
   },
 
   hideSelectedIcons: async () => {
-    const ids = get().selectedIconIds
-    if (ids.length === 0) return
+    const { selectedIconKeys, icons } = get()
+    if (selectedIconKeys.length === 0) return
+
+    const selectedKeySet = new Set(selectedIconKeys)
+    const targets: IconMutationTarget[] = icons
+      .filter(icon => selectedKeySet.has(buildIconSelectionKey(icon)))
+      .map(icon => ({ id: icon.id, source: icon.source }))
+
+    if (targets.length === 0) return
+
     try {
-      await invoke<number>('hide_desktop_icons', { ids })
-      set({ selectionMode: false, selectedIconIds: [] })
+      await invoke<number>('hide_desktop_icons', { targets })
+      set({ selectionMode: false, selectedIconKeys: [] })
       await get().fetchIcons()
     } catch (e) {
       console.error('Failed to hide icons:', e)
@@ -138,11 +159,19 @@ export const useIconStore = create<IconStore>((set, get) => ({
   },
 
   deleteSelectedIcons: async () => {
-    const ids = get().selectedIconIds
-    if (ids.length === 0) return
+    const { selectedIconKeys, icons } = get()
+    if (selectedIconKeys.length === 0) return
+
+    const selectedKeySet = new Set(selectedIconKeys)
+    const targets: IconMutationTarget[] = icons
+      .filter(icon => selectedKeySet.has(buildIconSelectionKey(icon)))
+      .map(icon => ({ id: icon.id, source: icon.source }))
+
+    if (targets.length === 0) return
+
     try {
-      await invoke<number>('delete_desktop_icons', { ids })
-      set({ selectionMode: false, selectedIconIds: [] })
+      await invoke<number>('delete_desktop_icons', { targets })
+      set({ selectionMode: false, selectedIconKeys: [] })
       await get().fetchIcons()
     } catch (e) {
       console.error('Failed to delete icons:', e)

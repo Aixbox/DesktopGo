@@ -2,8 +2,9 @@ mod commands;
 mod icons;
 
 use commands::{
-    delete_desktop_icons, get_desktop_icons, hide_desktop_icons, launch_app, set_window_mode,
-    sync_full_desktop_icons, sync_new_desktop_icons, toggle_window,
+    delete_desktop_icons, get_default_customapp_dir, get_desktop_icons, hide_desktop_icons,
+    launch_app, set_window_mode, sync_full_customapp_icons, sync_full_desktop_icons,
+    sync_new_customapp_icons, sync_new_desktop_icons, toggle_window,
 };
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
@@ -14,6 +15,7 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut}
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -63,8 +65,11 @@ pub fn run() {
             set_window_mode,
             sync_new_desktop_icons,
             sync_full_desktop_icons,
+            sync_new_customapp_icons,
+            sync_full_customapp_icons,
             hide_desktop_icons,
-            delete_desktop_icons
+            delete_desktop_icons,
+            get_default_customapp_dir
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -6,16 +6,18 @@ import { AppWindow, Check } from 'lucide-react'
 
 interface IconProps {
   icon: DesktopIcon
+  selectionKey: string
   selectionMode: boolean
   selected: boolean
-  onEnterSelectionMode: (id: string) => void
-  onToggleSelect: (id: string) => void
+  onEnterSelectionMode: (key: string) => void
+  onToggleSelect: (key: string) => void
 }
 
 const LONG_PRESS_MS = 420
 
 export function Icon({
   icon,
+  selectionKey,
   selectionMode,
   selected,
   onEnterSelectionMode,
@@ -46,7 +48,7 @@ export function Icon({
     clearLongPressTimer()
     longPressTimerRef.current = window.setTimeout(() => {
       longPressTriggeredRef.current = true
-      onEnterSelectionMode(icon.id)
+      onEnterSelectionMode(selectionKey)
     }, LONG_PRESS_MS)
   }
 
@@ -69,7 +71,7 @@ export function Icon({
     }
 
     if (selectionMode) {
-      onToggleSelect(icon.id)
+      onToggleSelect(selectionKey)
       return
     }
 

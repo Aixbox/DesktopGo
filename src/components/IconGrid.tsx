@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DesktopIcon } from '../types'
 import { ICON_SIZE_CONFIG } from '../types'
-import { useIconStore } from '../stores/iconStore'
+import { buildIconSelectionKey, useIconStore } from '../stores/iconStore'
 import { Icon } from './Icon'
 
 interface IconGridProps {
@@ -29,7 +29,7 @@ export function IconGrid({ icons }: IconGridProps) {
   const {
     iconSize,
     selectionMode,
-    selectedIconIds,
+    selectedIconKeys,
     enterSelectionMode,
     toggleSelectIcon,
   } = useIconStore()
@@ -109,7 +109,7 @@ export function IconGrid({ icons }: IconGridProps) {
     return icons.slice(start, start + pageSize)
   }, [icons, currentPage, pageSize])
 
-  const selectedIconSet = useMemo(() => new Set(selectedIconIds), [selectedIconIds])
+  const selectedIconSet = useMemo(() => new Set(selectedIconKeys), [selectedIconKeys])
   const gridWidth = columns * itemWidth + Math.max(0, columns - 1) * GRID_GAP
   const gridHeight = rows * itemHeight + Math.max(0, rows - 1) * GRID_GAP
 
@@ -132,16 +132,20 @@ export function IconGrid({ icons }: IconGridProps) {
               gridTemplateColumns: `repeat(${columns}, ${itemWidth}px)`,
             }}
           >
-            {pagedIcons.map(icon => (
-              <Icon
-                key={icon.id}
-                icon={icon}
-                selectionMode={selectionMode}
-                selected={selectedIconSet.has(icon.id)}
-                onEnterSelectionMode={enterSelectionMode}
-                onToggleSelect={toggleSelectIcon}
-              />
-            ))}
+            {pagedIcons.map(icon => {
+              const selectionKey = buildIconSelectionKey(icon)
+              return (
+                <Icon
+                  key={selectionKey}
+                  icon={icon}
+                  selectionKey={selectionKey}
+                  selectionMode={selectionMode}
+                  selected={selectedIconSet.has(selectionKey)}
+                  onEnterSelectionMode={enterSelectionMode}
+                  onToggleSelect={toggleSelectIcon}
+                />
+              )
+            })}
           </div>
 
           <div

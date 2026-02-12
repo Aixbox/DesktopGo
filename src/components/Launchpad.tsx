@@ -50,7 +50,7 @@ export function Launchpad() {
     titleLineCount,
     setTitleLineCount,
     selectionMode,
-    selectedIconIds,
+    selectedIconKeys,
     clearSelection,
     hideSelectedIcons,
     deleteSelectedIcons,
@@ -117,13 +117,13 @@ export function Launchpad() {
   };
 
   const handleHideSelected = () => {
-    if (selectedIconIds.length === 0) return;
+    if (selectedIconKeys.length === 0) return;
     void hideSelectedIcons();
   };
 
   const handleDeleteSelected = () => {
-    if (selectedIconIds.length === 0) return;
-    const confirmed = window.confirm(`确定删除已选中的 ${selectedIconIds.length} 个图标吗？`);
+    if (selectedIconKeys.length === 0) return;
+    const confirmed = window.confirm(`确定删除已选中的 ${selectedIconKeys.length} 个图标吗？`);
     if (!confirmed) return;
     void deleteSelectedIcons();
   };
@@ -181,7 +181,7 @@ export function Launchpad() {
               data-selection-toolbar
               className="absolute left-1/2 top-20 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-black/55 px-3 py-2 text-sm text-white/90 backdrop-blur-md"
             >
-              <span className="px-2">已选 {selectedIconIds.length}</span>
+              <span className="px-2">已选 {selectedIconKeys.length}</span>
               <button
                 type="button"
                 onClick={handleHideSelected}
