@@ -241,6 +241,21 @@ function SettingsPanel() {
     }
   };
 
+  const handleOpenCustomAppDir = async () => {
+    const targetDir = customAppDirInput.trim() || effectiveCustomAppDir || defaultCustomAppDir;
+    if (!targetDir) {
+      setCustomAppDirText("没有可打开的目录，请先选择或输入 customapp 目录。");
+      return;
+    }
+
+    try {
+      await invoke("launch_app", { path: targetDir });
+      setCustomAppDirText(`已打开目录：${targetDir}`);
+    } catch (e) {
+      setCustomAppDirText(`打开目录失败：${String(e)}`);
+    }
+  };
+
   const handleSaveCustomAppDir = async () => {
     try {
       const nextCustomAppDir = customAppDirInput.trim();
@@ -338,6 +353,12 @@ function SettingsPanel() {
               className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
             >
               选择文件夹
+            </button>
+            <button
+              onClick={handleOpenCustomAppDir}
+              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
+            >
+              打开文件夹
             </button>
             <button
               onClick={handleSaveCustomAppDir}
