@@ -89,7 +89,11 @@ export function Launchpad() {
   const handleBackgroundClick = (e: React.MouseEvent) => {
     if (windowMode === "fullscreen") {
       const target = e.target as HTMLElement;
-      if (!target.closest("[data-icon]") && !target.closest("[data-search-placeholder]")) {
+      if (
+        !target.closest("[data-icon]") &&
+        !target.closest("[data-search-placeholder]") &&
+        !target.closest("[data-pagination]")
+      ) {
         void invoke("toggle_window");
       }
     }
