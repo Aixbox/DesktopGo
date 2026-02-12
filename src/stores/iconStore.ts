@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
 import type { DesktopIcon, IconSize, TitleLineCount, WindowMode } from '../types'
 import { ICON_SIZE_CONFIG, WINDOW_SIZE_CONFIG } from '../types'
+import { getSetting, setSetting, syncLegacySettingsFromLocalStorage } from '../lib/settingsStore'
 
 interface IconStore {
   icons: DesktopIcon[]
@@ -16,33 +17,16 @@ interface IconStore {
   setWindowMode: (mode: WindowMode) => void
   setTitleLineCount: (count: TitleLineCount) => void
   applyWindowMode: (mode: WindowMode) => Promise<void>
-}
-
-const getSavedIconSize = (): IconSize => {
-  const saved = localStorage.getItem('iconSize')
-  if (saved === 'large' || saved === 'medium' || saved === 'small') return saved
-  return 'medium'
-}
-
-const getSavedWindowMode = (): WindowMode => {
-  const saved = localStorage.getItem('windowMode')
-  if (saved === 'fullscreen' || saved === 'large' || saved === 'medium' || saved === 'small') return saved
-  return 'fullscreen'
-}
-
-const getSavedTitleLineCount = (): TitleLineCount => {
-  const saved = localStorage.getItem('titleLineCount')
-  if (saved === 'one' || saved === 'two') return saved
-  return 'two'
+  hydrateSettings: () => Promise<void>
 }
 
 export const useIconStore = create<IconStore>((set, get) => ({
   icons: [],
   loading: false,
   error: null,
-  iconSize: getSavedIconSize(),
-  windowMode: getSavedWindowMode(),
-  titleLineCount: getSavedTitleLineCount(),
+  iconSize: 'medium',
+  windowMode: 'fullscreen',
+  titleLineCount: 'two',
 
   fetchIcons: async () => {
     set({ loading: true, error: null })
@@ -66,20 +50,26 @@ export const useIconStore = create<IconStore>((set, get) => ({
   },
 
   setIconSize: (size: IconSize) => {
-    localStorage.setItem('iconSize', size)
     set({ iconSize: size })
+    void setSetting('iconSize', size).catch((e) => {
+      console.error('Failed to persist icon size:', e)
+    })
     get().fetchIcons()
   },
 
   setWindowMode: (mode: WindowMode) => {
-    localStorage.setItem('windowMode', mode)
     set({ windowMode: mode })
-    get().applyWindowMode(mode)
+    void setSetting('windowMode', mode).catch((e) => {
+      console.error('Failed to persist window mode:', e)
+    })
+    void get().applyWindowMode(mode)
   },
 
   setTitleLineCount: (count: TitleLineCount) => {
-    localStorage.setItem('titleLineCount', count)
     set({ titleLineCount: count })
+    void setSetting('titleLineCount', count).catch((e) => {
+      console.error('Failed to persist title line count:', e)
+    })
   },
 
   applyWindowMode: async (mode: WindowMode) => {
@@ -92,6 +82,31 @@ export const useIconStore = create<IconStore>((set, get) => ({
       }
     } catch (e) {
       console.error('Failed to set window mode:', e)
+    }
+  },
+
+  hydrateSettings: async () => {
+    await syncLegacySettingsFromLocalStorage()
+    const [iconSize, windowMode, titleLineCount] = await Promise.all([
+      getSetting('iconSize'),
+      getSetting('windowMode'),
+      getSetting('titleLineCount'),
+    ])
+    const current = get()
+    const nextState: Partial<IconStore> = {}
+
+    if (current.iconSize !== iconSize) {
+      nextState.iconSize = iconSize
+    }
+    if (current.windowMode !== windowMode) {
+      nextState.windowMode = windowMode
+    }
+    if (current.titleLineCount !== titleLineCount) {
+      nextState.titleLineCount = titleLineCount
+    }
+
+    if (Object.keys(nextState).length > 0) {
+      set(nextState)
     }
   },
 }))

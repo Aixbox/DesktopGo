@@ -1,4 +1,5 @@
 import type { ThemeMode } from "@/types";
+import { getSetting, setSetting, syncLegacySettingsFromLocalStorage } from "@/lib/settingsStore";
 
 /**
  * 根据 ThemeMode 设置应用到 <html> 元素上的 dark class
@@ -22,28 +23,35 @@ export function applyTheme(mode: ThemeMode) {
 }
 
 /**
- * 从 localStorage 读取保存的主题模式
+ * 从 plugin-store 读取保存的主题模式
  */
-export function getSavedTheme(): ThemeMode {
-    const saved = localStorage.getItem("themeMode");
-    if (saved === "dark" || saved === "light" || saved === "system") return saved;
-    return "dark"; // 默认深色
+export async function getSavedTheme(): Promise<ThemeMode> {
+    await syncLegacySettingsFromLocalStorage();
+    return getSetting("themeMode");
+}
+
+export async function saveTheme(mode: ThemeMode): Promise<void> {
+    await setSetting("themeMode", mode);
 }
 
 /**
  * 初始化主题，并设置系统主题变化监听
  */
-export function initTheme(): () => void {
-    const mode = getSavedTheme();
+export async function initTheme(): Promise<() => void> {
+    const mode = await getSavedTheme();
     applyTheme(mode);
 
     // 监听系统主题偏好变化（仅在 system 模式下生效）
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
     const handleChange = () => {
-        const currentMode = getSavedTheme();
-        if (currentMode === "system") {
-            applyTheme("system");
-        }
+        void (async () => {
+            const currentMode = await getSavedTheme();
+            if (currentMode === "system") {
+                applyTheme("system");
+            }
+        })().catch((e) => {
+            console.error("Failed to sync system theme change:", e);
+        });
     };
     mediaQuery.addEventListener("change", handleChange);
 

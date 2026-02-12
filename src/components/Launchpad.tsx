@@ -42,6 +42,7 @@ export function Launchpad() {
     icons,
     loading,
     fetchIcons,
+    hydrateSettings,
     iconSize,
     setIconSize,
     windowMode,
@@ -51,30 +52,36 @@ export function Launchpad() {
   } = useIconStore();
 
   useEffect(() => {
-    fetchIcons();
-  }, [fetchIcons]);
+    void (async () => {
+      try {
+        await hydrateSettings();
+        await fetchIcons();
+        const { windowMode: currentWindowMode, applyWindowMode } = useIconStore.getState();
+        await applyWindowMode(currentWindowMode);
+        applyTheme(await getSavedTheme());
+      } catch (e) {
+        console.error("Failed to initialize launchpad settings:", e);
+      }
+    })();
+  }, [fetchIcons, hydrateSettings]);
 
-  useEffect(() => {
-    const { windowMode: currentWindowMode, applyWindowMode } = useIconStore.getState();
-    applyWindowMode(currentWindowMode);
-  }, []);
-
-  // 主窗口重新显示时，从 localStorage 同步设置（处理被隐藏期间 Settings 改动的情况）
+  // 主窗口重新显示时，从 plugin-store 同步设置（处理被隐藏期间 Settings 改动的情况）
   useEffect(() => {
     const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
       if (focused) {
-        const state = useIconStore.getState();
-        const savedIconSize = localStorage.getItem("iconSize") as IconSize | null;
-        const savedTitleLineCount = localStorage.getItem("titleLineCount") as TitleLineCount | null;
-        if (savedIconSize && savedIconSize !== state.iconSize) {
-          useIconStore.setState({ iconSize: savedIconSize });
-          state.fetchIcons();
-        }
-        if (savedTitleLineCount && savedTitleLineCount !== state.titleLineCount) {
-          useIconStore.setState({ titleLineCount: savedTitleLineCount });
-        }
-        // 同步主题
-        applyTheme(getSavedTheme());
+        void (async () => {
+          try {
+            const state = useIconStore.getState();
+            const prevIconSize = state.iconSize;
+            await state.hydrateSettings();
+            if (useIconStore.getState().iconSize !== prevIconSize) {
+              await useIconStore.getState().fetchIcons();
+            }
+            applyTheme(await getSavedTheme());
+          } catch (e) {
+            console.error("Failed to sync settings on focus:", e);
+          }
+        })();
       }
     });
     return () => {

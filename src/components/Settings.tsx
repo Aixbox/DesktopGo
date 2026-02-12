@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useIconStore } from "@/stores/iconStore";
-import { applyTheme, getSavedTheme } from "@/lib/theme";
+import { applyTheme, saveTheme } from "@/lib/theme";
+import { getSetting, setSetting } from "@/lib/settingsStore";
 import type { IconSize, TitleLineCount, WindowMode, ThemeMode } from "@/types";
 import { Settings as SettingsIcon, RefreshCw, Info, Images } from "lucide-react";
 
@@ -77,15 +78,41 @@ function OptionButton({
 
 function SettingsPanel() {
     const { iconSize, windowMode, titleLineCount } = useIconStore();
-    const [themeMode, setThemeMode] = useState<ThemeMode>(getSavedTheme);
+    const [themeMode, setThemeMode] = useState<ThemeMode>("dark");
+
+    useEffect(() => {
+        void (async () => {
+            try {
+                const [savedIconSize, savedWindowMode, savedTitleLineCount, savedThemeMode] =
+                    await Promise.all([
+                        getSetting("iconSize"),
+                        getSetting("windowMode"),
+                        getSetting("titleLineCount"),
+                        getSetting("themeMode"),
+                    ]);
+                useIconStore.setState({
+                    iconSize: savedIconSize,
+                    windowMode: savedWindowMode,
+                    titleLineCount: savedTitleLineCount,
+                });
+                setThemeMode(savedThemeMode);
+            } catch (e) {
+                console.error("Failed to load settings:", e);
+            }
+        })();
+    }, []);
 
     const handleIconSize = (value: IconSize) => {
-        localStorage.setItem("iconSize", value);
+        void setSetting("iconSize", value).catch((e) =>
+            console.error("Failed to save icon size:", e),
+        );
         useIconStore.setState({ iconSize: value });
     };
 
     const handleWindowMode = async (value: WindowMode) => {
-        localStorage.setItem("windowMode", value);
+        void setSetting("windowMode", value).catch((e) =>
+            console.error("Failed to save window mode:", e),
+        );
         useIconStore.setState({ windowMode: value });
         const mainWindow = await WebviewWindow.getByLabel("main");
         if (mainWindow) {
@@ -94,12 +121,14 @@ function SettingsPanel() {
     };
 
     const handleTitleLineCount = (value: TitleLineCount) => {
-        localStorage.setItem("titleLineCount", value);
+        void setSetting("titleLineCount", value).catch((e) =>
+            console.error("Failed to save title line count:", e),
+        );
         useIconStore.setState({ titleLineCount: value });
     };
 
     const handleThemeMode = (value: ThemeMode) => {
-        localStorage.setItem("themeMode", value);
+        void saveTheme(value).catch((e) => console.error("Failed to save theme mode:", e));
         setThemeMode(value);
         applyTheme(value);
     };

@@ -4,7 +4,9 @@ import App from "./App";
 import "./styles/globals.css";
 import { initTheme } from "./lib/theme";
 
-initTheme();
+void initTheme().catch((e) => {
+  console.error("Failed to initialize theme:", e);
+});
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
