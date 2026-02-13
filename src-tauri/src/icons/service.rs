@@ -50,6 +50,13 @@ impl IconSource {
     fn cache_folder_name(self) -> &'static str {
         self.as_str()
     }
+
+    fn other(self) -> Self {
+        match self {
+            Self::Desktop => Self::CustomApp,
+            Self::CustomApp => Self::Desktop,
+        }
+    }
 }
 
 pub fn get_desktop_icons(
@@ -250,6 +257,101 @@ fn snapshot_file_path(app_handle: &tauri::AppHandle, source: IconSource) -> Resu
 }
 
 #[cfg(windows)]
+fn max_snapshot_display_order(snapshot: &IconSnapshot) -> u64 {
+    snapshot
+        .icons
+        .iter()
+        .map(|item| item.display_order)
+        .max()
+        .unwrap_or(0)
+}
+
+#[cfg(windows)]
+fn normalize_snapshot_display_order(snapshot: &mut IconSnapshot) -> bool {
+    if snapshot.icons.is_empty() {
+        return false;
+    }
+
+    let mut changed = false;
+    let all_zero = snapshot.icons.iter().all(|item| item.display_order == 0);
+    if all_zero {
+        for (index, item) in snapshot.icons.iter_mut().enumerate() {
+            let next_order = (index as u64).saturating_add(1);
+            if item.display_order != next_order {
+                item.display_order = next_order;
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    let mut used_orders = HashSet::new();
+    let mut next_order = max_snapshot_display_order(snapshot);
+    for item in &mut snapshot.icons {
+        if item.display_order == 0 || !used_orders.insert(item.display_order) {
+            next_order = next_order.saturating_add(1);
+            item.display_order = next_order;
+            changed = true;
+            let _ = used_orders.insert(item.display_order);
+        }
+    }
+
+    changed
+}
+
+#[cfg(windows)]
+fn max_display_order_with_other_source(
+    app_handle: &tauri::AppHandle,
+    source: IconSource,
+    current_snapshot: &IconSnapshot,
+) -> Result<u64, String> {
+    let mut max_order = max_snapshot_display_order(current_snapshot);
+    if let Some(other_snapshot) = read_icon_snapshot(app_handle, source.other())? {
+        max_order = max_order.max(max_snapshot_display_order(&other_snapshot));
+    }
+    Ok(max_order)
+}
+
+#[cfg(windows)]
+fn resolve_cross_source_display_order_collisions(
+    app_handle: &tauri::AppHandle,
+) -> Result<(), String> {
+    let desktop_snapshot = match read_icon_snapshot(app_handle, IconSource::Desktop)? {
+        Some(snapshot) => snapshot,
+        None => return Ok(()),
+    };
+    let mut custom_snapshot = match read_icon_snapshot(app_handle, IconSource::CustomApp)? {
+        Some(snapshot) => snapshot,
+        None => return Ok(()),
+    };
+
+    let desktop_order_set = desktop_snapshot
+        .icons
+        .iter()
+        .map(|item| item.display_order)
+        .collect::<HashSet<_>>();
+    let has_collision = custom_snapshot
+        .icons
+        .iter()
+        .any(|item| desktop_order_set.contains(&item.display_order));
+    if !has_collision {
+        return Ok(());
+    }
+
+    let mut ordered_custom_items = custom_snapshot.icons.iter_mut().collect::<Vec<_>>();
+    ordered_custom_items.sort_by(|a, b| a.display_order.cmp(&b.display_order));
+
+    let mut next_display_order = max_snapshot_display_order(&desktop_snapshot).saturating_add(1);
+    for item in ordered_custom_items {
+        item.display_order = next_display_order;
+        next_display_order = next_display_order.saturating_add(1);
+    }
+
+    write_icon_snapshot(app_handle, IconSource::CustomApp, &custom_snapshot)?;
+    Ok(())
+}
+
+#[cfg(windows)]
 fn read_icon_snapshot(
     app_handle: &tauri::AppHandle,
     source: IconSource,
@@ -266,6 +368,10 @@ fn read_icon_snapshot(
 
     for item in &mut snapshot.icons {
         item.source = IconSource::from_value(&item.source).as_str().to_string();
+    }
+
+    if normalize_snapshot_display_order(&mut snapshot) {
+        write_icon_snapshot(app_handle, source, &snapshot)?;
     }
 
     Ok(Some(snapshot))
@@ -415,7 +521,6 @@ fn collect_desktop_items() -> Vec<ScannedDesktopItem> {
         });
     }
 
-    items.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     items
 }
 
@@ -462,7 +567,6 @@ fn collect_items_from_single_dir(dir: &PathBuf) -> Result<Vec<ScannedDesktopItem
         });
     }
 
-    items.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     Ok(items)
 }
 
@@ -518,6 +622,7 @@ fn build_snapshot_item(
     app_handle: &tauri::AppHandle,
     item: &ScannedDesktopItem,
     source: IconSource,
+    display_order: u64,
 ) -> Result<SnapshotIconItem, String> {
     let id = uuid::Uuid::new_v4().to_string();
     let key = stable_item_key(item);
@@ -530,6 +635,7 @@ fn build_snapshot_item(
     Ok(SnapshotIconItem {
         id,
         key,
+        display_order,
         name: item.name.clone(),
         path: item.path.clone(),
         target_path: item.target_path.clone(),
@@ -541,11 +647,11 @@ fn build_snapshot_item(
 }
 
 #[cfg(windows)]
-fn snapshot_to_desktop_icons(
+fn snapshot_to_ordered_desktop_icons(
     app_handle: &tauri::AppHandle,
     snapshot: &IconSnapshot,
     icon_size: i32,
-) -> Vec<DesktopIcon> {
+) -> Vec<(u64, DesktopIcon)> {
     let bucket = IconBucket::from_logical_size(icon_size);
     let base_dir = match snapshot_base_dir(app_handle) {
         Ok(dir) => dir,
@@ -555,10 +661,15 @@ fn snapshot_to_desktop_icons(
         }
     };
 
-    snapshot
+    let mut ordered_items = snapshot
         .icons
         .iter()
         .filter(|item| !item.hidden)
+        .collect::<Vec<_>>();
+    ordered_items.sort_by(|a, b| a.display_order.cmp(&b.display_order));
+
+    ordered_items
+        .into_iter()
         .map(|item| {
             let rel_path = match bucket {
                 IconBucket::Small => &item.icons.small,
@@ -571,25 +682,28 @@ fn snapshot_to_desktop_icons(
                 read_icon_file_as_data_uri(&base_dir.join(rel_path))
             };
 
-            DesktopIcon {
-                id: item.id.clone(),
-                name: item.name.clone(),
-                path: item.path.clone(),
-                target_path: item.target_path.clone(),
-                icon_base64,
-                item_type: item.item_type.clone(),
-                source: IconSource::from_value(&item.source).as_str().to_string(),
-            }
+            (
+                item.display_order,
+                DesktopIcon {
+                    id: item.id.clone(),
+                    name: item.name.clone(),
+                    path: item.path.clone(),
+                    target_path: item.target_path.clone(),
+                    icon_base64,
+                    item_type: item.item_type.clone(),
+                    source: IconSource::from_value(&item.source).as_str().to_string(),
+                },
+            )
         })
         .collect()
 }
 
 #[cfg(windows)]
-fn snapshot_to_icon_manager_items(
+fn snapshot_to_ordered_icon_manager_items(
     app_handle: &tauri::AppHandle,
     snapshot: &IconSnapshot,
     icon_size: i32,
-) -> Vec<IconManagerItem> {
+) -> Vec<(u64, IconManagerItem)> {
     let bucket = IconBucket::from_logical_size(icon_size);
     let base_dir = match snapshot_base_dir(app_handle) {
         Ok(dir) => dir,
@@ -599,9 +713,11 @@ fn snapshot_to_icon_manager_items(
         }
     };
 
-    snapshot
-        .icons
-        .iter()
+    let mut ordered_items = snapshot.icons.iter().collect::<Vec<_>>();
+    ordered_items.sort_by(|a, b| a.display_order.cmp(&b.display_order));
+
+    ordered_items
+        .into_iter()
         .map(|item| {
             let rel_path = match bucket {
                 IconBucket::Small => &item.icons.small,
@@ -614,16 +730,19 @@ fn snapshot_to_icon_manager_items(
                 read_icon_file_as_data_uri(&base_dir.join(rel_path))
             };
 
-            IconManagerItem {
-                id: item.id.clone(),
-                name: item.name.clone(),
-                path: item.path.clone(),
-                target_path: item.target_path.clone(),
-                icon_base64,
-                item_type: item.item_type.clone(),
-                source: IconSource::from_value(&item.source).as_str().to_string(),
-                hidden: item.hidden,
-            }
+            (
+                item.display_order,
+                IconManagerItem {
+                    id: item.id.clone(),
+                    name: item.name.clone(),
+                    path: item.path.clone(),
+                    target_path: item.target_path.clone(),
+                    icon_base64,
+                    item_type: item.item_type.clone(),
+                    source: IconSource::from_value(&item.source).as_str().to_string(),
+                    hidden: item.hidden,
+                },
+            )
         })
         .collect()
 }
@@ -633,6 +752,7 @@ fn build_full_snapshot(
     app_handle: &tauri::AppHandle,
     source: IconSource,
     scanned_items: &[ScannedDesktopItem],
+    mut next_display_order: u64,
 ) -> Result<IconSnapshot, String> {
     ensure_icon_cache_dirs(app_handle, source)?;
     let mut seen_keys = HashSet::new();
@@ -643,7 +763,13 @@ fn build_full_snapshot(
         if !seen_keys.insert(key) {
             continue;
         }
-        icons.push(build_snapshot_item(app_handle, item, source)?);
+        icons.push(build_snapshot_item(
+            app_handle,
+            item,
+            source,
+            next_display_order,
+        )?);
+        next_display_order = next_display_order.saturating_add(1);
     }
 
     Ok(IconSnapshot { version: 1, icons })
@@ -662,29 +788,21 @@ where
         Some(snapshot) => Ok(snapshot),
         None => {
             let scanned_items = collect_items()?;
-            let snapshot = build_full_snapshot(app_handle, source, &scanned_items)?;
+            let start_display_order = if let Some(other_snapshot) =
+                read_icon_snapshot(app_handle, source.other())?
+            {
+                max_snapshot_display_order(&other_snapshot).saturating_add(1)
+            } else {
+                1
+            };
+            let snapshot =
+                build_full_snapshot(app_handle, source, &scanned_items, start_display_order)?;
             write_icon_snapshot(app_handle, source, &snapshot)?;
             Ok(snapshot)
         }
     }
 }
 
-#[cfg(windows)]
-fn load_or_init_icons_snapshot_windows<F>(
-    app_handle: &tauri::AppHandle,
-    icon_size: i32,
-    source: IconSource,
-    collect_items: F,
-) -> Result<Vec<DesktopIcon>, String>
-where
-    F: FnOnce() -> Result<Vec<ScannedDesktopItem>, String>,
-{
-    let snapshot = load_or_init_icon_snapshot_windows(app_handle, source, collect_items)?;
-
-    Ok(snapshot_to_desktop_icons(app_handle, &snapshot, icon_size))
-}
-
-#[cfg(windows)]
 fn sync_new_icons_windows<F>(
     app_handle: &tauri::AppHandle,
     source: IconSource,
@@ -705,6 +823,7 @@ where
         .iter()
         .map(|item| item.key.clone())
         .collect::<HashSet<_>>();
+    let mut max_display_order = max_display_order_with_other_source(app_handle, source, &snapshot)?;
 
     let mut added_count = 0usize;
     for item in &scanned_items {
@@ -713,7 +832,8 @@ where
             continue;
         }
 
-        let snapshot_item = build_snapshot_item(app_handle, item, source)?;
+        max_display_order = max_display_order.saturating_add(1);
+        let snapshot_item = build_snapshot_item(app_handle, item, source, max_display_order)?;
         known_keys.insert(snapshot_item.key.clone());
         snapshot.icons.push(snapshot_item);
         added_count += 1;
@@ -743,6 +863,8 @@ where
         version: 1,
         icons: Vec::new(),
     });
+    let mut max_display_order =
+        max_display_order_with_other_source(app_handle, source, &existing_snapshot)?;
     let scanned_items = collect_items()?;
     let mut scanned_keys = HashSet::new();
     let mut unique_scanned_items = Vec::new();
@@ -774,7 +896,13 @@ where
             }
         }
 
-        next_icons.push(build_snapshot_item(app_handle, item, source)?);
+        max_display_order = max_display_order.saturating_add(1);
+        next_icons.push(build_snapshot_item(
+            app_handle,
+            item,
+            source,
+            max_display_order,
+        )?);
         added_count += 1;
     }
 
@@ -838,11 +966,20 @@ fn set_icons_hidden_state_in_snapshot_windows(
         Some(snapshot) => snapshot,
         None => return Ok(0),
     };
+    let mut max_display_order = if hidden {
+        0
+    } else {
+        max_display_order_with_other_source(app_handle, source, &snapshot)?
+    };
 
     let mut changed_count = 0usize;
     for item in &mut snapshot.icons {
         if id_set.contains(&item.id) && item.hidden != hidden {
             item.hidden = hidden;
+            if !hidden {
+                max_display_order = max_display_order.saturating_add(1);
+                item.display_order = max_display_order;
+            }
             changed_count += 1;
         }
     }
@@ -999,34 +1136,8 @@ fn get_all_icons_windows(
     icon_size: i32,
     custom_app_dir: Option<String>,
 ) -> Result<Vec<DesktopIcon>, String> {
-    let desktop_icons = load_or_init_icons_snapshot_windows(
-        app_handle,
-        icon_size,
-        IconSource::Desktop,
-        || Ok(collect_desktop_items()),
-    )?;
+    resolve_cross_source_display_order_collisions(app_handle)?;
 
-    let custom_dir = resolve_customapp_dir_windows(app_handle, custom_app_dir)?;
-    let custom_icons = load_or_init_icons_snapshot_windows(
-        app_handle,
-        icon_size,
-        IconSource::CustomApp,
-        || collect_items_from_single_dir(&custom_dir),
-    )?;
-
-    let mut all_icons = Vec::with_capacity(desktop_icons.len() + custom_icons.len());
-    all_icons.extend(desktop_icons);
-    all_icons.extend(custom_icons);
-    all_icons.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-    Ok(all_icons)
-}
-
-#[cfg(windows)]
-fn get_all_icon_manager_items_windows(
-    app_handle: &tauri::AppHandle,
-    icon_size: i32,
-    custom_app_dir: Option<String>,
-) -> Result<Vec<IconManagerItem>, String> {
     let desktop_snapshot =
         load_or_init_icon_snapshot_windows(app_handle, IconSource::Desktop, || {
             Ok(collect_desktop_items())
@@ -1038,16 +1149,51 @@ fn get_all_icon_manager_items_windows(
     })?;
 
     let mut all_icons = Vec::with_capacity(desktop_snapshot.icons.len() + custom_snapshot.icons.len());
-    all_icons.extend(snapshot_to_icon_manager_items(
+    all_icons.extend(snapshot_to_ordered_desktop_icons(
         app_handle,
         &desktop_snapshot,
         icon_size,
     ));
-    all_icons.extend(snapshot_to_icon_manager_items(
+    all_icons.extend(snapshot_to_ordered_desktop_icons(
         app_handle,
         &custom_snapshot,
         icon_size,
     ));
-    all_icons.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-    Ok(all_icons)
+    all_icons.sort_by(|(a_order, _), (b_order, _)| a_order.cmp(b_order));
+
+    Ok(all_icons.into_iter().map(|(_, icon)| icon).collect())
+}
+
+#[cfg(windows)]
+fn get_all_icon_manager_items_windows(
+    app_handle: &tauri::AppHandle,
+    icon_size: i32,
+    custom_app_dir: Option<String>,
+) -> Result<Vec<IconManagerItem>, String> {
+    resolve_cross_source_display_order_collisions(app_handle)?;
+
+    let desktop_snapshot =
+        load_or_init_icon_snapshot_windows(app_handle, IconSource::Desktop, || {
+            Ok(collect_desktop_items())
+        })?;
+
+    let custom_dir = resolve_customapp_dir_windows(app_handle, custom_app_dir)?;
+    let custom_snapshot = load_or_init_icon_snapshot_windows(app_handle, IconSource::CustomApp, || {
+        collect_items_from_single_dir(&custom_dir)
+    })?;
+
+    let mut all_icons = Vec::with_capacity(desktop_snapshot.icons.len() + custom_snapshot.icons.len());
+    all_icons.extend(snapshot_to_ordered_icon_manager_items(
+        app_handle,
+        &desktop_snapshot,
+        icon_size,
+    ));
+    all_icons.extend(snapshot_to_ordered_icon_manager_items(
+        app_handle,
+        &custom_snapshot,
+        icon_size,
+    ));
+    all_icons.sort_by(|(a_order, _), (b_order, _)| a_order.cmp(b_order));
+
+    Ok(all_icons.into_iter().map(|(_, icon)| icon).collect())
 }

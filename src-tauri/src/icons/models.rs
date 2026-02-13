@@ -48,6 +48,8 @@ pub(crate) struct SnapshotIconPaths {
 pub(crate) struct SnapshotIconItem {
     pub(crate) id: String,
     pub(crate) key: String,
+    #[serde(default)]
+    pub(crate) display_order: u64,
     pub(crate) name: String,
     pub(crate) path: String,
     pub(crate) target_path: String,
