@@ -1,4 +1,3 @@
-import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import type { DesktopIcon } from '../types'
 import { ICON_SIZE_CONFIG } from '../types'
 import { useIconStore } from '../stores/iconStore'
@@ -9,67 +8,21 @@ interface IconProps {
   selectionKey: string
   selectionMode: boolean
   selected: boolean
-  onEnterSelectionMode: (key: string) => void
   onToggleSelect: (key: string) => void
 }
-
-const LONG_PRESS_MS = 420
 
 export function Icon({
   icon,
   selectionKey,
   selectionMode,
   selected,
-  onEnterSelectionMode,
   onToggleSelect,
 }: IconProps) {
   const { launchApp, iconSize, titleLineCount } = useIconStore()
   const config = ICON_SIZE_CONFIG[iconSize]
   const isSingleLineTitle = titleLineCount === 'one'
-  const longPressTimerRef = useRef<number | null>(null)
-  const longPressTriggeredRef = useRef(false)
-
-  const clearLongPressTimer = () => {
-    if (longPressTimerRef.current !== null) {
-      window.clearTimeout(longPressTimerRef.current)
-      longPressTimerRef.current = null
-    }
-  }
-
-  useEffect(() => {
-    return () => {
-      clearLongPressTimer()
-    }
-  }, [])
-
-  const handlePointerDown = (e: ReactPointerEvent<HTMLButtonElement>) => {
-    if (selectionMode || e.button !== 0) return
-    longPressTriggeredRef.current = false
-    clearLongPressTimer()
-    longPressTimerRef.current = window.setTimeout(() => {
-      longPressTriggeredRef.current = true
-      onEnterSelectionMode(selectionKey)
-    }, LONG_PRESS_MS)
-  }
-
-  const handlePointerUp = () => {
-    clearLongPressTimer()
-  }
-
-  const handlePointerCancel = () => {
-    clearLongPressTimer()
-  }
-
-  const handlePointerLeave = () => {
-    clearLongPressTimer()
-  }
 
   const handleClick = () => {
-    if (longPressTriggeredRef.current) {
-      longPressTriggeredRef.current = false
-      return
-    }
-
     if (selectionMode) {
       onToggleSelect(selectionKey)
       return
@@ -96,10 +49,6 @@ export function Icon({
       data-selection-mode={selectionMode ? 'on' : 'off'}
       className={`icon-item relative flex flex-col items-center gap-2 rounded-2xl border-none p-3 shadow-none transition-all duration-200 cursor-pointer group ${buttonStateClass} ${layerClass}`}
       style={{ width: config.containerWidth }}
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerCancel}
-      onPointerLeave={handlePointerLeave}
       onClick={handleClick}
       title={icon.name}
       aria-pressed={selectionMode ? selected : undefined}

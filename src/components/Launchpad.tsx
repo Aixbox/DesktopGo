@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -37,6 +37,8 @@ const TITLE_LINE_OPTIONS: { label: string; value: TitleLineCount }[] = [
   { label: "两行标题", value: "two" },
 ];
 
+const LONG_PRESS_MS = 420;
+
 export function Launchpad() {
   const {
     icons,
@@ -51,10 +53,13 @@ export function Launchpad() {
     setTitleLineCount,
     selectionMode,
     selectedIconKeys,
+    enterSelectionMode,
     clearSelection,
     hideSelectedIcons,
     deleteSelectedIcons,
   } = useIconStore();
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressTriggeredRef = useRef(false);
 
   useEffect(() => {
     void (async () => {
@@ -90,27 +95,70 @@ export function Launchpad() {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current !== null) {
+        window.clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const clearBackgroundLongPressTimer = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const isBackgroundInteraction = (target: HTMLElement) =>
+    !target.closest("[data-icon]") &&
+    !target.closest("[data-search-placeholder]") &&
+    !target.closest("[data-pagination]") &&
+    !target.closest("[data-selection-toolbar]");
+
+  const handleBackgroundPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (selectionMode || e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (!isBackgroundInteraction(target)) return;
+
+    longPressTriggeredRef.current = false;
+    clearBackgroundLongPressTimer();
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      enterSelectionMode();
+    }, LONG_PRESS_MS);
+  };
+
+  const handleBackgroundPointerUp = () => {
+    clearBackgroundLongPressTimer();
+  };
+
+  const handleBackgroundPointerCancel = () => {
+    clearBackgroundLongPressTimer();
+  };
+
+  const handleBackgroundPointerLeave = () => {
+    clearBackgroundLongPressTimer();
+  };
+
   const handleBackgroundClick = (e: React.MouseEvent) => {
+    if (longPressTriggeredRef.current) {
+      longPressTriggeredRef.current = false;
+      return;
+    }
+
     const target = e.target as HTMLElement;
 
     if (selectionMode) {
-      if (
-        !target.closest("[data-icon]") &&
-        !target.closest("[data-search-placeholder]") &&
-        !target.closest("[data-pagination]") &&
-        !target.closest("[data-selection-toolbar]")
-      ) {
+      if (isBackgroundInteraction(target)) {
         clearSelection();
       }
       return;
     }
 
     if (windowMode === "fullscreen") {
-      if (
-        !target.closest("[data-icon]") &&
-        !target.closest("[data-search-placeholder]") &&
-        !target.closest("[data-pagination]")
-      ) {
+      if (isBackgroundInteraction(target)) {
         void invoke("toggle_window");
       }
     }
@@ -160,6 +208,10 @@ export function Launchpad() {
       <ContextMenuTrigger asChild>
         <div
           className="launchpad-bg relative flex h-screen w-screen select-none flex-col items-center justify-center"
+          onPointerDown={handleBackgroundPointerDown}
+          onPointerUp={handleBackgroundPointerUp}
+          onPointerCancel={handleBackgroundPointerCancel}
+          onPointerLeave={handleBackgroundPointerLeave}
           onClick={handleBackgroundClick}
         >
           <div
@@ -268,6 +320,8 @@ export function Launchpad() {
           </ContextMenuSubContent>
         </ContextMenuSub>
 
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={() => enterSelectionMode()}>编辑图标</ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={openSettings}>设置</ContextMenuItem>
       </ContextMenuContent>

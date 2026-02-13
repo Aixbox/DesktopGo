@@ -30,7 +30,6 @@ export function IconGrid({ icons }: IconGridProps) {
     iconSize,
     selectionMode,
     selectedIconKeys,
-    enterSelectionMode,
     toggleSelectIcon,
   } = useIconStore()
 
@@ -141,7 +140,6 @@ export function IconGrid({ icons }: IconGridProps) {
                   selectionKey={selectionKey}
                   selectionMode={selectionMode}
                   selected={selectedIconSet.has(selectionKey)}
-                  onEnterSelectionMode={enterSelectionMode}
                   onToggleSelect={toggleSelectIcon}
                 />
               )
