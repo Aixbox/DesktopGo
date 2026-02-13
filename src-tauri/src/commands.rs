@@ -1,4 +1,6 @@
-use crate::icons::{self, DesktopIcon, IconMutationTarget, IconSyncResult};
+use crate::icons::{
+    self, DesktopIcon, IconManagerItem, IconMutationTarget, IconSyncResult,
+};
 use tauri::Manager;
 
 #[tauri::command]
@@ -36,6 +38,15 @@ pub fn get_desktop_icons(
 }
 
 #[tauri::command]
+pub fn get_icon_manager_items(
+    app_handle: tauri::AppHandle,
+    icon_size: i32,
+    custom_app_dir: Option<String>,
+) -> Vec<IconManagerItem> {
+    icons::get_icon_manager_items(app_handle, icon_size, custom_app_dir)
+}
+
+#[tauri::command]
 pub fn sync_new_desktop_icons(app_handle: tauri::AppHandle) -> Result<IconSyncResult, String> {
     icons::sync_new_desktop_icons(app_handle)
 }
@@ -67,6 +78,14 @@ pub fn hide_desktop_icons(
     targets: Vec<IconMutationTarget>,
 ) -> Result<usize, String> {
     icons::hide_desktop_icons(app_handle, targets)
+}
+
+#[tauri::command]
+pub fn unhide_desktop_icons(
+    app_handle: tauri::AppHandle,
+    targets: Vec<IconMutationTarget>,
+) -> Result<usize, String> {
+    icons::unhide_desktop_icons(app_handle, targets)
 }
 
 #[tauri::command]

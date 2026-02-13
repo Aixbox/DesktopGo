@@ -2,9 +2,10 @@ mod commands;
 mod icons;
 
 use commands::{
-    delete_desktop_icons, get_default_customapp_dir, get_desktop_icons, hide_desktop_icons,
-    launch_app, set_window_mode, sync_full_customapp_icons, sync_full_desktop_icons,
-    sync_new_customapp_icons, sync_new_desktop_icons, toggle_window,
+    delete_desktop_icons, get_default_customapp_dir, get_desktop_icons, get_icon_manager_items,
+    hide_desktop_icons, launch_app, set_window_mode, sync_full_customapp_icons,
+    sync_full_desktop_icons, sync_new_customapp_icons, sync_new_desktop_icons, toggle_window,
+    unhide_desktop_icons,
 };
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
@@ -61,6 +62,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             toggle_window,
             get_desktop_icons,
+            get_icon_manager_items,
             launch_app,
             set_window_mode,
             sync_new_desktop_icons,
@@ -68,6 +70,7 @@ pub fn run() {
             sync_new_customapp_icons,
             sync_full_customapp_icons,
             hide_desktop_icons,
+            unhide_desktop_icons,
             delete_desktop_icons,
             get_default_customapp_dir
         ])

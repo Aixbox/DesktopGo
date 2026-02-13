@@ -10,6 +10,10 @@ export interface DesktopIcon {
   source: IconSource
 }
 
+export interface IconManagerItem extends DesktopIcon {
+  hidden: boolean
+}
+
 export interface IconMutationTarget {
   id: string
   source: IconSource

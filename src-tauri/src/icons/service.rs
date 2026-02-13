@@ -4,8 +4,9 @@ use std::path::PathBuf;
 use tauri::Manager;
 
 use super::models::{
-    DesktopIcon, IconBucket, IconMutationTarget, IconSnapshot, IconSyncResult, ScannedDesktopItem,
-    SnapshotIconItem, SnapshotIconPaths, ICON_SOURCE_CUSTOMAPP, ICON_SOURCE_DESKTOP,
+    DesktopIcon, IconBucket, IconManagerItem, IconMutationTarget, IconSnapshot, IconSyncResult,
+    ScannedDesktopItem, SnapshotIconItem, SnapshotIconPaths, ICON_SOURCE_CUSTOMAPP,
+    ICON_SOURCE_DESKTOP,
 };
 #[cfg(windows)]
 use super::platform_windows::{
@@ -62,6 +63,30 @@ pub fn get_desktop_icons(
             Ok(icons) => icons,
             Err(e) => {
                 eprintln!("Failed to load icon snapshots: {}", e);
+                Vec::new()
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app_handle;
+        let _ = icon_size;
+        let _ = custom_app_dir;
+        Vec::new()
+    }
+}
+
+pub fn get_icon_manager_items(
+    app_handle: tauri::AppHandle,
+    icon_size: i32,
+    custom_app_dir: Option<String>,
+) -> Vec<IconManagerItem> {
+    #[cfg(windows)]
+    {
+        match get_all_icon_manager_items_windows(&app_handle, icon_size, custom_app_dir) {
+            Ok(icons) => icons,
+            Err(e) => {
+                eprintln!("Failed to load icon manager snapshot data: {}", e);
                 Vec::new()
             }
         }
@@ -144,6 +169,22 @@ pub fn hide_desktop_icons(
     #[cfg(windows)]
     {
         hide_icons_windows(&app_handle, &targets)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app_handle;
+        let _ = targets;
+        Err("Not supported on this platform".to_string())
+    }
+}
+
+pub fn unhide_desktop_icons(
+    app_handle: tauri::AppHandle,
+    targets: Vec<IconMutationTarget>,
+) -> Result<usize, String> {
+    #[cfg(windows)]
+    {
+        unhide_icons_windows(&app_handle, &targets)
     }
     #[cfg(not(windows))]
     {
@@ -544,6 +585,50 @@ fn snapshot_to_desktop_icons(
 }
 
 #[cfg(windows)]
+fn snapshot_to_icon_manager_items(
+    app_handle: &tauri::AppHandle,
+    snapshot: &IconSnapshot,
+    icon_size: i32,
+) -> Vec<IconManagerItem> {
+    let bucket = IconBucket::from_logical_size(icon_size);
+    let base_dir = match snapshot_base_dir(app_handle) {
+        Ok(dir) => dir,
+        Err(e) => {
+            eprintln!("Failed to resolve icon snapshot directory: {}", e);
+            return Vec::new();
+        }
+    };
+
+    snapshot
+        .icons
+        .iter()
+        .map(|item| {
+            let rel_path = match bucket {
+                IconBucket::Small => &item.icons.small,
+                IconBucket::Medium => &item.icons.medium,
+                IconBucket::Large => &item.icons.large,
+            };
+            let icon_base64 = if rel_path.is_empty() {
+                String::new()
+            } else {
+                read_icon_file_as_data_uri(&base_dir.join(rel_path))
+            };
+
+            IconManagerItem {
+                id: item.id.clone(),
+                name: item.name.clone(),
+                path: item.path.clone(),
+                target_path: item.target_path.clone(),
+                icon_base64,
+                item_type: item.item_type.clone(),
+                source: IconSource::from_value(&item.source).as_str().to_string(),
+                hidden: item.hidden,
+            }
+        })
+        .collect()
+}
+
+#[cfg(windows)]
 fn build_full_snapshot(
     app_handle: &tauri::AppHandle,
     source: IconSource,
@@ -565,6 +650,26 @@ fn build_full_snapshot(
 }
 
 #[cfg(windows)]
+fn load_or_init_icon_snapshot_windows<F>(
+    app_handle: &tauri::AppHandle,
+    source: IconSource,
+    collect_items: F,
+) -> Result<IconSnapshot, String>
+where
+    F: FnOnce() -> Result<Vec<ScannedDesktopItem>, String>,
+{
+    match read_icon_snapshot(app_handle, source)? {
+        Some(snapshot) => Ok(snapshot),
+        None => {
+            let scanned_items = collect_items()?;
+            let snapshot = build_full_snapshot(app_handle, source, &scanned_items)?;
+            write_icon_snapshot(app_handle, source, &snapshot)?;
+            Ok(snapshot)
+        }
+    }
+}
+
+#[cfg(windows)]
 fn load_or_init_icons_snapshot_windows<F>(
     app_handle: &tauri::AppHandle,
     icon_size: i32,
@@ -574,15 +679,7 @@ fn load_or_init_icons_snapshot_windows<F>(
 where
     F: FnOnce() -> Result<Vec<ScannedDesktopItem>, String>,
 {
-    let snapshot = match read_icon_snapshot(app_handle, source)? {
-        Some(snapshot) => snapshot,
-        None => {
-            let scanned_items = collect_items()?;
-            let snapshot = build_full_snapshot(app_handle, source, &scanned_items)?;
-            write_icon_snapshot(app_handle, source, &snapshot)?;
-            snapshot
-        }
-    };
+    let snapshot = load_or_init_icon_snapshot_windows(app_handle, source, collect_items)?;
 
     Ok(snapshot_to_desktop_icons(app_handle, &snapshot, icon_size))
 }
@@ -727,10 +824,11 @@ fn split_targets_by_source(targets: &[IconMutationTarget]) -> (HashSet<String>, 
 }
 
 #[cfg(windows)]
-fn hide_icons_in_snapshot_windows(
+fn set_icons_hidden_state_in_snapshot_windows(
     app_handle: &tauri::AppHandle,
     source: IconSource,
     id_set: &HashSet<String>,
+    hidden: bool,
 ) -> Result<usize, String> {
     if id_set.is_empty() {
         return Ok(0);
@@ -741,19 +839,19 @@ fn hide_icons_in_snapshot_windows(
         None => return Ok(0),
     };
 
-    let mut hidden_count = 0usize;
+    let mut changed_count = 0usize;
     for item in &mut snapshot.icons {
-        if id_set.contains(&item.id) && !item.hidden {
-            item.hidden = true;
-            hidden_count += 1;
+        if id_set.contains(&item.id) && item.hidden != hidden {
+            item.hidden = hidden;
+            changed_count += 1;
         }
     }
 
-    if hidden_count > 0 {
+    if changed_count > 0 {
         write_icon_snapshot(app_handle, source, &snapshot)?;
     }
 
-    Ok(hidden_count)
+    Ok(changed_count)
 }
 
 #[cfg(windows)]
@@ -806,11 +904,37 @@ fn hide_icons_windows(
 
     let (desktop_ids, customapp_ids) = split_targets_by_source(targets);
     let desktop_hidden =
-        hide_icons_in_snapshot_windows(app_handle, IconSource::Desktop, &desktop_ids)?;
+        set_icons_hidden_state_in_snapshot_windows(app_handle, IconSource::Desktop, &desktop_ids, true)?;
     let customapp_hidden =
-        hide_icons_in_snapshot_windows(app_handle, IconSource::CustomApp, &customapp_ids)?;
+        set_icons_hidden_state_in_snapshot_windows(app_handle, IconSource::CustomApp, &customapp_ids, true)?;
 
     Ok(desktop_hidden + customapp_hidden)
+}
+
+#[cfg(windows)]
+fn unhide_icons_windows(
+    app_handle: &tauri::AppHandle,
+    targets: &[IconMutationTarget],
+) -> Result<usize, String> {
+    if targets.is_empty() {
+        return Ok(0);
+    }
+
+    let (desktop_ids, customapp_ids) = split_targets_by_source(targets);
+    let desktop_unhidden = set_icons_hidden_state_in_snapshot_windows(
+        app_handle,
+        IconSource::Desktop,
+        &desktop_ids,
+        false,
+    )?;
+    let customapp_unhidden = set_icons_hidden_state_in_snapshot_windows(
+        app_handle,
+        IconSource::CustomApp,
+        &customapp_ids,
+        false,
+    )?;
+
+    Ok(desktop_unhidden + customapp_unhidden)
 }
 
 #[cfg(windows)]
@@ -893,6 +1017,37 @@ fn get_all_icons_windows(
     let mut all_icons = Vec::with_capacity(desktop_icons.len() + custom_icons.len());
     all_icons.extend(desktop_icons);
     all_icons.extend(custom_icons);
+    all_icons.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(all_icons)
+}
+
+#[cfg(windows)]
+fn get_all_icon_manager_items_windows(
+    app_handle: &tauri::AppHandle,
+    icon_size: i32,
+    custom_app_dir: Option<String>,
+) -> Result<Vec<IconManagerItem>, String> {
+    let desktop_snapshot =
+        load_or_init_icon_snapshot_windows(app_handle, IconSource::Desktop, || {
+            Ok(collect_desktop_items())
+        })?;
+
+    let custom_dir = resolve_customapp_dir_windows(app_handle, custom_app_dir)?;
+    let custom_snapshot = load_or_init_icon_snapshot_windows(app_handle, IconSource::CustomApp, || {
+        collect_items_from_single_dir(&custom_dir)
+    })?;
+
+    let mut all_icons = Vec::with_capacity(desktop_snapshot.icons.len() + custom_snapshot.icons.len());
+    all_icons.extend(snapshot_to_icon_manager_items(
+        app_handle,
+        &desktop_snapshot,
+        icon_size,
+    ));
+    all_icons.extend(snapshot_to_icon_manager_items(
+        app_handle,
+        &custom_snapshot,
+        icon_size,
+    ));
     all_icons.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     Ok(all_icons)
 }

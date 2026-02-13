@@ -18,6 +18,18 @@ pub struct DesktopIcon {
     pub source: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct IconManagerItem {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub target_path: String,
+    pub icon_base64: String,
+    pub item_type: String,
+    pub source: String,
+    pub hidden: bool,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct IconMutationTarget {
     pub id: String,

@@ -1,11 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useIconStore } from "@/stores/iconStore";
 import { applyTheme, saveTheme } from "@/lib/theme";
 import { getSetting, setSetting } from "@/lib/settingsStore";
-import type { IconSize, TitleLineCount, WindowMode, ThemeMode } from "@/types";
+import type {
+  IconManagerItem,
+  IconMutationTarget,
+  IconSize,
+  IconSource,
+  ThemeMode,
+  TitleLineCount,
+  WindowMode,
+} from "@/types";
 import { Settings as SettingsIcon, RefreshCw, Info, Images } from "lucide-react";
 
 type NavItem = "settings" | "iconManager" | "update" | "about";
@@ -60,6 +68,21 @@ type IconSyncResult = {
   total_count: number;
 };
 
+type IconVisibilityFilter = "all" | "visible" | "hidden";
+type IconSourceFilter = "all" | IconSource;
+
+const ICON_VISIBILITY_FILTER_OPTIONS: { label: string; value: IconVisibilityFilter }[] = [
+  { label: "全部", value: "all" },
+  { label: "未隐藏", value: "visible" },
+  { label: "隐藏", value: "hidden" },
+];
+
+const ICON_SOURCE_FILTER_OPTIONS: { label: string; value: IconSourceFilter }[] = [
+  { label: "全部来源", value: "all" },
+  { label: "桌面", value: "desktop" },
+  { label: "customapp", value: "customapp" },
+];
+
 const ICON_SYNC_ACTIONS: Record<
   IconSyncAction,
   {
@@ -86,9 +109,10 @@ const ICON_SYNC_ACTIONS: Record<
     command: "sync_full_desktop_icons",
     source: "desktop",
     sourceLabel: "桌面",
-    desc: "按当前桌面重建图标快照，覆盖现有桌面快照结果。",
+    desc: "按当前桌面与快照对账：重叠保留，多出删除，缺失新增。",
     confirmTitle: "确认执行桌面全量图标同步",
-    confirmDesc: "该操作会重新扫描整个桌面并重建图标快照，旧快照中已不存在的图标会被移除。",
+    confirmDesc:
+      "该操作会重新扫描整个桌面，仅新增缺失项并删除失效项，已存在且重叠的图标记录会保留。",
   },
   customappIncremental: {
     label: "customapp新增图标同步",
@@ -104,9 +128,10 @@ const ICON_SYNC_ACTIONS: Record<
     command: "sync_full_customapp_icons",
     source: "customapp",
     sourceLabel: "customapp",
-    desc: "按当前 customapp 文件夹内容重建快照，覆盖现有 customapp 快照结果。",
+    desc: "按当前 customapp 内容与快照对账：重叠保留，多出删除，缺失新增。",
     confirmTitle: "确认执行 customapp 全量图标同步",
-    confirmDesc: "该操作会重新扫描 customapp 文件夹（仅一级目录）并重建图标快照，旧快照中已不存在的图标会被移除。",
+    confirmDesc:
+      "该操作会扫描 customapp 文件夹（仅一级目录），仅新增缺失项并删除失效项，已存在且重叠的图标记录会保留。",
   },
 };
 
@@ -392,10 +417,22 @@ function UpdatePanel() {
 
 function IconManagerPanel() {
   const [pendingAction, setPendingAction] = useState<IconSyncAction | null>(null);
+  const [pendingMutation, setPendingMutation] = useState<{
+    type: "hide" | "unhide" | "delete";
+    icon: IconManagerItem;
+  } | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [mutating, setMutating] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
   const [resultText, setResultText] = useState<string>("");
+  const [managerErrorText, setManagerErrorText] = useState<string>("");
   const [defaultCustomAppDir, setDefaultCustomAppDir] = useState("");
   const [effectiveCustomAppDir, setEffectiveCustomAppDir] = useState("");
+  const [allIcons, setAllIcons] = useState<IconManagerItem[]>([]);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const [visibilityFilter, setVisibilityFilter] = useState<IconVisibilityFilter>("all");
+  const [sourceFilter, setSourceFilter] = useState<IconSourceFilter>("all");
 
   const refreshCustomAppDirDisplay = async () => {
     try {
@@ -411,9 +448,47 @@ function IconManagerPanel() {
     }
   };
 
+  const refreshIconManagerList = async () => {
+    setListLoading(true);
+    setManagerErrorText("");
+    try {
+      const savedCustomAppDir = (await getSetting("customAppDir")).trim();
+      const icons = await invoke<IconManagerItem[]>("get_icon_manager_items", {
+        iconSize: 48,
+        customAppDir: savedCustomAppDir || null,
+      });
+      setAllIcons(icons);
+    } catch (e) {
+      setManagerErrorText(`加载图标列表失败：${String(e)}`);
+    } finally {
+      setListLoading(false);
+    }
+  };
+
   useEffect(() => {
-    void refreshCustomAppDirDisplay();
+    void (async () => {
+      await refreshCustomAppDirDisplay();
+      await refreshIconManagerList();
+    })();
   }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearchKeyword(searchInput.trim().toLowerCase());
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
+  const filteredIcons = useMemo(() => {
+    return allIcons.filter((icon) => {
+      if (visibilityFilter === "visible" && icon.hidden) return false;
+      if (visibilityFilter === "hidden" && !icon.hidden) return false;
+      if (sourceFilter !== "all" && icon.source !== sourceFilter) return false;
+      if (!searchKeyword) return true;
+      const haystack = `${icon.name} ${icon.path} ${icon.target_path}`.toLowerCase();
+      return haystack.includes(searchKeyword);
+    });
+  }, [allIcons, visibilityFilter, sourceFilter, searchKeyword]);
 
   const handleConfirmSync = async () => {
     if (!pendingAction) return;
@@ -438,6 +513,7 @@ function IconManagerPanel() {
         `${action.sourceLabel}${modeText}完成：扫描 ${result.scanned_count} 项，新增 ${result.added_count} 项，当前快照共 ${result.total_count} 项。`,
       );
       await refreshCustomAppDirDisplay();
+      await refreshIconManagerList();
     } catch (e) {
       setResultText(`同步失败：${String(e)}`);
     } finally {
@@ -446,13 +522,72 @@ function IconManagerPanel() {
     }
   };
 
+  const handleConfirmMutation = async () => {
+    if (!pendingMutation) return;
+    setMutating(true);
+    try {
+      const targets: IconMutationTarget[] = [
+        {
+          id: pendingMutation.icon.id,
+          source: pendingMutation.icon.source,
+        },
+      ];
+
+      let command = "hide_desktop_icons";
+      let actionLabel = "隐藏";
+      if (pendingMutation.type === "unhide") {
+        command = "unhide_desktop_icons";
+        actionLabel = "取消隐藏";
+      } else if (pendingMutation.type === "delete") {
+        command = "delete_desktop_icons";
+        actionLabel = "删除";
+      }
+
+      const affected = await invoke<number>(command, { targets });
+      const sourceText = pendingMutation.icon.source === "desktop" ? "桌面" : "customapp";
+      setResultText(`${actionLabel}完成：${sourceText} 图标影响 ${affected} 项。`);
+      await refreshIconManagerList();
+    } catch (e) {
+      setResultText(`操作失败：${String(e)}`);
+    } finally {
+      setMutating(false);
+      setPendingMutation(null);
+    }
+  };
+
+  const mutationDialogText = pendingMutation
+    ? pendingMutation.type === "hide"
+      ? {
+          title: "确认隐藏图标",
+          desc: `将隐藏图标“${pendingMutation.icon.name}”。隐藏后不会在主页面显示。`,
+          confirmLabel: "确认隐藏",
+          confirmClass:
+            "rounded-md bg-blue-500 px-3 py-1.5 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60",
+        }
+      : pendingMutation.type === "unhide"
+        ? {
+            title: "确认取消隐藏图标",
+            desc: `将取消隐藏图标“${pendingMutation.icon.name}”。取消后图标会重新显示。`,
+            confirmLabel: "确认取消隐藏",
+            confirmClass:
+              "rounded-md bg-emerald-500 px-3 py-1.5 text-sm text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60",
+          }
+        : {
+            title: "确认删除图标记录",
+            desc: `将删除图标“${pendingMutation.icon.name}”在应用内的记录，不会删除磁盘文件。`,
+            confirmLabel: "确认删除",
+            confirmClass:
+              "rounded-md bg-red-500 px-3 py-1.5 text-sm text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60",
+          }
+    : null;
+
   return (
     <>
       <div className="space-y-6">
         <div className="space-y-2">
           <h2 className="text-lg font-semibold">图标管理</h2>
           <p className="text-sm text-muted-foreground">
-            首次进入主页面会自动扫描并保存桌面与 customapp 图标快照，后续不会主动扫描。你可以在这里手动同步。
+            首次进入主页面会自动扫描并保存桌面与 customapp 图标快照，后续不会主动扫描。你可以在这里手动同步并管理图标。
           </p>
           <p className="text-xs text-muted-foreground">
             customapp 默认目录：{defaultCustomAppDir || "加载中..."}
@@ -469,7 +604,7 @@ function IconManagerPanel() {
               <button
                 key={actionKey}
                 onClick={() => setPendingAction(actionKey)}
-                disabled={syncing}
+                disabled={syncing || mutating}
                 className="rounded-lg border border-border bg-secondary px-4 py-3 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <p className="text-sm font-medium">{action.label}</p>
@@ -477,6 +612,142 @@ function IconManagerPanel() {
               </button>
             );
           })}
+        </div>
+
+        <div className="space-y-3 rounded-lg border border-border bg-secondary/30 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="搜索图标名称或路径"
+              className="min-w-[220px] flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-blue-500"
+            />
+            <button
+              onClick={() => void refreshIconManagerList()}
+              disabled={listLoading || syncing || mutating}
+              className="rounded-md border border-border px-3 py-2 text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              刷新列表
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {ICON_VISIBILITY_FILTER_OPTIONS.map((opt) => (
+              <OptionButton
+                key={opt.value}
+                label={opt.label}
+                selected={visibilityFilter === opt.value}
+                onClick={() => setVisibilityFilter(opt.value)}
+              />
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {ICON_SOURCE_FILTER_OPTIONS.map((opt) => (
+              <OptionButton
+                key={opt.value}
+                label={opt.label}
+                selected={sourceFilter === opt.value}
+                onClick={() => setSourceFilter(opt.value)}
+              />
+            ))}
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            图标总数 {allIcons.length} 项，当前筛选结果 {filteredIcons.length} 项。
+          </p>
+
+          {managerErrorText ? <p className="text-sm text-red-500">{managerErrorText}</p> : null}
+
+          <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+            {listLoading ? (
+              <p className="text-sm text-muted-foreground">图标列表加载中...</p>
+            ) : filteredIcons.length === 0 ? (
+              <p className="text-sm text-muted-foreground">当前筛选条件下没有图标。</p>
+            ) : (
+              filteredIcons.map((icon) => {
+                const sourceLabel = icon.source === "desktop" ? "桌面" : "customapp";
+                const sourceBadgeClass =
+                  icon.source === "desktop"
+                    ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                    : "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
+                return (
+                  <div
+                    key={`${icon.source}:${icon.id}`}
+                    className="rounded-md border border-border bg-background/60 p-3"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md border border-border bg-secondary">
+                        {icon.icon_base64 ? (
+                          <img
+                            src={icon.icon_base64}
+                            alt={icon.name}
+                            className="h-full w-full object-contain"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                            No Icon
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate text-sm font-medium">{icon.name || "未命名"}</p>
+                          <span
+                            className={`rounded border px-2 py-0.5 text-[11px] ${sourceBadgeClass}`}
+                          >
+                            {sourceLabel}
+                          </span>
+                          <span
+                            className={`rounded border px-2 py-0.5 text-[11px] ${
+                              icon.hidden
+                                ? "border-orange-500/30 bg-orange-500/15 text-orange-400"
+                                : "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
+                            }`}
+                          >
+                            {icon.hidden ? "隐藏" : "未隐藏"}
+                          </span>
+                        </div>
+                        <p className="truncate text-xs text-muted-foreground">路径：{icon.path}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          目标：{icon.target_path || "-"}
+                        </p>
+                      </div>
+
+                      <div className="flex shrink-0 gap-2">
+                        {icon.hidden ? (
+                          <button
+                            onClick={() => setPendingMutation({ type: "unhide", icon })}
+                            disabled={syncing || mutating}
+                            className="rounded-md border border-emerald-500/40 px-3 py-1.5 text-xs text-emerald-400 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            取消隐藏
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setPendingMutation({ type: "hide", icon })}
+                            disabled={syncing || mutating}
+                            className="rounded-md border border-blue-500/40 px-3 py-1.5 text-xs text-blue-400 hover:bg-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            隐藏
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setPendingMutation({ type: "delete", icon })}
+                          disabled={syncing || mutating}
+                          className="rounded-md border border-red-500/40 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          删除
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
 
         {resultText ? <p className="text-sm text-muted-foreground">{resultText}</p> : null}
@@ -503,6 +774,31 @@ function IconManagerPanel() {
                 className="rounded-md bg-blue-500 px-3 py-1.5 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {syncing ? "同步中..." : "开始同步"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {pendingMutation && mutationDialogText ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-md rounded-xl border border-border bg-background p-5 shadow-xl">
+            <h3 className="text-base font-semibold">{mutationDialogText.title}</h3>
+            <p className="mt-2 text-sm text-muted-foreground">{mutationDialogText.desc}</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setPendingMutation(null)}
+                disabled={mutating}
+                className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleConfirmMutation}
+                disabled={mutating}
+                className={mutationDialogText.confirmClass}
+              >
+                {mutating ? "处理中..." : mutationDialogText.confirmLabel}
               </button>
             </div>
           </div>
