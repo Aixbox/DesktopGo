@@ -25,6 +25,7 @@ type FolderItem = {
 }
 
 type GridItem = IconItem | FolderItem
+type DragContext = 'outer' | 'folder'
 
 type PersistedItem =
   | {
@@ -39,8 +40,11 @@ type PersistedItem =
     }
 
 interface DragState {
+  context: DragContext
+  sourceFolderId: string | null
   pointerId: number
   draggingId: string
+  draggingItem: GridItem
   pointerX: number
   pointerY: number
   offsetX: number
@@ -57,6 +61,8 @@ interface DragState {
 }
 
 interface PendingDrag {
+  context: DragContext
+  sourceFolderId: string | null
   pointerId: number
   itemId: string
   startX: number
@@ -104,6 +110,8 @@ const FOLDER_PREVIEW_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
 const FOLDER_PREVIEW_TOP_OFFSET = 12
 const FOLDER_SURFACE_CLASS =
   'relative h-full w-full overflow-hidden rounded-xl bg-[linear-gradient(145deg,rgba(20,31,52,0.92),rgba(8,12,22,0.9))] shadow-[0_12px_28px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.14)] backdrop-blur-md'
+const FOLDER_MODAL_MAX_WIDTH = 620
+const FOLDER_MODAL_MAX_HEIGHT = 480
 
 const getFolderPreviewSlotSize = (imgSize: number): number =>
   Math.max(8, Math.floor((imgSize - FOLDER_PREVIEW_PADDING * 2 - FOLDER_PREVIEW_GAP) / 2))
@@ -202,6 +210,37 @@ const hydrateItems = (icons: DesktopIcon[], persisted: PersistedItem[] | null): 
   })
 
   return result
+}
+
+const findFolderIndexById = (items: GridItem[], folderId: string): number =>
+  items.findIndex(item => item.kind === 'folder' && item.id === folderId)
+
+const getFolderChildrenById = (items: GridItem[], folderId: string): IconItem[] => {
+  const index = findFolderIndexById(items, folderId)
+  if (index < 0) return []
+  const item = items[index]
+  return item && item.kind === 'folder' ? item.children : []
+}
+
+const replaceFolderChildren = (items: GridItem[], folderId: string, nextChildren: IconItem[]): GridItem[] => {
+  const index = findFolderIndexById(items, folderId)
+  if (index < 0) return items
+  const current = items[index]
+  if (!current || current.kind !== 'folder') return items
+
+  const next = [...items]
+  if (nextChildren.length >= 2) {
+    next[index] = { ...current, children: nextChildren }
+    return next
+  }
+
+  if (nextChildren.length === 1) {
+    next[index] = nextChildren[0]
+    return next
+  }
+
+  next.splice(index, 1)
+  return next
 }
 
 const classifyZone = (rect: DOMRect, x: number, y: number): HoverZone => {
@@ -332,7 +371,11 @@ export function IconGrid({ icons }: IconGridProps) {
   const { iconSize, selectionMode, selectedIconKeys, toggleSelectIcon } = useIconStore()
   const containerRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
+  const folderPanelRef = useRef<HTMLDivElement>(null)
+  const folderGridContainerRef = useRef<HTMLDivElement>(null)
+  const folderGridRef = useRef<HTMLDivElement>(null)
   const tileRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const folderTileRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const pendingRef = useRef<PendingDrag | null>(null)
   const dragRef = useRef<DragState | null>(null)
   const beginDragFnRef = useRef<(pending: PendingDrag, x: number, y: number) => void>(() => undefined)
@@ -341,7 +384,9 @@ export function IconGrid({ icons }: IconGridProps) {
   const clearPendingFnRef = useRef<() => void>(() => undefined)
   const prevPageEntriesRef = useRef<Array<string | null>>([])
   const prevPageRef = useRef<number>(0)
+  const prevFolderEntriesRef = useRef<Array<string | null>>([])
   const tileAnimationTimerRef = useRef<Map<string, number>>(new Map())
+  const folderTileAnimationTimerRef = useRef<Map<string, number>>(new Map())
   const folderDropFlightTimerRef = useRef<number | null>(null)
   const folderDropFlightIdRef = useRef(0)
   const timerRef = useRef<number | null>(null)
@@ -360,6 +405,10 @@ export function IconGrid({ icons }: IconGridProps) {
   const [itemHeight, setItemHeight] = useState<number>(fallbackRowHeight)
   const [items, setItems] = useState<GridItem[]>([])
   const [dragState, setDragState] = useState<DragState | null>(null)
+  const [openFolderId, setOpenFolderId] = useState<string | null>(null)
+  const [folderItemWidth, setFolderItemWidth] = useState<number>(columnWidth)
+  const [folderItemHeight, setFolderItemHeight] = useState<number>(fallbackRowHeight)
+  const [folderColumns, setFolderColumns] = useState<number>(1)
   const [folderDropFlight, setFolderDropFlight] = useState<FolderDropFlight | null>(null)
   const [folderPreviewFreezeTargetId, setFolderPreviewFreezeTargetId] = useState<string | null>(null)
 
@@ -386,14 +435,52 @@ export function IconGrid({ icons }: IconGridProps) {
     dragRef.current = dragState
   }, [dragState])
 
+  useEffect(() => {
+    if (!openFolderId) return
+    const exists = items.some(item => item.kind === 'folder' && item.id === openFolderId)
+    if (!exists) {
+      setOpenFolderId(null)
+    }
+  }, [openFolderId, items])
+
+  useEffect(() => {
+    if (!openFolderId) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (dragRef.current?.context === 'folder') return
+      setOpenFolderId(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [openFolderId])
+
   const itemById = useMemo(() => {
     const map = new Map<string, GridItem>()
     items.forEach(item => map.set(getId(item), item))
     return map
   }, [items])
 
+  const openFolder = useMemo(() => {
+    if (!openFolderId) return null
+    const found = items.find(item => item.kind === 'folder' && item.id === openFolderId)
+    return found && found.kind === 'folder' ? found : null
+  }, [items, openFolderId])
+
+  const folderItemById = useMemo(() => {
+    const map = new Map<string, IconItem>()
+    if (!openFolder) return map
+    openFolder.children.forEach(child => map.set(child.key, child))
+    return map
+  }, [openFolder])
+
   const order = useMemo(() => items.map(getId), [items])
-  const renderOrder = dragState ? dragState.workingOrder : order
+  const folderOrder = useMemo(() => openFolder?.children.map(child => child.key) ?? [], [openFolder])
+  const renderOrder =
+    dragState && dragState.context === 'outer' ? dragState.workingOrder : order
+  const folderRenderOrder =
+    dragState && dragState.context === 'folder' ? dragState.workingOrder : folderOrder
   const selectedSet = useMemo(() => new Set(selectedIconKeys), [selectedIconKeys])
   const iconConfig = ICON_SIZE_CONFIG[iconSize]
 
@@ -409,53 +496,175 @@ export function IconGrid({ icons }: IconGridProps) {
     clearTimer()
   }
 
-  const collectCenters = () => {
+  const collectCenters = (refs: Map<string, HTMLDivElement>) => {
     const centers: Record<string, { x: number; y: number }> = {}
-    tileRefs.current.forEach((node, id) => {
+    refs.forEach((node, id) => {
       const rect = node.getBoundingClientRect()
       centers[id] = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
     })
     return centers
   }
 
-  const findHit = (
+  const getFolderMapById = (folderId: string | null, baseItems: GridItem[]) => {
+    const map = new Map<string, IconItem>()
+    if (!folderId) return map
+    getFolderChildrenById(baseItems, folderId).forEach(child => {
+      map.set(child.key, child)
+    })
+    return map
+  }
+
+  const resolveDragItemMap = (state: DragState): Map<string, GridItem> => {
+    if (state.context === 'folder') {
+      const folderMap = getFolderMapById(state.sourceFolderId, itemsRef.current)
+      const gridMap = new Map<string, GridItem>()
+      folderMap.forEach((item, id) => gridMap.set(id, item))
+      return gridMap
+    }
+    const outerMap = new Map<string, GridItem>()
+    itemsRef.current.forEach(item => {
+      outerMap.set(getId(item), item)
+    })
+    return outerMap
+  }
+
+  const resolveGridMetrics = (context: DragContext) => {
+    if (context === 'folder') {
+      return {
+        gridElement: folderGridRef.current,
+        columns: Math.max(1, folderColumns),
+        rows: Math.max(1, Math.ceil(Math.max(1, folderRenderOrder.length) / Math.max(1, folderColumns))),
+        itemWidth: folderItemWidth,
+        itemHeight: folderItemHeight,
+        pageOffset: 0,
+      }
+    }
+
+    return {
+      gridElement: gridRef.current,
+      columns: Math.max(1, columns),
+      rows: Math.max(1, rows),
+      itemWidth,
+      itemHeight,
+      pageOffset: currentPage * pageSize,
+    }
+  }
+
+  const findHitByContext = (
+    state: DragState,
     x: number,
     y: number,
-    draggingId: string,
-    workingOrder: Array<string | null>,
   ): { targetId: string; zone: HoverZone } | null => {
-    const gridElement = gridRef.current
-    if (!gridElement || columns <= 0 || rows <= 0) return null
+    const metrics = resolveGridMetrics(state.context)
+    const { gridElement, columns: colCount, rows: rowCount, itemWidth: tileW, itemHeight: tileH, pageOffset } =
+      metrics
+    if (!gridElement || colCount <= 0 || rowCount <= 0) return null
 
     const rect = gridElement.getBoundingClientRect()
     if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return null
 
-    const stepX = itemWidth + GRID_GAP
-    const stepY = itemHeight + GRID_GAP
+    const stepX = tileW + GRID_GAP
+    const stepY = tileH + GRID_GAP
     if (stepX <= 0 || stepY <= 0) return null
 
     const relX = x - rect.left
     const relY = y - rect.top
     const col = Math.floor(relX / stepX)
     const row = Math.floor(relY / stepY)
-    if (col < 0 || col >= columns || row < 0 || row >= rows) return null
+    if (col < 0 || col >= colCount || row < 0 || row >= rowCount) return null
 
     const localX = relX - col * stepX
     const localY = relY - row * stepY
-    if (localX < 0 || localX > itemWidth || localY < 0 || localY > itemHeight) return null
+    if (localX < 0 || localX > tileW || localY < 0 || localY > tileH) return null
 
-    const pageSlotIndex = row * columns + col
-    const globalSlotIndex = currentPage * pageSize + pageSlotIndex
-    const targetId = workingOrder[globalSlotIndex]
-    if (!targetId || targetId === draggingId) return null
+    const slotIndex = row * colCount + col
+    const globalSlotIndex = pageOffset + slotIndex
+    const targetId = state.workingOrder[globalSlotIndex]
+    if (!targetId || targetId === state.draggingId) return null
 
     const targetRect = new DOMRect(
       rect.left + col * stepX,
       rect.top + row * stepY,
-      itemWidth,
-      itemHeight,
+      tileW,
+      tileH,
     )
     return { targetId, zone: classifyZone(targetRect, x, y) }
+  }
+
+  const resolveNearestDropOrderByContext = (state: DragState): Array<string | null> => {
+    const metrics = resolveGridMetrics(state.context)
+    const { gridElement, columns: colCount, rows: rowCount, itemWidth: tileW, itemHeight: tileH, pageOffset } =
+      metrics
+    if (!gridElement) return state.workingOrder
+
+    const rect = gridElement.getBoundingClientRect()
+    const stepX = tileW + GRID_GAP
+    const stepY = tileH + GRID_GAP
+    if (stepX <= 0 || stepY <= 0 || colCount <= 0 || rowCount <= 0) {
+      return state.workingOrder
+    }
+
+    const clampedX = clampNumber(state.pointerX, rect.left, rect.right)
+    const clampedY = clampNumber(state.pointerY, rect.top, rect.bottom)
+    const col = clampNumber(
+      Math.round((clampedX - rect.left - tileW / 2) / stepX),
+      0,
+      Math.max(0, colCount - 1),
+    )
+    const row = clampNumber(
+      Math.round((clampedY - rect.top - tileH / 2) / stepY),
+      0,
+      Math.max(0, rowCount - 1),
+    )
+    const slotIndex = row * colCount + col
+    const globalSlotIndex = clampNumber(
+      pageOffset + slotIndex,
+      0,
+      Math.max(0, state.workingOrder.length - 1),
+    )
+    return moveEmptyToIndex(state.workingOrder, globalSlotIndex)
+  }
+
+  const moveDragFromFolderToOuter = (state: DragState, x: number, y: number): DragState => {
+    if (state.context !== 'folder' || !state.sourceFolderId || state.draggingItem.kind !== 'icon') {
+      return { ...state, pointerX: x, pointerY: y }
+    }
+
+    const currentItems = itemsRef.current
+    const children = getFolderChildrenById(currentItems, state.sourceFolderId)
+    const nextChildren = children.filter(child => child.key !== state.draggingId)
+    if (nextChildren.length === children.length) {
+      return { ...state, pointerX: x, pointerY: y }
+    }
+
+    const nextItems = replaceFolderChildren(currentItems, state.sourceFolderId, nextChildren)
+    itemsRef.current = nextItems
+    setItems(nextItems)
+    setOpenFolderId(null)
+
+    const nextOrder: Array<string | null> = [...nextItems.map(getId), null]
+    const outerCenters = collectCenters(tileRefs.current)
+    outerCenters[state.draggingId] = { x, y }
+    const outerState: DragState = {
+      ...state,
+      context: 'outer',
+      sourceFolderId: null,
+      pointerX: x,
+      pointerY: y,
+      workingOrder: nextOrder,
+      hoverTargetId: null,
+      hoverZone: null,
+      centerStartedAt: null,
+      folderPreviewTargetId: null,
+      lastEvasionSignature: null,
+      lastEvasionTriggerPointer: null,
+      lastEvasionAt: null,
+      initialCenters: outerCenters,
+    }
+    return {
+      ...outerState,
+      workingOrder: resolveNearestDropOrderByContext(outerState),
+    }
   }
 
   const beginDrag = (pending: PendingDrag, x: number, y: number) => {
@@ -466,9 +675,21 @@ export function IconGrid({ icons }: IconGridProps) {
     }
     setFolderDropFlight(null)
     setFolderPreviewFreezeTargetId(null)
-    const sourceOrder = itemsRef.current.map(getId)
+    const sourceOrder =
+      pending.context === 'folder' && pending.sourceFolderId
+        ? getFolderChildrenById(itemsRef.current, pending.sourceFolderId).map(child => child.key)
+        : itemsRef.current.map(getId)
     const sourceIndex = sourceOrder.indexOf(pending.itemId)
     if (sourceIndex < 0) {
+      clearPending()
+      return
+    }
+
+    const draggingItem =
+      pending.context === 'folder' && pending.sourceFolderId
+        ? getFolderMapById(pending.sourceFolderId, itemsRef.current).get(pending.itemId)
+        : itemById.get(pending.itemId)
+    if (!draggingItem) {
       clearPending()
       return
     }
@@ -476,8 +697,11 @@ export function IconGrid({ icons }: IconGridProps) {
     const workingOrder: Array<string | null> = [...sourceOrder]
     workingOrder[sourceIndex] = null
     const nextState: DragState = {
+      context: pending.context,
+      sourceFolderId: pending.sourceFolderId,
       pointerId: pending.pointerId,
       draggingId: pending.itemId,
+      draggingItem,
       pointerX: x,
       pointerY: y,
       offsetX: pending.offsetX,
@@ -490,7 +714,10 @@ export function IconGrid({ icons }: IconGridProps) {
       lastEvasionSignature: null,
       lastEvasionTriggerPointer: null,
       lastEvasionAt: null,
-      initialCenters: collectCenters(),
+      initialCenters:
+        pending.context === 'folder'
+          ? collectCenters(folderTileRefs.current)
+          : collectCenters(tileRefs.current),
     }
     dragRef.current = nextState
     setDragState(nextState)
@@ -498,107 +725,139 @@ export function IconGrid({ icons }: IconGridProps) {
   }
 
   const onDragMove = (pointerId: number, x: number, y: number) => {
-    setDragState(current => {
-      if (!current || current.pointerId !== pointerId) return current
-      const sync = (state: DragState) => {
-        dragRef.current = state
-        return state
-      }
-      const next: DragState = { ...current, pointerX: x, pointerY: y }
-      const hit = findHit(x, y, current.draggingId, current.workingOrder)
-      if (!hit) {
-        next.hoverTargetId = null
-        next.hoverZone = null
-        next.centerStartedAt = null
-        next.folderPreviewTargetId = null
-        next.lastEvasionSignature = null
-        return sync(next)
-      }
+    const current = dragRef.current
+    if (!current || current.pointerId !== pointerId) return
 
-      const source = itemById.get(current.draggingId)
-      const target = itemById.get(hit.targetId)
-      if (!source || !target) return sync(next)
-
-      next.hoverTargetId = hit.targetId
-      next.hoverZone = hit.zone
-
-      const canFolder = source.kind === 'icon' && target.kind === 'icon'
-      if (canFolder && hit.zone === 'center') {
-        const now = performance.now()
-        const sameCenter =
-          current.hoverTargetId === hit.targetId &&
-          current.hoverZone === 'center' &&
-          current.centerStartedAt !== null
-        const startAt =
-          sameCenter && current.centerStartedAt !== null ? current.centerStartedAt : now
-        next.centerStartedAt = startAt
-        next.folderPreviewTargetId = now - startAt >= FOLDER_DWELL_MS ? hit.targetId : null
-        next.lastEvasionSignature = null
-        return sync(next)
-      }
-
-      next.centerStartedAt = null
-      next.folderPreviewTargetId = null
-
-      const sourceCenter = current.initialCenters[current.draggingId]
-      const targetCenter = current.initialCenters[hit.targetId]
-      const horizontal =
-        !sourceCenter || !targetCenter
-          ? null
-          : targetCenter.x > sourceCenter.x
-            ? 'right'
-            : targetCenter.x < sourceCenter.x
-              ? 'left'
-              : null
-
-      const sideZone = hit.zone === 'left' || hit.zone === 'right'
-      const shouldEvasion = canFolder && sideZone && horizontal === hit.zone
-      const targetIndex = current.workingOrder.indexOf(hit.targetId)
-      if (targetIndex < 0) return sync(next)
-
-      let desiredHoleIndex = targetIndex
-      if (shouldEvasion) {
-        const now = performance.now()
-        const signature = `${hit.targetId}:${hit.zone}`
-        const movedSinceLastEvasion =
-          !current.lastEvasionTriggerPointer ||
-          Math.hypot(
-            x - current.lastEvasionTriggerPointer.x,
-            y - current.lastEvasionTriggerPointer.y,
-          ) >= EVASION_REARM_DISTANCE
-        const cooledDownSinceLastEvasion =
-          current.lastEvasionAt === null || now - current.lastEvasionAt >= EVASION_COOLDOWN_MS
-
-        const shouldTriggerThisFrame =
-          movedSinceLastEvasion &&
-          cooledDownSinceLastEvasion &&
-          current.lastEvasionSignature !== signature
-
-        if (!shouldTriggerThisFrame) {
-          next.lastEvasionSignature = current.lastEvasionSignature
-          next.lastEvasionAt = current.lastEvasionAt
-          return sync(next)
-        }
-
-        next.lastEvasionSignature = signature
-        next.lastEvasionTriggerPointer = { x, y }
-        next.lastEvasionAt = now
-      } else {
-        next.lastEvasionSignature = null
-        next.lastEvasionAt = current.lastEvasionAt
-        if (hit.zone === 'right' || hit.zone === 'down') {
-          desiredHoleIndex = Math.min(current.workingOrder.length - 1, targetIndex + 1)
+    let baseState: DragState = { ...current, pointerX: x, pointerY: y }
+    if (current.context === 'folder') {
+      const panel = folderPanelRef.current
+      if (panel) {
+        const panelRect = panel.getBoundingClientRect()
+        const outsidePanel =
+          x < panelRect.left || x > panelRect.right || y < panelRect.top || y > panelRect.bottom
+        if (outsidePanel) {
+          baseState = moveDragFromFolderToOuter(baseState, x, y)
         }
       }
+    }
 
-      next.workingOrder = moveEmptyToIndex(current.workingOrder, desiredHoleIndex)
-      return sync(next)
-    })
+    const hit = findHitByContext(baseState, x, y)
+    if (!hit) {
+      const resetState: DragState = {
+        ...baseState,
+        hoverTargetId: null,
+        hoverZone: null,
+        centerStartedAt: null,
+        folderPreviewTargetId: null,
+        lastEvasionSignature: null,
+      }
+      dragRef.current = resetState
+      setDragState(resetState)
+      return
+    }
+
+    const itemMap = resolveDragItemMap(baseState)
+    const source = baseState.draggingItem
+    const target = itemMap.get(hit.targetId)
+    if (!target) {
+      dragRef.current = baseState
+      setDragState(baseState)
+      return
+    }
+
+    const next: DragState = {
+      ...baseState,
+      hoverTargetId: hit.targetId,
+      hoverZone: hit.zone,
+    }
+
+    const canFolder = source.kind === 'icon' && target.kind === 'icon'
+    const allowFolderCreate = baseState.context === 'outer'
+    if (allowFolderCreate && canFolder && hit.zone === 'center') {
+      const now = performance.now()
+      const sameCenter =
+        baseState.hoverTargetId === hit.targetId &&
+        baseState.hoverZone === 'center' &&
+        baseState.centerStartedAt !== null
+      const startAt = sameCenter && baseState.centerStartedAt !== null ? baseState.centerStartedAt : now
+      next.centerStartedAt = startAt
+      next.folderPreviewTargetId = now - startAt >= FOLDER_DWELL_MS ? hit.targetId : null
+      next.lastEvasionSignature = null
+      dragRef.current = next
+      setDragState(next)
+      return
+    }
+
+    next.centerStartedAt = null
+    next.folderPreviewTargetId = null
+
+    const sourceCenter = baseState.initialCenters[baseState.draggingId]
+    const targetCenter = baseState.initialCenters[hit.targetId]
+    const horizontal =
+      !sourceCenter || !targetCenter
+        ? null
+        : targetCenter.x > sourceCenter.x
+          ? 'right'
+          : targetCenter.x < sourceCenter.x
+            ? 'left'
+            : null
+
+    const sideZone = hit.zone === 'left' || hit.zone === 'right'
+    const shouldEvasion = canFolder && sideZone && horizontal === hit.zone
+    const targetIndex = baseState.workingOrder.indexOf(hit.targetId)
+    if (targetIndex < 0) {
+      dragRef.current = next
+      setDragState(next)
+      return
+    }
+
+    let desiredHoleIndex = targetIndex
+    if (shouldEvasion) {
+      const now = performance.now()
+      const signature = `${hit.targetId}:${hit.zone}`
+      const movedSinceLastEvasion =
+        !baseState.lastEvasionTriggerPointer ||
+        Math.hypot(
+          x - baseState.lastEvasionTriggerPointer.x,
+          y - baseState.lastEvasionTriggerPointer.y,
+        ) >= EVASION_REARM_DISTANCE
+      const cooledDownSinceLastEvasion =
+        baseState.lastEvasionAt === null || now - baseState.lastEvasionAt >= EVASION_COOLDOWN_MS
+
+      const shouldTriggerThisFrame =
+        movedSinceLastEvasion &&
+        cooledDownSinceLastEvasion &&
+        baseState.lastEvasionSignature !== signature
+
+      if (!shouldTriggerThisFrame) {
+        next.lastEvasionSignature = baseState.lastEvasionSignature
+        next.lastEvasionAt = baseState.lastEvasionAt
+        dragRef.current = next
+        setDragState(next)
+        return
+      }
+
+      next.lastEvasionSignature = signature
+      next.lastEvasionTriggerPointer = { x, y }
+      next.lastEvasionAt = now
+    } else {
+      next.lastEvasionSignature = null
+      next.lastEvasionAt = baseState.lastEvasionAt
+      if (hit.zone === 'right' || hit.zone === 'down') {
+        desiredHoleIndex = Math.min(baseState.workingOrder.length - 1, targetIndex + 1)
+      }
+    }
+
+    next.workingOrder = moveEmptyToIndex(baseState.workingOrder, desiredHoleIndex)
+    dragRef.current = next
+    setDragState(next)
   }
 
   const applyFolderCreateFromSession = (base: GridItem[], session: DragState): GridItem[] => {
     const map = new Map<string, GridItem>()
     base.forEach(item => map.set(getId(item), item))
+    const sourceExistsInBase = map.has(session.draggingId)
+    map.set(session.draggingId, session.draggingItem)
     const sourceItem = map.get(session.draggingId)
     const targetId = session.folderPreviewTargetId as string
     const targetItem = map.get(targetId)
@@ -623,7 +882,8 @@ export function IconGrid({ icons }: IconGridProps) {
     map.set(folderId, folder)
     nextOrder.splice(targetIndex, 0, folderId)
     const nextItems = nextOrder.map(id => map.get(id)).filter((item): item is GridItem => Boolean(item))
-    return nextItems.length === base.length - 1 ? nextItems : base
+    const expectedLength = sourceExistsInBase ? base.length - 1 : base.length
+    return nextItems.length === expectedLength ? nextItems : base
   }
 
   const resolveFolderSecondSlotCenter = (targetId: string): { x: number; y: number; size: number } | null => {
@@ -649,106 +909,112 @@ export function IconGrid({ icons }: IconGridProps) {
     const current = dragRef.current
     if (!current || current.pointerId !== pointerId) return
 
-    const source = itemById.get(current.draggingId)
-    const target = current.hoverTargetId ? itemById.get(current.hoverTargetId) : null
-    const canCreateFolder =
-      current.folderPreviewTargetId !== null &&
-      current.folderPreviewTargetId === current.hoverTargetId &&
-      current.hoverZone === 'center' &&
-      source?.kind === 'icon' &&
-      target?.kind === 'icon'
-
-    if (canCreateFolder) {
-      const targetId = current.folderPreviewTargetId as string
-      const sourceItem = source?.kind === 'icon' ? source : null
-      const slotCenter = resolveFolderSecondSlotCenter(targetId)
-      if (sourceItem && slotCenter) {
-        if (folderDropFlightTimerRef.current !== null) {
-          window.clearTimeout(folderDropFlightTimerRef.current)
-          folderDropFlightTimerRef.current = null
-        }
-
-        const flightId = folderDropFlightIdRef.current + 1
-        folderDropFlightIdRef.current = flightId
-        setFolderPreviewFreezeTargetId(targetId)
-        setFolderDropFlight({
-          id: flightId,
-          icon: sourceItem.icon,
-          startX: current.pointerX,
-          startY: current.pointerY,
-          startSize: iconConfig.imgSize,
-          endX: slotCenter.x,
-          endY: slotCenter.y,
-          endSize: slotCenter.size,
-          animate: false,
-        })
-
-        folderDropFlightTimerRef.current = window.setTimeout(() => {
-          setItems(base => applyFolderCreateFromSession(base, current))
-          setFolderDropFlight(prev => (prev && prev.id === flightId ? null : prev))
-          setFolderPreviewFreezeTargetId(prev => (prev === targetId ? null : prev))
-          folderDropFlightTimerRef.current = null
-        }, REORDER_ANIMATION_MS + 30)
-      } else {
-        setFolderPreviewFreezeTargetId(null)
-        setItems(base => applyFolderCreateFromSession(base, current))
-      }
-    } else {
-      setFolderPreviewFreezeTargetId(null)
-      const resolveNearestDropOrder = (): Array<string | null> => {
-        const gridElement = gridRef.current
-        if (!gridElement) return current.workingOrder
-
-        const rect = gridElement.getBoundingClientRect()
-        const stepX = itemWidth + GRID_GAP
-        const stepY = itemHeight + GRID_GAP
-        if (stepX <= 0 || stepY <= 0 || columns <= 0 || rows <= 0) {
-          return current.workingOrder
-        }
-
-        const clampedX = clampNumber(current.pointerX, rect.left, rect.right)
-        const clampedY = clampNumber(current.pointerY, rect.top, rect.bottom)
-        const col = clampNumber(
-          Math.round((clampedX - rect.left - itemWidth / 2) / stepX),
-          0,
-          Math.max(0, columns - 1),
-        )
-        const row = clampNumber(
-          Math.round((clampedY - rect.top - itemHeight / 2) / stepY),
-          0,
-          Math.max(0, rows - 1),
-        )
-        const slotIndexInPage = row * columns + col
-        const globalSlotIndex = clampNumber(
-          currentPage * pageSize + slotIndexInPage,
-          0,
-          Math.max(0, current.workingOrder.length - 1),
-        )
-        return moveEmptyToIndex(current.workingOrder, globalSlotIndex)
-      }
-
+    if (current.context === 'folder') {
+      const folderMap = getFolderMapById(current.sourceFolderId, itemsRef.current)
+      const target = current.hoverTargetId ? folderMap.get(current.hoverTargetId) : null
       const hasValidHoverTarget = Boolean(current.hoverTargetId && target)
       const dropOrder =
         hasValidHoverTarget && current.hoverTargetId
-          ? current.hoverZone === 'center' && source?.kind === 'icon' && target?.kind === 'icon'
+          ? current.hoverZone === 'center' && current.draggingItem.kind === 'icon' && target?.kind === 'icon'
             ? (() => {
                 const targetIndex = current.workingOrder.indexOf(current.hoverTargetId)
                 if (targetIndex < 0) return current.workingOrder
                 return moveEmptyToIndex(current.workingOrder, targetIndex)
               })()
             : current.workingOrder
-          : resolveNearestDropOrder()
+          : resolveNearestDropOrderByContext(current)
+
       setItems(base => {
-        const map = new Map<string, GridItem>()
-        base.forEach(item => map.set(getId(item), item))
+        if (!current.sourceFolderId || current.draggingItem.kind !== 'icon') return base
+        const children = getFolderChildrenById(base, current.sourceFolderId)
+        if (children.length === 0) return base
+        const map = new Map<string, IconItem>()
+        children.forEach(child => map.set(child.key, child))
+        map.set(current.draggingId, current.draggingItem)
         const nextOrder = [...dropOrder]
         const emptyIndex = nextOrder.indexOf(null)
         if (emptyIndex < 0) return base
         nextOrder[emptyIndex] = current.draggingId
         const normalized = nextOrder.filter((id): id is string => id !== null)
-        const nextItems = normalized.map(id => map.get(id)).filter((item): item is GridItem => Boolean(item))
-        return nextItems.length === base.length ? nextItems : base
+        const nextChildren = normalized.map(id => map.get(id)).filter((item): item is IconItem => Boolean(item))
+        if (nextChildren.length !== children.length) return base
+        return replaceFolderChildren(base, current.sourceFolderId, nextChildren)
       })
+    } else {
+      const outerMap = new Map<string, GridItem>()
+      itemsRef.current.forEach(item => outerMap.set(getId(item), item))
+      const source = current.draggingItem
+      const target = current.hoverTargetId ? outerMap.get(current.hoverTargetId) : null
+      const canCreateFolder =
+        current.folderPreviewTargetId !== null &&
+        current.folderPreviewTargetId === current.hoverTargetId &&
+        current.hoverZone === 'center' &&
+        source.kind === 'icon' &&
+        target?.kind === 'icon'
+
+      if (canCreateFolder) {
+        const targetId = current.folderPreviewTargetId as string
+        const sourceItem = source.kind === 'icon' ? source : null
+        const slotCenter = resolveFolderSecondSlotCenter(targetId)
+        if (sourceItem && slotCenter) {
+          if (folderDropFlightTimerRef.current !== null) {
+            window.clearTimeout(folderDropFlightTimerRef.current)
+            folderDropFlightTimerRef.current = null
+          }
+
+          const flightId = folderDropFlightIdRef.current + 1
+          folderDropFlightIdRef.current = flightId
+          setFolderPreviewFreezeTargetId(targetId)
+          setFolderDropFlight({
+            id: flightId,
+            icon: sourceItem.icon,
+            startX: current.pointerX,
+            startY: current.pointerY,
+            startSize: iconConfig.imgSize,
+            endX: slotCenter.x,
+            endY: slotCenter.y,
+            endSize: slotCenter.size,
+            animate: false,
+          })
+
+          folderDropFlightTimerRef.current = window.setTimeout(() => {
+            setItems(base => applyFolderCreateFromSession(base, current))
+            setFolderDropFlight(prev => (prev && prev.id === flightId ? null : prev))
+            setFolderPreviewFreezeTargetId(prev => (prev === targetId ? null : prev))
+            folderDropFlightTimerRef.current = null
+          }, REORDER_ANIMATION_MS + 30)
+        } else {
+          setFolderPreviewFreezeTargetId(null)
+          setItems(base => applyFolderCreateFromSession(base, current))
+        }
+      } else {
+        setFolderPreviewFreezeTargetId(null)
+        const hasValidHoverTarget = Boolean(current.hoverTargetId && target)
+        const dropOrder =
+          hasValidHoverTarget && current.hoverTargetId
+            ? current.hoverZone === 'center' && source.kind === 'icon' && target?.kind === 'icon'
+              ? (() => {
+                  const targetIndex = current.workingOrder.indexOf(current.hoverTargetId)
+                  if (targetIndex < 0) return current.workingOrder
+                  return moveEmptyToIndex(current.workingOrder, targetIndex)
+                })()
+              : current.workingOrder
+            : resolveNearestDropOrderByContext(current)
+        setItems(base => {
+          const map = new Map<string, GridItem>()
+          base.forEach(item => map.set(getId(item), item))
+          const hadDraggedInBase = map.has(current.draggingId)
+          map.set(current.draggingId, current.draggingItem)
+          const nextOrder = [...dropOrder]
+          const emptyIndex = nextOrder.indexOf(null)
+          if (emptyIndex < 0) return base
+          nextOrder[emptyIndex] = current.draggingId
+          const normalized = nextOrder.filter((id): id is string => id !== null)
+          const nextItems = normalized.map(id => map.get(id)).filter((item): item is GridItem => Boolean(item))
+          const expectedLength = hadDraggedInBase ? base.length : base.length + 1
+          return nextItems.length === expectedLength ? nextItems : base
+        })
+      }
     }
 
     suppressClickUntilRef.current = performance.now() + 300
@@ -825,6 +1091,33 @@ export function IconGrid({ icons }: IconGridProps) {
     if (selectionMode || event.button !== 0) return
     const rect = event.currentTarget.getBoundingClientRect()
     pendingRef.current = {
+      context: 'outer',
+      sourceFolderId: null,
+      pointerId: event.pointerId,
+      itemId,
+      startX: event.clientX,
+      startY: event.clientY,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+    }
+    clearTimer()
+    timerRef.current = window.setTimeout(() => {
+      const pending = pendingRef.current
+      if (!pending || pending.pointerId !== event.pointerId) return
+      beginDrag(pending, pending.startX, pending.startY)
+    }, DRAG_LONG_PRESS_MS)
+  }
+
+  const handleFolderTilePointerDown = (
+    event: ReactPointerEvent<HTMLDivElement>,
+    folderId: string,
+    itemId: string,
+  ) => {
+    if (selectionMode || event.button !== 0) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    pendingRef.current = {
+      context: 'folder',
+      sourceFolderId: folderId,
       pointerId: event.pointerId,
       itemId,
       startX: event.clientX,
@@ -880,8 +1173,40 @@ export function IconGrid({ icons }: IconGridProps) {
     }
   }, [columnWidth, fallbackRowHeight, items.length, currentPage])
 
+  useEffect(() => {
+    const container = folderGridContainerRef.current
+    if (!container || !openFolder) return
+
+    let raf = 0
+    const recalc = () => {
+      const width = container.clientWidth
+      const first = folderGridRef.current?.querySelector<HTMLElement>('[data-folder-grid-item]')
+      const tileWidth = first?.offsetWidth ?? columnWidth
+      const tileHeight = first?.offsetHeight ?? fallbackRowHeight
+      setFolderItemWidth(tileWidth)
+      setFolderItemHeight(tileHeight)
+      setFolderColumns(fitCount(width, tileWidth))
+    }
+    const schedule = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(recalc)
+    }
+
+    schedule()
+    const observer = new ResizeObserver(schedule)
+    observer.observe(container)
+    if (folderGridRef.current) observer.observe(folderGridRef.current)
+    window.addEventListener('resize', schedule)
+    return () => {
+      cancelAnimationFrame(raf)
+      observer.disconnect()
+      window.removeEventListener('resize', schedule)
+    }
+  }, [openFolder, folderRenderOrder.length, columnWidth, fallbackRowHeight])
+
   const pageSize = Math.max(1, columns * rows)
-  const pageCount = Math.max(1, Math.ceil(items.length / pageSize))
+  const outerRenderCount = dragState?.context === 'outer' ? renderOrder.length : items.length
+  const pageCount = Math.max(1, Math.ceil(outerRenderCount / pageSize))
   useEffect(() => {
     if (currentPage >= pageCount) setCurrentPage(pageCount - 1)
   }, [currentPage, pageCount])
@@ -956,12 +1281,72 @@ export function IconGrid({ icons }: IconGridProps) {
     prevPageEntriesRef.current = currentPageEntries
   }, [pageItems, currentPage, columns, itemWidth, itemHeight])
 
+  useLayoutEffect(() => {
+    if (!openFolder) {
+      prevFolderEntriesRef.current = []
+      return
+    }
+
+    const currentEntries = folderRenderOrder
+    const prevIndexMap = new Map<string, number>()
+    prevFolderEntriesRef.current.forEach((entry, index) => {
+      if (entry === null) return
+      prevIndexMap.set(entry, index)
+    })
+
+    const stepX = folderItemWidth + GRID_GAP
+    const stepY = folderItemHeight + GRID_GAP
+    currentEntries.forEach((entry, newIndex) => {
+      if (entry === null) return
+      const prevIndex = prevIndexMap.get(entry)
+      if (prevIndex === undefined || prevIndex === newIndex) return
+
+      const prevRow = Math.floor(prevIndex / folderColumns)
+      const prevCol = prevIndex % folderColumns
+      const newRow = Math.floor(newIndex / folderColumns)
+      const newCol = newIndex % folderColumns
+      const deltaX = (prevCol - newCol) * stepX
+      const deltaY = (prevRow - newRow) * stepY
+      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return
+
+      const node = folderTileRefs.current.get(entry)
+      if (!node) return
+
+      const existingTimer = folderTileAnimationTimerRef.current.get(entry)
+      if (existingTimer !== undefined) {
+        window.clearTimeout(existingTimer)
+        folderTileAnimationTimerRef.current.delete(entry)
+      }
+
+      node.style.transition = 'none'
+      node.style.willChange = 'transform'
+      node.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0px)`
+      void node.offsetWidth
+      node.style.transition = `transform ${REORDER_ANIMATION_MS}ms ${REORDER_EASING}`
+      node.style.transform = 'translate3d(0px, 0px, 0px)'
+
+      const timer = window.setTimeout(() => {
+        node.style.transition = ''
+        node.style.transform = ''
+        node.style.willChange = ''
+        folderTileAnimationTimerRef.current.delete(entry)
+      }, REORDER_ANIMATION_MS + 40)
+      folderTileAnimationTimerRef.current.set(entry, timer)
+    })
+
+    prevFolderEntriesRef.current = currentEntries
+  }, [openFolder, folderRenderOrder, folderColumns, folderItemWidth, folderItemHeight])
+
   useEffect(() => {
     return () => {
       tileAnimationTimerRef.current.forEach(timer => {
         window.clearTimeout(timer)
       })
       tileAnimationTimerRef.current.clear()
+      folderTileAnimationTimerRef.current.forEach(timer => {
+        window.clearTimeout(timer)
+      })
+      folderTileAnimationTimerRef.current.clear()
       if (folderDropFlightTimerRef.current !== null) {
         window.clearTimeout(folderDropFlightTimerRef.current)
         folderDropFlightTimerRef.current = null
@@ -981,7 +1366,7 @@ export function IconGrid({ icons }: IconGridProps) {
 
   const gridWidth = columns * itemWidth + Math.max(0, columns - 1) * GRID_GAP
   const gridHeight = rows * itemHeight + Math.max(0, rows - 1) * GRID_GAP
-  const ghostItem = dragState ? itemById.get(dragState.draggingId) : null
+  const ghostItem = dragState ? dragState.draggingItem : null
 
   return (
     <div className="relative h-full w-full px-16 pb-20 pt-24">
@@ -1015,7 +1400,8 @@ export function IconGrid({ icons }: IconGridProps) {
               const item = itemById.get(entry)
               if (!item) return null
               const folderPreview =
-                dragState?.folderPreviewTargetId === entry || folderPreviewFreezeTargetId === entry
+                (dragState?.context === 'outer' && dragState.folderPreviewTargetId === entry) ||
+                folderPreviewFreezeTargetId === entry
 
               return (
                 <div
@@ -1047,9 +1433,14 @@ export function IconGrid({ icons }: IconGridProps) {
                     <button
                       data-icon
                       type="button"
-                      className="relative flex cursor-default flex-col items-center gap-2 rounded-2xl border-none p-3"
+                      className="relative flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-none p-3"
                       style={{ width: iconConfig.containerWidth }}
                       title={item.name}
+                      onClick={event => {
+                        event.stopPropagation()
+                        if (selectionMode) return
+                        setOpenFolderId(item.id)
+                      }}
                     >
                       <FolderIconVisual
                         icons={item.children.map(child => child.icon)}
@@ -1114,6 +1505,100 @@ export function IconGrid({ icons }: IconGridProps) {
           </div>
         </div>
       </div>
+
+      {openFolder ? (
+        <div
+          className="absolute inset-0 z-40 flex items-center justify-center bg-black/45 backdrop-blur-[2px]"
+          onPointerDown={event => {
+            event.stopPropagation()
+            if (event.target !== event.currentTarget) return
+            if (dragState?.context === 'folder') return
+            setOpenFolderId(null)
+          }}
+          onClick={event => {
+            event.stopPropagation()
+          }}
+        >
+          <div
+            data-icon
+            ref={folderPanelRef}
+            className="relative overflow-hidden rounded-3xl border border-white/15 bg-black/55 p-5 shadow-[0_24px_56px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+            style={{
+              width: `min(92vw, ${FOLDER_MODAL_MAX_WIDTH}px)`,
+              maxHeight: `min(80vh, ${FOLDER_MODAL_MAX_HEIGHT}px)`,
+            }}
+            onPointerDown={event => {
+              event.stopPropagation()
+            }}
+            onClick={event => {
+              event.stopPropagation()
+            }}
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="truncate text-sm font-medium text-white/90" title={openFolder.name}>
+                {openFolder.name}
+              </h3>
+              <button
+                type="button"
+                className="rounded-full border border-white/25 px-3 py-1 text-xs text-white/85 transition-colors hover:bg-white/15"
+                onClick={() => setOpenFolderId(null)}
+              >
+                Close
+              </button>
+            </div>
+
+            <div
+              ref={folderGridContainerRef}
+              className="overflow-auto"
+              style={{ maxHeight: `calc(min(80vh, ${FOLDER_MODAL_MAX_HEIGHT}px) - 88px)` }}
+            >
+              <div
+                ref={folderGridRef}
+                className="grid content-start justify-items-center gap-2"
+                style={{ gridTemplateColumns: `repeat(${Math.max(1, folderColumns)}, ${folderItemWidth}px)` }}
+              >
+                {folderRenderOrder.map((entry, index) => {
+                  if (entry === null) {
+                    return (
+                      <div
+                        key={`folder-empty-${index}`}
+                        data-folder-grid-item
+                        className="h-full w-full rounded-2xl border border-white/10 bg-white/5"
+                        aria-hidden="true"
+                      />
+                    )
+                  }
+
+                  const item = folderItemById.get(entry)
+                  if (!item || !openFolder) return null
+
+                  return (
+                    <div
+                      key={entry}
+                      ref={node => {
+                        if (node) folderTileRefs.current.set(entry, node)
+                        else folderTileRefs.current.delete(entry)
+                      }}
+                      data-folder-grid-item
+                      className="relative touch-none"
+                      onPointerDown={event => handleFolderTilePointerDown(event, openFolder.id, entry)}
+                      onClickCapture={handleTileClickCapture}
+                    >
+                      <Icon
+                        icon={item.icon}
+                        selectionKey={item.key}
+                        selectionMode={selectionMode}
+                        selected={selectedSet.has(item.key)}
+                        onToggleSelect={toggleSelectIcon}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {dragState && ghostItem ? (
         <div
