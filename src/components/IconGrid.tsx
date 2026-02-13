@@ -102,6 +102,8 @@ const FOLDER_PREVIEW_PADDING = 4
 const FOLDER_PREVIEW_GAP = 2
 const FOLDER_PREVIEW_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
 const FOLDER_PREVIEW_TOP_OFFSET = 12
+const FOLDER_SURFACE_CLASS =
+  'relative h-full w-full overflow-hidden rounded-xl bg-[linear-gradient(145deg,rgba(20,31,52,0.92),rgba(8,12,22,0.9))] shadow-[0_12px_28px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.14)] backdrop-blur-md'
 
 const getFolderPreviewSlotSize = (imgSize: number): number =>
   Math.max(8, Math.floor((imgSize - FOLDER_PREVIEW_PADDING * 2 - FOLDER_PREVIEW_GAP) / 2))
@@ -256,27 +258,10 @@ function FolderCreatePreview({ active, icon, imgSize }: FolderCreatePreviewProps
       aria-hidden="true"
     >
       <div
-        className={`relative h-full w-full overflow-hidden rounded-xl border bg-white/18 shadow-[0_8px_18px_rgba(0,0,0,0.2)] backdrop-blur-sm transition-all duration-200 ${
-          active ? 'border-white/70 opacity-100' : 'border-white/0 opacity-0'
+        className={`${FOLDER_SURFACE_CLASS} transition-all duration-200 ${
+          active ? 'opacity-100' : 'opacity-0'
         }`}
       >
-        <div
-          className="absolute grid grid-cols-2 grid-rows-2"
-          style={{
-            left: `${FOLDER_PREVIEW_PADDING}px`,
-            top: `${FOLDER_PREVIEW_PADDING}px`,
-            gap: `${FOLDER_PREVIEW_GAP}px`,
-          }}
-        >
-          {Array.from({ length: 4 }, (_, idx) => (
-            <div
-              key={idx}
-              className="rounded-[4px] border border-white/25 bg-black/15"
-              style={{ width: `${slotSize}px`, height: `${slotSize}px` }}
-            />
-          ))}
-        </div>
-
         <div className="absolute left-0 top-0 overflow-hidden rounded-[5px]" style={itemStyle}>
           {icon.icon_base64 ? (
             <img
@@ -308,24 +293,7 @@ function FolderIconVisual({ icons, imgSize }: FolderIconVisualProps) {
 
   return (
     <div className="relative" style={frameStyle} aria-hidden="true">
-      <div className="relative h-full w-full overflow-hidden rounded-xl border border-white/70 bg-white/18 shadow-[0_8px_18px_rgba(0,0,0,0.2)] backdrop-blur-sm">
-        <div
-          className="absolute grid grid-cols-2 grid-rows-2"
-          style={{
-            left: `${FOLDER_PREVIEW_PADDING}px`,
-            top: `${FOLDER_PREVIEW_PADDING}px`,
-            gap: `${FOLDER_PREVIEW_GAP}px`,
-          }}
-        >
-          {Array.from({ length: 4 }, (_, idx) => (
-            <div
-              key={idx}
-              className="rounded-[4px] border border-white/25 bg-black/15"
-              style={{ width: `${slotSize}px`, height: `${slotSize}px` }}
-            />
-          ))}
-        </div>
-
+      <div className={FOLDER_SURFACE_CLASS}>
         {icons.slice(0, 4).map((icon, idx) => {
           const row = Math.floor(idx / 2)
           const col = idx % 2
