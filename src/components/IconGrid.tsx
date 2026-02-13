@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { AppWindow, Folder } from 'lucide-react'
+import { AppWindow } from 'lucide-react'
 import type { DesktopIcon } from '../types'
 import { ICON_SIZE_CONFIG } from '../types'
 import { buildIconSelectionKey, useIconStore } from '../stores/iconStore'
@@ -65,6 +65,24 @@ interface PendingDrag {
   offsetY: number
 }
 
+interface FolderCreatePreviewProps {
+  active: boolean
+  icon: DesktopIcon
+  imgSize: number
+}
+
+interface FolderDropFlight {
+  id: number
+  icon: DesktopIcon
+  startX: number
+  startY: number
+  startSize: number
+  endX: number
+  endY: number
+  endSize: number
+  animate: boolean
+}
+
 const GRID_GAP = 8
 const PAGINATION_OFFSET = 14
 const PAGINATION_DOT_SIZE = 8
@@ -79,6 +97,14 @@ const EVASION_REARM_DISTANCE = 14
 const EVASION_COOLDOWN_MS = 80
 const REORDER_ANIMATION_MS = 220
 const REORDER_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
+
+const FOLDER_PREVIEW_PADDING = 4
+const FOLDER_PREVIEW_GAP = 2
+const FOLDER_PREVIEW_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
+const FOLDER_PREVIEW_TOP_OFFSET = 12
+
+const getFolderPreviewSlotSize = (imgSize: number): number =>
+  Math.max(8, Math.floor((imgSize - FOLDER_PREVIEW_PADDING * 2 - FOLDER_PREVIEW_GAP) / 2))
 
 const FALLBACK_ICON_ROW_HEIGHT = {
   large: 130,
@@ -205,6 +231,135 @@ const moveEmptyToIndex = (order: Array<string | null>, targetIndex: number): Arr
   return next
 }
 
+function FolderCreatePreview({ active, icon, imgSize }: FolderCreatePreviewProps) {
+  const slotSize = getFolderPreviewSlotSize(imgSize)
+  const startSize = Math.max(slotSize, Math.floor(imgSize * 0.84))
+  const startOffset = (imgSize - startSize) / 2
+
+  const itemStyle = {
+    width: `${active ? slotSize : startSize}px`,
+    height: `${active ? slotSize : startSize}px`,
+    transform: `translate3d(${active ? FOLDER_PREVIEW_PADDING : startOffset}px, ${active ? FOLDER_PREVIEW_PADDING : startOffset}px, 0)`,
+    opacity: active ? 1 : 0,
+    transition: `transform ${REORDER_ANIMATION_MS}ms ${FOLDER_PREVIEW_EASING}, width ${REORDER_ANIMATION_MS}ms ${FOLDER_PREVIEW_EASING}, height ${REORDER_ANIMATION_MS}ms ${FOLDER_PREVIEW_EASING}, opacity 140ms ease-out`,
+  } as const
+
+  const frameStyle = {
+    width: `${imgSize}px`,
+    height: `${imgSize}px`,
+  } as const
+
+  return (
+    <div
+      className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2"
+      style={frameStyle}
+      aria-hidden="true"
+    >
+      <div
+        className={`relative h-full w-full overflow-hidden rounded-xl border bg-white/18 shadow-[0_8px_18px_rgba(0,0,0,0.2)] backdrop-blur-sm transition-all duration-200 ${
+          active ? 'border-white/70 opacity-100' : 'border-white/0 opacity-0'
+        }`}
+      >
+        <div
+          className="absolute grid grid-cols-2 grid-rows-2"
+          style={{
+            left: `${FOLDER_PREVIEW_PADDING}px`,
+            top: `${FOLDER_PREVIEW_PADDING}px`,
+            gap: `${FOLDER_PREVIEW_GAP}px`,
+          }}
+        >
+          {Array.from({ length: 4 }, (_, idx) => (
+            <div
+              key={idx}
+              className="rounded-[4px] border border-white/25 bg-black/15"
+              style={{ width: `${slotSize}px`, height: `${slotSize}px` }}
+            />
+          ))}
+        </div>
+
+        <div className="absolute left-0 top-0 overflow-hidden rounded-[5px]" style={itemStyle}>
+          {icon.icon_base64 ? (
+            <img
+              src={icon.icon_base64}
+              alt={icon.name}
+              className="h-full w-full object-contain"
+              draggable={false}
+            />
+          ) : (
+            <AppWindow className="h-full w-full text-foreground/70" />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+interface FolderIconVisualProps {
+  icons: DesktopIcon[]
+  imgSize: number
+}
+
+function FolderIconVisual({ icons, imgSize }: FolderIconVisualProps) {
+  const slotSize = getFolderPreviewSlotSize(imgSize)
+  const frameStyle = {
+    width: `${imgSize}px`,
+    height: `${imgSize}px`,
+  } as const
+
+  return (
+    <div className="relative" style={frameStyle} aria-hidden="true">
+      <div className="relative h-full w-full overflow-hidden rounded-xl border border-white/70 bg-white/18 shadow-[0_8px_18px_rgba(0,0,0,0.2)] backdrop-blur-sm">
+        <div
+          className="absolute grid grid-cols-2 grid-rows-2"
+          style={{
+            left: `${FOLDER_PREVIEW_PADDING}px`,
+            top: `${FOLDER_PREVIEW_PADDING}px`,
+            gap: `${FOLDER_PREVIEW_GAP}px`,
+          }}
+        >
+          {Array.from({ length: 4 }, (_, idx) => (
+            <div
+              key={idx}
+              className="rounded-[4px] border border-white/25 bg-black/15"
+              style={{ width: `${slotSize}px`, height: `${slotSize}px` }}
+            />
+          ))}
+        </div>
+
+        {icons.slice(0, 4).map((icon, idx) => {
+          const row = Math.floor(idx / 2)
+          const col = idx % 2
+          const left = FOLDER_PREVIEW_PADDING + col * (slotSize + FOLDER_PREVIEW_GAP)
+          const top = FOLDER_PREVIEW_PADDING + row * (slotSize + FOLDER_PREVIEW_GAP)
+          return (
+            <div
+              key={`${icon.id}-${idx}`}
+              className="absolute overflow-hidden rounded-[5px]"
+              style={{
+                left: `${left}px`,
+                top: `${top}px`,
+                width: `${slotSize}px`,
+                height: `${slotSize}px`,
+              }}
+            >
+              {icon.icon_base64 ? (
+                <img
+                  src={icon.icon_base64}
+                  alt={icon.name}
+                  className="h-full w-full object-contain"
+                  draggable={false}
+                />
+              ) : (
+                <AppWindow className="h-full w-full text-foreground/70" />
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export function IconGrid({ icons }: IconGridProps) {
   const { iconSize, selectionMode, selectedIconKeys, toggleSelectIcon } = useIconStore()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -219,6 +374,8 @@ export function IconGrid({ icons }: IconGridProps) {
   const prevPageEntriesRef = useRef<Array<string | null>>([])
   const prevPageRef = useRef<number>(0)
   const tileAnimationTimerRef = useRef<Map<string, number>>(new Map())
+  const folderDropFlightTimerRef = useRef<number | null>(null)
+  const folderDropFlightIdRef = useRef(0)
   const timerRef = useRef<number | null>(null)
   const suppressClickUntilRef = useRef(0)
   const hydratedRef = useRef(false)
@@ -235,6 +392,8 @@ export function IconGrid({ icons }: IconGridProps) {
   const [itemHeight, setItemHeight] = useState<number>(fallbackRowHeight)
   const [items, setItems] = useState<GridItem[]>([])
   const [dragState, setDragState] = useState<DragState | null>(null)
+  const [folderDropFlight, setFolderDropFlight] = useState<FolderDropFlight | null>(null)
+  const [folderPreviewFreezeTargetId, setFolderPreviewFreezeTargetId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!hydratedRef.current && icons.length === 0) return
@@ -333,6 +492,12 @@ export function IconGrid({ icons }: IconGridProps) {
 
   const beginDrag = (pending: PendingDrag, x: number, y: number) => {
     clearTimer()
+    if (folderDropFlightTimerRef.current !== null) {
+      window.clearTimeout(folderDropFlightTimerRef.current)
+      folderDropFlightTimerRef.current = null
+    }
+    setFolderDropFlight(null)
+    setFolderPreviewFreezeTargetId(null)
     const sourceOrder = itemsRef.current.map(getId)
     const sourceIndex = sourceOrder.indexOf(pending.itemId)
     if (sourceIndex < 0) {
@@ -463,6 +628,55 @@ export function IconGrid({ icons }: IconGridProps) {
     })
   }
 
+  const applyFolderCreateFromSession = (base: GridItem[], session: DragState): GridItem[] => {
+    const map = new Map<string, GridItem>()
+    base.forEach(item => map.set(getId(item), item))
+    const sourceItem = map.get(session.draggingId)
+    const targetId = session.folderPreviewTargetId as string
+    const targetItem = map.get(targetId)
+    if (!sourceItem || !targetItem || sourceItem.kind !== 'icon' || targetItem.kind !== 'icon') {
+      return base
+    }
+
+    const orderWithoutDragged = session.workingOrder.filter((id): id is string => id !== null)
+    const targetIndex = orderWithoutDragged.indexOf(targetId)
+    if (targetIndex < 0) return base
+
+    const nextOrder = orderWithoutDragged.filter(id => id !== targetId)
+    const folder: FolderItem = {
+      kind: 'folder',
+      id: makeFolderId(),
+      name: 'New Folder',
+      children: [targetItem, sourceItem],
+    }
+    const folderId = getId(folder)
+    map.delete(session.draggingId)
+    map.delete(targetId)
+    map.set(folderId, folder)
+    nextOrder.splice(targetIndex, 0, folderId)
+    const nextItems = nextOrder.map(id => map.get(id)).filter((item): item is GridItem => Boolean(item))
+    return nextItems.length === base.length - 1 ? nextItems : base
+  }
+
+  const resolveFolderSecondSlotCenter = (targetId: string): { x: number; y: number; size: number } | null => {
+    const targetNode = tileRefs.current.get(targetId)
+    if (!targetNode) return null
+
+    const rect = targetNode.getBoundingClientRect()
+    const frameSize = iconConfig.imgSize
+    const slotSize = getFolderPreviewSlotSize(frameSize)
+    const frameLeft = rect.left + (rect.width - frameSize) / 2
+    const frameTop = rect.top + FOLDER_PREVIEW_TOP_OFFSET
+    const slotLeft = frameLeft + FOLDER_PREVIEW_PADDING + slotSize + FOLDER_PREVIEW_GAP
+    const slotTop = frameTop + FOLDER_PREVIEW_PADDING
+
+    return {
+      x: slotLeft + slotSize / 2,
+      y: slotTop + slotSize / 2,
+      size: slotSize,
+    }
+  }
+
   const finishDrag = (pointerId: number) => {
     const current = dragRef.current
     if (!current || current.pointerId !== pointerId) return
@@ -477,36 +691,42 @@ export function IconGrid({ icons }: IconGridProps) {
       target?.kind === 'icon'
 
     if (canCreateFolder) {
-      setItems(base => {
-        const map = new Map<string, GridItem>()
-        base.forEach(item => map.set(getId(item), item))
-        const sourceItem = map.get(current.draggingId)
-        const targetId = current.folderPreviewTargetId as string
-        const targetItem = map.get(targetId)
-        if (!sourceItem || !targetItem || sourceItem.kind !== 'icon' || targetItem.kind !== 'icon') {
-          return base
+      const targetId = current.folderPreviewTargetId as string
+      const sourceItem = source?.kind === 'icon' ? source : null
+      const slotCenter = resolveFolderSecondSlotCenter(targetId)
+      if (sourceItem && slotCenter) {
+        if (folderDropFlightTimerRef.current !== null) {
+          window.clearTimeout(folderDropFlightTimerRef.current)
+          folderDropFlightTimerRef.current = null
         }
 
-        const orderWithoutDragged = current.workingOrder.filter((id): id is string => id !== null)
-        const targetIndex = orderWithoutDragged.indexOf(targetId)
-        if (targetIndex < 0) return base
+        const flightId = folderDropFlightIdRef.current + 1
+        folderDropFlightIdRef.current = flightId
+        setFolderPreviewFreezeTargetId(targetId)
+        setFolderDropFlight({
+          id: flightId,
+          icon: sourceItem.icon,
+          startX: current.pointerX,
+          startY: current.pointerY,
+          startSize: iconConfig.imgSize,
+          endX: slotCenter.x,
+          endY: slotCenter.y,
+          endSize: slotCenter.size,
+          animate: false,
+        })
 
-        const nextOrder = orderWithoutDragged.filter(id => id !== targetId)
-        const folder: FolderItem = {
-          kind: 'folder',
-          id: makeFolderId(),
-          name: 'New Folder',
-          children: [sourceItem, targetItem],
-        }
-        const folderId = getId(folder)
-        map.delete(current.draggingId)
-        map.delete(targetId)
-        map.set(folderId, folder)
-        nextOrder.splice(targetIndex, 0, folderId)
-        const nextItems = nextOrder.map(id => map.get(id)).filter((item): item is GridItem => Boolean(item))
-        return nextItems.length === base.length - 1 ? nextItems : base
-      })
+        folderDropFlightTimerRef.current = window.setTimeout(() => {
+          setItems(base => applyFolderCreateFromSession(base, current))
+          setFolderDropFlight(prev => (prev && prev.id === flightId ? null : prev))
+          setFolderPreviewFreezeTargetId(prev => (prev === targetId ? null : prev))
+          folderDropFlightTimerRef.current = null
+        }, REORDER_ANIMATION_MS + 30)
+      } else {
+        setFolderPreviewFreezeTargetId(null)
+        setItems(base => applyFolderCreateFromSession(base, current))
+      }
     } else {
+      setFolderPreviewFreezeTargetId(null)
       const resolveNearestDropOrder = (): Array<string | null> => {
         const gridElement = gridRef.current
         if (!gridElement) return current.workingOrder
@@ -774,8 +994,22 @@ export function IconGrid({ icons }: IconGridProps) {
         window.clearTimeout(timer)
       })
       tileAnimationTimerRef.current.clear()
+      if (folderDropFlightTimerRef.current !== null) {
+        window.clearTimeout(folderDropFlightTimerRef.current)
+        folderDropFlightTimerRef.current = null
+      }
     }
   }, [])
+
+  useEffect(() => {
+    if (!folderDropFlight || folderDropFlight.animate) return
+    const raf = requestAnimationFrame(() => {
+      setFolderDropFlight(prev => (prev ? { ...prev, animate: true } : prev))
+    })
+    return () => {
+      cancelAnimationFrame(raf)
+    }
+  }, [folderDropFlight])
 
   const gridWidth = columns * itemWidth + Math.max(0, columns - 1) * GRID_GAP
   const gridHeight = rows * itemHeight + Math.max(0, rows - 1) * GRID_GAP
@@ -812,7 +1046,8 @@ export function IconGrid({ icons }: IconGridProps) {
 
               const item = itemById.get(entry)
               if (!item) return null
-              const folderPreview = dragState?.folderPreviewTargetId === entry
+              const folderPreview =
+                dragState?.folderPreviewTargetId === entry || folderPreviewFreezeTargetId === entry
 
               return (
                 <div
@@ -827,13 +1062,19 @@ export function IconGrid({ icons }: IconGridProps) {
                   onClickCapture={handleTileClickCapture}
                 >
                   {item.kind === 'icon' ? (
-                    <Icon
-                      icon={item.icon}
-                      selectionKey={item.key}
-                      selectionMode={selectionMode}
-                      selected={selectedSet.has(item.key)}
-                      onToggleSelect={toggleSelectIcon}
-                    />
+                    <div
+                      className={`transition-opacity duration-200 ${
+                        folderPreview ? 'opacity-45' : 'opacity-100'
+                      }`}
+                    >
+                      <Icon
+                        icon={item.icon}
+                        selectionKey={item.key}
+                        selectionMode={selectionMode}
+                        selected={selectedSet.has(item.key)}
+                        onToggleSelect={toggleSelectIcon}
+                      />
+                    </div>
                   ) : (
                     <button
                       data-icon
@@ -842,31 +1083,27 @@ export function IconGrid({ icons }: IconGridProps) {
                       style={{ width: iconConfig.containerWidth }}
                       title={item.name}
                     >
-                      <div
-                        className="flex items-center justify-center rounded-xl bg-yellow-400/20"
-                        style={{ width: iconConfig.imgSize, height: iconConfig.imgSize }}
-                      >
-                        <Folder className="h-8 w-8 text-yellow-300" />
-                      </div>
+                      <FolderIconVisual
+                        icons={item.children.map(child => child.icon)}
+                        imgSize={iconConfig.imgSize}
+                      />
                       <span
                         className="truncate text-center text-[11px] leading-tight text-foreground"
                         style={{ maxWidth: iconConfig.containerWidth - 10 }}
                       >
                         {item.name}
                       </span>
-                      <span className="rounded-full bg-black/30 px-1.5 py-0.5 text-[10px] text-white/70">
-                        {item.children.length}
-                      </span>
                     </button>
                   )}
 
-                  {folderPreview ? (
-                    <div className="pointer-events-none absolute inset-1 z-20 rounded-2xl border border-emerald-300/80 bg-emerald-400/20">
-                      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-2 py-0.5 text-[10px] text-white">
-                        Release to create folder
-                      </div>
-                    </div>
+                  {item.kind === 'icon' ? (
+                    <FolderCreatePreview
+                      active={folderPreview}
+                      icon={item.icon}
+                      imgSize={iconConfig.imgSize}
+                    />
                   ) : null}
+
                 </div>
               )
             })}
@@ -921,7 +1158,7 @@ export function IconGrid({ icons }: IconGridProps) {
           }}
         >
           <div
-            className="flex items-center justify-center overflow-hidden"
+            className="flex items-center justify-center"
             style={{ width: iconConfig.imgSize, height: iconConfig.imgSize }}
           >
             {ghostItem.kind === 'icon' ? (
@@ -937,9 +1174,41 @@ export function IconGrid({ icons }: IconGridProps) {
                 <AppWindow className="h-8 w-8 text-foreground/70" />
               )
             ) : (
-              <Folder className="h-8 w-8 text-yellow-300" />
+              <FolderIconVisual
+                icons={ghostItem.children.map(child => child.icon)}
+                imgSize={iconConfig.imgSize}
+              />
             )}
           </div>
+        </div>
+      ) : null}
+
+      {folderDropFlight ? (
+        <div
+          className="pointer-events-none fixed z-[55]"
+          style={{
+            left:
+              (folderDropFlight.animate ? folderDropFlight.endX : folderDropFlight.startX) -
+              (folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize) / 2,
+            top:
+              (folderDropFlight.animate ? folderDropFlight.endY : folderDropFlight.startY) -
+              (folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize) / 2,
+            width: folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize,
+            height: folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize,
+            opacity: folderDropFlight.animate ? 0.92 : 1,
+            transition: `left ${REORDER_ANIMATION_MS}ms ${FOLDER_PREVIEW_EASING}, top ${REORDER_ANIMATION_MS}ms ${FOLDER_PREVIEW_EASING}, width ${REORDER_ANIMATION_MS}ms ${FOLDER_PREVIEW_EASING}, height ${REORDER_ANIMATION_MS}ms ${FOLDER_PREVIEW_EASING}, opacity ${REORDER_ANIMATION_MS}ms ease-out`,
+          }}
+        >
+          {folderDropFlight.icon.icon_base64 ? (
+            <img
+              src={folderDropFlight.icon.icon_base64}
+              alt={folderDropFlight.icon.name}
+              className="h-full w-full object-contain"
+              draggable={false}
+            />
+          ) : (
+            <AppWindow className="h-full w-full text-foreground/70" />
+          )}
         </div>
       ) : null}
     </div>
