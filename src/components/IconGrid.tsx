@@ -912,37 +912,33 @@ export function IconGrid({ icons }: IconGridProps) {
 
       {dragState && ghostItem ? (
         <div
-          className="pointer-events-none fixed z-50 rounded-2xl bg-black/25 px-3 py-3 shadow-2xl backdrop-blur-sm"
+          className="pointer-events-none fixed z-50"
           style={{
-            width: iconConfig.containerWidth,
-            left: dragState.pointerX - dragState.offsetX,
-            top: dragState.pointerY - dragState.offsetY,
+            width: iconConfig.imgSize,
+            height: iconConfig.imgSize,
+            left: dragState.pointerX - iconConfig.imgSize / 2,
+            top: dragState.pointerY - iconConfig.imgSize / 2,
           }}
         >
-          <div className="flex flex-col items-center gap-2">
-            <div
-              className="flex items-center justify-center overflow-hidden"
-              style={{ width: iconConfig.imgSize, height: iconConfig.imgSize }}
-            >
-              {ghostItem.kind === 'icon' ? (
-                ghostItem.icon.icon_base64 ? (
-                  <img
-                    src={ghostItem.icon.icon_base64}
-                    alt={ghostItem.icon.name}
-                    className="object-contain"
-                    style={{ width: iconConfig.imgSize, height: iconConfig.imgSize }}
-                    draggable={false}
-                  />
-                ) : (
-                  <AppWindow className="h-8 w-8 text-foreground/70" />
-                )
+          <div
+            className="flex items-center justify-center overflow-hidden"
+            style={{ width: iconConfig.imgSize, height: iconConfig.imgSize }}
+          >
+            {ghostItem.kind === 'icon' ? (
+              ghostItem.icon.icon_base64 ? (
+                <img
+                  src={ghostItem.icon.icon_base64}
+                  alt={ghostItem.icon.name}
+                  className="object-contain"
+                  style={{ width: iconConfig.imgSize, height: iconConfig.imgSize }}
+                  draggable={false}
+                />
               ) : (
-                <Folder className="h-8 w-8 text-yellow-300" />
-              )}
-            </div>
-            <span className="max-w-[100%] truncate text-[11px] leading-tight text-foreground">
-              {ghostItem.kind === 'icon' ? ghostItem.icon.name : ghostItem.name}
-            </span>
+                <AppWindow className="h-8 w-8 text-foreground/70" />
+              )
+            ) : (
+              <Folder className="h-8 w-8 text-yellow-300" />
+            )}
           </div>
         </div>
       ) : null}
