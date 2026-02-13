@@ -1,5 +1,5 @@
 use base64::Engine;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use tauri::Manager;
 
@@ -259,23 +259,6 @@ fn ensure_icon_cache_dirs(app_handle: &tauri::AppHandle, source: IconSource) -> 
         std::fs::create_dir_all(&dir)
             .map_err(|e| format!("Failed to create icon cache directory {:?}: {}", dir, e))?;
     }
-    Ok(())
-}
-
-#[cfg(windows)]
-fn clear_icon_cache_dirs(app_handle: &tauri::AppHandle, source: IconSource) -> Result<(), String> {
-    let icon_root = snapshot_base_dir(app_handle)?
-        .join("icons")
-        .join(source.cache_folder_name());
-    if icon_root.exists() {
-        std::fs::remove_dir_all(&icon_root).map_err(|e| {
-            format!(
-                "Failed to clear icon cache directory {:?}: {}",
-                icon_root, e
-            )
-        })?;
-    }
-    ensure_icon_cache_dirs(app_handle, source)?;
     Ok(())
 }
 
@@ -658,16 +641,68 @@ fn sync_full_icons_windows<F>(
 where
     F: FnOnce() -> Result<Vec<ScannedDesktopItem>, String>,
 {
-    clear_icon_cache_dirs(app_handle, source)?;
+    ensure_icon_cache_dirs(app_handle, source)?;
+    let existing_snapshot = read_icon_snapshot(app_handle, source)?.unwrap_or(IconSnapshot {
+        version: 1,
+        icons: Vec::new(),
+    });
     let scanned_items = collect_items()?;
-    let snapshot = build_full_snapshot(app_handle, source, &scanned_items)?;
+    let mut scanned_keys = HashSet::new();
+    let mut unique_scanned_items = Vec::new();
+    for item in &scanned_items {
+        let key = stable_item_key(item);
+        if scanned_keys.insert(key) {
+            unique_scanned_items.push(item.clone());
+        }
+    }
+
+    let mut existing_by_key: HashMap<String, Vec<SnapshotIconItem>> = HashMap::new();
+    for snapshot_item in existing_snapshot.icons {
+        existing_by_key
+            .entry(snapshot_item.key.clone())
+            .or_default()
+            .push(snapshot_item);
+    }
+
+    let mut next_icons = Vec::with_capacity(unique_scanned_items.len());
+    let mut added_count = 0usize;
+    for item in &unique_scanned_items {
+        let key = stable_item_key(item);
+        if let Some(existing_items) = existing_by_key.get_mut(&key) {
+            if !existing_items.is_empty() {
+                let mut reused = existing_items.remove(0);
+                reused.source = source.as_str().to_string();
+                next_icons.push(reused);
+                continue;
+            }
+        }
+
+        next_icons.push(build_snapshot_item(app_handle, item, source)?);
+        added_count += 1;
+    }
+
+    let mut removed_items = Vec::new();
+    for mut leftovers in existing_by_key.into_values() {
+        removed_items.append(&mut leftovers);
+    }
+
+    for item in &removed_items {
+        remove_cached_icon_file(app_handle, &item.icons.small)?;
+        remove_cached_icon_file(app_handle, &item.icons.medium)?;
+        remove_cached_icon_file(app_handle, &item.icons.large)?;
+    }
+
+    let snapshot = IconSnapshot {
+        version: 1,
+        icons: next_icons,
+    };
     let total_count = snapshot.icons.len();
     write_icon_snapshot(app_handle, source, &snapshot)?;
 
     Ok(IconSyncResult {
         mode: "full".to_string(),
         scanned_count: scanned_items.len(),
-        added_count: total_count,
+        added_count,
         total_count,
     })
 }
