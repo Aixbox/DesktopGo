@@ -1,5 +1,13 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { AppWindow } from 'lucide-react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type WheelEvent as ReactWheelEvent,
+} from 'react'
+import { AppWindow, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { DesktopIcon } from '../types'
 import { ICON_SIZE_CONFIG } from '../types'
 import { buildIconSelectionKey, useIconStore } from '../stores/iconStore'
@@ -39,6 +47,11 @@ type PersistedItem =
       children: string[]
     }
 
+interface PersistedLayout {
+  items: PersistedItem[]
+  slots: Array<string | null> | null
+}
+
 interface DragState {
   context: DragContext
   sourceFolderId: string | null
@@ -58,6 +71,12 @@ interface DragState {
   lastEvasionTriggerPointer: { x: number; y: number } | null
   lastEvasionAt: number | null
   initialCenters: Record<string, { x: number; y: number }>
+}
+
+interface DragHit {
+  targetId: string | null
+  zone: HoverZone
+  globalSlotIndex: number
 }
 
 interface PendingDrag {
@@ -94,11 +113,17 @@ const PAGINATION_OFFSET = 14
 const PAGINATION_DOT_SIZE = 8
 const PAGINATION_DOT_GAP = 10
 const PAGINATION_ACTIVE_WIDTH = 18
+const SIDE_ARROW_OFFSET = 66
+const DRAG_EDGE_SWITCH_ZONE = 72
+const DRAG_EDGE_SWITCH_MS = 600
+const WHEEL_PAGE_DELTA_THRESHOLD = 54
+const WHEEL_PAGE_COOLDOWN_MS = 180
 const DRAG_LONG_PRESS_MS = 150
 const DRAG_MOVE_THRESHOLD = 7
 const FOLDER_DWELL_MS = 300
 const CENTER_RATIO = 0.45
 const LAYOUT_KEY = 'desktopgo.launchpad.layout.v1'
+const DRAG_HOLE_ID = '__desktopgo.drag-hole__'
 const EVASION_REARM_DISTANCE = 14
 const EVASION_COOLDOWN_MS = 80
 const REORDER_ANIMATION_MS = 220
@@ -136,25 +161,123 @@ const makeFolderId = () => {
   return `folder-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-const readLayout = (): PersistedItem[] | null => {
+const serializeItems = (items: GridItem[]): PersistedItem[] =>
+  items.map<PersistedItem>(item =>
+    item.kind === 'icon'
+      ? { type: 'icon', key: item.key }
+      : {
+          type: 'folder',
+          id: item.id,
+          name: item.name,
+          children: item.children.map(child => child.key),
+        }
+  )
+
+const normalizeOuterSlots = (
+  source: Array<string | null> | null | undefined,
+  itemIds: string[],
+  pageSize: number
+): Array<string | null> => {
+  const safePageSize = Math.max(1, pageSize)
+  const validIdSet = new Set(itemIds)
+  const consumed = new Set<string>()
+  const next: Array<string | null> = []
+
+  ;(source ?? []).forEach(slot => {
+    if (slot === null || slot === DRAG_HOLE_ID) {
+      next.push(null)
+      return
+    }
+    if (!validIdSet.has(slot) || consumed.has(slot)) {
+      next.push(null)
+      return
+    }
+    consumed.add(slot)
+    next.push(slot)
+  })
+
+  itemIds.forEach(id => {
+    if (consumed.has(id)) return
+    const emptyIndex = next.indexOf(null)
+    if (emptyIndex >= 0) next[emptyIndex] = id
+    else next.push(id)
+    consumed.add(id)
+  })
+
+  if (next.length === 0) next.push(null)
+  if (next.length < safePageSize) {
+    next.push(...Array.from({ length: safePageSize - next.length }, () => null))
+  }
+
+  const remainder = next.length % safePageSize
+  if (remainder > 0) {
+    next.push(...Array.from({ length: safePageSize - remainder }, () => null))
+  }
+
+  while (next.length > safePageSize) {
+    const lastPageStart = next.length - safePageSize
+    const prevPageStart = lastPageStart - safePageSize
+    if (prevPageStart < 0) break
+    const lastPageEmpty = next.slice(lastPageStart).every(slot => slot === null)
+    const prevPageEmpty = next.slice(prevPageStart, lastPageStart).every(slot => slot === null)
+    if (!lastPageEmpty || !prevPageEmpty) break
+    next.splice(lastPageStart, safePageSize)
+  }
+
+  return next
+}
+
+const areSlotsEqual = (a: Array<string | null>, b: Array<string | null>): boolean => {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
+}
+
+const getPageCountBySlots = (slots: Array<string | null>, pageSize: number): number =>
+  Math.max(1, Math.ceil(Math.max(pageSize, slots.length) / Math.max(1, pageSize)))
+
+const isPageFullyEmpty = (slots: Array<string | null>, page: number, pageSize: number): boolean => {
+  const safePageSize = Math.max(1, pageSize)
+  const start = page * safePageSize
+  for (let i = 0; i < safePageSize; i += 1) {
+    const slot = slots[start + i]
+    if (slot && slot !== DRAG_HOLE_ID) return false
+  }
+  return true
+}
+
+const hasTrailingEmptyPage = (slots: Array<string | null>, pageSize: number): boolean => {
+  const pageCount = getPageCountBySlots(slots, pageSize)
+  if (pageCount <= 1) return false
+  return isPageFullyEmpty(slots, pageCount - 1, pageSize)
+}
+
+const readLayout = (): PersistedLayout | null => {
   try {
     const raw = localStorage.getItem(LAYOUT_KEY)
     if (!raw) return null
-    const parsed = JSON.parse(raw) as { version: number; items: PersistedItem[] }
-    if (parsed.version !== 1 || !Array.isArray(parsed.items)) return null
-    return parsed.items
+    const parsed = JSON.parse(raw) as
+      | { version: 1; items: PersistedItem[] }
+      | { version: 2; items: PersistedItem[]; slots: unknown[] }
+    if (!Array.isArray(parsed.items)) return null
+    if (parsed.version === 1) return { items: parsed.items, slots: null }
+    if (parsed.version !== 2 || !Array.isArray(parsed.slots)) return null
+    return {
+      items: parsed.items,
+      slots: parsed.slots.map(slot => (typeof slot === 'string' ? slot : null)),
+    }
   } catch {
     return null
   }
 }
 
-const writeLayout = (items: GridItem[]) => {
+const writeLayout = (items: GridItem[], slots: Array<string | null>) => {
   const payload = {
-    version: 1,
-    items: items.map<PersistedItem>(item =>
-      item.kind === 'icon'
-        ? { type: 'icon', key: item.key }
-        : { type: 'folder', id: item.id, name: item.name, children: item.children.map(child => child.key) }),
+    version: 2,
+    items: serializeItems(items),
+    slots,
   }
   localStorage.setItem(LAYOUT_KEY, JSON.stringify(payload))
 }
@@ -222,7 +345,11 @@ const getFolderChildrenById = (items: GridItem[], folderId: string): IconItem[] 
   return item && item.kind === 'folder' ? item.children : []
 }
 
-const replaceFolderChildren = (items: GridItem[], folderId: string, nextChildren: IconItem[]): GridItem[] => {
+const replaceFolderChildren = (
+  items: GridItem[],
+  folderId: string,
+  nextChildren: IconItem[]
+): GridItem[] => {
   const index = findFolderIndexById(items, folderId)
   if (index < 0) return items
   const current = items[index]
@@ -259,16 +386,19 @@ const classifyZone = (rect: DOMRect, x: number, y: number): HoverZone => {
 const clampNumber = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value))
 
-const moveEmptyToIndex = (order: Array<string | null>, targetIndex: number): Array<string | null> => {
-  const emptyIndex = order.indexOf(null)
-  if (emptyIndex < 0) return order
+const moveDragHoleToIndex = (
+  order: Array<string | null>,
+  targetIndex: number
+): Array<string | null> => {
+  const holeIndex = order.indexOf(DRAG_HOLE_ID)
+  if (holeIndex < 0) return order
   const boundedIndex = clampNumber(targetIndex, 0, order.length - 1)
-  if (boundedIndex === emptyIndex) return order
+  if (boundedIndex === holeIndex) return order
 
   const next = [...order]
-  next.splice(emptyIndex, 1)
+  next.splice(holeIndex, 1)
   const insertIndex = clampNumber(boundedIndex, 0, next.length)
-  next.splice(insertIndex, 0, null)
+  next.splice(insertIndex, 0, DRAG_HOLE_ID)
   return next
 }
 
@@ -378,7 +508,9 @@ export function IconGrid({ icons }: IconGridProps) {
   const folderTileRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const pendingRef = useRef<PendingDrag | null>(null)
   const dragRef = useRef<DragState | null>(null)
-  const beginDragFnRef = useRef<(pending: PendingDrag, x: number, y: number) => void>(() => undefined)
+  const beginDragFnRef = useRef<(pending: PendingDrag, x: number, y: number) => void>(
+    () => undefined
+  )
   const onDragMoveFnRef = useRef<(pointerId: number, x: number, y: number) => void>(() => undefined)
   const finishDragFnRef = useRef<(pointerId: number) => void>(() => undefined)
   const clearPendingFnRef = useRef<() => void>(() => undefined)
@@ -393,6 +525,13 @@ export function IconGrid({ icons }: IconGridProps) {
   const suppressClickUntilRef = useRef(0)
   const hydratedRef = useRef(false)
   const itemsRef = useRef<GridItem[]>([])
+  const outerSlotsRef = useRef<Array<string | null>>([])
+  const currentPageRef = useRef(0)
+  const pageSizeRef = useRef(1)
+  const edgeSwitchTimerRef = useRef<number | null>(null)
+  const edgeSwitchSignatureRef = useRef<string | null>(null)
+  const wheelDeltaRef = useRef(0)
+  const wheelCooldownUntilRef = useRef(0)
 
   const columnWidth = ICON_SIZE_CONFIG[iconSize].columnWidth
   const fallbackRowHeight = FALLBACK_ICON_ROW_HEIGHT[iconSize]
@@ -404,32 +543,41 @@ export function IconGrid({ icons }: IconGridProps) {
   const [itemWidth, setItemWidth] = useState<number>(columnWidth)
   const [itemHeight, setItemHeight] = useState<number>(fallbackRowHeight)
   const [items, setItems] = useState<GridItem[]>([])
+  const [outerSlots, setOuterSlots] = useState<Array<string | null>>([])
   const [dragState, setDragState] = useState<DragState | null>(null)
   const [openFolderId, setOpenFolderId] = useState<string | null>(null)
   const [folderItemWidth, setFolderItemWidth] = useState<number>(columnWidth)
   const [folderItemHeight, setFolderItemHeight] = useState<number>(fallbackRowHeight)
   const [folderColumns, setFolderColumns] = useState<number>(1)
   const [folderDropFlight, setFolderDropFlight] = useState<FolderDropFlight | null>(null)
-  const [folderPreviewFreezeTargetId, setFolderPreviewFreezeTargetId] = useState<string | null>(null)
+  const [folderPreviewFreezeTargetId, setFolderPreviewFreezeTargetId] = useState<string | null>(
+    null
+  )
 
   useEffect(() => {
     if (!hydratedRef.current && icons.length === 0) return
-    setItems(current => {
-      const persisted = hydratedRef.current
-        ? current.map<PersistedItem>(item =>
-            item.kind === 'icon'
-              ? { type: 'icon', key: item.key }
-              : { type: 'folder', id: item.id, name: item.name, children: item.children.map(child => child.key) })
-        : readLayout()
-      return hydrateItems(icons, persisted)
-    })
+    const persisted = hydratedRef.current
+      ? { items: serializeItems(itemsRef.current), slots: outerSlotsRef.current }
+      : readLayout()
+    const nextItems = hydrateItems(icons, persisted?.items ?? null)
+    const nextItemIds = nextItems.map(getId)
+    const nextSlots = normalizeOuterSlots(persisted?.slots, nextItemIds, pageSizeRef.current)
+    itemsRef.current = nextItems
+    outerSlotsRef.current = nextSlots
+    setItems(nextItems)
+    setOuterSlots(nextSlots)
     hydratedRef.current = true
   }, [icons])
 
   useEffect(() => {
     itemsRef.current = items
-    if (hydratedRef.current) writeLayout(items)
-  }, [items])
+    outerSlotsRef.current = outerSlots
+    if (hydratedRef.current) writeLayout(items, outerSlots)
+  }, [items, outerSlots])
+
+  useEffect(() => {
+    currentPageRef.current = currentPage
+  }, [currentPage])
 
   useEffect(() => {
     dragRef.current = dragState
@@ -475,14 +623,25 @@ export function IconGrid({ icons }: IconGridProps) {
     return map
   }, [openFolder])
 
-  const order = useMemo(() => items.map(getId), [items])
-  const folderOrder = useMemo(() => openFolder?.children.map(child => child.key) ?? [], [openFolder])
+  const itemIds = useMemo(() => items.map(getId), [items])
+  const folderOrder = useMemo(
+    () => openFolder?.children.map(child => child.key) ?? [],
+    [openFolder]
+  )
   const renderOrder =
-    dragState && dragState.context === 'outer' ? dragState.workingOrder : order
+    dragState && dragState.context === 'outer' ? dragState.workingOrder : outerSlots
   const folderRenderOrder =
     dragState && dragState.context === 'folder' ? dragState.workingOrder : folderOrder
   const selectedSet = useMemo(() => new Set(selectedIconKeys), [selectedIconKeys])
   const iconConfig = ICON_SIZE_CONFIG[iconSize]
+
+  const clearEdgeSwitchTimer = () => {
+    if (edgeSwitchTimerRef.current !== null) {
+      window.clearTimeout(edgeSwitchTimerRef.current)
+      edgeSwitchTimerRef.current = null
+    }
+    edgeSwitchSignatureRef.current = null
+  }
 
   const clearTimer = () => {
     if (timerRef.current !== null) {
@@ -494,6 +653,7 @@ export function IconGrid({ icons }: IconGridProps) {
   const clearPending = () => {
     pendingRef.current = null
     clearTimer()
+    clearEdgeSwitchTimer()
   }
 
   const collectCenters = (refs: Map<string, HTMLDivElement>) => {
@@ -533,7 +693,10 @@ export function IconGrid({ icons }: IconGridProps) {
       return {
         gridElement: folderGridRef.current,
         columns: Math.max(1, folderColumns),
-        rows: Math.max(1, Math.ceil(Math.max(1, folderRenderOrder.length) / Math.max(1, folderColumns))),
+        rows: Math.max(
+          1,
+          Math.ceil(Math.max(1, folderRenderOrder.length) / Math.max(1, folderColumns))
+        ),
         itemWidth: folderItemWidth,
         itemHeight: folderItemHeight,
         pageOffset: 0,
@@ -550,14 +713,16 @@ export function IconGrid({ icons }: IconGridProps) {
     }
   }
 
-  const findHitByContext = (
-    state: DragState,
-    x: number,
-    y: number,
-  ): { targetId: string; zone: HoverZone } | null => {
+  const findHitByContext = (state: DragState, x: number, y: number): DragHit | null => {
     const metrics = resolveGridMetrics(state.context)
-    const { gridElement, columns: colCount, rows: rowCount, itemWidth: tileW, itemHeight: tileH, pageOffset } =
-      metrics
+    const {
+      gridElement,
+      columns: colCount,
+      rows: rowCount,
+      itemWidth: tileW,
+      itemHeight: tileH,
+      pageOffset,
+    } = metrics
     if (!gridElement || colCount <= 0 || rowCount <= 0) return null
 
     const rect = gridElement.getBoundingClientRect()
@@ -579,22 +744,27 @@ export function IconGrid({ icons }: IconGridProps) {
 
     const slotIndex = row * colCount + col
     const globalSlotIndex = pageOffset + slotIndex
-    const targetId = state.workingOrder[globalSlotIndex]
-    if (!targetId || targetId === state.draggingId) return null
+    if (globalSlotIndex < 0 || globalSlotIndex >= state.workingOrder.length) return null
+    const rawTargetId = state.workingOrder[globalSlotIndex]
+    const targetId =
+      !rawTargetId || rawTargetId === DRAG_HOLE_ID || rawTargetId === state.draggingId
+        ? null
+        : rawTargetId
 
-    const targetRect = new DOMRect(
-      rect.left + col * stepX,
-      rect.top + row * stepY,
-      tileW,
-      tileH,
-    )
-    return { targetId, zone: classifyZone(targetRect, x, y) }
+    const targetRect = new DOMRect(rect.left + col * stepX, rect.top + row * stepY, tileW, tileH)
+    return { targetId, zone: classifyZone(targetRect, x, y), globalSlotIndex }
   }
 
   const resolveNearestDropOrderByContext = (state: DragState): Array<string | null> => {
     const metrics = resolveGridMetrics(state.context)
-    const { gridElement, columns: colCount, rows: rowCount, itemWidth: tileW, itemHeight: tileH, pageOffset } =
-      metrics
+    const {
+      gridElement,
+      columns: colCount,
+      rows: rowCount,
+      itemWidth: tileW,
+      itemHeight: tileH,
+      pageOffset,
+    } = metrics
     if (!gridElement) return state.workingOrder
 
     const rect = gridElement.getBoundingClientRect()
@@ -609,20 +779,20 @@ export function IconGrid({ icons }: IconGridProps) {
     const col = clampNumber(
       Math.round((clampedX - rect.left - tileW / 2) / stepX),
       0,
-      Math.max(0, colCount - 1),
+      Math.max(0, colCount - 1)
     )
     const row = clampNumber(
       Math.round((clampedY - rect.top - tileH / 2) / stepY),
       0,
-      Math.max(0, rowCount - 1),
+      Math.max(0, rowCount - 1)
     )
     const slotIndex = row * colCount + col
     const globalSlotIndex = clampNumber(
       pageOffset + slotIndex,
       0,
-      Math.max(0, state.workingOrder.length - 1),
+      Math.max(0, state.workingOrder.length - 1)
     )
-    return moveEmptyToIndex(state.workingOrder, globalSlotIndex)
+    return moveDragHoleToIndex(state.workingOrder, globalSlotIndex)
   }
 
   const moveDragFromFolderToOuter = (state: DragState, x: number, y: number): DragState => {
@@ -638,11 +808,21 @@ export function IconGrid({ icons }: IconGridProps) {
     }
 
     const nextItems = replaceFolderChildren(currentItems, state.sourceFolderId, nextChildren)
+    const nextOuterSlots = normalizeOuterSlots(
+      outerSlotsRef.current,
+      nextItems.map(getId),
+      pageSizeRef.current
+    )
     itemsRef.current = nextItems
+    outerSlotsRef.current = nextOuterSlots
     setItems(nextItems)
+    setOuterSlots(nextOuterSlots)
     setOpenFolderId(null)
 
-    const nextOrder: Array<string | null> = [...nextItems.map(getId), null]
+    const nextOrder: Array<string | null> = [...nextOuterSlots]
+    const firstEmptyIndex = nextOrder.indexOf(null)
+    if (firstEmptyIndex >= 0) nextOrder[firstEmptyIndex] = DRAG_HOLE_ID
+    else nextOrder.push(DRAG_HOLE_ID)
     const outerCenters = collectCenters(tileRefs.current)
     outerCenters[state.draggingId] = { x, y }
     const outerState: DragState = {
@@ -678,7 +858,11 @@ export function IconGrid({ icons }: IconGridProps) {
     const sourceOrder =
       pending.context === 'folder' && pending.sourceFolderId
         ? getFolderChildrenById(itemsRef.current, pending.sourceFolderId).map(child => child.key)
-        : itemsRef.current.map(getId)
+        : normalizeOuterSlots(outerSlotsRef.current, itemIds, pageSizeRef.current)
+    if (pending.context === 'outer' && !areSlotsEqual(sourceOrder, outerSlotsRef.current)) {
+      outerSlotsRef.current = sourceOrder
+      setOuterSlots(sourceOrder)
+    }
     const sourceIndex = sourceOrder.indexOf(pending.itemId)
     if (sourceIndex < 0) {
       clearPending()
@@ -695,7 +879,7 @@ export function IconGrid({ icons }: IconGridProps) {
     }
 
     const workingOrder: Array<string | null> = [...sourceOrder]
-    workingOrder[sourceIndex] = null
+    workingOrder[sourceIndex] = DRAG_HOLE_ID
     const nextState: DragState = {
       context: pending.context,
       sourceFolderId: pending.sourceFolderId,
@@ -724,6 +908,119 @@ export function IconGrid({ icons }: IconGridProps) {
     clearPending()
   }
 
+  const scheduleEdgeSwitch = (signature: string, action: () => void) => {
+    if (edgeSwitchSignatureRef.current === signature && edgeSwitchTimerRef.current !== null) return
+    clearEdgeSwitchTimer()
+    edgeSwitchSignatureRef.current = signature
+    edgeSwitchTimerRef.current = window.setTimeout(() => {
+      edgeSwitchTimerRef.current = null
+      edgeSwitchSignatureRef.current = null
+      action()
+    }, DRAG_EDGE_SWITCH_MS)
+  }
+
+  const maybeHandleOuterEdgeSwitch = (state: DragState, x: number, y: number) => {
+    if (state.context !== 'outer') {
+      clearEdgeSwitchTimer()
+      return
+    }
+    const container = containerRef.current
+    if (!container) {
+      clearEdgeSwitchTimer()
+      return
+    }
+    const rect = container.getBoundingClientRect()
+    if (y < rect.top || y > rect.bottom) {
+      clearEdgeSwitchTimer()
+      return
+    }
+
+    const nearLeft = x <= rect.left + DRAG_EDGE_SWITCH_ZONE
+    const nearRight = x >= rect.right - DRAG_EDGE_SWITCH_ZONE
+    if (!nearLeft && !nearRight) {
+      clearEdgeSwitchTimer()
+      return
+    }
+
+    const safePageSize = Math.max(1, pageSizeRef.current)
+    const currentPageValue = currentPageRef.current
+    const dragPageCount = getPageCountBySlots(state.workingOrder, safePageSize)
+
+    if (nearLeft) {
+      if (currentPageValue <= 0) {
+        clearEdgeSwitchTimer()
+        return
+      }
+      const targetPage = currentPageValue - 1
+      scheduleEdgeSwitch(`left:${targetPage}`, () => {
+        const latest = dragRef.current
+        if (!latest || latest.context !== 'outer') return
+        const maxPage =
+          getPageCountBySlots(latest.workingOrder, Math.max(1, pageSizeRef.current)) - 1
+        const nextPage = clampNumber(currentPageRef.current - 1, 0, Math.max(0, maxPage))
+        if (nextPage === currentPageRef.current) return
+        currentPageRef.current = nextPage
+        setCurrentPage(nextPage)
+      })
+      return
+    }
+
+    if (currentPageValue < dragPageCount - 1) {
+      const targetPage = currentPageValue + 1
+      scheduleEdgeSwitch(`right:${targetPage}`, () => {
+        const latest = dragRef.current
+        if (!latest || latest.context !== 'outer') return
+        const maxPage =
+          getPageCountBySlots(latest.workingOrder, Math.max(1, pageSizeRef.current)) - 1
+        const nextPage = clampNumber(currentPageRef.current + 1, 0, Math.max(0, maxPage))
+        if (nextPage === currentPageRef.current) return
+        currentPageRef.current = nextPage
+        setCurrentPage(nextPage)
+      })
+      return
+    }
+
+    const trailingEmpty = hasTrailingEmptyPage(state.workingOrder, safePageSize)
+    const lastContentPage = trailingEmpty ? dragPageCount - 2 : dragPageCount - 1
+    if (currentPageValue !== lastContentPage || trailingEmpty) {
+      clearEdgeSwitchTimer()
+      return
+    }
+
+    scheduleEdgeSwitch(`right:create:${dragPageCount}`, () => {
+      const latest = dragRef.current
+      if (!latest || latest.context !== 'outer') return
+      const latestPageSize = Math.max(1, pageSizeRef.current)
+      const latestPageCount = getPageCountBySlots(latest.workingOrder, latestPageSize)
+      if (hasTrailingEmptyPage(latest.workingOrder, latestPageSize)) {
+        const nextPage = clampNumber(
+          currentPageRef.current + 1,
+          0,
+          Math.max(0, latestPageCount - 1)
+        )
+        if (nextPage !== currentPageRef.current) {
+          currentPageRef.current = nextPage
+          setCurrentPage(nextPage)
+        }
+        return
+      }
+      const expandedOrder = [
+        ...latest.workingOrder,
+        ...Array.from({ length: latestPageSize }, () => null),
+      ]
+      const nextState: DragState = { ...latest, workingOrder: expandedOrder }
+      dragRef.current = nextState
+      setDragState(nextState)
+      const nextPage = clampNumber(
+        currentPageRef.current + 1,
+        0,
+        Math.max(0, getPageCountBySlots(expandedOrder, latestPageSize) - 1)
+      )
+      currentPageRef.current = nextPage
+      setCurrentPage(nextPage)
+    })
+  }
+
   const onDragMove = (pointerId: number, x: number, y: number) => {
     const current = dragRef.current
     if (!current || current.pointerId !== pointerId) return
@@ -741,6 +1038,8 @@ export function IconGrid({ icons }: IconGridProps) {
       }
     }
 
+    maybeHandleOuterEdgeSwitch(baseState, x, y)
+
     const hit = findHitByContext(baseState, x, y)
     if (!hit) {
       const resetState: DragState = {
@@ -753,6 +1052,21 @@ export function IconGrid({ icons }: IconGridProps) {
       }
       dragRef.current = resetState
       setDragState(resetState)
+      return
+    }
+
+    if (hit.targetId === null) {
+      const next: DragState = {
+        ...baseState,
+        hoverTargetId: null,
+        hoverZone: null,
+        centerStartedAt: null,
+        folderPreviewTargetId: null,
+        lastEvasionSignature: null,
+        workingOrder: moveDragHoleToIndex(baseState.workingOrder, hit.globalSlotIndex),
+      }
+      dragRef.current = next
+      setDragState(next)
       return
     }
 
@@ -779,7 +1093,8 @@ export function IconGrid({ icons }: IconGridProps) {
         baseState.hoverTargetId === hit.targetId &&
         baseState.hoverZone === 'center' &&
         baseState.centerStartedAt !== null
-      const startAt = sameCenter && baseState.centerStartedAt !== null ? baseState.centerStartedAt : now
+      const startAt =
+        sameCenter && baseState.centerStartedAt !== null ? baseState.centerStartedAt : now
       next.centerStartedAt = startAt
       next.folderPreviewTargetId = now - startAt >= FOLDER_DWELL_MS ? hit.targetId : null
       next.lastEvasionSignature = null
@@ -819,7 +1134,7 @@ export function IconGrid({ icons }: IconGridProps) {
         !baseState.lastEvasionTriggerPointer ||
         Math.hypot(
           x - baseState.lastEvasionTriggerPointer.x,
-          y - baseState.lastEvasionTriggerPointer.y,
+          y - baseState.lastEvasionTriggerPointer.y
         ) >= EVASION_REARM_DISTANCE
       const cooledDownSinceLastEvasion =
         baseState.lastEvasionAt === null || now - baseState.lastEvasionAt >= EVASION_COOLDOWN_MS
@@ -848,12 +1163,16 @@ export function IconGrid({ icons }: IconGridProps) {
       }
     }
 
-    next.workingOrder = moveEmptyToIndex(baseState.workingOrder, desiredHoleIndex)
+    next.workingOrder = moveDragHoleToIndex(baseState.workingOrder, desiredHoleIndex)
     dragRef.current = next
     setDragState(next)
   }
 
-  const applyFolderCreateFromSession = (base: GridItem[], session: DragState): GridItem[] => {
+  const applyFolderCreateFromSession = (
+    base: GridItem[],
+    session: DragState
+  ): { items: GridItem[]; slots: Array<string | null> } => {
+    const baseSlots = session.workingOrder.map(slot => (slot === DRAG_HOLE_ID ? null : slot))
     const map = new Map<string, GridItem>()
     base.forEach(item => map.set(getId(item), item))
     const sourceExistsInBase = map.has(session.draggingId)
@@ -862,14 +1181,11 @@ export function IconGrid({ icons }: IconGridProps) {
     const targetId = session.folderPreviewTargetId as string
     const targetItem = map.get(targetId)
     if (!sourceItem || !targetItem || sourceItem.kind !== 'icon' || targetItem.kind !== 'icon') {
-      return base
+      return { items: base, slots: baseSlots }
     }
 
-    const orderWithoutDragged = session.workingOrder.filter((id): id is string => id !== null)
-    const targetIndex = orderWithoutDragged.indexOf(targetId)
-    if (targetIndex < 0) return base
-
-    const nextOrder = orderWithoutDragged.filter(id => id !== targetId)
+    const targetSlotIndex = baseSlots.indexOf(targetId)
+    if (targetSlotIndex < 0) return { items: base, slots: baseSlots }
     const folder: FolderItem = {
       kind: 'folder',
       id: makeFolderId(),
@@ -880,13 +1196,20 @@ export function IconGrid({ icons }: IconGridProps) {
     map.delete(session.draggingId)
     map.delete(targetId)
     map.set(folderId, folder)
-    nextOrder.splice(targetIndex, 0, folderId)
-    const nextItems = nextOrder.map(id => map.get(id)).filter((item): item is GridItem => Boolean(item))
+    const nextSlots = [...baseSlots]
+    nextSlots[targetSlotIndex] = folderId
+    const normalizedOrder = nextSlots.filter((id): id is string => id !== null)
+    const nextItems = normalizedOrder
+      .map(id => map.get(id))
+      .filter((item): item is GridItem => Boolean(item))
     const expectedLength = sourceExistsInBase ? base.length - 1 : base.length
-    return nextItems.length === expectedLength ? nextItems : base
+    if (nextItems.length !== expectedLength) return { items: base, slots: baseSlots }
+    return { items: nextItems, slots: nextSlots }
   }
 
-  const resolveFolderSecondSlotCenter = (targetId: string): { x: number; y: number; size: number } | null => {
+  const resolveFolderSecondSlotCenter = (
+    targetId: string
+  ): { x: number; y: number; size: number } | null => {
     const targetNode = tileRefs.current.get(targetId)
     if (!targetNode) return null
 
@@ -905,9 +1228,22 @@ export function IconGrid({ icons }: IconGridProps) {
     }
   }
 
+  const commitOuterLayout = (nextItems: GridItem[], nextSlotsInput: Array<string | null>) => {
+    const normalizedSlots = normalizeOuterSlots(
+      nextSlotsInput,
+      nextItems.map(getId),
+      pageSizeRef.current
+    )
+    itemsRef.current = nextItems
+    outerSlotsRef.current = normalizedSlots
+    setItems(nextItems)
+    setOuterSlots(normalizedSlots)
+  }
+
   const finishDrag = (pointerId: number) => {
     const current = dragRef.current
     if (!current || current.pointerId !== pointerId) return
+    clearEdgeSwitchTimer()
 
     if (current.context === 'folder') {
       const folderMap = getFolderMapById(current.sourceFolderId, itemsRef.current)
@@ -915,11 +1251,13 @@ export function IconGrid({ icons }: IconGridProps) {
       const hasValidHoverTarget = Boolean(current.hoverTargetId && target)
       const dropOrder =
         hasValidHoverTarget && current.hoverTargetId
-          ? current.hoverZone === 'center' && current.draggingItem.kind === 'icon' && target?.kind === 'icon'
+          ? current.hoverZone === 'center' &&
+            current.draggingItem.kind === 'icon' &&
+            target?.kind === 'icon'
             ? (() => {
                 const targetIndex = current.workingOrder.indexOf(current.hoverTargetId)
                 if (targetIndex < 0) return current.workingOrder
-                return moveEmptyToIndex(current.workingOrder, targetIndex)
+                return moveDragHoleToIndex(current.workingOrder, targetIndex)
               })()
             : current.workingOrder
           : resolveNearestDropOrderByContext(current)
@@ -932,11 +1270,13 @@ export function IconGrid({ icons }: IconGridProps) {
         children.forEach(child => map.set(child.key, child))
         map.set(current.draggingId, current.draggingItem)
         const nextOrder = [...dropOrder]
-        const emptyIndex = nextOrder.indexOf(null)
-        if (emptyIndex < 0) return base
-        nextOrder[emptyIndex] = current.draggingId
+        const holeIndex = nextOrder.indexOf(DRAG_HOLE_ID)
+        if (holeIndex < 0) return base
+        nextOrder[holeIndex] = current.draggingId
         const normalized = nextOrder.filter((id): id is string => id !== null)
-        const nextChildren = normalized.map(id => map.get(id)).filter((item): item is IconItem => Boolean(item))
+        const nextChildren = normalized
+          .map(id => map.get(id))
+          .filter((item): item is IconItem => Boolean(item))
         if (nextChildren.length !== children.length) return base
         return replaceFolderChildren(base, current.sourceFolderId, nextChildren)
       })
@@ -978,14 +1318,16 @@ export function IconGrid({ icons }: IconGridProps) {
           })
 
           folderDropFlightTimerRef.current = window.setTimeout(() => {
-            setItems(base => applyFolderCreateFromSession(base, current))
+            const result = applyFolderCreateFromSession(itemsRef.current, current)
+            commitOuterLayout(result.items, result.slots)
             setFolderDropFlight(prev => (prev && prev.id === flightId ? null : prev))
             setFolderPreviewFreezeTargetId(prev => (prev === targetId ? null : prev))
             folderDropFlightTimerRef.current = null
           }, REORDER_ANIMATION_MS + 30)
         } else {
           setFolderPreviewFreezeTargetId(null)
-          setItems(base => applyFolderCreateFromSession(base, current))
+          const result = applyFolderCreateFromSession(itemsRef.current, current)
+          commitOuterLayout(result.items, result.slots)
         }
       } else {
         setFolderPreviewFreezeTargetId(null)
@@ -996,24 +1338,29 @@ export function IconGrid({ icons }: IconGridProps) {
               ? (() => {
                   const targetIndex = current.workingOrder.indexOf(current.hoverTargetId)
                   if (targetIndex < 0) return current.workingOrder
-                  return moveEmptyToIndex(current.workingOrder, targetIndex)
+                  return moveDragHoleToIndex(current.workingOrder, targetIndex)
                 })()
               : current.workingOrder
             : resolveNearestDropOrderByContext(current)
-        setItems(base => {
-          const map = new Map<string, GridItem>()
-          base.forEach(item => map.set(getId(item), item))
-          const hadDraggedInBase = map.has(current.draggingId)
-          map.set(current.draggingId, current.draggingItem)
-          const nextOrder = [...dropOrder]
-          const emptyIndex = nextOrder.indexOf(null)
-          if (emptyIndex < 0) return base
-          nextOrder[emptyIndex] = current.draggingId
-          const normalized = nextOrder.filter((id): id is string => id !== null)
-          const nextItems = normalized.map(id => map.get(id)).filter((item): item is GridItem => Boolean(item))
+        const base = itemsRef.current
+        const map = new Map<string, GridItem>()
+        base.forEach(item => map.set(getId(item), item))
+        const hadDraggedInBase = map.has(current.draggingId)
+        map.set(current.draggingId, current.draggingItem)
+        const nextOrder = [...dropOrder]
+        const holeIndex = nextOrder.indexOf(DRAG_HOLE_ID)
+        if (holeIndex >= 0) {
+          nextOrder[holeIndex] = current.draggingId
+          const nextSlots = nextOrder.map(slot => (slot === DRAG_HOLE_ID ? null : slot))
+          const normalized = nextSlots.filter((id): id is string => id !== null)
+          const nextItems = normalized
+            .map(id => map.get(id))
+            .filter((item): item is GridItem => Boolean(item))
           const expectedLength = hadDraggedInBase ? base.length : base.length + 1
-          return nextItems.length === expectedLength ? nextItems : base
-        })
+          if (nextItems.length === expectedLength) {
+            commitOuterLayout(nextItems, nextSlots)
+          }
+        }
       }
     }
 
@@ -1067,6 +1414,7 @@ export function IconGrid({ icons }: IconGridProps) {
 
     const handlePointerCancel = (event: PointerEvent) => {
       if (dragRef.current?.pointerId === event.pointerId) {
+        clearEdgeSwitchTimer()
         dragRef.current = null
         setDragState(null)
       }
@@ -1085,7 +1433,13 @@ export function IconGrid({ icons }: IconGridProps) {
     }
   }, [])
 
-  useEffect(() => () => clearTimer(), [])
+  useEffect(
+    () => () => {
+      clearTimer()
+      clearEdgeSwitchTimer()
+    },
+    []
+  )
 
   const handleTilePointerDown = (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => {
     if (selectionMode || event.button !== 0) return
@@ -1111,7 +1465,7 @@ export function IconGrid({ icons }: IconGridProps) {
   const handleFolderTilePointerDown = (
     event: ReactPointerEvent<HTMLDivElement>,
     folderId: string,
-    itemId: string,
+    itemId: string
   ) => {
     if (selectionMode || event.button !== 0) return
     const rect = event.currentTarget.getBoundingClientRect()
@@ -1205,21 +1559,88 @@ export function IconGrid({ icons }: IconGridProps) {
   }, [openFolder, folderRenderOrder.length, columnWidth, fallbackRowHeight])
 
   const pageSize = Math.max(1, columns * rows)
-  const outerRenderCount = dragState?.context === 'outer' ? renderOrder.length : items.length
+  useEffect(() => {
+    pageSizeRef.current = pageSize
+  }, [pageSize])
+
+  useEffect(() => {
+    const normalized = normalizeOuterSlots(outerSlotsRef.current, itemIds, pageSize)
+    if (areSlotsEqual(normalized, outerSlotsRef.current)) return
+    outerSlotsRef.current = normalized
+    setOuterSlots(normalized)
+  }, [itemIds, pageSize])
+
+  const outerRenderCount = Math.max(pageSize, renderOrder.length)
   const pageCount = Math.max(1, Math.ceil(outerRenderCount / pageSize))
   useEffect(() => {
-    if (currentPage >= pageCount) setCurrentPage(pageCount - 1)
+    if (currentPage >= pageCount) {
+      const nextPage = pageCount - 1
+      currentPageRef.current = nextPage
+      setCurrentPage(nextPage)
+    }
   }, [currentPage, pageCount])
   useEffect(() => {
     if (hoverPage !== null && hoverPage >= pageCount) setHoverPage(null)
   }, [hoverPage, pageCount])
   useEffect(() => {
+    currentPageRef.current = 0
     setCurrentPage(0)
   }, [items.length, iconSize, pageSize])
 
+  const handleWheelPageSwitch = (event: ReactWheelEvent<HTMLDivElement>) => {
+    const isOuterDrag = dragState?.context === 'outer'
+    if (openFolder && !isOuterDrag) return
+    if (dragState && dragState.context !== 'outer') return
+    if (pageCount <= 1) return
+
+    const primaryDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
+    if (Math.abs(primaryDelta) < 0.1) return
+    event.preventDefault()
+
+    const now = performance.now()
+    if (now < wheelCooldownUntilRef.current) return
+
+    if (wheelDeltaRef.current !== 0 && Math.sign(wheelDeltaRef.current) !== Math.sign(primaryDelta)) {
+      wheelDeltaRef.current = 0
+    }
+    wheelDeltaRef.current += primaryDelta
+    if (Math.abs(wheelDeltaRef.current) < WHEEL_PAGE_DELTA_THRESHOLD) return
+
+    const direction = wheelDeltaRef.current > 0 ? 1 : -1
+    wheelDeltaRef.current = 0
+    wheelCooldownUntilRef.current = now + WHEEL_PAGE_COOLDOWN_MS
+
+    const nextPage = clampNumber(currentPageRef.current + direction, 0, pageCount - 1)
+    if (nextPage === currentPageRef.current) return
+    clearEdgeSwitchTimer()
+
+    if (isOuterDrag) {
+      const currentDrag = dragRef.current
+      if (currentDrag && currentDrag.context === 'outer') {
+        const nextDrag: DragState = {
+          ...currentDrag,
+          hoverTargetId: null,
+          hoverZone: null,
+          centerStartedAt: null,
+          folderPreviewTargetId: null,
+          lastEvasionSignature: null,
+        }
+        dragRef.current = nextDrag
+        setDragState(nextDrag)
+      }
+    }
+
+    currentPageRef.current = nextPage
+    setCurrentPage(nextPage)
+  }
+
   const pageItems = useMemo(() => {
     const start = currentPage * pageSize
-    return renderOrder.slice(start, start + pageSize)
+    const currentSlice = [...renderOrder.slice(start, start + pageSize)]
+    if (currentSlice.length < pageSize) {
+      currentSlice.push(...Array.from({ length: pageSize - currentSlice.length }, () => null))
+    }
+    return currentSlice
   }, [renderOrder, currentPage, pageSize])
 
   useLayoutEffect(() => {
@@ -1232,7 +1653,7 @@ export function IconGrid({ icons }: IconGridProps) {
 
     const prevIndexMap = new Map<string, number>()
     prevPageEntriesRef.current.forEach((entry, index) => {
-      if (entry === null) return
+      if (entry === null || entry === DRAG_HOLE_ID) return
       const id = entry
       prevIndexMap.set(id, index)
     })
@@ -1240,7 +1661,7 @@ export function IconGrid({ icons }: IconGridProps) {
     const stepX = itemWidth + GRID_GAP
     const stepY = itemHeight + GRID_GAP
     currentPageEntries.forEach((entry, newIndex) => {
-      if (entry === null) return
+      if (entry === null || entry === DRAG_HOLE_ID) return
       const id = entry
       const prevIndex = prevIndexMap.get(id)
       if (prevIndex === undefined || prevIndex === newIndex) return
@@ -1275,7 +1696,7 @@ export function IconGrid({ icons }: IconGridProps) {
         node.style.willChange = ''
         tileAnimationTimerRef.current.delete(id)
       }, REORDER_ANIMATION_MS + 40)
-        tileAnimationTimerRef.current.set(id, timer)
+      tileAnimationTimerRef.current.set(id, timer)
     })
 
     prevPageEntriesRef.current = currentPageEntries
@@ -1290,14 +1711,14 @@ export function IconGrid({ icons }: IconGridProps) {
     const currentEntries = folderRenderOrder
     const prevIndexMap = new Map<string, number>()
     prevFolderEntriesRef.current.forEach((entry, index) => {
-      if (entry === null) return
+      if (entry === null || entry === DRAG_HOLE_ID) return
       prevIndexMap.set(entry, index)
     })
 
     const stepX = folderItemWidth + GRID_GAP
     const stepY = folderItemHeight + GRID_GAP
     currentEntries.forEach((entry, newIndex) => {
-      if (entry === null) return
+      if (entry === null || entry === DRAG_HOLE_ID) return
       const prevIndex = prevIndexMap.get(entry)
       if (prevIndex === undefined || prevIndex === newIndex) return
 
@@ -1351,6 +1772,7 @@ export function IconGrid({ icons }: IconGridProps) {
         window.clearTimeout(folderDropFlightTimerRef.current)
         folderDropFlightTimerRef.current = null
       }
+      clearEdgeSwitchTimer()
     }
   }, [])
 
@@ -1367,9 +1789,11 @@ export function IconGrid({ icons }: IconGridProps) {
   const gridWidth = columns * itemWidth + Math.max(0, columns - 1) * GRID_GAP
   const gridHeight = rows * itemHeight + Math.max(0, rows - 1) * GRID_GAP
   const ghostItem = dragState ? dragState.draggingItem : null
+  const canGoLeft = currentPage > 0
+  const canGoRight = currentPage < pageCount - 1
 
   return (
-    <div className="relative h-full w-full px-16 pb-20 pt-24">
+    <div className="relative h-full w-full px-16 pb-20 pt-24" onWheel={handleWheelPageSwitch}>
       <div ref={containerRef} className="flex h-full w-full items-center justify-center">
         <div
           className="relative"
@@ -1386,12 +1810,18 @@ export function IconGrid({ icons }: IconGridProps) {
             style={{ gridTemplateColumns: `repeat(${columns}, ${itemWidth}px)` }}
           >
             {pageItems.map((entry, index) => {
-              if (entry === null) {
+              if (entry === null || entry === DRAG_HOLE_ID) {
+                const showDropSlot = entry === DRAG_HOLE_ID && dragState?.context === 'outer'
                 return (
                   <div
-                    key={`empty-${currentPage}-${index}`}
+                    key={`${showDropSlot ? 'drop' : 'empty'}-${currentPage}-${index}`}
                     data-grid-item
-                    className="h-full w-full rounded-2xl border border-white/10 bg-white/5"
+                    className={`h-full w-full rounded-2xl ${
+                      showDropSlot
+                        ? 'border border-white/20 bg-white/8'
+                        : 'border border-transparent bg-transparent'
+                    }`}
+                    style={{ minHeight: `${itemHeight}px` }}
                     aria-hidden="true"
                   />
                 )
@@ -1462,11 +1892,44 @@ export function IconGrid({ icons }: IconGridProps) {
                       imgSize={iconConfig.imgSize}
                     />
                   ) : null}
-
                 </div>
               )
             })}
           </div>
+
+          {canGoLeft ? (
+            <button
+              data-pagination
+              type="button"
+              aria-label="上一页"
+              className="absolute top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/35 text-white/85 backdrop-blur-sm transition-colors hover:bg-black/55"
+              style={{ left: `-${SIDE_ARROW_OFFSET}px` }}
+              onClick={() => {
+                const nextPage = Math.max(0, currentPage - 1)
+                currentPageRef.current = nextPage
+                setCurrentPage(nextPage)
+              }}
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          ) : null}
+
+          {canGoRight ? (
+            <button
+              data-pagination
+              type="button"
+              aria-label="下一页"
+              className="absolute top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/35 text-white/85 backdrop-blur-sm transition-colors hover:bg-black/55"
+              style={{ right: `-${SIDE_ARROW_OFFSET}px` }}
+              onClick={() => {
+                const nextPage = Math.min(pageCount - 1, currentPage + 1)
+                currentPageRef.current = nextPage
+                setCurrentPage(nextPage)
+              }}
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          ) : null}
 
           <div
             data-pagination
@@ -1486,7 +1949,10 @@ export function IconGrid({ icons }: IconGridProps) {
                     type="button"
                     aria-label={`Switch to page ${index + 1}`}
                     onMouseEnter={() => setHoverPage(index)}
-                    onClick={() => setCurrentPage(index)}
+                    onClick={() => {
+                      currentPageRef.current = index
+                      setCurrentPage(index)
+                    }}
                     className={`relative rounded-full transition-all duration-250 ease-out ${
                       isCurrent
                         ? 'bg-white/95 shadow-[0_0_10px_rgba(255,255,255,0.75)]'
@@ -1555,15 +2021,23 @@ export function IconGrid({ icons }: IconGridProps) {
               <div
                 ref={folderGridRef}
                 className="grid content-start justify-items-center gap-2"
-                style={{ gridTemplateColumns: `repeat(${Math.max(1, folderColumns)}, ${folderItemWidth}px)` }}
+                style={{
+                  gridTemplateColumns: `repeat(${Math.max(1, folderColumns)}, ${folderItemWidth}px)`,
+                }}
               >
                 {folderRenderOrder.map((entry, index) => {
-                  if (entry === null) {
+                  if (entry === null || entry === DRAG_HOLE_ID) {
+                    const showDropSlot = entry === DRAG_HOLE_ID && dragState?.context === 'folder'
                     return (
                       <div
-                        key={`folder-empty-${index}`}
+                        key={`folder-${showDropSlot ? 'drop' : 'empty'}-${index}`}
                         data-folder-grid-item
-                        className="h-full w-full rounded-2xl border border-white/10 bg-white/5"
+                        className={`h-full w-full rounded-2xl ${
+                          showDropSlot
+                            ? 'border border-white/20 bg-white/8'
+                            : 'border border-transparent bg-transparent'
+                        }`}
+                        style={{ minHeight: `${folderItemHeight}px` }}
                         aria-hidden="true"
                       />
                     )
@@ -1581,7 +2055,9 @@ export function IconGrid({ icons }: IconGridProps) {
                       }}
                       data-folder-grid-item
                       className="relative touch-none"
-                      onPointerDown={event => handleFolderTilePointerDown(event, openFolder.id, entry)}
+                      onPointerDown={event =>
+                        handleFolderTilePointerDown(event, openFolder.id, entry)
+                      }
                       onClickCapture={handleTileClickCapture}
                     >
                       <Icon
@@ -1642,12 +2118,16 @@ export function IconGrid({ icons }: IconGridProps) {
           style={{
             left:
               (folderDropFlight.animate ? folderDropFlight.endX : folderDropFlight.startX) -
-              (folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize) / 2,
+              (folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize) /
+                2,
             top:
               (folderDropFlight.animate ? folderDropFlight.endY : folderDropFlight.startY) -
-              (folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize) / 2,
+              (folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize) /
+                2,
             width: folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize,
-            height: folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize,
+            height: folderDropFlight.animate
+              ? folderDropFlight.endSize
+              : folderDropFlight.startSize,
             opacity: folderDropFlight.animate ? 0.92 : 1,
             transition: `left ${REORDER_ANIMATION_MS}ms ${FOLDER_PREVIEW_EASING}, top ${REORDER_ANIMATION_MS}ms ${FOLDER_PREVIEW_EASING}, width ${REORDER_ANIMATION_MS}ms ${FOLDER_PREVIEW_EASING}, height ${REORDER_ANIMATION_MS}ms ${FOLDER_PREVIEW_EASING}, opacity ${REORDER_ANIMATION_MS}ms ease-out`,
           }}
