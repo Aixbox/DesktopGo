@@ -15,7 +15,7 @@ import {
   normalizeOuterSlots,
 } from '../domain/slots'
 import { moveDragHoleToIndex } from '../domain/evasionPolicy'
-import { getFolderChildrenById, replaceFolderChildren } from '../domain/folderPolicy'
+import { getFolderChildrenById } from '../domain/folderPolicy'
 import {
   applyOuterEvasionPolicy,
   findHitByMetrics,
@@ -374,29 +374,13 @@ export function useIconGridDragWorkflow({
     if (state.context !== 'folder' || !state.sourceFolderId || state.draggingItem.kind !== 'icon') {
       return { ...state, pointerX: x, pointerY: y }
     }
-
-    const currentItems = itemsRef.current
-    const children = getFolderChildrenById(currentItems, state.sourceFolderId)
-    const nextChildren = children.filter(child => child.key !== state.draggingId)
-    if (nextChildren.length === children.length) {
-      return { ...state, pointerX: x, pointerY: y }
-    }
-
-    const nextItems = replaceFolderChildren(currentItems, state.sourceFolderId, nextChildren, {
-      collapseSingleChild: false,
-    })
-    const nextOuterSlots = normalizeOuterSlots(
-      outerSlotsRef.current,
-      nextItems.map(getId),
-      pageSizeRef.current
-    )
-    itemsRef.current = nextItems
-    outerSlotsRef.current = nextOuterSlots
-    setItems(nextItems)
-    setOuterSlots(nextOuterSlots)
     setOpenFolderId(null)
 
-    const nextOrder: Array<string | null> = [...nextOuterSlots]
+    const nextOrder = normalizeOuterSlots(
+      outerSlotsRef.current,
+      itemsRef.current.map(getId),
+      pageSizeRef.current
+    )
     const outerCenters = collectCenters(tileRefs.current)
     outerCenters[state.draggingId] = { x, y }
     const outerState: DragState = {

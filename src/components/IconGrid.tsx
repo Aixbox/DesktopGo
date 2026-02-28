@@ -211,6 +211,24 @@ export function IconGrid({ icons }: IconGridProps) {
   const folderRenderOrder =
     dragState && dragState.context === 'folder' ? dragState.workingOrder : folderOrder
 
+  const outerViewItemById = useMemo(() => {
+    if (!dragState || dragState.context !== 'outer' || !dragState.sourceFolderId) {
+      return itemById
+    }
+    const draggingIconKey =
+      dragState.draggingItem.kind === 'icon' ? dragState.draggingItem.key : null
+    if (!draggingIconKey) return itemById
+
+    const sourceFolderEntryId = `folder:${dragState.sourceFolderId}`
+    const sourceFolder = itemById.get(sourceFolderEntryId)
+    if (!sourceFolder || sourceFolder.kind !== 'folder') return itemById
+
+    const nextChildren = sourceFolder.children.filter(child => child.key !== draggingIconKey)
+    const next = new Map(itemById)
+    next.set(sourceFolderEntryId, { ...sourceFolder, children: nextChildren })
+    return next
+  }, [itemById, dragState])
+
   useEffect(() => {
     if (!openFolderId) return
     const onKeyDown = (event: KeyboardEvent) => {
@@ -509,7 +527,7 @@ export function IconGrid({ icons }: IconGridProps) {
           pageItems={pageItems}
           pageSize={pageSize}
           currentPage={currentPage}
-          itemById={itemById}
+          itemById={outerViewItemById}
           dragContext={dragState?.context ?? null}
           dragPreviewSlotIndex={dragState?.previewSlotIndex ?? null}
           dragFolderPreviewTargetId={dragState?.folderPreviewTargetId ?? null}

@@ -56,6 +56,7 @@ export function usePointerDragController<
 
     const handlePointerUp = (event: PointerEvent) => {
       if (dragRef.current?.pointerId === event.pointerId) {
+        onDragMoveFnRef.current(event.pointerId, event.clientX, event.clientY)
         finishDragFnRef.current(event.pointerId)
         return
       }

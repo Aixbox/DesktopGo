@@ -75,8 +75,10 @@ export const applyOuterDropFromSession = ({
   nextSlots = nextSlots.map(slot => (slot === session.draggingId ? null : slot))
 
   const nearestDropIndex = resolveNearestSlotIndexByContext(session)
+  const sourceFallbackIndex = session.sourceFolderId ? null : session.sourceSlotIndex
+  const emptyFallbackIndex = session.sourceFolderId ? null : nextSlots.indexOf(null)
   const candidateDropIndex =
-    session.previewSlotIndex ?? nearestDropIndex ?? session.sourceSlotIndex ?? nextSlots.indexOf(null)
+    session.previewSlotIndex ?? nearestDropIndex ?? sourceFallbackIndex ?? emptyFallbackIndex
   if (candidateDropIndex === null || candidateDropIndex < 0) {
     return { items: base, slots: baseSlots }
   }

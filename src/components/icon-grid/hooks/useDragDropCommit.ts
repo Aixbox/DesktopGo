@@ -75,6 +75,58 @@ export function useDragDropCommit({
     return map
   }
 
+  const hasIconRepresentation = (
+    items: GridItem[],
+    slots: Array<string | null>,
+    iconKey: string
+  ): boolean => {
+    if (slots.includes(iconKey)) return true
+    return items.some(
+      item =>
+        (item.kind === 'icon' && item.key === iconKey) ||
+        (item.kind === 'folder' && item.children.some(child => child.key === iconKey))
+    )
+  }
+
+  const extractDraggedIconFromSourceFolder = (base: GridItem[], session: DragState): GridItem[] => {
+    if (!session.sourceFolderId || session.draggingItem.kind !== 'icon') return base
+    const iconKey = session.draggingItem.key
+    const children = getFolderChildrenById(base, session.sourceFolderId)
+    if (children.length === 0 || !children.some(child => child.key === iconKey)) return base
+    const nextChildren = children.filter(child => child.key !== iconKey)
+    return replaceFolderChildren(base, session.sourceFolderId, nextChildren, {
+      collapseSingleChild: false,
+    })
+  }
+
+  const commitOuterSessionResult = (
+    session: DragState,
+    originalItems: GridItem[],
+    originalSlots: Array<string | null>,
+    result: { items: GridItem[]; slots: Array<string | null> }
+  ) => {
+    const normalizedResultSlots = normalizeOuterSlots(
+      result.slots,
+      result.items.map(getId),
+      pageSizeRef.current
+    )
+    if (
+      session.sourceFolderId &&
+      session.draggingItem.kind === 'icon' &&
+      !hasIconRepresentation(result.items, normalizedResultSlots, session.draggingItem.key)
+    ) {
+      commitOuterLayout(originalItems, originalSlots)
+      return
+    }
+
+    const finalized = finalizeFolderExtractionInOuterLayout(
+      result.items,
+      normalizedResultSlots,
+      session.sourceFolderId
+    )
+    commitOuterLayout(finalized.items, finalized.slots)
+  }
+
   const resolveFolderSecondSlotCenter = (targetId: string): { x: number; y: number; size: number } | null => {
     const targetNode = tileRefs.current.get(targetId)
     if (!targetNode) return null
@@ -181,42 +233,36 @@ export function useDragDropCommit({
           })
 
           folderDropFlightTimerRef.current = window.setTimeout(() => {
-            const result = applyFolderCreateFromSession(itemsRef.current, current)
-            const finalized = finalizeFolderExtractionInOuterLayout(
-              result.items,
-              result.slots,
-              current.sourceFolderId
-            )
-            commitOuterLayout(finalized.items, finalized.slots)
+            const originalItems = itemsRef.current
+            const originalSlots = outerSlotsRef.current
+            const baseForDrop = extractDraggedIconFromSourceFolder(originalItems, current)
+            const result = applyFolderCreateFromSession(baseForDrop, current)
+            commitOuterSessionResult(current, originalItems, originalSlots, result)
             setFolderDropFlight(prev => (prev && prev.id === flightId ? null : prev))
             setFolderPreviewFreezeTargetId(prev => (prev === targetId ? null : prev))
             folderDropFlightTimerRef.current = null
           }, reorderAnimationMs + 30)
         } else {
           setFolderPreviewFreezeTargetId(null)
-          const result = applyFolderCreateFromSession(itemsRef.current, current)
-          const finalized = finalizeFolderExtractionInOuterLayout(
-            result.items,
-            result.slots,
-            current.sourceFolderId
-          )
-          commitOuterLayout(finalized.items, finalized.slots)
+          const originalItems = itemsRef.current
+          const originalSlots = outerSlotsRef.current
+          const baseForDrop = extractDraggedIconFromSourceFolder(originalItems, current)
+          const result = applyFolderCreateFromSession(baseForDrop, current)
+          commitOuterSessionResult(current, originalItems, originalSlots, result)
         }
       } else {
         setFolderPreviewFreezeTargetId(null)
+        const originalItems = itemsRef.current
+        const originalSlots = outerSlotsRef.current
+        const baseForDrop = extractDraggedIconFromSourceFolder(originalItems, current)
         const result = applyOuterDropFromSession({
-          base: itemsRef.current,
+          base: baseForDrop,
           session: current,
           pageSize: pageSizeRef.current,
           columns,
           resolveNearestSlotIndexByContext,
         })
-        const finalized = finalizeFolderExtractionInOuterLayout(
-          result.items,
-          result.slots,
-          current.sourceFolderId
-        )
-        commitOuterLayout(finalized.items, finalized.slots)
+        commitOuterSessionResult(current, originalItems, originalSlots, result)
       }
     }
 
