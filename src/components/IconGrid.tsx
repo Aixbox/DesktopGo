@@ -163,6 +163,8 @@ export function IconGrid({ icons }: IconGridProps) {
     dragRef,
     folderDropFlight,
     folderPreviewFreezeTargetId,
+    hiddenOuterItemIds,
+    frozenOuterOrder,
     handleTilePointerDown,
     handleFolderTilePointerDown,
     handleTileClickCapture,
@@ -207,7 +209,9 @@ export function IconGrid({ icons }: IconGridProps) {
     setOpenFolderId,
   })
   const renderOrder =
-    dragState && dragState.context === 'outer' ? dragState.workingOrder : outerSlots
+    dragState && dragState.context === 'outer'
+      ? dragState.workingOrder
+      : frozenOuterOrder ?? outerSlots
   const folderRenderOrder =
     dragState && dragState.context === 'folder' ? dragState.workingOrder : folderOrder
 
@@ -532,6 +536,7 @@ export function IconGrid({ icons }: IconGridProps) {
           dragPreviewSlotIndex={dragState?.previewSlotIndex ?? null}
           dragFolderPreviewTargetId={dragState?.folderPreviewTargetId ?? null}
           folderPreviewFreezeTargetId={folderPreviewFreezeTargetId}
+          hiddenOuterItemIds={hiddenOuterItemIds}
           iconConfig={iconConfig}
           selectionMode={selectionMode}
           selectedSet={selectedSet}

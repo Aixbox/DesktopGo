@@ -41,6 +41,8 @@ interface UseDragDropCommitParams {
 interface UseDragDropCommitResult {
   folderDropFlight: FolderDropFlight | null
   folderPreviewFreezeTargetId: string | null
+  hiddenOuterItemIds: string[]
+  frozenOuterOrder: Array<string | null> | null
   resetDropVisuals: () => void
   finishDrag: (pointerId: number) => boolean
 }
@@ -65,6 +67,8 @@ export function useDragDropCommit({
   const folderDropFlightIdRef = useRef(0)
   const [folderDropFlight, setFolderDropFlight] = useState<FolderDropFlight | null>(null)
   const [folderPreviewFreezeTargetId, setFolderPreviewFreezeTargetId] = useState<string | null>(null)
+  const [hiddenOuterItemIds, setHiddenOuterItemIds] = useState<string[]>([])
+  const [frozenOuterOrder, setFrozenOuterOrder] = useState<Array<string | null> | null>(null)
 
   const getFolderMapById = (folderId: string | null, baseItems: GridItem[]) => {
     const map = new Map<string, IconItem>()
@@ -161,6 +165,8 @@ export function useDragDropCommit({
     }
     setFolderDropFlight(null)
     setFolderPreviewFreezeTargetId(null)
+    setHiddenOuterItemIds([])
+    setFrozenOuterOrder(null)
   }
 
   const finishDrag = (pointerId: number): boolean => {
@@ -220,6 +226,8 @@ export function useDragDropCommit({
           const flightId = folderDropFlightIdRef.current + 1
           folderDropFlightIdRef.current = flightId
           setFolderPreviewFreezeTargetId(targetId)
+          setHiddenOuterItemIds([current.draggingId, targetId])
+          setFrozenOuterOrder(current.workingOrder.map(slot => (slot === DRAG_HOLE_ID ? null : slot)))
           setFolderDropFlight({
             id: flightId,
             icon: sourceItem.icon,
@@ -240,10 +248,18 @@ export function useDragDropCommit({
             commitOuterSessionResult(current, originalItems, originalSlots, result)
             setFolderDropFlight(prev => (prev && prev.id === flightId ? null : prev))
             setFolderPreviewFreezeTargetId(prev => (prev === targetId ? null : prev))
+            setHiddenOuterItemIds(prev =>
+              prev.length === 2 && prev.includes(current.draggingId) && prev.includes(targetId) ? [] : prev
+            )
+            setFrozenOuterOrder(prev =>
+              prev && prev.some(slot => slot === current.draggingId || slot === targetId) ? null : prev
+            )
             folderDropFlightTimerRef.current = null
           }, reorderAnimationMs + 30)
         } else {
           setFolderPreviewFreezeTargetId(null)
+          setHiddenOuterItemIds([])
+          setFrozenOuterOrder(null)
           const originalItems = itemsRef.current
           const originalSlots = outerSlotsRef.current
           const baseForDrop = extractDraggedIconFromSourceFolder(originalItems, current)
@@ -252,6 +268,8 @@ export function useDragDropCommit({
         }
       } else {
         setFolderPreviewFreezeTargetId(null)
+        setHiddenOuterItemIds([])
+        setFrozenOuterOrder(null)
         const originalItems = itemsRef.current
         const originalSlots = outerSlotsRef.current
         const baseForDrop = extractDraggedIconFromSourceFolder(originalItems, current)
@@ -294,6 +312,8 @@ export function useDragDropCommit({
   return {
     folderDropFlight,
     folderPreviewFreezeTargetId,
+    hiddenOuterItemIds,
+    frozenOuterOrder,
     resetDropVisuals,
     finishDrag,
   }

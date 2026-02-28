@@ -79,6 +79,8 @@ interface UseIconGridDragWorkflowResult {
   dragRef: MutableRefObject<DragState | null>
   folderDropFlight: FolderDropFlight | null
   folderPreviewFreezeTargetId: string | null
+  hiddenOuterItemIds: string[]
+  frozenOuterOrder: Array<string | null> | null
   handleTilePointerDown: (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => void
   handleFolderTilePointerDown: (
     event: ReactPointerEvent<HTMLDivElement>,
@@ -351,6 +353,8 @@ export function useIconGridDragWorkflow({
   const {
     folderDropFlight,
     folderPreviewFreezeTargetId,
+    hiddenOuterItemIds,
+    frozenOuterOrder,
     resetDropVisuals,
     finishDrag,
   } = useDragDropCommit({
@@ -794,6 +798,8 @@ export function useIconGridDragWorkflow({
     dragRef,
     folderDropFlight,
     folderPreviewFreezeTargetId,
+    hiddenOuterItemIds,
+    frozenOuterOrder,
     handleTilePointerDown,
     handleFolderTilePointerDown,
     handleTileClickCapture,
