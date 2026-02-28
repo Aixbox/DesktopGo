@@ -382,7 +382,9 @@ export function useIconGridDragWorkflow({
       return { ...state, pointerX: x, pointerY: y }
     }
 
-    const nextItems = replaceFolderChildren(currentItems, state.sourceFolderId, nextChildren)
+    const nextItems = replaceFolderChildren(currentItems, state.sourceFolderId, nextChildren, {
+      collapseSingleChild: false,
+    })
     const nextOuterSlots = normalizeOuterSlots(
       outerSlotsRef.current,
       nextItems.map(getId),
@@ -400,7 +402,7 @@ export function useIconGridDragWorkflow({
     const outerState: DragState = {
       ...state,
       context: 'outer',
-      sourceFolderId: null,
+      sourceFolderId: state.sourceFolderId,
       pointerX: x,
       pointerY: y,
       workingOrder: nextOrder,

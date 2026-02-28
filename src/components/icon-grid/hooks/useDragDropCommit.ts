@@ -3,7 +3,11 @@ import type { GridItem, IconItem } from '../model'
 import { getId } from '../model'
 import { DRAG_HOLE_ID, normalizeOuterSlots } from '../domain/slots'
 import { moveDragHoleToIndex } from '../domain/evasionPolicy'
-import { getFolderChildrenById, replaceFolderChildren } from '../domain/folderPolicy'
+import {
+  finalizeFolderExtractionInOuterLayout,
+  getFolderChildrenById,
+  replaceFolderChildren,
+} from '../domain/folderPolicy'
 import { applyFolderCreateFromSession, applyOuterDropFromSession } from '../domain/dropPolicy'
 import type { DragState, FolderDropFlight } from '../state/types'
 import {
@@ -178,7 +182,12 @@ export function useDragDropCommit({
 
           folderDropFlightTimerRef.current = window.setTimeout(() => {
             const result = applyFolderCreateFromSession(itemsRef.current, current)
-            commitOuterLayout(result.items, result.slots)
+            const finalized = finalizeFolderExtractionInOuterLayout(
+              result.items,
+              result.slots,
+              current.sourceFolderId
+            )
+            commitOuterLayout(finalized.items, finalized.slots)
             setFolderDropFlight(prev => (prev && prev.id === flightId ? null : prev))
             setFolderPreviewFreezeTargetId(prev => (prev === targetId ? null : prev))
             folderDropFlightTimerRef.current = null
@@ -186,7 +195,12 @@ export function useDragDropCommit({
         } else {
           setFolderPreviewFreezeTargetId(null)
           const result = applyFolderCreateFromSession(itemsRef.current, current)
-          commitOuterLayout(result.items, result.slots)
+          const finalized = finalizeFolderExtractionInOuterLayout(
+            result.items,
+            result.slots,
+            current.sourceFolderId
+          )
+          commitOuterLayout(finalized.items, finalized.slots)
         }
       } else {
         setFolderPreviewFreezeTargetId(null)
@@ -197,7 +211,12 @@ export function useDragDropCommit({
           columns,
           resolveNearestSlotIndexByContext,
         })
-        commitOuterLayout(result.items, result.slots)
+        const finalized = finalizeFolderExtractionInOuterLayout(
+          result.items,
+          result.slots,
+          current.sourceFolderId
+        )
+        commitOuterLayout(finalized.items, finalized.slots)
       }
     }
 
