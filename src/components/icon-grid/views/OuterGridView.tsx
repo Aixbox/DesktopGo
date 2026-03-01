@@ -139,7 +139,7 @@ export function OuterGridView({
               {item.kind === 'icon' ? (
                 <div
                   className={`transition-opacity duration-150 ${
-                    hideItem ? 'opacity-0' : folderPreview ? 'opacity-45' : 'opacity-100'
+                    hideItem || folderPreview ? 'opacity-0' : 'opacity-100'
                   }`}
                 >
                   <Icon
