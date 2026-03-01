@@ -25,6 +25,7 @@ interface OuterGridViewProps {
   dragPreviewSlotIndex: number | null
   dragFolderPreviewTargetId: string | null
   folderPreviewFreezeTargetId: string | null
+  folderCreateTransitionTargetId: string | null
   hiddenOuterItemIds: string[]
   iconConfig: IconConfigLike
   selectionMode: boolean
@@ -65,6 +66,7 @@ export function OuterGridView({
   dragPreviewSlotIndex,
   dragFolderPreviewTargetId,
   folderPreviewFreezeTargetId,
+  folderCreateTransitionTargetId,
   hiddenOuterItemIds,
   iconConfig,
   selectionMode,
@@ -121,7 +123,8 @@ export function OuterGridView({
           const hideItem = hiddenOuterItemIds.includes(entry)
           const folderPreview =
             (dragContext === 'outer' && dragFolderPreviewTargetId === entry) ||
-            folderPreviewFreezeTargetId === entry
+            folderPreviewFreezeTargetId === entry ||
+            folderCreateTransitionTargetId === entry
 
           return (
             <div
@@ -166,6 +169,7 @@ export function OuterGridView({
                   <FolderIconVisual
                     icons={item.children.map(child => child.icon)}
                     imgSize={iconConfig.imgSize}
+                    expanded={folderPreview}
                   />
                   <span
                     className="truncate text-center text-[11px] leading-tight text-foreground"

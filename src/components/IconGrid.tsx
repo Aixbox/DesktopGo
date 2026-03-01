@@ -163,6 +163,7 @@ export function IconGrid({ icons }: IconGridProps) {
     dragRef,
     folderDropFlight,
     folderPreviewFreezeTargetId,
+    folderCreateTransitionTargetId,
     hiddenOuterItemIds,
     frozenOuterOrder,
     handleTilePointerDown,
@@ -536,6 +537,7 @@ export function IconGrid({ icons }: IconGridProps) {
           dragPreviewSlotIndex={dragState?.previewSlotIndex ?? null}
           dragFolderPreviewTargetId={dragState?.folderPreviewTargetId ?? null}
           folderPreviewFreezeTargetId={folderPreviewFreezeTargetId}
+          folderCreateTransitionTargetId={folderCreateTransitionTargetId}
           hiddenOuterItemIds={hiddenOuterItemIds}
           iconConfig={iconConfig}
           selectionMode={selectionMode}

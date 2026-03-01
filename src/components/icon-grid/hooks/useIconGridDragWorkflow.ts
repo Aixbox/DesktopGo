@@ -79,6 +79,7 @@ interface UseIconGridDragWorkflowResult {
   dragRef: MutableRefObject<DragState | null>
   folderDropFlight: FolderDropFlight | null
   folderPreviewFreezeTargetId: string | null
+  folderCreateTransitionTargetId: string | null
   hiddenOuterItemIds: string[]
   frozenOuterOrder: Array<string | null> | null
   handleTilePointerDown: (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => void
@@ -331,7 +332,7 @@ export function useIconGridDragWorkflow({
         hoverTargetId: overlapHit.targetId,
         hoverZone: overlapHit.zone,
         hoverIou: overlapHit.iou,
-        folderPreviewTargetId: null,
+        folderPreviewTargetId: overlapHit.targetId,
         dwellStartedAt: null,
         lastEvasionSignature: null,
       }
@@ -373,6 +374,7 @@ export function useIconGridDragWorkflow({
   const {
     folderDropFlight,
     folderPreviewFreezeTargetId,
+    folderCreateTransitionTargetId,
     hiddenOuterItemIds,
     frozenOuterOrder,
     resetDropVisuals,
@@ -562,7 +564,7 @@ export function useIconGridDragWorkflow({
         overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
       if (canAddToExistingFolder) {
         clearOuterDwellTimer()
-        next.folderPreviewTargetId = null
+        next.folderPreviewTargetId = overlapHit.targetId
         next.dwellStartedAt = null
         next.lastEvasionSignature = null
         dragRef.current = next
@@ -832,6 +834,7 @@ export function useIconGridDragWorkflow({
     dragRef,
     folderDropFlight,
     folderPreviewFreezeTargetId,
+    folderCreateTransitionTargetId,
     hiddenOuterItemIds,
     frozenOuterOrder,
     handleTilePointerDown,

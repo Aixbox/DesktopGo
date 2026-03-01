@@ -17,8 +17,10 @@ import type { DragState, FolderDropFlight } from '../state/types'
 import { OUTER_DRAG_RULES } from '../constants'
 import {
   FOLDER_PREVIEW_GAP,
+  FOLDER_PREVIEW_OUTER_EXPAND,
   FOLDER_PREVIEW_PADDING,
   FOLDER_PREVIEW_TOP_OFFSET,
+  getFolderPreviewFrameSize,
   getFolderPreviewSlotSize,
 } from '../views/FolderVisuals'
 
@@ -46,6 +48,7 @@ interface UseDragDropCommitParams {
 interface UseDragDropCommitResult {
   folderDropFlight: FolderDropFlight | null
   folderPreviewFreezeTargetId: string | null
+  folderCreateTransitionTargetId: string | null
   hiddenOuterItemIds: string[]
   frozenOuterOrder: Array<string | null> | null
   resetDropVisuals: () => void
@@ -69,9 +72,11 @@ export function useDragDropCommit({
   resolveNearestSlotIndexByContext,
 }: UseDragDropCommitParams): UseDragDropCommitResult {
   const folderDropFlightTimerRef = useRef<number | null>(null)
+  const folderCreateTransitionTimerRef = useRef<number | null>(null)
   const folderDropFlightIdRef = useRef(0)
   const [folderDropFlight, setFolderDropFlight] = useState<FolderDropFlight | null>(null)
   const [folderPreviewFreezeTargetId, setFolderPreviewFreezeTargetId] = useState<string | null>(null)
+  const [folderCreateTransitionTargetId, setFolderCreateTransitionTargetId] = useState<string | null>(null)
   const [hiddenOuterItemIds, setHiddenOuterItemIds] = useState<string[]>([])
   const [frozenOuterOrder, setFrozenOuterOrder] = useState<Array<string | null> | null>(null)
 
@@ -141,12 +146,14 @@ export function useDragDropCommit({
     if (!targetNode) return null
 
     const rect = targetNode.getBoundingClientRect()
-    const frameSize = iconConfig.imgSize
-    const slotSize = getFolderPreviewSlotSize(frameSize)
+    const iconSize = iconConfig.imgSize
+    const frameSize = getFolderPreviewFrameSize(iconSize)
+    const slotSize = getFolderPreviewSlotSize(iconSize)
     const frameLeft = rect.left + (rect.width - frameSize) / 2
-    const frameTop = rect.top + FOLDER_PREVIEW_TOP_OFFSET
-    const slotLeft = frameLeft + FOLDER_PREVIEW_PADDING + slotSize + FOLDER_PREVIEW_GAP
-    const slotTop = frameTop + FOLDER_PREVIEW_PADDING
+    const frameTop = rect.top + FOLDER_PREVIEW_TOP_OFFSET - FOLDER_PREVIEW_OUTER_EXPAND
+    const slotLeft =
+      frameLeft + FOLDER_PREVIEW_OUTER_EXPAND + FOLDER_PREVIEW_PADDING + slotSize + FOLDER_PREVIEW_GAP
+    const slotTop = frameTop + FOLDER_PREVIEW_OUTER_EXPAND + FOLDER_PREVIEW_PADDING
 
     return {
       x: slotLeft + slotSize / 2,
@@ -163,13 +170,45 @@ export function useDragDropCommit({
     setOuterSlots(normalizedSlots)
   }
 
+  const scheduleFolderCreateTransition = (folderId: string | null) => {
+    if (folderCreateTransitionTimerRef.current !== null) {
+      window.clearTimeout(folderCreateTransitionTimerRef.current)
+      folderCreateTransitionTimerRef.current = null
+    }
+    setFolderCreateTransitionTargetId(folderId)
+    if (!folderId) return
+    folderCreateTransitionTimerRef.current = window.setTimeout(() => {
+      setFolderCreateTransitionTargetId(prev => (prev === folderId ? null : prev))
+      folderCreateTransitionTimerRef.current = null
+    }, 34)
+  }
+
+  const resolveCreatedFolderId = (
+    session: DragState,
+    result: { items: GridItem[]; slots: Array<string | null> }
+  ): string | null => {
+    const targetId = session.folderPreviewTargetId
+    if (!targetId) return null
+    const targetSlotIndex = session.workingOrder.findIndex(slot => slot === targetId)
+    if (targetSlotIndex < 0 || targetSlotIndex >= result.slots.length) return null
+    const candidateId = result.slots[targetSlotIndex]
+    if (!candidateId) return null
+    const createdFolder = result.items.find(item => item.kind === 'folder' && getId(item) === candidateId)
+    return createdFolder ? candidateId : null
+  }
+
   const resetDropVisuals = () => {
     if (folderDropFlightTimerRef.current !== null) {
       window.clearTimeout(folderDropFlightTimerRef.current)
       folderDropFlightTimerRef.current = null
     }
+    if (folderCreateTransitionTimerRef.current !== null) {
+      window.clearTimeout(folderCreateTransitionTimerRef.current)
+      folderCreateTransitionTimerRef.current = null
+    }
     setFolderDropFlight(null)
     setFolderPreviewFreezeTargetId(null)
+    setFolderCreateTransitionTargetId(null)
     setHiddenOuterItemIds([])
     setFrozenOuterOrder(null)
   }
@@ -225,6 +264,7 @@ export function useDragDropCommit({
 
       if (canAddToExistingFolder) {
         setFolderPreviewFreezeTargetId(null)
+        scheduleFolderCreateTransition(null)
         setHiddenOuterItemIds([])
         setFrozenOuterOrder(null)
         const originalItems = itemsRef.current
@@ -264,7 +304,9 @@ export function useDragDropCommit({
             const originalSlots = outerSlotsRef.current
             const baseForDrop = extractDraggedIconFromSourceFolder(originalItems, current)
             const result = applyFolderCreateFromSession(baseForDrop, current)
+            const createdFolderId = resolveCreatedFolderId(current, result)
             commitOuterSessionResult(current, originalItems, originalSlots, result)
+            scheduleFolderCreateTransition(createdFolderId)
             setFolderDropFlight(prev => (prev && prev.id === flightId ? null : prev))
             setFolderPreviewFreezeTargetId(prev => (prev === targetId ? null : prev))
             setHiddenOuterItemIds(prev =>
@@ -277,16 +319,20 @@ export function useDragDropCommit({
           }, reorderAnimationMs + 30)
         } else {
           setFolderPreviewFreezeTargetId(null)
+          scheduleFolderCreateTransition(null)
           setHiddenOuterItemIds([])
           setFrozenOuterOrder(null)
           const originalItems = itemsRef.current
           const originalSlots = outerSlotsRef.current
           const baseForDrop = extractDraggedIconFromSourceFolder(originalItems, current)
           const result = applyFolderCreateFromSession(baseForDrop, current)
+          const createdFolderId = resolveCreatedFolderId(current, result)
           commitOuterSessionResult(current, originalItems, originalSlots, result)
+          scheduleFolderCreateTransition(createdFolderId)
         }
       } else {
         setFolderPreviewFreezeTargetId(null)
+        scheduleFolderCreateTransition(null)
         setHiddenOuterItemIds([])
         setFrozenOuterOrder(null)
         const originalItems = itemsRef.current
@@ -324,6 +370,10 @@ export function useDragDropCommit({
         window.clearTimeout(folderDropFlightTimerRef.current)
         folderDropFlightTimerRef.current = null
       }
+      if (folderCreateTransitionTimerRef.current !== null) {
+        window.clearTimeout(folderCreateTransitionTimerRef.current)
+        folderCreateTransitionTimerRef.current = null
+      }
     },
     []
   )
@@ -331,6 +381,7 @@ export function useDragDropCommit({
   return {
     folderDropFlight,
     folderPreviewFreezeTargetId,
+    folderCreateTransitionTargetId,
     hiddenOuterItemIds,
     frozenOuterOrder,
     resetDropVisuals,
