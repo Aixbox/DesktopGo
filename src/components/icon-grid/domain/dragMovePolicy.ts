@@ -121,6 +121,8 @@ interface FindOuterMaxOverlapHitParams {
 const resolveOverlapTargetRect = (node: HTMLDivElement): DOMRect => {
   const iconImage = node.querySelector<HTMLElement>('.icon-image')
   if (iconImage) return iconImage.getBoundingClientRect()
+  const folderVisual = node.querySelector<HTMLElement>('[data-folder-icon-visual]')
+  if (folderVisual) return folderVisual.getBoundingClientRect()
   return node.getBoundingClientRect()
 }
 

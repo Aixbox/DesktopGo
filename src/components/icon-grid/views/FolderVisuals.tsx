@@ -84,7 +84,7 @@ export function FolderIconVisual({ icons, imgSize }: FolderIconVisualProps) {
   } as const
 
   return (
-    <div className="relative" style={frameStyle} aria-hidden="true">
+    <div className="relative" style={frameStyle} aria-hidden="true" data-folder-icon-visual>
       <div className={FOLDER_SURFACE_CLASS}>
         {icons.slice(0, 4).map((icon, idx) => {
           const row = Math.floor(idx / 2)

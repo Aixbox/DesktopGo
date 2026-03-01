@@ -8,8 +8,13 @@ import {
   getFolderChildrenById,
   replaceFolderChildren,
 } from '../domain/folderPolicy'
-import { applyFolderCreateFromSession, applyOuterDropFromSession } from '../domain/dropPolicy'
+import {
+  applyAddToFolderFromSession,
+  applyFolderCreateFromSession,
+  applyOuterDropFromSession,
+} from '../domain/dropPolicy'
 import type { DragState, FolderDropFlight } from '../state/types'
+import { OUTER_DRAG_RULES } from '../constants'
 import {
   FOLDER_PREVIEW_GAP,
   FOLDER_PREVIEW_PADDING,
@@ -209,11 +214,25 @@ export function useDragDropCommit({
       const outerMap = new Map<string, GridItem>()
       itemsRef.current.forEach(item => outerMap.set(getId(item), item))
       const source = current.draggingItem
+      const existingFolderTarget = current.hoverTargetId ? outerMap.get(current.hoverTargetId) : null
+      const canAddToExistingFolder =
+        source.kind === 'icon' &&
+        existingFolderTarget?.kind === 'folder' &&
+        current.hoverIou >= OUTER_DRAG_RULES.folderOverlapThreshold
       const folderTarget = current.folderPreviewTargetId !== null ? outerMap.get(current.folderPreviewTargetId) : null
       const canCreateFolder =
         current.folderPreviewTargetId !== null && source.kind === 'icon' && folderTarget?.kind === 'icon'
 
-      if (canCreateFolder) {
+      if (canAddToExistingFolder) {
+        setFolderPreviewFreezeTargetId(null)
+        setHiddenOuterItemIds([])
+        setFrozenOuterOrder(null)
+        const originalItems = itemsRef.current
+        const originalSlots = outerSlotsRef.current
+        const baseForDrop = extractDraggedIconFromSourceFolder(originalItems, current)
+        const result = applyAddToFolderFromSession(baseForDrop, current, current.hoverTargetId as string)
+        commitOuterSessionResult(current, originalItems, originalSlots, result)
+      } else if (canCreateFolder) {
         const targetId = current.folderPreviewTargetId as string
         const sourceItem = source.kind === 'icon' ? source : null
         const slotCenter = resolveFolderSecondSlotCenter(targetId)

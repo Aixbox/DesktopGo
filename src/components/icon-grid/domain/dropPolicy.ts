@@ -45,6 +45,35 @@ export const applyFolderCreateFromSession = (
   return { items: nextItems, slots: nextSlots }
 }
 
+export const applyAddToFolderFromSession = (
+  base: GridItem[],
+  session: DragState,
+  targetFolderId: string
+): { items: GridItem[]; slots: Array<string | null> } => {
+  const baseSlots = session.workingOrder.map(slot => (slot === DRAG_HOLE_ID ? null : slot))
+  const map = new Map<string, GridItem>()
+  base.forEach(item => map.set(getId(item), item))
+  const sourceExistsInBase = map.has(session.draggingId)
+  const sourceItem = map.get(session.draggingId) ?? session.draggingItem
+  const targetFolder = map.get(targetFolderId)
+  if (!targetFolder || targetFolder.kind !== 'folder' || sourceItem.kind !== 'icon') {
+    return { items: base, slots: baseSlots }
+  }
+
+  const nextFolderChildren = targetFolder.children.some(child => child.key === sourceItem.key)
+    ? targetFolder.children
+    : [...targetFolder.children, sourceItem]
+  map.set(targetFolderId, { ...targetFolder, children: nextFolderChildren })
+  map.delete(session.draggingId)
+
+  const nextSlots = baseSlots.map(slot => (slot === session.draggingId ? null : slot))
+  const normalizedOrder = nextSlots.filter((id): id is string => id !== null)
+  const nextItems = normalizedOrder.map(id => map.get(id)).filter((item): item is GridItem => Boolean(item))
+  const expectedLength = sourceExistsInBase ? base.length - 1 : base.length
+  if (nextItems.length !== expectedLength) return { items: base, slots: baseSlots }
+  return { items: nextItems, slots: nextSlots }
+}
+
 interface ApplyOuterDropFromSessionParams {
   base: GridItem[]
   session: DragState

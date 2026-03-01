@@ -320,6 +320,26 @@ export function useIconGridDragWorkflow({
     if (!target) return
 
     const now = performance.now()
+    const canAddToExistingFolder =
+      source.kind === 'icon' &&
+      target.kind === 'folder' &&
+      overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
+    if (canAddToExistingFolder) {
+      const nextState: DragState = {
+        ...latest,
+        previewSlotIndex: overlapHit.targetIndex,
+        hoverTargetId: overlapHit.targetId,
+        hoverZone: overlapHit.zone,
+        hoverIou: overlapHit.iou,
+        folderPreviewTargetId: null,
+        dwellStartedAt: null,
+        lastEvasionSignature: null,
+      }
+      dragRef.current = nextState
+      setDragState(nextState)
+      return
+    }
+
     const canFolderPreview = source.kind === 'icon' && target.kind === 'icon'
     if (canFolderPreview && overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold) {
       const previewState: DragState = {
@@ -529,6 +549,20 @@ export function useIconGridDragWorkflow({
       if (canFolderPreview && overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold) {
         clearOuterDwellTimer()
         next.folderPreviewTargetId = overlapHit.targetId
+        next.dwellStartedAt = null
+        next.lastEvasionSignature = null
+        dragRef.current = next
+        setDragState(next)
+        return
+      }
+
+      const canAddToExistingFolder =
+        source.kind === 'icon' &&
+        target.kind === 'folder' &&
+        overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
+      if (canAddToExistingFolder) {
+        clearOuterDwellTimer()
+        next.folderPreviewTargetId = null
         next.dwellStartedAt = null
         next.lastEvasionSignature = null
         dragRef.current = next
