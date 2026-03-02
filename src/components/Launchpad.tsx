@@ -69,14 +69,23 @@ export function Launchpad() {
   const {
     keyword,
     setKeyword,
+    submitSearch,
+    isKeywordCommitted,
     items: searchItems,
     loading: searchLoading,
+    loadingMore: searchLoadingMore,
+    hasMore: searchHasMore,
     error: searchError,
     provider: searchProvider,
     tookMs: searchTookMs,
     selectedIndex,
     setSelectedIndex,
     moveSelection,
+    filter: searchFilter,
+    setFilter: setSearchFilter,
+    settings: searchSettings,
+    reloadSettings: reloadSearchSettings,
+    loadMore: loadMoreSearchResults,
     clear: clearSearch,
   } = useSearch();
 
@@ -106,6 +115,7 @@ export function Launchpad() {
             const state = useIconStore.getState();
             await state.hydrateSettings();
             await useIconStore.getState().fetchIcons();
+            await reloadSearchSettings();
             applyTheme(await getSavedTheme());
           } catch (e) {
             console.error("Failed to sync settings on focus:", e);
@@ -116,7 +126,7 @@ export function Launchpad() {
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, []);
+  }, [reloadSearchSettings]);
 
   useEffect(() => {
     return () => {
@@ -188,6 +198,16 @@ export function Launchpad() {
     }
     if (e.key === "Enter") {
       e.preventDefault();
+      if (!searchSettings.liveOnType) {
+        if (!isKeywordCommitted) {
+          submitSearch();
+          return;
+        }
+        submitSearch();
+      }
+      if (!searchSettings.openOnEnter) {
+        return;
+      }
       if (selectedIndex >= 0 && selectedIndex < searchItems.length) {
         void launchSearchItem(searchItems[selectedIndex].path);
       }
@@ -292,12 +312,18 @@ export function Launchpad() {
           <SearchPanel
             visible={hasSearchKeyword}
             loading={searchLoading}
+            loadingMore={searchLoadingMore}
+            hasMore={searchHasMore}
             error={searchError}
             provider={searchProvider}
             tookMs={searchTookMs}
             items={searchItems}
             selectedIndex={selectedIndex}
+            filter={searchFilter}
+            onFilterChange={setSearchFilter}
             onSelect={setSelectedIndex}
+            onLoadMore={loadMoreSearchResults}
+            allowDoubleClickOpen={searchSettings.openOnDoubleClick}
             onActivate={(item) => {
               void launchSearchItem(item.path);
             }}

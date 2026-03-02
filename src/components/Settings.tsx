@@ -5,6 +5,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useIconStore } from "@/stores/iconStore";
 import { applyTheme, saveTheme } from "@/lib/theme";
 import { getSetting, setSetting } from "@/lib/settingsStore";
+import { SearchSettingsPanel } from "@/components/search/SearchSettingsPanel";
 import type {
   IconManagerItem,
   IconMutationTarget,
@@ -14,12 +15,13 @@ import type {
   TitleLineCount,
   WindowMode,
 } from "@/types";
-import { Settings as SettingsIcon, RefreshCw, Info, Images } from "lucide-react";
+import { Settings as SettingsIcon, RefreshCw, Info, Images, Search } from "lucide-react";
 
-type NavItem = "settings" | "iconManager" | "update" | "about";
+type NavItem = "settings" | "search" | "iconManager" | "update" | "about";
 
 const NAV_ITEMS: { key: NavItem; label: string; icon: React.ReactNode }[] = [
   { key: "settings", label: "设置", icon: <SettingsIcon className="w-4 h-4" /> },
+  { key: "search", label: "搜索", icon: <Search className="w-4 h-4" /> },
   { key: "iconManager", label: "图标管理", icon: <Images className="w-4 h-4" /> },
   { key: "update", label: "更新", icon: <RefreshCw className="w-4 h-4" /> },
   { key: "about", label: "关于", icon: <Info className="w-4 h-4" /> },
@@ -844,6 +846,7 @@ export function Settings() {
 
       <main className="flex-1 overflow-y-auto p-8">
         {activeNav === "settings" && <SettingsPanel />}
+        {activeNav === "search" && <SearchSettingsPanel />}
         {activeNav === "iconManager" && <IconManagerPanel />}
         {activeNav === "update" && <UpdatePanel />}
         {activeNav === "about" && <AboutPanel />}

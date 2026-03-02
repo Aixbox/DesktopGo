@@ -45,3 +45,4 @@ windows = { version = "0.61", features = [
     "Win32_System_Ole",
     "Win32_Foundation",
 ] }
+winreg = "0.52"

@@ -4,6 +4,11 @@ use std::process::{Child, Command, Stdio};
 
 use tauri::Manager;
 
+pub const DEFAULT_PORTABLE_SERVICE_PIPE_NAME: &str = "EverythingSvcDesktopGo";
+const PORTABLE_ASSET_VERSION: &str =
+    concat!("desktopgo-everything-assets-", env!("CARGO_PKG_VERSION"), "-v1");
+const VERSION_FILE_NAME: &str = ".asset-version";
+
 pub struct PortableAssets {
     pub exe_path: PathBuf,
     pub dll_path: PathBuf,
@@ -60,6 +65,35 @@ fn copy_if_needed(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn copy_always(src: &Path, dst: &Path) -> Result<(), String> {
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create directory {:?}: {}", parent, e))?;
+    }
+    fs::copy(src, dst).map_err(|e| format!("Failed to copy {:?} -> {:?}: {}", src, dst, e))?;
+    Ok(())
+}
+
+fn version_file_path(target_root: &Path) -> PathBuf {
+    target_root.join(VERSION_FILE_NAME)
+}
+
+fn is_version_match(target_root: &Path) -> bool {
+    let version_path = version_file_path(target_root);
+    if !version_path.exists() {
+        return false;
+    }
+    match fs::read_to_string(version_path) {
+        Ok(text) => text.trim() == PORTABLE_ASSET_VERSION,
+        Err(_) => false,
+    }
+}
+
+fn write_version_file(target_root: &Path) -> Result<(), String> {
+    fs::write(version_file_path(target_root), PORTABLE_ASSET_VERSION)
+        .map_err(|e| format!("Failed to write portable version file: {}", e))
+}
+
 pub fn ensure_portable_assets(app_handle: &tauri::AppHandle) -> Result<PortableAssets, String> {
     let resource_root = resolve_resource_root(app_handle)?;
     let local_data_dir = app_handle
@@ -80,11 +114,22 @@ pub fn ensure_portable_assets(app_handle: &tauri::AppHandle) -> Result<PortableA
     let target_license = target_root.join("License.txt");
     let target_ini = target_root.join("Everything.ini");
 
-    copy_if_needed(&src_exe, &target_exe)?;
-    copy_if_needed(&src_dll, &target_dll)?;
-    copy_if_needed(&src_license, &target_license)?;
-    if src_ini.exists() {
-        copy_if_needed(&src_ini, &target_ini)?;
+    let force_refresh = !is_version_match(&target_root);
+    if force_refresh {
+        copy_always(&src_exe, &target_exe)?;
+        copy_always(&src_dll, &target_dll)?;
+        copy_always(&src_license, &target_license)?;
+        if src_ini.exists() {
+            copy_always(&src_ini, &target_ini)?;
+        }
+        write_version_file(&target_root)?;
+    } else {
+        copy_if_needed(&src_exe, &target_exe)?;
+        copy_if_needed(&src_dll, &target_dll)?;
+        copy_if_needed(&src_license, &target_license)?;
+        if src_ini.exists() {
+            copy_if_needed(&src_ini, &target_ini)?;
+        }
     }
 
     Ok(PortableAssets {
@@ -93,12 +138,19 @@ pub fn ensure_portable_assets(app_handle: &tauri::AppHandle) -> Result<PortableA
     })
 }
 
-pub fn start_portable_service(exe_path: &Path) -> Result<Child, String> {
+pub fn start_portable_service(exe_path: &Path, pipe_name: &str) -> Result<Child, String> {
     let workdir = exe_path
         .parent()
         .ok_or_else(|| format!("Failed to resolve parent directory for {:?}", exe_path))?;
+    let normalized_pipe_name = if pipe_name.trim().is_empty() {
+        DEFAULT_PORTABLE_SERVICE_PIPE_NAME
+    } else {
+        pipe_name.trim()
+    };
     Command::new(exe_path)
         .arg("-svc")
+        .arg("-svc-pipe-name")
+        .arg(normalized_pipe_name)
         .current_dir(workdir)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
