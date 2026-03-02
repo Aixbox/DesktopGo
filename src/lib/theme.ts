@@ -1,5 +1,5 @@
 import type { ThemeMode } from "@/types";
-import { getSetting, setSetting, syncLegacySettingsFromLocalStorage } from "@/lib/settingsStore";
+import { getSetting, setSetting } from "@/lib/settingsStore";
 
 /**
  * 根据 ThemeMode 设置应用到 <html> 元素上的 dark class
@@ -26,7 +26,6 @@ export function applyTheme(mode: ThemeMode) {
  * 从 plugin-store 读取保存的主题模式
  */
 export async function getSavedTheme(): Promise<ThemeMode> {
-    await syncLegacySettingsFromLocalStorage();
     return getSetting("themeMode");
 }
 

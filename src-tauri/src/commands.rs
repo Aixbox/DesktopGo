@@ -1,6 +1,5 @@
-use crate::icons::{
-    self, DesktopIcon, IconManagerItem, IconMutationTarget, IconSyncResult,
-};
+use crate::icons::{self, DesktopIcon, IconManagerItem, IconMutationTarget, IconSyncResult};
+use crate::layout_db;
 use tauri::Manager;
 
 #[tauri::command]
@@ -104,4 +103,21 @@ pub fn get_default_customapp_dir(app_handle: tauri::AppHandle) -> Result<String,
 #[tauri::command]
 pub fn launch_app(path: String) -> Result<(), String> {
     icons::launch_app(path)
+}
+
+#[tauri::command]
+pub fn get_layout_payload(
+    app_handle: tauri::AppHandle,
+    key: String,
+) -> Result<Option<String>, String> {
+    layout_db::get_layout_payload(&app_handle, &key)
+}
+
+#[tauri::command]
+pub fn set_layout_payload(
+    app_handle: tauri::AppHandle,
+    key: String,
+    payload: String,
+) -> Result<(), String> {
+    layout_db::set_layout_payload(&app_handle, &key, &payload)
 }

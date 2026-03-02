@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core'
 import type { DesktopIcon } from '../../../types'
 import { buildIconSelectionKey } from '../../../stores/iconStore'
 import type { GridItem, IconItem, PersistedItem, PersistedLayout } from '../model'
@@ -17,9 +18,9 @@ export const serializeItems = (items: GridItem[]): PersistedItem[] =>
         }
   )
 
-export const readLayout = (): PersistedLayout | null => {
+export const readLayout = async (): Promise<PersistedLayout | null> => {
   try {
-    const raw = localStorage.getItem(LAYOUT_KEY)
+    const raw = await invoke<string | null>('get_layout_payload', { key: LAYOUT_KEY })
     if (!raw) return null
     const parsed = JSON.parse(raw) as
       | { version: 1; items: PersistedItem[] }
@@ -36,13 +37,13 @@ export const readLayout = (): PersistedLayout | null => {
   }
 }
 
-export const writeLayout = (items: GridItem[], slots: Array<string | null>) => {
+export const writeLayout = async (items: GridItem[], slots: Array<string | null>) => {
   const payload = {
     version: 2,
     items: serializeItems(items),
     slots,
   }
-  localStorage.setItem(LAYOUT_KEY, JSON.stringify(payload))
+  await invoke('set_layout_payload', { key: LAYOUT_KEY, payload: JSON.stringify(payload) })
 }
 
 export const hydrateItems = (icons: DesktopIcon[], persisted: PersistedItem[] | null): GridItem[] => {

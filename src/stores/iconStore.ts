@@ -8,7 +8,7 @@ import type {
   WindowMode,
 } from '../types'
 import { ICON_SIZE_CONFIG, WINDOW_SIZE_CONFIG } from '../types'
-import { getSetting, setSetting, syncLegacySettingsFromLocalStorage } from '../lib/settingsStore'
+import { getSetting, setSetting } from '../lib/settingsStore'
 
 export const buildIconSelectionKey = (icon: Pick<DesktopIcon, 'id' | 'source'>): string =>
   `${icon.source}:${icon.id}`
@@ -192,7 +192,6 @@ export const useIconStore = create<IconStore>((set, get) => ({
   },
 
   hydrateSettings: async () => {
-    await syncLegacySettingsFromLocalStorage()
     const [iconSize, windowMode, titleLineCount] = await Promise.all([
       getSetting('iconSize'),
       getSetting('windowMode'),

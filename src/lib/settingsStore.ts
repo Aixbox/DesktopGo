@@ -21,7 +21,6 @@ const DEFAULT_SETTINGS: SettingValueMap = {
 };
 
 const store = new LazyStore("settings.json");
-let legacySynced = false;
 
 const isIconSize = (value: unknown): value is IconSize =>
   value === "large" || value === "medium" || value === "small";
@@ -57,35 +56,4 @@ export async function setSetting<K extends ExtendedSettingKey>(
   value: SettingValueMap[K],
 ): Promise<void> {
   await store.set(key, value);
-}
-
-export async function syncLegacySettingsFromLocalStorage(): Promise<void> {
-  if (legacySynced) return;
-
-  const legacySettings: Partial<Record<ExtendedSettingKey, string | null>> = {
-    iconSize: localStorage.getItem("iconSize"),
-    windowMode: localStorage.getItem("windowMode"),
-    titleLineCount: localStorage.getItem("titleLineCount"),
-    themeMode: localStorage.getItem("themeMode"),
-    customAppDir: localStorage.getItem("customAppDir"),
-  };
-
-  for (const key of Object.keys(DEFAULT_SETTINGS) as ExtendedSettingKey[]) {
-    const exists = await store.has(key);
-    if (!exists) {
-      const legacyValue = legacySettings[key];
-      const value =
-        legacyValue !== null && validators[key](legacyValue)
-          ? legacyValue
-          : DEFAULT_SETTINGS[key];
-      await store.set(key, value);
-    }
-  }
-
-  localStorage.removeItem("iconSize");
-  localStorage.removeItem("windowMode");
-  localStorage.removeItem("titleLineCount");
-  localStorage.removeItem("themeMode");
-  localStorage.removeItem("customAppDir");
-  legacySynced = true;
 }

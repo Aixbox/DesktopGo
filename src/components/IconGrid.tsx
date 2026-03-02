@@ -9,7 +9,7 @@ import {
 import type { DesktopIcon } from '../types'
 import { ICON_SIZE_CONFIG } from '../types'
 import { useIconStore } from '../stores/iconStore'
-import type { GridItem, IconItem } from './icon-grid/model'
+import type { GridItem, IconItem, PersistedLayout } from './icon-grid/model'
 import { getId } from './icon-grid/model'
 import {
   DRAG_HOLE_ID,
@@ -75,6 +75,10 @@ export function IconGrid({ icons }: IconGridProps) {
   const tileAnimationTimerRef = useRef<Map<string, number>>(new Map())
   const folderTileAnimationTimerRef = useRef<Map<string, number>>(new Map())
   const hydratedRef = useRef(false)
+  const persistedLayoutRef = useRef<PersistedLayout | null>(null)
+  const persistedLayoutLoadedRef = useRef(false)
+  const persistedLayoutLoadPromiseRef = useRef<Promise<PersistedLayout | null> | null>(null)
+  const layoutWriteQueueRef = useRef<Promise<void>>(Promise.resolve())
   const itemsRef = useRef<GridItem[]>([])
   const outerSlotsRef = useRef<Array<string | null>>([])
   const currentPageRef = useRef(0)
@@ -99,24 +103,57 @@ export function IconGrid({ icons }: IconGridProps) {
   const [folderColumns, setFolderColumns] = useState<number>(1)
 
   useEffect(() => {
-    if (!hydratedRef.current && icons.length === 0) return
-    const persisted = hydratedRef.current
-      ? { items: serializeItems(itemsRef.current), slots: outerSlotsRef.current }
-      : readLayout()
-    const nextItems = hydrateItems(icons, persisted?.items ?? null)
-    const nextItemIds = nextItems.map(getId)
-    const nextSlots = normalizeOuterSlots(persisted?.slots, nextItemIds, pageSizeRef.current)
-    itemsRef.current = nextItems
-    outerSlotsRef.current = nextSlots
-    setItems(nextItems)
-    setOuterSlots(nextSlots)
-    hydratedRef.current = true
+    let cancelled = false
+
+    const hydrate = async () => {
+      if (!hydratedRef.current && icons.length === 0) return
+
+      let persisted: PersistedLayout | null = null
+      if (hydratedRef.current) {
+        persisted = {
+          items: serializeItems(itemsRef.current),
+          slots: outerSlotsRef.current,
+        }
+      } else {
+        if (!persistedLayoutLoadedRef.current) {
+          if (!persistedLayoutLoadPromiseRef.current) {
+            persistedLayoutLoadPromiseRef.current = readLayout()
+          }
+          persistedLayoutRef.current = await persistedLayoutLoadPromiseRef.current
+          persistedLayoutLoadedRef.current = true
+        }
+        if (cancelled) return
+        persisted = persistedLayoutRef.current
+      }
+
+      const nextItems = hydrateItems(icons, persisted?.items ?? null)
+      const nextItemIds = nextItems.map(getId)
+      const nextSlots = normalizeOuterSlots(persisted?.slots, nextItemIds, pageSizeRef.current)
+      itemsRef.current = nextItems
+      outerSlotsRef.current = nextSlots
+      setItems(nextItems)
+      setOuterSlots(nextSlots)
+      hydratedRef.current = true
+    }
+
+    void hydrate()
+    return () => {
+      cancelled = true
+    }
   }, [icons])
 
   useEffect(() => {
     itemsRef.current = items
     outerSlotsRef.current = outerSlots
-    if (hydratedRef.current) writeLayout(items, outerSlots)
+    if (!hydratedRef.current) return
+
+    const nextItems = items
+    const nextSlots = outerSlots
+    layoutWriteQueueRef.current = layoutWriteQueueRef.current
+      .then(() => writeLayout(nextItems, nextSlots))
+      .catch((e) => {
+        console.error('Failed to persist launchpad layout:', e)
+      })
   }, [items, outerSlots])
 
   useEffect(() => {

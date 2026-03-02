@@ -1,11 +1,12 @@
 mod commands;
 mod icons;
+mod layout_db;
 
 use commands::{
     delete_desktop_icons, get_default_customapp_dir, get_desktop_icons, get_icon_manager_items,
-    hide_desktop_icons, launch_app, set_window_mode, sync_full_customapp_icons,
-    sync_full_desktop_icons, sync_new_customapp_icons, sync_new_desktop_icons, toggle_window,
-    unhide_desktop_icons,
+    get_layout_payload, hide_desktop_icons, launch_app, set_layout_payload, set_window_mode,
+    sync_full_customapp_icons, sync_full_desktop_icons, sync_new_customapp_icons,
+    sync_new_desktop_icons, toggle_window, unhide_desktop_icons,
 };
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
@@ -72,7 +73,9 @@ pub fn run() {
             hide_desktop_icons,
             unhide_desktop_icons,
             delete_desktop_icons,
-            get_default_customapp_dir
+            get_default_customapp_dir,
+            get_layout_payload,
+            set_layout_payload
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
