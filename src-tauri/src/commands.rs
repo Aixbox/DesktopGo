@@ -1,3 +1,4 @@
+use crate::everything::{self, SearchPage, SearchQuery, SearchRuntimeStatus};
 use crate::icons::{self, DesktopIcon, IconManagerItem, IconMutationTarget, IconSyncResult};
 use crate::layout_db;
 use tauri::Manager;
@@ -120,4 +121,27 @@ pub fn set_layout_payload(
     payload: String,
 ) -> Result<(), String> {
     layout_db::set_layout_payload(&app_handle, &key, &payload)
+}
+
+#[tauri::command]
+pub fn start_search_runtime(app_handle: tauri::AppHandle) -> Result<SearchRuntimeStatus, String> {
+    everything::start_search_runtime(&app_handle)
+}
+
+#[tauri::command]
+pub fn get_search_runtime_status() -> Result<SearchRuntimeStatus, String> {
+    everything::get_search_runtime_status()
+}
+
+#[tauri::command]
+pub fn stop_portable_runtime() -> Result<(), String> {
+    everything::stop_portable_runtime()
+}
+
+#[tauri::command]
+pub fn search_files(
+    app_handle: tauri::AppHandle,
+    query: SearchQuery,
+) -> Result<SearchPage, String> {
+    everything::search_files(&app_handle, query)
 }

@@ -228,6 +228,19 @@ pub fn launch_app(path: String) -> Result<(), String> {
     }
 }
 
+pub fn get_path_icon_base64(path: &str, icon_size: i32) -> String {
+    #[cfg(windows)]
+    {
+        get_path_icon_base64_windows(path, icon_size)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        let _ = icon_size;
+        String::new()
+    }
+}
+
 pub fn get_default_customapp_dir(app_handle: tauri::AppHandle) -> Result<String, String> {
     #[cfg(windows)]
     {
@@ -242,6 +255,30 @@ pub fn get_default_customapp_dir(app_handle: tauri::AppHandle) -> Result<String,
 }
 
 // ===== Windows implementations =====
+
+#[cfg(windows)]
+fn get_path_icon_base64_windows(path: &str, icon_size: i32) -> String {
+    let item_path = PathBuf::from(path);
+    if !item_path.exists() {
+        return String::new();
+    }
+
+    let item_path_text = item_path.to_string_lossy().to_string();
+    let (target_path, item_type) = if has_extension(&item_path, "lnk") {
+        (
+            resolve_lnk(&item_path).unwrap_or_default(),
+            "shortcut",
+        )
+    } else if item_path.is_dir() {
+        (item_path_text.clone(), "folder")
+    } else if has_extension(&item_path, "exe") {
+        (item_path_text.clone(), "executable")
+    } else {
+        (item_path_text, "file")
+    };
+
+    extract_icon_for_item(&item_path, &target_path, item_type, icon_size)
+}
 
 #[cfg(windows)]
 fn snapshot_base_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {

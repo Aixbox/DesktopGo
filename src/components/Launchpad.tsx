@@ -1,8 +1,15 @@
-import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { applyTheme, getSavedTheme } from "@/lib/theme";
+import { useSearch } from "@/lib/search/useSearch";
+import { SearchPanel } from "@/components/search/SearchPanel";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -20,21 +27,21 @@ import type { IconSize, TitleLineCount, WindowMode } from "@/types";
 import { IconGrid } from "./IconGrid";
 
 const ICON_SIZE_OPTIONS: { label: string; value: IconSize }[] = [
-  { label: "大图标", value: "large" },
-  { label: "中等图标", value: "medium" },
-  { label: "小图标", value: "small" },
+  { label: "Large", value: "large" },
+  { label: "Medium", value: "medium" },
+  { label: "Small", value: "small" },
 ];
 
 const WINDOW_MODE_OPTIONS: { label: string; value: WindowMode }[] = [
-  { label: "全屏", value: "fullscreen" },
-  { label: "大窗口", value: "large" },
-  { label: "中窗口", value: "medium" },
-  { label: "小窗口", value: "small" },
+  { label: "Fullscreen", value: "fullscreen" },
+  { label: "Large Window", value: "large" },
+  { label: "Medium Window", value: "medium" },
+  { label: "Small Window", value: "small" },
 ];
 
 const TITLE_LINE_OPTIONS: { label: string; value: TitleLineCount }[] = [
-  { label: "一行标题", value: "one" },
-  { label: "两行标题", value: "two" },
+  { label: "One Line", value: "one" },
+  { label: "Two Lines", value: "two" },
 ];
 
 const LONG_PRESS_MS = 420;
@@ -58,8 +65,24 @@ export function Launchpad() {
     hideSelectedIcons,
     deleteSelectedIcons,
   } = useIconStore();
+
+  const {
+    keyword,
+    setKeyword,
+    items: searchItems,
+    loading: searchLoading,
+    error: searchError,
+    provider: searchProvider,
+    tookMs: searchTookMs,
+    selectedIndex,
+    setSelectedIndex,
+    moveSelection,
+    clear: clearSearch,
+  } = useSearch();
+
   const longPressTimerRef = useRef<number | null>(null);
   const longPressTriggeredRef = useRef(false);
+  const hasSearchKeyword = keyword.trim().length > 0;
 
   useEffect(() => {
     void (async () => {
@@ -118,7 +141,7 @@ export function Launchpad() {
     !target.closest("[data-selection-toolbar]");
 
   const handleBackgroundPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (selectionMode || e.button !== 0) return;
+    if (selectionMode || e.button !== 0 || hasSearchKeyword) return;
     const target = e.target as HTMLElement;
     if (!isBackgroundInteraction(target)) return;
 
@@ -142,6 +165,40 @@ export function Launchpad() {
     clearBackgroundLongPressTimer();
   };
 
+  const launchSearchItem = async (path: string) => {
+    try {
+      await invoke("launch_app", { path });
+      await invoke("toggle_window");
+      clearSearch();
+    } catch (e) {
+      console.error("Failed to launch selected search item:", e);
+    }
+  };
+
+  const handleSearchInputKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      moveSelection(1);
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      moveSelection(-1);
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (selectedIndex >= 0 && selectedIndex < searchItems.length) {
+        void launchSearchItem(searchItems[selectedIndex].path);
+      }
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      clearSearch();
+    }
+  };
+
   const handleBackgroundClick = (e: React.MouseEvent) => {
     if (longPressTriggeredRef.current) {
       longPressTriggeredRef.current = false;
@@ -157,7 +214,7 @@ export function Launchpad() {
       return;
     }
 
-    if (windowMode === "fullscreen") {
+    if (windowMode === "fullscreen" && !hasSearchKeyword) {
       if (isBackgroundInteraction(target)) {
         void invoke("toggle_window");
       }
@@ -171,7 +228,9 @@ export function Launchpad() {
 
   const handleDeleteSelected = () => {
     if (selectedIconKeys.length === 0) return;
-    const confirmed = window.confirm(`确定删除已选中的 ${selectedIconKeys.length} 个图标吗？`);
+    const confirmed = window.confirm(
+      `Delete ${selectedIconKeys.length} selected icon(s)? This cannot be undone.`,
+    );
     if (!confirmed) return;
     void deleteSelectedIcons();
   };
@@ -188,7 +247,7 @@ export function Launchpad() {
 
     const settingsWindow = new WebviewWindow("settings", {
       url: "index.html?page=settings",
-      title: "设置",
+      title: "Settings",
       width: 800,
       height: 600,
       center: true,
@@ -216,44 +275,60 @@ export function Launchpad() {
         >
           <div
             data-search-placeholder
-            className="absolute left-1/2 top-6 z-10 w-full max-w-xl -translate-x-1/2 px-6"
+            className="absolute left-1/2 top-6 z-20 w-full max-w-xl -translate-x-1/2 px-6"
           >
             <input
               data-search-placeholder
               type="text"
-              placeholder="搜索（功能开发中）"
-              readOnly
-              aria-label="搜索框占位"
-              className="h-11 w-full rounded-full border border-white/20 bg-black/25 px-4 text-sm text-white/80 shadow-lg backdrop-blur-md placeholder:text-white/50"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              onKeyDown={handleSearchInputKeyDown}
+              placeholder="Search files, folders and applications..."
+              aria-label="Search files"
+              className="h-11 w-full rounded-full border border-white/20 bg-black/25 px-4 text-sm text-white/90 shadow-lg backdrop-blur-md placeholder:text-white/50"
             />
           </div>
+
+          <SearchPanel
+            visible={hasSearchKeyword}
+            loading={searchLoading}
+            error={searchError}
+            provider={searchProvider}
+            tookMs={searchTookMs}
+            items={searchItems}
+            selectedIndex={selectedIndex}
+            onSelect={setSelectedIndex}
+            onActivate={(item) => {
+              void launchSearchItem(item.path);
+            }}
+          />
 
           {selectionMode ? (
             <div
               data-selection-toolbar
               className="absolute left-1/2 top-20 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-black/55 px-3 py-2 text-sm text-white/90 backdrop-blur-md"
             >
-              <span className="px-2">已选 {selectedIconKeys.length}</span>
+              <span className="px-2">Selected: {selectedIconKeys.length}</span>
               <button
                 type="button"
                 onClick={handleHideSelected}
                 className="rounded-full border border-white/25 px-3 py-1 text-xs hover:bg-white/15"
               >
-                隐藏
+                Hide
               </button>
               <button
                 type="button"
                 onClick={handleDeleteSelected}
                 className="rounded-full border border-red-300/40 px-3 py-1 text-xs text-red-200 hover:bg-red-500/25"
               >
-                删除
+                Delete
               </button>
               <button
                 type="button"
                 onClick={clearSelection}
                 className="rounded-full border border-white/25 px-3 py-1 text-xs hover:bg-white/15"
               >
-                取消
+                Cancel
               </button>
             </div>
           ) : null}
@@ -271,10 +346,10 @@ export function Launchpad() {
         </div>
       </ContextMenuTrigger>
 
-      <ContextMenuContent className="w-40">
+      <ContextMenuContent className="w-44">
         <ContextMenuSub>
-          <ContextMenuSubTrigger>图标大小</ContextMenuSubTrigger>
-          <ContextMenuSubContent className="w-40">
+          <ContextMenuSubTrigger>Icon Size</ContextMenuSubTrigger>
+          <ContextMenuSubContent className="w-44">
             <ContextMenuRadioGroup
               value={iconSize}
               onValueChange={(value) => setIconSize(value as IconSize)}
@@ -289,8 +364,8 @@ export function Launchpad() {
         </ContextMenuSub>
 
         <ContextMenuSub>
-          <ContextMenuSubTrigger>窗口大小</ContextMenuSubTrigger>
-          <ContextMenuSubContent className="w-40">
+          <ContextMenuSubTrigger>Window Size</ContextMenuSubTrigger>
+          <ContextMenuSubContent className="w-44">
             <ContextMenuRadioGroup
               value={windowMode}
               onValueChange={(value) => setWindowMode(value as WindowMode)}
@@ -305,8 +380,8 @@ export function Launchpad() {
         </ContextMenuSub>
 
         <ContextMenuSub>
-          <ContextMenuSubTrigger>标题行数</ContextMenuSubTrigger>
-          <ContextMenuSubContent className="w-40">
+          <ContextMenuSubTrigger>Title Lines</ContextMenuSubTrigger>
+          <ContextMenuSubContent className="w-44">
             <ContextMenuRadioGroup
               value={titleLineCount}
               onValueChange={(value) => setTitleLineCount(value as TitleLineCount)}
@@ -321,9 +396,9 @@ export function Launchpad() {
         </ContextMenuSub>
 
         <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => enterSelectionMode()}>编辑图标</ContextMenuItem>
+        <ContextMenuItem onSelect={() => enterSelectionMode()}>Edit Icons</ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem onSelect={openSettings}>设置</ContextMenuItem>
+        <ContextMenuItem onSelect={openSettings}>Settings</ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );
