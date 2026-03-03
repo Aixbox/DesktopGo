@@ -1,5 +1,4 @@
 mod errors;
-mod installed;
 mod ipc;
 mod models;
 mod portable;

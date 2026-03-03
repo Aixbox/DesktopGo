@@ -42,7 +42,6 @@ pub struct SearchQuery {
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchProvider {
-    Installed,
     Portable,
 }
 
@@ -50,7 +49,6 @@ pub enum SearchProvider {
 #[serde(rename_all = "snake_case")]
 pub enum SearchRuntimeState {
     Unknown,
-    InstalledReady,
     PortableReady,
     Unavailable,
 }

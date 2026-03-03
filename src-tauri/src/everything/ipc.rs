@@ -1,7 +1,5 @@
 use std::path::Path;
 
-use crate::icons;
-
 use super::errors::map_ipc_error;
 use super::models::{SearchHit, SearchQuery, SearchSort};
 
@@ -12,6 +10,7 @@ mod windows_impl {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use std::path::PathBuf;
+    use std::time::{Duration, Instant};
 
     const EVERYTHING_SORT_NAME_ASCENDING: u32 = 1;
     const EVERYTHING_SORT_NAME_DESCENDING: u32 = 2;
@@ -24,8 +23,11 @@ mod windows_impl {
     type SetBoolFlag = unsafe extern "system" fn(i32);
     type SetU32 = unsafe extern "system" fn(u32);
     type QueryW = unsafe extern "system" fn(i32) -> i32;
+    type IsQueryReply = unsafe extern "system" fn() -> i32;
     type GetNumResults = unsafe extern "system" fn() -> u32;
     type GetResultFullPathNameW = unsafe extern "system" fn(u32, *mut u16, u32) -> u32;
+    type IsFolderResult = unsafe extern "system" fn(u32) -> i32;
+    type IsFileResult = unsafe extern "system" fn(u32) -> i32;
     type GetLastError = unsafe extern "system" fn() -> u32;
     type Reset = unsafe extern "system" fn();
     type CleanUp = unsafe extern "system" fn();
@@ -42,8 +44,11 @@ mod windows_impl {
         set_offset: SetU32,
         set_max: SetU32,
         query_w: QueryW,
+        is_query_reply: Option<IsQueryReply>,
         get_num_results: GetNumResults,
         get_result_full_path_name_w: GetResultFullPathNameW,
+        is_folder_result: Option<IsFolderResult>,
+        is_file_result: Option<IsFileResult>,
         get_last_error: GetLastError,
         reset: Reset,
         clean_up: CleanUp,
@@ -66,11 +71,14 @@ mod windows_impl {
                     set_offset: load_symbol(&lib, b"Everything_SetOffset\0")?,
                     set_max: load_symbol(&lib, b"Everything_SetMax\0")?,
                     query_w: load_symbol(&lib, b"Everything_QueryW\0")?,
+                    is_query_reply: load_symbol_optional(&lib, b"Everything_IsQueryReply\0"),
                     get_num_results: load_symbol(&lib, b"Everything_GetNumResults\0")?,
                     get_result_full_path_name_w: load_symbol(
                         &lib,
                         b"Everything_GetResultFullPathNameW\0",
                     )?,
+                    is_folder_result: load_symbol_optional(&lib, b"Everything_IsFolderResult\0"),
+                    is_file_result: load_symbol_optional(&lib, b"Everything_IsFileResult\0"),
                     get_last_error: load_symbol(&lib, b"Everything_GetLastError\0")?,
                     reset: load_symbol(&lib, b"Everything_Reset\0")?,
                     clean_up: load_symbol(&lib, b"Everything_CleanUp\0")?,
@@ -91,6 +99,11 @@ mod windows_impl {
         Ok(*symbol)
     }
 
+    unsafe fn load_symbol_optional<T: Copy>(lib: &Library, name: &[u8]) -> Option<T> {
+        let symbol: Result<Symbol<T>, _> = lib.get(name);
+        symbol.ok().map(|v| *v)
+    }
+
     fn to_wide_null_terminated(input: &str) -> Vec<u16> {
         OsStr::new(input)
             .encode_wide()
@@ -105,6 +118,40 @@ mod windows_impl {
             SearchSort::PathAsc => EVERYTHING_SORT_PATH_ASCENDING,
             SearchSort::DateModifiedDesc => EVERYTHING_SORT_DATE_MODIFIED_DESCENDING,
         }
+    }
+
+    fn execute_query(api: &EverythingApi, timeout: Duration) -> Result<(), String> {
+        if let Some(is_query_reply) = api.is_query_reply {
+            let ok = unsafe { (api.query_w)(0) };
+            if ok == 0 {
+                let err = unsafe { (api.get_last_error)() };
+                return Err(format!(
+                    "Everything query failed (code={}): {}",
+                    err,
+                    map_ipc_error(err)
+                ));
+            }
+
+            let started_at = Instant::now();
+            while started_at.elapsed() < timeout {
+                if unsafe { is_query_reply() } != 0 {
+                    return Ok(());
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            return Err("Everything query timed out while waiting for reply".to_string());
+        }
+
+        let ok = unsafe { (api.query_w)(1) };
+        if ok == 0 {
+            let err = unsafe { (api.get_last_error)() };
+            return Err(format!(
+                "Everything query failed (code={}): {}",
+                err,
+                map_ipc_error(err)
+            ));
+        }
+        Ok(())
     }
 
     fn extract_path(api: &EverythingApi, index: u32) -> Option<String> {
@@ -132,15 +179,9 @@ mod windows_impl {
             (api.set_search_w)(to_wide_null_terminated("").as_ptr());
             (api.set_offset)(0);
             (api.set_max)(1);
-            let ok = (api.query_w)(1);
-            if ok == 0 {
-                let err = (api.get_last_error)();
+            if let Err(error) = execute_query(&api, Duration::from_secs(3)) {
                 (api.clean_up)();
-                return Err(format!(
-                    "Everything probe failed (code={}): {}",
-                    err,
-                    map_ipc_error(err)
-                ));
+                return Err(format!("Everything probe failed: {}", error));
             }
             (api.clean_up)();
         }
@@ -161,15 +202,9 @@ mod windows_impl {
             (api.set_offset)(query.offset);
             (api.set_max)(query.limit.max(1));
 
-            let ok = (api.query_w)(1);
-            if ok == 0 {
-                let err = (api.get_last_error)();
+            if let Err(error) = execute_query(&api, Duration::from_secs(5)) {
                 (api.clean_up)();
-                return Err(format!(
-                    "Everything query failed (code={}): {}",
-                    err,
-                    map_ipc_error(err)
-                ));
+                return Err(error);
             }
 
             let result_count = (api.get_num_results)();
@@ -179,7 +214,14 @@ mod windows_impl {
                     continue;
                 };
                 let path_buf = PathBuf::from(&path);
-                let is_folder = path_buf.is_dir();
+                let is_folder = api
+                    .is_folder_result
+                    .map(|f| f(index) != 0)
+                    .unwrap_or(false);
+                let is_file = api
+                    .is_file_result
+                    .map(|f| f(index) != 0)
+                    .unwrap_or(!is_folder);
                 let name = path_buf
                     .file_name()
                     .and_then(|v| v.to_str())
@@ -189,14 +231,13 @@ mod windows_impl {
                     .parent()
                     .map(|v| v.to_string_lossy().to_string())
                     .unwrap_or_default();
-                let icon_base64 = icons::get_path_icon_base64(&path, 32);
                 items.push(SearchHit {
                     path,
                     name,
                     parent,
-                    is_file: !is_folder,
+                    is_file,
                     is_folder,
-                    icon_base64,
+                    icon_base64: String::new(),
                 });
             }
             (api.clean_up)();

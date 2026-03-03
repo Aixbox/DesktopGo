@@ -242,12 +242,6 @@ export function SearchSettingsPanel() {
       <section className="space-y-3">
         <h3 className="text-sm font-medium text-muted-foreground">Runtime</h3>
         <ToggleRow
-          label="Prefer Installed Everything"
-          desc="Try the installed runtime before bundled portable runtime."
-          checked={settings.preferInstalled}
-          onChange={(next) => void updateSetting("preferInstalled", next)}
-        />
-        <ToggleRow
           label="Auto Start Runtime"
           desc="Start Everything runtime when Launchpad is opened."
           checked={settings.autoStartRuntime}

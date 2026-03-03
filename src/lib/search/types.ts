@@ -11,7 +11,7 @@ export interface SearchQuery {
   sort?: SearchSort;
 }
 
-export type SearchProvider = "installed" | "portable";
+export type SearchProvider = "portable";
 
 export interface SearchHit {
   path: string;
@@ -33,7 +33,6 @@ export interface SearchPage {
 
 export type SearchRuntimeState =
   | "unknown"
-  | "installed_ready"
   | "portable_ready"
   | "unavailable";
 

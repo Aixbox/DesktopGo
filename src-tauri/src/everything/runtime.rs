@@ -9,7 +9,6 @@ use serde::Serialize;
 use crate::layout_db;
 
 use super::errors::{build_error, SearchErrorCode};
-use super::installed;
 use super::ipc;
 use super::models::{
     SearchPage, SearchProvider, SearchQuery, SearchRuntimeState, SearchRuntimeStatus,
@@ -20,7 +19,6 @@ const DEFAULT_SEARCH_LIMIT: u32 = 50;
 const MAX_SEARCH_LIMIT: u32 = 200;
 const MAX_KEYWORD_LEN: usize = 256;
 
-const KEY_SEARCH_PREFER_INSTALLED: &str = "search.preferInstalled";
 const KEY_SEARCH_AUTO_START_RUNTIME: &str = "search.autoStartRuntime";
 const KEY_SEARCH_LAST_PROVIDER: &str = "search.lastProvider";
 const KEY_SEARCH_PORTABLE_PIPE_NAME: &str = "search.portableServicePipeName";
@@ -93,10 +91,6 @@ where
     }
 }
 
-fn read_bool_setting(app_handle: &tauri::AppHandle, key: &str, default: bool) -> bool {
-    get_json_setting::<bool>(app_handle, key).unwrap_or(default)
-}
-
 fn read_string_setting(app_handle: &tauri::AppHandle, key: &str, default: &str) -> String {
     let value = get_json_setting::<String>(app_handle, key).unwrap_or_else(|| default.to_string());
     if value.trim().is_empty() {
@@ -107,14 +101,6 @@ fn read_string_setting(app_handle: &tauri::AppHandle, key: &str, default: &str) 
 }
 
 fn ensure_runtime_defaults(app_handle: &tauri::AppHandle) {
-    if layout_db::get_layout_payload(app_handle, KEY_SEARCH_PREFER_INSTALLED)
-        .ok()
-        .flatten()
-        .is_none()
-    {
-        set_json_setting(app_handle, KEY_SEARCH_PREFER_INSTALLED, &true);
-    }
-
     if layout_db::get_layout_payload(app_handle, KEY_SEARCH_AUTO_START_RUNTIME)
         .ok()
         .flatten()
@@ -136,71 +122,48 @@ fn ensure_runtime_defaults(app_handle: &tauri::AppHandle) {
     }
 }
 
-fn persist_last_provider(app_handle: &tauri::AppHandle, provider: SearchProvider) {
-    let value = match provider {
-        SearchProvider::Installed => "installed",
-        SearchProvider::Portable => "portable",
-    };
-    set_json_setting(app_handle, KEY_SEARCH_LAST_PROVIDER, &value.to_string());
+fn persist_last_provider(app_handle: &tauri::AppHandle) {
+    set_json_setting(
+        app_handle,
+        KEY_SEARCH_LAST_PROVIDER,
+        &"portable".to_string(),
+    );
 }
 
-fn set_runtime_ready(
-    app_handle: &tauri::AppHandle,
-    provider: SearchProvider,
-) -> Result<SearchRuntimeStatus, String> {
-    let next_state = if provider == SearchProvider::Portable {
-        SearchRuntimeState::PortableReady
-    } else {
-        SearchRuntimeState::InstalledReady
-    };
-
+fn set_runtime_ready(app_handle: &tauri::AppHandle) -> Result<SearchRuntimeStatus, String> {
     let mut guard = RUNTIME_STATE
         .lock()
         .map_err(|_| "Failed to lock search runtime state".to_string())?;
-    guard.set_status(next_state, Some(provider), None);
+    guard.set_status(
+        SearchRuntimeState::PortableReady,
+        Some(SearchProvider::Portable),
+        None,
+    );
     let snapshot = guard.snapshot();
     drop(guard);
 
-    persist_last_provider(app_handle, provider);
+    persist_last_provider(app_handle);
     Ok(snapshot)
 }
 
-fn attempt_installed_start(
-    app_handle: &tauri::AppHandle,
-    dll_path: &PathBuf,
-    installed_probe: &installed::InstalledProbeResult,
-) -> Result<Option<SearchRuntimeStatus>, String> {
-    if installed_probe.executable_paths.is_empty() {
-        return Ok(None);
+fn cleanup_existing_portable_child() -> Result<(), String> {
+    let mut guard = RUNTIME_STATE
+        .lock()
+        .map_err(|_| "Failed to lock search runtime state".to_string())?;
+    if let Some(mut child) = guard.portable_child.take() {
+        let _ = child.kill();
+        let _ = child.wait();
     }
-
-    let started = installed::try_start_installed_everything(&installed_probe.executable_paths)?;
-    if !started && !installed_probe.service_running {
-        return Ok(None);
-    }
-
-    if wait_for_ipc_ready(dll_path, Duration::from_secs(5)) {
-        return set_runtime_ready(app_handle, SearchProvider::Installed).map(Some);
-    }
-
-    Err(build_error(
-        SearchErrorCode::EverythingStartTimeout,
-        "Installed Everything start timed out",
-    ))
+    Ok(())
 }
 
 fn attempt_portable_start(
     app_handle: &tauri::AppHandle,
     dll_path: &PathBuf,
-    portable_assets: Option<&portable::PortableAssets>,
+    assets: &portable::PortableAssets,
     portable_pipe_name: &str,
-) -> Result<Option<SearchRuntimeStatus>, String> {
-    let Some(assets) = portable_assets else {
-        return Ok(None);
-    };
-
-    let mut portable_child =
-        portable::start_portable_service(&assets.exe_path, portable_pipe_name)?;
+) -> Result<SearchRuntimeStatus, String> {
+    let mut portable_child = portable::start_portable_service(&assets.exe_path, portable_pipe_name)?;
     if wait_for_ipc_ready(dll_path, Duration::from_secs(5)) {
         {
             let mut guard = RUNTIME_STATE
@@ -208,7 +171,7 @@ fn attempt_portable_start(
                 .map_err(|_| "Failed to lock search runtime state".to_string())?;
             guard.portable_child = Some(portable_child);
         }
-        return set_runtime_ready(app_handle, SearchProvider::Portable).map(Some);
+        return set_runtime_ready(app_handle);
     }
 
     let _ = portable_child.kill();
@@ -216,6 +179,14 @@ fn attempt_portable_start(
         SearchErrorCode::EverythingStartTimeout,
         "Portable Everything start timed out",
     ))
+}
+
+fn set_unavailable_state(message: String) -> Result<(), String> {
+    let mut guard = RUNTIME_STATE
+        .lock()
+        .map_err(|_| "Failed to lock search runtime state".to_string())?;
+    guard.set_status(SearchRuntimeState::Unavailable, None, Some(message));
+    Ok(())
 }
 
 pub fn get_search_runtime_status() -> Result<SearchRuntimeStatus, String> {
@@ -234,23 +205,18 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
             .map_err(|_| "Failed to lock search runtime state".to_string())?;
         if let Some(dll_path) = guard.dll_path.as_ref() {
             if with_ipc_lock(|| ipc::probe_connection(dll_path)).is_ok() {
-                return Ok(guard.snapshot());
+                return set_runtime_ready(app_handle);
             }
         }
     }
 
-    let installed_probe = installed::probe_installed_everything()?;
-    let portable_assets = portable::ensure_portable_assets(app_handle).ok();
-    let dll_path = portable_assets
-        .as_ref()
-        .map(|assets| assets.dll_path.clone())
-        .or_else(|| installed::resolve_dll_path(&installed_probe.executable_paths))
-        .ok_or_else(|| {
-            build_error(
-                SearchErrorCode::EverythingNotFound,
-                "Everything SDK DLL is unavailable",
-            )
-        })?;
+    let portable_assets = portable::ensure_portable_assets(app_handle).map_err(|e| {
+        build_error(
+            SearchErrorCode::EverythingNotFound,
+            format!("Portable Everything assets are unavailable: {}", e),
+        )
+    })?;
+    let dll_path = portable_assets.dll_path.clone();
 
     {
         let mut guard = RUNTIME_STATE
@@ -260,95 +226,30 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
     }
 
     if with_ipc_lock(|| ipc::probe_connection(&dll_path)).is_ok() {
-        let provider = {
-            let guard = RUNTIME_STATE
-                .lock()
-                .map_err(|_| "Failed to lock search runtime state".to_string())?;
-            if guard.portable_child.is_some() {
-                SearchProvider::Portable
-            } else {
-                SearchProvider::Installed
-            }
-        };
-        return set_runtime_ready(app_handle, provider);
+        return set_runtime_ready(app_handle);
     }
 
-    let prefer_installed = read_bool_setting(app_handle, KEY_SEARCH_PREFER_INSTALLED, true);
+    cleanup_existing_portable_child()?;
     let portable_pipe_name = read_string_setting(
         app_handle,
         KEY_SEARCH_PORTABLE_PIPE_NAME,
         DEFAULT_PORTABLE_SERVICE_PIPE_NAME,
     );
 
-    let mut last_error = String::new();
-    let installed_only_lite =
-        installed_probe.lite_detected && !installed::contains_full_install(&installed_probe.executable_paths);
-    let mut ready: Option<SearchRuntimeStatus> = None;
-
-    if prefer_installed {
-        match attempt_installed_start(app_handle, &dll_path, &installed_probe) {
-            Ok(status) => ready = status,
-            Err(e) => last_error = e,
-        }
-        if ready.is_none() {
-            match attempt_portable_start(
-                app_handle,
-                &dll_path,
-                portable_assets.as_ref(),
-                &portable_pipe_name,
-            ) {
-                Ok(status) => ready = status,
-                Err(e) => last_error = e,
-            }
-        }
-    } else {
-        match attempt_portable_start(
-            app_handle,
-            &dll_path,
-            portable_assets.as_ref(),
-            &portable_pipe_name,
-        ) {
-            Ok(status) => ready = status,
-            Err(e) => last_error = e,
-        }
-        if ready.is_none() {
-            match attempt_installed_start(app_handle, &dll_path, &installed_probe) {
-                Ok(status) => ready = status,
-                Err(e) => last_error = e,
-            }
-        }
-    }
-
-    if let Some(status) = ready {
+    let startup_result =
+        attempt_portable_start(app_handle, &dll_path, &portable_assets, &portable_pipe_name);
+    if let Ok(status) = startup_result {
         return Ok(status);
     }
 
-    let no_installed = installed_probe.executable_paths.is_empty() && !installed_probe.lite_detected;
-    let no_portable = portable_assets.is_none();
-    let final_error = if installed_only_lite && no_portable {
-        build_error(
-            SearchErrorCode::EverythingLiteUnsupported,
-            "Everything Lite does not support IPC. Please install full Everything.",
-        )
-    } else if no_installed && no_portable {
-        build_error(
-            SearchErrorCode::EverythingNotFound,
-            "No available Everything runtime found",
-        )
-    } else if last_error.is_empty() {
+    let error = startup_result.err().unwrap_or_else(|| {
         build_error(
             SearchErrorCode::EverythingIpcUnavailable,
-            "Everything runtime is unavailable",
+            "Portable runtime is unavailable",
         )
-    } else {
-        last_error
-    };
-
-    let mut guard = RUNTIME_STATE
-        .lock()
-        .map_err(|_| "Failed to lock search runtime state".to_string())?;
-    guard.set_status(SearchRuntimeState::Unavailable, None, Some(final_error.clone()));
-    Err(final_error)
+    });
+    let _ = set_unavailable_state(error.clone());
+    Err(error)
 }
 
 pub fn stop_portable_runtime() -> Result<(), String> {
@@ -380,7 +281,7 @@ pub fn search_files(
     }
 
     let status = start_search_runtime(app_handle)?;
-    let provider = status.provider.unwrap_or(SearchProvider::Installed);
+    let provider = status.provider.unwrap_or(SearchProvider::Portable);
 
     if query.keyword.is_empty() {
         return Ok(SearchPage {

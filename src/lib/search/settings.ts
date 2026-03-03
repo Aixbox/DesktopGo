@@ -18,7 +18,6 @@ export interface SearchSettings {
   includeHidden: boolean;
   sortBy: SearchSort;
   rememberLastFilter: boolean;
-  preferInstalled: boolean;
   autoStartRuntime: boolean;
   portableServicePipeName: string;
 }
@@ -40,7 +39,6 @@ export const DEFAULT_SEARCH_SETTINGS: SearchSettings = {
   includeHidden: false,
   sortBy: "name_asc",
   rememberLastFilter: true,
-  preferInstalled: true,
   autoStartRuntime: true,
   portableServicePipeName: DEFAULT_PIPE_NAME,
 };
@@ -60,7 +58,6 @@ const SEARCH_SETTING_KEYS: { [K in keyof SearchSettings]: string } = {
   includeHidden: "search.includeHidden",
   sortBy: "search.sortBy",
   rememberLastFilter: "search.rememberLastFilter",
-  preferInstalled: "search.preferInstalled",
   autoStartRuntime: "search.autoStartRuntime",
   portableServicePipeName: "search.portableServicePipeName",
 };
@@ -78,7 +75,6 @@ const BOOLEAN_KEYS: Array<keyof SearchSettings> = [
   "matchWholeWord",
   "includeHidden",
   "rememberLastFilter",
-  "preferInstalled",
   "autoStartRuntime",
 ];
 
@@ -211,9 +207,6 @@ export const saveLastFilter = async (filter: SearchDefaultFilter): Promise<void>
 };
 
 export const describeSearchRuntimeError = (message: string) => {
-  if (message.startsWith("EverythingLiteUnsupported")) {
-    return "Detected Everything Lite. Install full Everything to enable IPC search.";
-  }
   if (message.startsWith("EverythingNotFound")) {
     return "No available Everything runtime was found.";
   }
