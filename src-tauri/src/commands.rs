@@ -124,8 +124,10 @@ pub fn set_layout_payload(
 }
 
 #[tauri::command]
-pub fn start_search_runtime(app_handle: tauri::AppHandle) -> Result<SearchRuntimeStatus, String> {
-    everything::start_search_runtime(&app_handle)
+pub async fn start_search_runtime(app_handle: tauri::AppHandle) -> Result<SearchRuntimeStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || everything::start_search_runtime(&app_handle))
+        .await
+        .map_err(|e| format!("Failed to join start_search_runtime task: {}", e))?
 }
 
 #[tauri::command]
@@ -139,9 +141,11 @@ pub fn stop_portable_runtime() -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn search_files(
+pub async fn search_files(
     app_handle: tauri::AppHandle,
     query: SearchQuery,
 ) -> Result<SearchPage, String> {
-    everything::search_files(&app_handle, query)
+    tauri::async_runtime::spawn_blocking(move || everything::search_files(&app_handle, query))
+        .await
+        .map_err(|e| format!("Failed to join search_files task: {}", e))?
 }

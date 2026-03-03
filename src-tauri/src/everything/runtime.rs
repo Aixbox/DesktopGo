@@ -56,11 +56,19 @@ impl RuntimeState {
 }
 
 static RUNTIME_STATE: Lazy<Mutex<RuntimeState>> = Lazy::new(|| Mutex::new(RuntimeState::default()));
+static IPC_CALL_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+fn with_ipc_lock<T>(f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    let _guard = IPC_CALL_LOCK
+        .lock()
+        .map_err(|_| "Failed to lock Everything IPC state".to_string())?;
+    f()
+}
 
 fn wait_for_ipc_ready(dll_path: &PathBuf, timeout: Duration) -> bool {
     let started_at = Instant::now();
     while started_at.elapsed() < timeout {
-        if ipc::probe_connection(dll_path).is_ok() {
+        if with_ipc_lock(|| ipc::probe_connection(dll_path)).is_ok() {
             return true;
         }
         std::thread::sleep(Duration::from_millis(100));
@@ -225,7 +233,7 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
             .lock()
             .map_err(|_| "Failed to lock search runtime state".to_string())?;
         if let Some(dll_path) = guard.dll_path.as_ref() {
-            if ipc::probe_connection(dll_path).is_ok() {
+            if with_ipc_lock(|| ipc::probe_connection(dll_path)).is_ok() {
                 return Ok(guard.snapshot());
             }
         }
@@ -251,7 +259,7 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
         guard.dll_path = Some(dll_path.clone());
     }
 
-    if ipc::probe_connection(&dll_path).is_ok() {
+    if with_ipc_lock(|| ipc::probe_connection(&dll_path)).is_ok() {
         let provider = {
             let guard = RUNTIME_STATE
                 .lock()
@@ -396,7 +404,7 @@ pub fn search_files(
     };
 
     let started_at = Instant::now();
-    let items = ipc::search(&dll_path, &query).map_err(|e| {
+    let items = with_ipc_lock(|| ipc::search(&dll_path, &query)).map_err(|e| {
         build_error(
             SearchErrorCode::EverythingIpcUnavailable,
             format!("Everything query failed: {}", e),
