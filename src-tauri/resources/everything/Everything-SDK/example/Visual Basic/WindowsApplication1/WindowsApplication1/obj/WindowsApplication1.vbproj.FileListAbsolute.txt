@@ -1,0 +1,30 @@
+C:\Users\Administrator\Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\obj\Debug\ResolveAssemblyReference.cache
+C:\Users\Administrator\Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.Resources.resources
+C:\Users\Administrator\Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.vbproj.GenerateResource.Cache
+C:\Users\Administrator\Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\bin\Debug\WindowsApplication1.exe
+C:\Users\Administrator\Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\bin\Debug\WindowsApplication1.pdb
+C:\Users\Administrator\Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\bin\Debug\WindowsApplication1.xml
+C:\Users\Administrator\Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.exe
+C:\Users\Administrator\Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.xml
+C:\Users\Administrator\Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.pdb
+C:\Users\Administrator\Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.Form1.resources
+C:\Private\My Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.exe
+C:\Private\My Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.xml
+C:\Private\My Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.pdb
+C:\Private\My Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\obj\Debug\ResolveAssemblyReference.cache
+C:\Private\My Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.Form1.resources
+C:\Private\My Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.Resources.resources
+C:\Private\My Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.vbproj.GenerateResource.Cache
+C:\Private\My Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\bin\Debug\WindowsApplication1.exe
+C:\Private\My Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\bin\Debug\WindowsApplication1.pdb
+C:\Private\My Documents\Visual Studio 2005\Projects\WindowsApplication1\WindowsApplication1\bin\Debug\WindowsApplication1.xml
+C:\dev\everything\sdk\example\Visual Basic\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.exe
+C:\dev\everything\sdk\example\Visual Basic\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.xml
+C:\dev\everything\sdk\example\Visual Basic\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.pdb
+C:\dev\everything\sdk\example\Visual Basic\WindowsApplication1\WindowsApplication1\bin\Debug\WindowsApplication1.exe
+C:\dev\everything\sdk\example\Visual Basic\WindowsApplication1\WindowsApplication1\bin\Debug\WindowsApplication1.pdb
+C:\dev\everything\sdk\example\Visual Basic\WindowsApplication1\WindowsApplication1\bin\Debug\WindowsApplication1.xml
+C:\dev\everything\sdk\example\Visual Basic\WindowsApplication1\WindowsApplication1\obj\Debug\ResolveAssemblyReference.cache
+C:\dev\everything\sdk\example\Visual Basic\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.Form1.resources
+C:\dev\everything\sdk\example\Visual Basic\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.Resources.resources
+C:\dev\everything\sdk\example\Visual Basic\WindowsApplication1\WindowsApplication1\obj\Debug\WindowsApplication1.vbproj.GenerateResource.Cache

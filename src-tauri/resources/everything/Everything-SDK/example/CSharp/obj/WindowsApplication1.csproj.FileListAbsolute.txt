@@ -1,0 +1,10 @@
+D:\dev\everything\sdk\example\CSharp\bin\x86\Debug\WindowsApplication1.exe
+D:\dev\everything\sdk\example\CSharp\bin\x86\Debug\WindowsApplication1.pdb
+D:\dev\everything\sdk\example\CSharp\obj\x86\Debug\ResolveAssemblyReference.cache
+D:\dev\everything\sdk\example\CSharp\obj\x86\Debug\WindowsApplication1.Form1.resources
+D:\dev\everything\sdk\example\CSharp\obj\x86\Debug\WindowsApplication1.Properties.Resources.resources
+D:\dev\everything\sdk\example\CSharp\obj\x86\Debug\WindowsApplication1.csproj.GenerateResource.Cache
+D:\dev\everything\sdk\example\CSharp\obj\x86\Debug\WindowsApplication1.exe
+D:\dev\everything\sdk\example\CSharp\obj\x86\Debug\WindowsApplication1.pdb
+C:\dev\everything\sdk\example\CSharp\obj\x86\Debug\WindowsApplication1.exe
+C:\dev\everything\sdk\example\CSharp\obj\x86\Debug\WindowsApplication1.pdb
