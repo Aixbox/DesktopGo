@@ -243,21 +243,16 @@ export function SearchSettingsPanel() {
         <h3 className="text-sm font-medium text-muted-foreground">Runtime</h3>
         <ToggleRow
           label="Auto Start Runtime"
-          desc="Start Everything runtime when Launchpad is opened."
+          desc="Automatically detect and connect to the installed Everything runtime."
           checked={settings.autoStartRuntime}
           onChange={(next) => void updateSetting("autoStartRuntime", next)}
         />
         <div className="rounded-md border border-border bg-secondary/30 px-3 py-2">
-          <label className="block text-sm font-medium">Portable Service Pipe Name</label>
-          <p className="mb-2 text-xs text-muted-foreground">
-            Used for bundled portable service isolation.
+          <label className="block text-sm font-medium">Installed Everything Only</label>
+          <p className="text-xs text-muted-foreground">
+            DesktopGo search only works with the installed Everything application. If search is
+            unavailable, reinstall DesktopGo and select the Everything install option.
           </p>
-          <input
-            type="text"
-            value={settings.portableServicePipeName}
-            onChange={(e) => void updateSetting("portableServicePipeName", e.target.value)}
-            className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
-          />
         </div>
       </section>
 

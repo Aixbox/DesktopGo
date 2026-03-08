@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { searchFiles, startSearchRuntime } from "./api";
+import { searchFiles } from "./api";
 import {
   DEFAULT_SEARCH_SETTINGS,
   describeSearchRuntimeError,
@@ -91,7 +91,6 @@ export function useSearch(): UseSearchResult {
 
   const requestSeqRef = useRef(0);
   const activeQueryKeyRef = useRef("");
-  const runtimeStartedRef = useRef(false);
 
   const loadSettingsAndFilter = useCallback(async () => {
     const loaded = await loadSearchSettings();
@@ -111,16 +110,6 @@ export function useSearch(): UseSearchResult {
       setError(describeSearchRuntimeError(asErrorMessage(e)));
     });
   }, [loadSettingsAndFilter]);
-
-  useEffect(() => {
-    if (!settings.autoStartRuntime || runtimeStartedRef.current) {
-      return;
-    }
-    runtimeStartedRef.current = true;
-    void startSearchRuntime().catch(() => {
-      // Keep lazy retry on first query.
-    });
-  }, [settings.autoStartRuntime]);
 
   useEffect(() => {
     if (settings.liveOnType) {

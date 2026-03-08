@@ -136,11 +136,6 @@ pub fn get_search_runtime_status() -> Result<SearchRuntimeStatus, String> {
 }
 
 #[tauri::command]
-pub fn stop_portable_runtime() -> Result<(), String> {
-    everything::stop_portable_runtime()
-}
-
-#[tauri::command]
 pub async fn search_files(
     app_handle: tauri::AppHandle,
     query: SearchQuery,

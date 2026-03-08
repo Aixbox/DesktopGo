@@ -7,10 +7,20 @@ use super::models::{SearchHit, SearchQuery, SearchSort};
 mod windows_impl {
     use super::*;
     use libloading::{Library, Symbol};
+    use once_cell::sync::{Lazy, OnceCell};
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use std::path::PathBuf;
+    use std::sync::Mutex;
     use std::time::{Duration, Instant};
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::{GetLastError, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
+    use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        ChangeWindowMessageFilterEx, CreateWindowExW, DefWindowProcW, DestroyWindow,
+        DispatchMessageW, MSG, MSGFLT_ALLOW, PM_REMOVE, PeekMessageW, RegisterClassW,
+        TranslateMessage, WINDOW_EX_STYLE, WINDOW_STYLE, WNDCLASSW, WM_COPYDATA,
+    };
 
     const EVERYTHING_SORT_NAME_ASCENDING: u32 = 1;
     const EVERYTHING_SORT_NAME_DESCENDING: u32 = 2;
@@ -18,12 +28,16 @@ mod windows_impl {
     const EVERYTHING_SORT_DATE_MODIFIED_DESCENDING: u32 = 14;
     const EVERYTHING_REQUEST_FILE_NAME: u32 = 0x0000_0001;
     const EVERYTHING_REQUEST_PATH: u32 = 0x0000_0002;
+    const REPLY_WINDOW_CLASS: &str = "DesktopGoEverythingSdkReplyWindow";
+    const REPLY_ID: u32 = 0;
 
     type SetSearchW = unsafe extern "system" fn(*const u16);
     type SetBoolFlag = unsafe extern "system" fn(i32);
     type SetU32 = unsafe extern "system" fn(u32);
+    type SetReplyWindow = unsafe extern "system" fn(HWND);
+    type SetReplyId = unsafe extern "system" fn(u32);
     type QueryW = unsafe extern "system" fn(i32) -> i32;
-    type IsQueryReply = unsafe extern "system" fn() -> i32;
+    type IsQueryReply = unsafe extern "system" fn(u32, WPARAM, LPARAM, u32) -> i32;
     type GetNumResults = unsafe extern "system" fn() -> u32;
     type GetResultFullPathNameW = unsafe extern "system" fn(u32, *mut u16, u32) -> u32;
     type IsFolderResult = unsafe extern "system" fn(u32) -> i32;
@@ -43,8 +57,10 @@ mod windows_impl {
         set_sort: SetU32,
         set_offset: SetU32,
         set_max: SetU32,
+        set_reply_window: SetReplyWindow,
+        set_reply_id: SetReplyId,
         query_w: QueryW,
-        is_query_reply: Option<IsQueryReply>,
+        is_query_reply: IsQueryReply,
         get_num_results: GetNumResults,
         get_result_full_path_name_w: GetResultFullPathNameW,
         is_folder_result: Option<IsFolderResult>,
@@ -70,8 +86,10 @@ mod windows_impl {
                     set_sort: load_symbol(&lib, b"Everything_SetSort\0")?,
                     set_offset: load_symbol(&lib, b"Everything_SetOffset\0")?,
                     set_max: load_symbol(&lib, b"Everything_SetMax\0")?,
+                    set_reply_window: load_symbol(&lib, b"Everything_SetReplyWindow\0")?,
+                    set_reply_id: load_symbol(&lib, b"Everything_SetReplyID\0")?,
                     query_w: load_symbol(&lib, b"Everything_QueryW\0")?,
-                    is_query_reply: load_symbol_optional(&lib, b"Everything_IsQueryReply\0"),
+                    is_query_reply: load_symbol(&lib, b"Everything_IsQueryReply\0")?,
                     get_num_results: load_symbol(&lib, b"Everything_GetNumResults\0")?,
                     get_result_full_path_name_w: load_symbol(
                         &lib,
@@ -88,6 +106,17 @@ mod windows_impl {
         }
     }
 
+    struct ReplyState {
+        is_query_reply: IsQueryReply,
+        reply_id: u32,
+        completed: bool,
+    }
+
+    static REPLY_WINDOW_CLASS_WIDE: Lazy<Vec<u16>> =
+        Lazy::new(|| to_wide_null_terminated(REPLY_WINDOW_CLASS));
+    static WINDOW_CLASS_REGISTERED: OnceCell<()> = OnceCell::new();
+    static QUERY_REPLY_STATE: Lazy<Mutex<Option<ReplyState>>> = Lazy::new(|| Mutex::new(None));
+
     unsafe fn load_symbol<T: Copy>(lib: &Library, name: &[u8]) -> Result<T, String> {
         let symbol: Symbol<T> = lib.get(name).map_err(|e| {
             format!(
@@ -101,7 +130,7 @@ mod windows_impl {
 
     unsafe fn load_symbol_optional<T: Copy>(lib: &Library, name: &[u8]) -> Option<T> {
         let symbol: Result<Symbol<T>, _> = lib.get(name);
-        symbol.ok().map(|v| *v)
+        symbol.ok().map(|value| *value)
     }
 
     fn to_wide_null_terminated(input: &str) -> Vec<u16> {
@@ -120,38 +149,175 @@ mod windows_impl {
         }
     }
 
-    fn execute_query(api: &EverythingApi, timeout: Duration) -> Result<(), String> {
-        if let Some(is_query_reply) = api.is_query_reply {
-            let ok = unsafe { (api.query_w)(0) };
-            if ok == 0 {
-                let err = unsafe { (api.get_last_error)() };
-                return Err(format!(
-                    "Everything query failed (code={}): {}",
-                    err,
-                    map_ipc_error(err)
-                ));
-            }
+    fn build_query_error(api: &EverythingApi, context: &str) -> String {
+        let code = unsafe { (api.get_last_error)() };
+        format!(
+            "{} (code={}): {}",
+            context,
+            code,
+            map_ipc_error(code)
+        )
+    }
 
-            let started_at = Instant::now();
-            while started_at.elapsed() < timeout {
-                if unsafe { is_query_reply() } != 0 {
-                    return Ok(());
+    unsafe extern "system" fn reply_window_proc(
+        hwnd: HWND,
+        msg: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT {
+        if msg == WM_COPYDATA {
+            if let Ok(mut guard) = QUERY_REPLY_STATE.lock() {
+                if let Some(state) = guard.as_mut() {
+                    if unsafe { (state.is_query_reply)(msg, wparam, lparam, state.reply_id) } != 0 {
+                        state.completed = true;
+                        return LRESULT(1);
+                    }
                 }
-                std::thread::sleep(Duration::from_millis(10));
             }
-            return Err("Everything query timed out while waiting for reply".to_string());
         }
 
-        let ok = unsafe { (api.query_w)(1) };
-        if ok == 0 {
-            let err = unsafe { (api.get_last_error)() };
+        unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+    }
+
+    fn register_reply_window_class() -> Result<(), String> {
+        WINDOW_CLASS_REGISTERED
+            .get_or_try_init(|| {
+                let instance = unsafe { GetModuleHandleW(None) }
+                    .map_err(|e| format!("GetModuleHandleW failed: {}", e))?;
+                let class = WNDCLASSW {
+                    lpfnWndProc: Some(reply_window_proc),
+                    hInstance: HINSTANCE(instance.0),
+                    lpszClassName: PCWSTR(REPLY_WINDOW_CLASS_WIDE.as_ptr()),
+                    ..Default::default()
+                };
+
+                let atom = unsafe { RegisterClassW(&class) };
+                if atom == 0 {
+                    let error = unsafe { GetLastError() }.0;
+                    if error != 1410 {
+                        return Err(format!("RegisterClassW failed with code {}", error));
+                    }
+                }
+
+                Ok(())
+            })
+            .map(|_| ())
+    }
+
+    fn create_reply_window() -> Result<HWND, String> {
+        register_reply_window_class()?;
+        let instance = unsafe { GetModuleHandleW(None) }
+            .map_err(|e| format!("GetModuleHandleW failed: {}", e))?;
+        let hwnd = unsafe {
+            CreateWindowExW(
+                WINDOW_EX_STYLE::default(),
+                PCWSTR(REPLY_WINDOW_CLASS_WIDE.as_ptr()),
+                PCWSTR(REPLY_WINDOW_CLASS_WIDE.as_ptr()),
+                WINDOW_STYLE::default(),
+                0,
+                0,
+                0,
+                0,
+                None,
+                None,
+                Some(HINSTANCE(instance.0)),
+                None,
+            )
+        }
+        .map_err(|e| format!("CreateWindowExW failed: {}", e))?;
+
+        if hwnd.0.is_null() {
             return Err(format!(
-                "Everything query failed (code={}): {}",
-                err,
-                map_ipc_error(err)
+                "CreateWindowExW failed with code {}",
+                unsafe { GetLastError() }.0
             ));
         }
-        Ok(())
+
+        let _ = unsafe { ChangeWindowMessageFilterEx(hwnd, WM_COPYDATA, MSGFLT_ALLOW, None) };
+        Ok(hwnd)
+    }
+
+    fn clear_reply_state() {
+        if let Ok(mut guard) = QUERY_REPLY_STATE.lock() {
+            *guard = None;
+        }
+    }
+
+    fn is_reply_completed() -> bool {
+        QUERY_REPLY_STATE
+            .lock()
+            .ok()
+            .and_then(|guard| guard.as_ref().map(|state| state.completed))
+            .unwrap_or(false)
+    }
+
+    fn execute_query(api: &EverythingApi, timeout: Duration) -> Result<(), String> {
+        let reply_hwnd = create_reply_window()?;
+        {
+            let mut guard = QUERY_REPLY_STATE
+                .lock()
+                .map_err(|_| "Failed to lock Everything reply state".to_string())?;
+            *guard = Some(ReplyState {
+                is_query_reply: api.is_query_reply,
+                reply_id: REPLY_ID,
+                completed: false,
+            });
+        }
+
+        unsafe {
+            (api.set_reply_window)(reply_hwnd);
+            (api.set_reply_id)(REPLY_ID);
+        }
+
+        let ok = unsafe { (api.query_w)(0) };
+        if ok == 0 {
+            let error = build_query_error(api, "Everything query failed");
+            clear_reply_state();
+            unsafe {
+                let _ = DestroyWindow(reply_hwnd);
+            }
+            return Err(error);
+        }
+
+        let started_at = Instant::now();
+        loop {
+            if is_reply_completed() {
+                clear_reply_state();
+                unsafe {
+                    (api.set_reply_window)(HWND(std::ptr::null_mut()));
+                    let _ = DestroyWindow(reply_hwnd);
+                }
+                return Ok(());
+            }
+
+            let mut message = MSG::default();
+            while unsafe { PeekMessageW(&mut message, None, 0, 0, PM_REMOVE) }.into() {
+                unsafe {
+                    let _ = TranslateMessage(&message);
+                    DispatchMessageW(&message);
+                }
+            }
+
+            if is_reply_completed() {
+                clear_reply_state();
+                unsafe {
+                    (api.set_reply_window)(HWND(std::ptr::null_mut()));
+                    let _ = DestroyWindow(reply_hwnd);
+                }
+                return Ok(());
+            }
+
+            if started_at.elapsed() >= timeout {
+                clear_reply_state();
+                unsafe {
+                    (api.set_reply_window)(HWND(std::ptr::null_mut()));
+                    let _ = DestroyWindow(reply_hwnd);
+                }
+                return Err("Everything query timed out while waiting for reply".to_string());
+            }
+
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
 
     fn extract_path(api: &EverythingApi, index: u32) -> Option<String> {
@@ -179,13 +345,15 @@ mod windows_impl {
             (api.set_search_w)(to_wide_null_terminated("").as_ptr());
             (api.set_offset)(0);
             (api.set_max)(1);
-            if let Err(error) = execute_query(&api, Duration::from_secs(3)) {
-                (api.clean_up)();
-                return Err(format!("Everything probe failed: {}", error));
-            }
+        }
+
+        let result = execute_query(&api, Duration::from_secs(3))
+            .map_err(|error| format!("Everything probe failed: {}", error));
+
+        unsafe {
             (api.clean_up)();
         }
-        Ok(())
+        result
     }
 
     pub(super) fn search(dll_path: &Path, query: &SearchQuery) -> Result<Vec<SearchHit>, String> {
@@ -201,35 +369,29 @@ mod windows_impl {
             (api.set_sort)(sort_to_sdk_value(query.sort));
             (api.set_offset)(query.offset);
             (api.set_max)(query.limit.max(1));
+        }
 
-            if let Err(error) = execute_query(&api, Duration::from_secs(5)) {
-                (api.clean_up)();
-                return Err(error);
-            }
-
-            let result_count = (api.get_num_results)();
+        let result = execute_query(&api, Duration::from_secs(5)).and_then(|_| {
+            let result_count = unsafe { (api.get_num_results)() };
             let mut items = Vec::with_capacity(result_count as usize);
             for index in 0..result_count {
                 let Some(path) = extract_path(&api, index) else {
                     continue;
                 };
                 let path_buf = PathBuf::from(&path);
-                let is_folder = api
-                    .is_folder_result
-                    .map(|f| f(index) != 0)
-                    .unwrap_or(false);
+                let is_folder = api.is_folder_result.map(|func| unsafe { func(index) != 0 }).unwrap_or(false);
                 let is_file = api
                     .is_file_result
-                    .map(|f| f(index) != 0)
+                    .map(|func| unsafe { func(index) != 0 })
                     .unwrap_or(!is_folder);
                 let name = path_buf
                     .file_name()
-                    .and_then(|v| v.to_str())
+                    .and_then(|value| value.to_str())
                     .unwrap_or("")
                     .to_string();
                 let parent = path_buf
                     .parent()
-                    .map(|v| v.to_string_lossy().to_string())
+                    .map(|value| value.to_string_lossy().to_string())
                     .unwrap_or_default();
                 items.push(SearchHit {
                     path,
@@ -240,9 +402,13 @@ mod windows_impl {
                     icon_base64: String::new(),
                 });
             }
-            (api.clean_up)();
             Ok(items)
+        });
+
+        unsafe {
+            (api.clean_up)();
         }
+        result
     }
 }
 

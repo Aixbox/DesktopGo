@@ -46,7 +46,7 @@ export function SearchPanel({
     >
       <div className="max-h-[60vh] overflow-hidden rounded-2xl border border-white/15 bg-black/70 shadow-2xl backdrop-blur-xl">
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs text-white/60">
-          <span>{provider ? `Everything (${provider})` : "Everything"}</span>
+          <span>{provider ? "Everything (installed)" : "Everything"}</span>
           <span>{loading ? "Searching..." : `${items.length} result(s) · ${tookMs}ms`}</span>
         </div>
 

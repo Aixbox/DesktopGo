@@ -2,7 +2,6 @@
 pub enum SearchErrorCode {
     EverythingNotFound,
     EverythingIpcUnavailable,
-    EverythingStartTimeout,
 }
 
 impl SearchErrorCode {
@@ -10,7 +9,6 @@ impl SearchErrorCode {
         match self {
             Self::EverythingNotFound => "EverythingNotFound",
             Self::EverythingIpcUnavailable => "EverythingIpcUnavailable",
-            Self::EverythingStartTimeout => "EverythingStartTimeout",
         }
     }
 }

@@ -19,10 +19,7 @@ export interface SearchSettings {
   sortBy: SearchSort;
   rememberLastFilter: boolean;
   autoStartRuntime: boolean;
-  portableServicePipeName: string;
 }
-
-const DEFAULT_PIPE_NAME = "EverythingSvcDesktopGo";
 
 export const DEFAULT_SEARCH_SETTINGS: SearchSettings = {
   liveOnType: true,
@@ -40,7 +37,6 @@ export const DEFAULT_SEARCH_SETTINGS: SearchSettings = {
   sortBy: "name_asc",
   rememberLastFilter: true,
   autoStartRuntime: true,
-  portableServicePipeName: DEFAULT_PIPE_NAME,
 };
 
 const SEARCH_SETTING_KEYS: { [K in keyof SearchSettings]: string } = {
@@ -59,7 +55,6 @@ const SEARCH_SETTING_KEYS: { [K in keyof SearchSettings]: string } = {
   sortBy: "search.sortBy",
   rememberLastFilter: "search.rememberLastFilter",
   autoStartRuntime: "search.autoStartRuntime",
-  portableServicePipeName: "search.portableServicePipeName",
 };
 
 const LAST_FILTER_KEY = "search.lastFilter";
@@ -109,12 +104,6 @@ const normalizeSort = (value: unknown, fallback: SearchSort): SearchSort => {
   return fallback;
 };
 
-const normalizePipeName = (value: unknown, fallback: string) => {
-  if (typeof value !== "string") return fallback;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : fallback;
-};
-
 const normalizeValue = <K extends keyof SearchSettings>(
   key: K,
   value: unknown,
@@ -135,9 +124,6 @@ const normalizeValue = <K extends keyof SearchSettings>(
   }
   if (key === "sortBy") {
     return normalizeSort(value, fallback as SearchSort) as SearchSettings[K];
-  }
-  if (key === "portableServicePipeName") {
-    return normalizePipeName(value, fallback as string) as SearchSettings[K];
   }
 
   return fallback;
@@ -208,13 +194,16 @@ export const saveLastFilter = async (filter: SearchDefaultFilter): Promise<void>
 
 export const describeSearchRuntimeError = (message: string) => {
   if (message.startsWith("EverythingNotFound")) {
-    return "No available Everything runtime was found.";
-  }
-  if (message.startsWith("EverythingStartTimeout")) {
-    return "Everything startup timed out. Please retry.";
+    return "Installed Everything was not found. Install it from the DesktopGo installer.";
   }
   if (message.startsWith("EverythingIpcUnavailable")) {
-    return "Everything IPC is unavailable. Check runtime status.";
+    return "DesktopGo could not query the running Everything instance. Make sure Everything is already running and both apps use the same privilege level.";
+  }
+  if (message === "Everything runtime startup timed out.") {
+    return "DesktopGo timed out while preparing Everything. Retry the search.";
+  }
+  if (message === "Everything search timed out.") {
+    return "DesktopGo timed out while waiting for Everything search results.";
   }
   return message;
 };
