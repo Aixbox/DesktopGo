@@ -1,6 +1,7 @@
 import {
   useEffect,
   useRef,
+  useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -93,7 +94,9 @@ export function Launchpad() {
 
   const longPressTimerRef = useRef<number | null>(null);
   const longPressTriggeredRef = useRef(false);
+  const [isSearchPanelOpen, setIsSearchPanelOpen] = useState(false);
   const hasSearchKeyword = keyword.trim().length > 0;
+  const isSearchPanelVisible = hasSearchKeyword && isSearchPanelOpen;
 
   useEffect(() => {
     void (async () => {
@@ -138,6 +141,10 @@ export function Launchpad() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    setIsSearchPanelOpen(hasSearchKeyword);
+  }, [keyword, hasSearchKeyword]);
 
   const clearBackgroundLongPressTimer = () => {
     if (longPressTimerRef.current !== null) {
@@ -190,16 +197,25 @@ export function Launchpad() {
   const handleSearchInputKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
+      if (!isSearchPanelVisible && hasSearchKeyword) {
+        setIsSearchPanelOpen(true);
+      }
       moveSelection(1);
       return;
     }
     if (e.key === "ArrowUp") {
       e.preventDefault();
+      if (!isSearchPanelVisible && hasSearchKeyword) {
+        setIsSearchPanelOpen(true);
+      }
       moveSelection(-1);
       return;
     }
     if (e.key === "Enter") {
       e.preventDefault();
+      if (!isSearchPanelVisible && hasSearchKeyword) {
+        setIsSearchPanelOpen(true);
+      }
       if (!searchSettings.liveOnType) {
         if (!isKeywordCommitted) {
           submitSearch();
@@ -220,6 +236,10 @@ export function Launchpad() {
     }
     if (e.key === "Escape") {
       e.preventDefault();
+      if (isSearchPanelVisible) {
+        setIsSearchPanelOpen(false);
+        return;
+      }
       clearSearch();
     }
   };
@@ -231,6 +251,12 @@ export function Launchpad() {
     }
 
     const target = e.target as HTMLElement;
+    const clickedOutsideSearch = !target.closest("[data-search-placeholder]");
+
+    if (isSearchPanelVisible && clickedOutsideSearch) {
+      setIsSearchPanelOpen(false);
+      return;
+    }
 
     if (selectionMode) {
       if (isBackgroundInteraction(target)) {
@@ -300,13 +326,20 @@ export function Launchpad() {
         >
           <div
             data-search-placeholder
-            className="absolute left-1/2 top-6 z-20 w-full max-w-xl -translate-x-1/2 px-6"
+            className="absolute left-1/2 top-6 z-20 w-full max-w-2xl -translate-x-1/2 px-6"
           >
             <input
               data-search-placeholder
               type="text"
               value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
+              onChange={(e) => {
+                setKeyword(e.target.value);
+              }}
+              onFocus={() => {
+                if (hasSearchKeyword) {
+                  setIsSearchPanelOpen(true);
+                }
+              }}
               onKeyDown={handleSearchInputKeyDown}
               placeholder="Search files, folders and applications..."
               aria-label="Search files"
@@ -315,7 +348,7 @@ export function Launchpad() {
           </div>
 
           <SearchPanel
-            visible={hasSearchKeyword}
+            visible={isSearchPanelVisible}
             loading={searchLoading}
             loadingMore={searchLoadingMore}
             error={searchError}
