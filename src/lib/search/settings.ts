@@ -237,9 +237,6 @@ export const describeSearchRuntimeError = (message: string) => {
   if (message === "Everything runtime startup timed out.") {
     return "DesktopGo timed out while preparing Everything. Retry the search.";
   }
-  if (message === "Everything search timed out.") {
-    return "DesktopGo timed out while waiting for Everything search results.";
-  }
   return message;
 };
 

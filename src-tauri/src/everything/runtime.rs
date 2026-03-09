@@ -11,7 +11,6 @@ use tauri::Manager;
 use crate::layout_db;
 
 use super::errors::{build_error, SearchErrorCode};
-use super::http::{self, HttpServerConfig};
 use super::installed;
 use super::ipc;
 use super::models::{
@@ -32,7 +31,6 @@ struct RuntimeState {
     provider: Option<SearchProvider>,
     message: Option<String>,
     dll_path: Option<PathBuf>,
-    http_config: Option<HttpServerConfig>,
 }
 
 impl RuntimeState {
@@ -122,12 +120,10 @@ fn persist_last_provider(app_handle: &tauri::AppHandle) {
 
 fn set_runtime_ready(
     app_handle: &tauri::AppHandle,
-    http_config: Option<HttpServerConfig>,
 ) -> Result<SearchRuntimeStatus, String> {
     let mut guard = RUNTIME_STATE
         .lock()
         .map_err(|_| "Failed to lock search runtime state".to_string())?;
-    guard.http_config = http_config;
     guard.set_status(
         SearchRuntimeState::InstalledReady,
         Some(SearchProvider::Installed),
@@ -152,7 +148,6 @@ fn set_unavailable_state(message: String) -> Result<(), String> {
     let mut guard = RUNTIME_STATE
         .lock()
         .map_err(|_| "Failed to lock search runtime state".to_string())?;
-    guard.http_config = None;
     guard.set_status(SearchRuntimeState::Unavailable, None, Some(message));
     Ok(())
 }
@@ -172,8 +167,7 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
         let guard = RUNTIME_STATE
             .lock()
             .map_err(|_| "Failed to lock search runtime state".to_string())?;
-        if matches!(guard.state, Some(SearchRuntimeState::InstalledReady))
-            && (guard.dll_path.is_some() || guard.http_config.is_some())
+        if matches!(guard.state, Some(SearchRuntimeState::InstalledReady)) && guard.dll_path.is_some()
         {
             append_debug_log(app_handle, "start_search_runtime: reuse installed_ready state");
             return Ok(guard.snapshot());
@@ -196,39 +190,6 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
             installation.exe_path, installation.version
         ),
     );
-
-    let http_config = http::detect_http_server()?;
-    if let Some(config) = http_config {
-        append_debug_log(
-            app_handle,
-            format!("start_search_runtime: http configured on port {}", config.port),
-        );
-        if http::probe(config).is_ok() {
-            append_debug_log(app_handle, "start_search_runtime: http probe ok");
-            return set_runtime_ready(app_handle, Some(config));
-        }
-
-        append_debug_log(app_handle, "start_search_runtime: http probe failed, requesting desktop instance");
-        if let Err(error) = installed::start_installed_everything(&installation.exe_path) {
-            let error = build_error(
-                SearchErrorCode::EverythingIpcUnavailable,
-                format!("Failed to start installed Everything desktop instance: {}", error),
-            );
-            append_debug_log(app_handle, format!("start_search_runtime: start failed: {}", error));
-            let _ = set_unavailable_state(error.clone());
-            return Err(error);
-        }
-
-        let started_at = Instant::now();
-        while started_at.elapsed() < Duration::from_secs(5) {
-            if http::probe(config).is_ok() {
-                append_debug_log(app_handle, "start_search_runtime: http probe ok after desktop start");
-                return set_runtime_ready(app_handle, Some(config));
-            }
-            std::thread::sleep(Duration::from_millis(100));
-        }
-        append_debug_log(app_handle, "start_search_runtime: http probe still unavailable after desktop start");
-    }
 
     let dll_path = sdk::ensure_sdk_dll(app_handle).map_err(|e| {
         build_error(
@@ -257,7 +218,7 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
     if let Some(dll_path) = cached_dll_path.as_ref() {
         if ipc::probe_connection(dll_path, app_handle).is_ok() {
             append_debug_log(app_handle, "start_search_runtime: probe ok");
-            return set_runtime_ready(app_handle, None);
+            return set_runtime_ready(app_handle);
         }
     }
     append_debug_log(app_handle, "start_search_runtime: initial probe failed");
@@ -275,7 +236,7 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
 
     if wait_for_ipc_ready(app_handle, &dll_path, Duration::from_secs(5)) {
         append_debug_log(app_handle, "start_search_runtime: probe ok after desktop start");
-        return set_runtime_ready(app_handle, None);
+        return set_runtime_ready(app_handle);
     }
 
     let version_text = installation
@@ -329,49 +290,6 @@ pub fn search_files(
             has_more: false,
             provider,
             took_ms: 0,
-        });
-    }
-
-    let http_config = {
-        let guard = RUNTIME_STATE
-            .lock()
-            .map_err(|_| "Failed to lock search runtime state".to_string())?;
-        guard.http_config
-    };
-
-    if let Some(config) = http_config {
-        let started_at = Instant::now();
-        append_debug_log(
-            app_handle,
-            format!("search_files: http search begin port={}", config.port),
-        );
-        let response = http::search(config, &query).map_err(|e| {
-            build_error(
-                SearchErrorCode::EverythingIpcUnavailable,
-                format!("Everything HTTP search failed: {}", e),
-            )
-        })?;
-        let took_ms = started_at.elapsed().as_millis() as u64;
-        let has_more = query.offset.saturating_add(response.items.len() as u32) < response.total_results;
-        append_debug_log(
-            app_handle,
-            format!(
-                "search_files: http search done items={} total_results={} took_ms={} has_more={}",
-                response.items.len(),
-                response.total_results,
-                took_ms,
-                has_more
-            ),
-        );
-
-        return Ok(SearchPage {
-            items: response.items,
-            offset: query.offset,
-            limit: query.limit,
-            total_results: response.total_results,
-            has_more,
-            provider,
-            took_ms,
         });
     }
 

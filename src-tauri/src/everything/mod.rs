@@ -1,5 +1,4 @@
 mod errors;
-mod http;
 mod installed;
 mod ipc;
 mod models;
