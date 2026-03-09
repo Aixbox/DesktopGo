@@ -9,7 +9,7 @@ import {
   type SearchDefaultFilter,
   type SearchSettings,
 } from "./settings";
-import type { SearchHit, SearchProvider, SearchQuery } from "./types";
+import type { SearchHit, SearchPage, SearchProvider, SearchQuery } from "./types";
 
 const buildSearchKeyword = (
   keyword: string,
@@ -27,8 +27,11 @@ const buildSearchKeyword = (
   return terms.join(" ").trim();
 };
 
-const buildQueryOptions = (settings: SearchSettings, offset: number): Omit<SearchQuery, "keyword"> => ({
-  offset,
+type SearchQueryOptions = Omit<SearchQuery, "keyword" | "offset"> & {
+  limit: number;
+};
+
+const buildQueryOptions = (settings: SearchSettings): SearchQueryOptions => ({
   limit: settings.maxResultsPerPage,
   matchPath: settings.matchPath,
   matchCase: settings.matchCase,
@@ -56,15 +59,38 @@ const isSearchBusyError = (error: unknown) =>
 const getBusyRetryDelay = (attempt: number) =>
   Math.min(SEARCH_BUSY_RETRY_BASE_MS * (attempt + 1), SEARCH_BUSY_RETRY_MAX_MS);
 
+type PageCache = Record<number, SearchHit[]>;
+
+interface SearchContext {
+  seq: number;
+  queryKey: string;
+  queryKeyword: string;
+  queryOptions: SearchQueryOptions;
+  autoSelectFirst: boolean;
+}
+
+interface RangeRequest {
+  seq: number;
+  token: number;
+  offset: number;
+}
+
+interface VisibleRange {
+  start: number;
+  end: number;
+}
+
 interface UseSearchResult {
   keyword: string;
   setKeyword: (value: string) => void;
   submitSearch: () => void;
   isKeywordCommitted: boolean;
-  items: SearchHit[];
+  loadedCount: number;
+  getItemAt: (index: number) => SearchHit | null;
+  setVisibleRange: (startIndex: number, endIndex: number) => void;
+  requestRange: (startIndex: number, endIndex: number) => void;
   loading: boolean;
   loadingMore: boolean;
-  hasMore: boolean;
   error: string | null;
   provider: SearchProvider | null;
   tookMs: number;
@@ -77,7 +103,6 @@ interface UseSearchResult {
   setFilter: (filter: SearchDefaultFilter) => void;
   settings: SearchSettings;
   reloadSettings: () => Promise<void>;
-  loadMore: () => void;
 }
 
 export function useSearch(): UseSearchResult {
@@ -86,10 +111,9 @@ export function useSearch(): UseSearchResult {
   const [committedKeyword, setCommittedKeyword] = useState("");
   const [filter, setFilterState] = useState<SearchDefaultFilter>(DEFAULT_SEARCH_SETTINGS.defaultFilter);
 
-  const [items, setItems] = useState<SearchHit[]>([]);
+  const [pages, setPages] = useState<PageCache>({});
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [provider, setProvider] = useState<SearchProvider | null>(null);
   const [tookMs, setTookMs] = useState(0);
@@ -97,7 +121,55 @@ export function useSearch(): UseSearchResult {
   const [selectedIndex, setSelectedIndex] = useState(-1);
 
   const requestSeqRef = useRef(0);
-  const activeQueryKeyRef = useRef("");
+  const rangeRequestTokenRef = useRef(0);
+  const activeQueryRef = useRef<SearchContext | null>(null);
+  const pagesRef = useRef<PageCache>({});
+  const totalResultsRef = useRef(0);
+  const displayedItemsRef = useRef(new Map<number, SearchHit>());
+  const visibleRangeRef = useRef<VisibleRange>({ start: 0, end: -1 });
+  const requestedOffsetsRef = useRef(new Set<number>());
+  const flushTimerRef = useRef<number | null>(null);
+  const rangeRequestRef = useRef<RangeRequest | null>(null);
+
+  const loadedCount = useMemo(
+    () => Object.values(pages).reduce((sum, page) => sum + page.length, 0),
+    [pages],
+  );
+
+  const setPagesAndRef = useCallback((nextPages: PageCache) => {
+    pagesRef.current = nextPages;
+    setPages(nextPages);
+  }, []);
+
+  const clearFlushTimer = useCallback(() => {
+    if (flushTimerRef.current !== null) {
+      window.clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+  }, []);
+
+  const invalidateRangeRequest = useCallback(() => {
+    rangeRequestTokenRef.current += 1;
+    rangeRequestRef.current = null;
+    setLoadingMore(false);
+  }, []);
+
+  const resetSearchState = useCallback(() => {
+    clearFlushTimer();
+    invalidateRangeRequest();
+    activeQueryRef.current = null;
+    requestedOffsetsRef.current.clear();
+    visibleRangeRef.current = { start: 0, end: -1 };
+    displayedItemsRef.current.clear();
+    totalResultsRef.current = 0;
+    setPagesAndRef({});
+    setLoading(false);
+    setError(null);
+    setProvider(null);
+    setTookMs(0);
+    setTotalResults(0);
+    setSelectedIndex(-1);
+  }, [clearFlushTimer, invalidateRangeRequest, setPagesAndRef]);
 
   const loadSettingsAndFilter = useCallback(async () => {
     const loaded = await loadSearchSettings();
@@ -112,9 +184,299 @@ export function useSearch(): UseSearchResult {
     setFilterState(nextFilter);
   }, []);
 
+  const isContextActive = useCallback((context: SearchContext) => {
+    const current = activeQueryRef.current;
+    return current?.seq === context.seq && current.queryKey === context.queryKey;
+  }, []);
+
+  const executeSearchWithRetry = useCallback(
+    async (
+      context: SearchContext,
+      offset: number,
+      retryAttempt = 0,
+    ): Promise<SearchPage> => {
+      try {
+        return await searchFiles({
+          keyword: context.queryKeyword,
+          offset,
+          ...context.queryOptions,
+        });
+      } catch (error) {
+        if (isSearchBusyError(error) && isContextActive(context)) {
+          await new Promise<void>((resolve) => {
+            window.setTimeout(resolve, getBusyRetryDelay(retryAttempt));
+          });
+          return executeSearchWithRetry(context, offset, retryAttempt + 1);
+        }
+        throw error;
+      }
+    },
+    [isContextActive],
+  );
+
+  const requestInitialPage = useCallback(
+    (context: SearchContext) => {
+      setLoading(true);
+      void executeSearchWithRetry(context, 0)
+        .then((page) => {
+          if (!isContextActive(context)) return;
+
+          setPagesAndRef({ 0: page.items });
+          totalResultsRef.current = page.totalResults;
+          setTotalResults(page.totalResults);
+          setProvider(page.provider);
+          setTookMs(page.tookMs);
+          setError(null);
+          setSelectedIndex(page.totalResults === 0 ? -1 : context.autoSelectFirst ? 0 : -1);
+        })
+        .catch((searchError) => {
+          if (!isContextActive(context)) return;
+
+          setPagesAndRef({});
+          totalResultsRef.current = 0;
+          setProvider(null);
+          setTookMs(0);
+          setTotalResults(0);
+          setSelectedIndex(-1);
+          setError(describeSearchRuntimeError(asErrorMessage(searchError)));
+        })
+        .finally(() => {
+          if (!isContextActive(context)) return;
+          setLoading(false);
+        });
+    },
+    [executeSearchWithRetry, isContextActive, setPagesAndRef],
+  );
+
+  const flushRequestedOffsets = useCallback(() => {
+    flushTimerRef.current = null;
+
+    const context = activeQueryRef.current;
+    if (!context || loading) {
+      return;
+    }
+
+    const pageSize = context.queryOptions.limit;
+    const visibleStartPage =
+      visibleRangeRef.current.end >= 0
+        ? Math.floor(visibleRangeRef.current.start / pageSize) * pageSize
+        : 0;
+
+    const candidateOffsets = [...requestedOffsetsRef.current].filter((offset) => {
+      if (offset < 0) return false;
+      if (totalResultsRef.current > 0 && offset >= totalResultsRef.current) return false;
+      return !pagesRef.current[offset];
+    });
+
+    requestedOffsetsRef.current.clear();
+
+    if (candidateOffsets.length === 0) {
+      return;
+    }
+
+    candidateOffsets.sort((left, right) => {
+      const leftDistance = Math.abs(left - visibleStartPage);
+      const rightDistance = Math.abs(right - visibleStartPage);
+      if (leftDistance !== rightDistance) {
+        return leftDistance - rightDistance;
+      }
+      return left - right;
+    });
+
+    const nextOffset = candidateOffsets[0];
+    const nextToken = rangeRequestTokenRef.current + 1;
+    rangeRequestTokenRef.current = nextToken;
+    rangeRequestRef.current = {
+      seq: context.seq,
+      token: nextToken,
+      offset: nextOffset,
+    };
+    setLoadingMore(true);
+
+    void executeSearchWithRetry(context, nextOffset)
+      .then((page) => {
+        if (!isContextActive(context)) return;
+
+        const activeRangeRequest = rangeRequestRef.current;
+        if (
+          !activeRangeRequest ||
+          activeRangeRequest.seq !== context.seq ||
+          activeRangeRequest.token !== nextToken ||
+          activeRangeRequest.offset !== nextOffset
+        ) {
+          return;
+        }
+
+        setPagesAndRef({
+          ...pagesRef.current,
+          [nextOffset]: page.items,
+        });
+        totalResultsRef.current = page.totalResults;
+        setTotalResults(page.totalResults);
+        setProvider(page.provider);
+        setTookMs((currentTookMs) => currentTookMs + page.tookMs);
+        setError(null);
+      })
+      .catch((searchError) => {
+        if (!isContextActive(context)) return;
+
+        const activeRangeRequest = rangeRequestRef.current;
+        if (
+          !activeRangeRequest ||
+          activeRangeRequest.seq !== context.seq ||
+          activeRangeRequest.token !== nextToken ||
+          activeRangeRequest.offset !== nextOffset
+        ) {
+          return;
+        }
+
+        setError(describeSearchRuntimeError(asErrorMessage(searchError)));
+      })
+      .finally(() => {
+        const activeRangeRequest = rangeRequestRef.current;
+        if (
+          activeRangeRequest &&
+          activeRangeRequest.seq === context.seq &&
+          activeRangeRequest.token === nextToken &&
+          activeRangeRequest.offset === nextOffset
+        ) {
+          rangeRequestRef.current = null;
+          setLoadingMore(false);
+        }
+
+        if (requestedOffsetsRef.current.size > 0) {
+          clearFlushTimer();
+          flushTimerRef.current = window.setTimeout(flushRequestedOffsets, 0);
+        }
+      });
+  }, [clearFlushTimer, executeSearchWithRetry, isContextActive, loading, setPagesAndRef]);
+
+  const scheduleOffsetRequest = useCallback(
+    (offset: number) => {
+      const context = activeQueryRef.current;
+      if (!context || loading) return;
+
+      const pageSize = context.queryOptions.limit;
+      const normalizedOffset = Math.max(0, Math.floor(offset / pageSize) * pageSize);
+
+      if (totalResultsRef.current > 0 && normalizedOffset >= totalResultsRef.current) {
+        return;
+      }
+      if (pagesRef.current[normalizedOffset]) {
+        return;
+      }
+
+      const activeRangeRequest = rangeRequestRef.current;
+      if (
+        activeRangeRequest &&
+        activeRangeRequest.seq === context.seq &&
+        activeRangeRequest.offset === normalizedOffset
+      ) {
+        return;
+      }
+
+      requestedOffsetsRef.current.add(normalizedOffset);
+      clearFlushTimer();
+      flushTimerRef.current = window.setTimeout(flushRequestedOffsets, 0);
+    },
+    [clearFlushTimer, flushRequestedOffsets, loading],
+  );
+
+  const requestRange = useCallback(
+    (startIndex: number, endIndex: number) => {
+      const context = activeQueryRef.current;
+      if (!context || endIndex < startIndex) return;
+
+      const pageSize = context.queryOptions.limit;
+      const safeStart = Math.max(0, startIndex);
+      const maxEnd = totalResultsRef.current > 0 ? totalResultsRef.current - 1 : endIndex;
+      const safeEnd = Math.max(safeStart, Math.min(endIndex, maxEnd));
+
+      for (
+        let offset = Math.floor(safeStart / pageSize) * pageSize;
+        offset <= safeEnd;
+        offset += pageSize
+      ) {
+        scheduleOffsetRequest(offset);
+      }
+    },
+    [scheduleOffsetRequest],
+  );
+
+  const setVisibleRange = useCallback(
+    (startIndex: number, endIndex: number) => {
+      const safeStart = Math.max(0, startIndex);
+      visibleRangeRef.current = {
+        start: safeStart,
+        end: endIndex,
+      };
+
+      const context = activeQueryRef.current;
+      if (!context || loading || endIndex < safeStart) {
+        return;
+      }
+
+      const pageSize = context.queryOptions.limit;
+      const safeEnd =
+        totalResultsRef.current > 0
+          ? Math.min(totalResultsRef.current - 1, endIndex)
+          : endIndex;
+
+      requestedOffsetsRef.current.clear();
+      for (
+        let offset = Math.floor(safeStart / pageSize) * pageSize;
+        offset <= safeEnd;
+        offset += pageSize
+      ) {
+        if (pagesRef.current[offset]) {
+          continue;
+        }
+
+        const activeRangeRequest = rangeRequestRef.current;
+        if (
+          activeRangeRequest &&
+          activeRangeRequest.seq === context.seq &&
+          activeRangeRequest.offset === offset
+        ) {
+          continue;
+        }
+
+        requestedOffsetsRef.current.add(offset);
+      }
+
+      if (requestedOffsetsRef.current.size > 0) {
+        clearFlushTimer();
+        flushTimerRef.current = window.setTimeout(flushRequestedOffsets, 0);
+      }
+    },
+    [clearFlushTimer, flushRequestedOffsets, loading],
+  );
+
+  const getItemAt = useCallback(
+    (index: number): SearchHit | null => {
+      if (index < 0) {
+        return null;
+      }
+
+      const pageSize = activeQueryRef.current?.queryOptions.limit ?? settings.maxResultsPerPage;
+      const pageOffset = Math.floor(index / pageSize) * pageSize;
+      const page = pagesRef.current[pageOffset];
+      const pageItem = page?.[index - pageOffset] ?? null;
+
+      if (pageItem) {
+        displayedItemsRef.current.set(index, pageItem);
+        return pageItem;
+      }
+
+      scheduleOffsetRequest(pageOffset);
+      return displayedItemsRef.current.get(index) ?? null;
+    },
+    [scheduleOffsetRequest, settings.maxResultsPerPage],
+  );
+
   useEffect(() => {
-    void loadSettingsAndFilter().catch((e) => {
-      setError(describeSearchRuntimeError(asErrorMessage(e)));
+    void loadSettingsAndFilter().catch((searchError) => {
+      setError(describeSearchRuntimeError(asErrorMessage(searchError)));
     });
   }, [loadSettingsAndFilter]);
 
@@ -127,18 +489,9 @@ export function useSearch(): UseSearchResult {
   useEffect(() => {
     if (keyword.trim().length === 0) {
       setCommittedKeyword("");
-      setItems([]);
-      setLoading(false);
-      setLoadingMore(false);
-      setHasMore(false);
-      setError(null);
-      setProvider(null);
-      setTookMs(0);
-      setTotalResults(0);
-      setSelectedIndex(-1);
-      activeQueryKeyRef.current = "";
+      resetSearchState();
     }
-  }, [keyword]);
+  }, [keyword, resetSearchState]);
 
   useEffect(() => {
     const trimmedKeyword = committedKeyword.trim();
@@ -147,97 +500,60 @@ export function useSearch(): UseSearchResult {
     }
 
     const queryKeyword = buildSearchKeyword(trimmedKeyword, filter);
+    const queryOptions = buildQueryOptions(settings);
     const queryKey = JSON.stringify({
       queryKeyword,
       filter,
-      limit: settings.maxResultsPerPage,
-      matchPath: settings.matchPath,
-      matchCase: settings.matchCase,
-      regex: settings.regex,
-      wholeWord: settings.matchWholeWord,
-      sortBy: settings.sortBy,
+      ...queryOptions,
+      autoSelectFirst: settings.autoSelectFirst,
     });
-
-    activeQueryKeyRef.current = queryKey;
     const seq = ++requestSeqRef.current;
-    let retryTimer: number | null = null;
+
     let cancelled = false;
-
-    const runSearch = (retryAttempt: number) => {
-      if (cancelled) return;
-      if (requestSeqRef.current !== seq || activeQueryKeyRef.current !== queryKey) return;
-
-      setLoading(true);
-      setLoadingMore(false);
-      setError(null);
-
-      let scheduledRetry = false;
-      void searchFiles({
-        keyword: queryKeyword,
-        ...buildQueryOptions(settings, 0),
-      })
-        .then((page) => {
-          if (requestSeqRef.current !== seq || activeQueryKeyRef.current !== queryKey) return;
-          setItems(page.items);
-          setProvider(page.provider);
-          setTookMs(page.tookMs);
-          setTotalResults(page.totalResults);
-          setHasMore(page.hasMore);
-          setSelectedIndex(
-            page.items.length === 0 ? -1 : settings.autoSelectFirst ? 0 : -1,
-          );
-        })
-        .catch((e) => {
-          if (requestSeqRef.current !== seq || activeQueryKeyRef.current !== queryKey) return;
-          if (isSearchBusyError(e)) {
-            scheduledRetry = true;
-            retryTimer = window.setTimeout(() => {
-              retryTimer = null;
-              runSearch(retryAttempt + 1);
-            }, getBusyRetryDelay(retryAttempt));
-            return;
-          }
-          setItems([]);
-          setProvider(null);
-          setTookMs(0);
-          setTotalResults(0);
-          setHasMore(false);
-          setSelectedIndex(-1);
-          setError(describeSearchRuntimeError(asErrorMessage(e)));
-        })
-        .finally(() => {
-          if (scheduledRetry || cancelled) {
-            return;
-          }
-          if (requestSeqRef.current === seq && activeQueryKeyRef.current === queryKey) {
-            setLoading(false);
-          }
-        });
-    };
-
     const timer = window.setTimeout(() => {
-      runSearch(0);
+      if (cancelled) return;
+
+      resetSearchState();
+      const context: SearchContext = {
+        seq,
+        queryKey,
+        queryKeyword,
+        queryOptions,
+        autoSelectFirst: settings.autoSelectFirst,
+      };
+      activeQueryRef.current = context;
+      requestInitialPage(context);
     }, settings.debounceMs);
 
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
-      if (retryTimer !== null) {
-        window.clearTimeout(retryTimer);
-      }
     };
   }, [
     committedKeyword,
     filter,
-    settings.autoSelectFirst,
-    settings.debounceMs,
-    settings.matchCase,
-    settings.matchPath,
-    settings.matchWholeWord,
-    settings.maxResultsPerPage,
-    settings.regex,
-    settings.sortBy,
+    requestInitialPage,
+    resetSearchState,
+    settings,
   ]);
+
+  useEffect(() => {
+    if (selectedIndex < 0) return;
+    requestRange(selectedIndex, selectedIndex);
+  }, [requestRange, selectedIndex]);
+
+  useEffect(() => {
+    if (totalResults === 0) {
+      if (selectedIndex !== -1) {
+        setSelectedIndex(-1);
+      }
+      return;
+    }
+
+    if (selectedIndex >= totalResults) {
+      setSelectedIndex(totalResults - 1);
+    }
+  }, [selectedIndex, totalResults]);
 
   const reloadSettings = useCallback(async () => {
     await loadSettingsAndFilter();
@@ -246,27 +562,20 @@ export function useSearch(): UseSearchResult {
   const clear = useCallback(() => {
     setKeyword("");
     setCommittedKeyword("");
-    setItems([]);
-    setLoading(false);
-    setLoadingMore(false);
-    setHasMore(false);
-    setError(null);
-    setProvider(null);
-    setTookMs(0);
-    setTotalResults(0);
-    setSelectedIndex(-1);
-    activeQueryKeyRef.current = "";
-  }, []);
+    resetSearchState();
+  }, [resetSearchState]);
 
   const moveSelection = useCallback(
     (delta: number) => {
-      if (items.length === 0) return;
+      const resultCount = totalResults > 0 ? totalResults : loadedCount;
+      if (resultCount === 0) return;
+
       setSelectedIndex((current) => {
         const safeCurrent = current < 0 ? 0 : current;
-        return (safeCurrent + delta + items.length) % items.length;
+        return (safeCurrent + delta + resultCount) % resultCount;
       });
     },
-    [items.length],
+    [loadedCount, totalResults],
   );
 
   const setFilter = useCallback(
@@ -288,48 +597,6 @@ export function useSearch(): UseSearchResult {
     setCommittedKeyword(keyword.trim());
   }, [keyword]);
 
-  const loadMore = useCallback(() => {
-    if (loading || loadingMore || !hasMore || items.length === 0) return;
-    const queryKey = activeQueryKeyRef.current;
-    const trimmedKeyword = committedKeyword.trim();
-    if (!queryKey || !trimmedKeyword) return;
-
-    const seq = ++requestSeqRef.current;
-    setLoadingMore(true);
-    setError(null);
-
-    const queryKeyword = buildSearchKeyword(trimmedKeyword, filter);
-    void searchFiles({
-      keyword: queryKeyword,
-      ...buildQueryOptions(settings, items.length),
-    })
-      .then((page) => {
-        if (requestSeqRef.current !== seq || activeQueryKeyRef.current !== queryKey) return;
-        setItems((prev) => [...prev, ...page.items]);
-        setProvider(page.provider);
-        setTookMs((prev) => prev + page.tookMs);
-        setTotalResults(page.totalResults);
-        setHasMore(page.hasMore);
-      })
-      .catch((e) => {
-        if (requestSeqRef.current !== seq || activeQueryKeyRef.current !== queryKey) return;
-        setError(describeSearchRuntimeError(asErrorMessage(e)));
-      })
-      .finally(() => {
-        if (requestSeqRef.current === seq && activeQueryKeyRef.current === queryKey) {
-          setLoadingMore(false);
-        }
-      });
-  }, [
-    committedKeyword,
-    filter,
-    hasMore,
-    items.length,
-    loading,
-    loadingMore,
-    settings,
-  ]);
-
   const isKeywordCommitted = keyword.trim() === committedKeyword.trim();
 
   return useMemo(
@@ -338,10 +605,12 @@ export function useSearch(): UseSearchResult {
       setKeyword,
       submitSearch,
       isKeywordCommitted,
-      items,
+      loadedCount,
+      getItemAt,
+      setVisibleRange,
+      requestRange,
       loading,
       loadingMore,
-      hasMore,
       error,
       provider,
       tookMs,
@@ -354,28 +623,28 @@ export function useSearch(): UseSearchResult {
       setFilter,
       settings,
       reloadSettings,
-      loadMore,
     }),
     [
       clear,
       error,
       filter,
-      hasMore,
-      items,
+      getItemAt,
+      isKeywordCommitted,
       keyword,
-      loadMore,
+      loadedCount,
       loading,
       loadingMore,
       moveSelection,
       provider,
       reloadSettings,
+      requestRange,
       selectedIndex,
       setFilter,
+      setVisibleRange,
       settings,
       submitSearch,
-      isKeywordCommitted,
-      totalResults,
       tookMs,
+      totalResults,
     ],
   );
 }

@@ -71,10 +71,12 @@ export function Launchpad() {
     setKeyword,
     submitSearch,
     isKeywordCommitted,
-    items: searchItems,
+    loadedCount: searchLoadedCount,
+    getItemAt: getSearchItemAt,
+    setVisibleRange: setSearchVisibleRange,
+    requestRange: requestSearchRange,
     loading: searchLoading,
     loadingMore: searchLoadingMore,
-    hasMore: searchHasMore,
     error: searchError,
     provider: searchProvider,
     tookMs: searchTookMs,
@@ -86,7 +88,6 @@ export function Launchpad() {
     setFilter: setSearchFilter,
     settings: searchSettings,
     reloadSettings: reloadSearchSettings,
-    loadMore: loadMoreSearchResults,
     clear: clearSearch,
   } = useSearch();
 
@@ -209,8 +210,11 @@ export function Launchpad() {
       if (!searchSettings.openOnEnter) {
         return;
       }
-      if (selectedIndex >= 0 && selectedIndex < searchItems.length) {
-        void launchSearchItem(searchItems[selectedIndex].path);
+      const selectedItem = getSearchItemAt(selectedIndex);
+      if (selectedItem) {
+        void launchSearchItem(selectedItem.path);
+      } else if (selectedIndex >= 0) {
+        requestSearchRange(selectedIndex, selectedIndex);
       }
       return;
     }
@@ -314,17 +318,17 @@ export function Launchpad() {
             visible={hasSearchKeyword}
             loading={searchLoading}
             loadingMore={searchLoadingMore}
-            hasMore={searchHasMore}
             error={searchError}
             provider={searchProvider}
             tookMs={searchTookMs}
             totalResults={searchTotalResults}
-            items={searchItems}
+            loadedCount={searchLoadedCount}
+            getItemAt={getSearchItemAt}
             selectedIndex={selectedIndex}
             filter={searchFilter}
             onFilterChange={setSearchFilter}
+            onVisibleRangeChange={setSearchVisibleRange}
             onSelect={setSelectedIndex}
-            onLoadMore={loadMoreSearchResults}
             allowDoubleClickOpen={searchSettings.openOnDoubleClick}
             onActivate={(item) => {
               void launchSearchItem(item.path);
