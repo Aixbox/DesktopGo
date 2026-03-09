@@ -13,6 +13,7 @@ pub struct SearchResponse {
 #[cfg(windows)]
 mod windows_impl {
     use super::*;
+    use crate::icons;
     use libloading::{Library, Symbol};
     use once_cell::sync::{Lazy, OnceCell};
     use std::ffi::OsStr;
@@ -37,6 +38,7 @@ mod windows_impl {
     const EVERYTHING_SORT_DATE_MODIFIED_DESCENDING: u32 = 14;
     const EVERYTHING_REQUEST_FILE_NAME: u32 = 0x0000_0001;
     const EVERYTHING_REQUEST_PATH: u32 = 0x0000_0002;
+    const SEARCH_RESULT_ICON_SIZE: i32 = 32;
     const REPLY_WINDOW_CLASS: &str = "DesktopGoEverythingSdkReplyWindow";
     const REPLY_ID_COUNT: u32 = 1;
     const REPLY_ID_RANGE: u32 = 2;
@@ -445,13 +447,14 @@ mod windows_impl {
                 .parent()
                 .map(|value| value.to_string_lossy().to_string())
                 .unwrap_or_default();
+            let icon_base64 = icons::get_path_icon_base64(&path, SEARCH_RESULT_ICON_SIZE);
             items.push(SearchHit {
                 path,
                 name,
                 parent,
                 is_file,
                 is_folder,
-                icon_base64: String::new(),
+                icon_base64,
             });
         }
         append_debug_log(

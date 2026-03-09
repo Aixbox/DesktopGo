@@ -268,7 +268,7 @@ export function SearchPanel({
                       }}
                       onClick={() => onSelect(index)}
                     >
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white/5">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden">
                         {item.iconBase64 ? (
                           <img
                             src={item.iconBase64}
