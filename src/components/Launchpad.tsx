@@ -72,6 +72,8 @@ export function Launchpad() {
     setKeyword,
     submitSearch,
     isKeywordCommitted,
+    searchPending,
+    hasCommittedQuery,
     loadedCount: searchLoadedCount,
     getItemAt: getSearchItemAt,
     setVisibleRange: setSearchVisibleRange,
@@ -144,7 +146,7 @@ export function Launchpad() {
 
   useEffect(() => {
     setIsSearchPanelOpen(hasSearchKeyword);
-  }, [keyword, hasSearchKeyword]);
+  }, [hasSearchKeyword]);
 
   const clearBackgroundLongPressTimer = () => {
     if (longPressTimerRef.current !== null) {
@@ -350,12 +352,14 @@ export function Launchpad() {
           <SearchPanel
             visible={isSearchPanelVisible}
             loading={searchLoading}
+            searchPending={searchPending}
             loadingMore={searchLoadingMore}
             error={searchError}
             provider={searchProvider}
             tookMs={searchTookMs}
             totalResults={searchTotalResults}
             loadedCount={searchLoadedCount}
+            hasCommittedQuery={hasCommittedQuery}
             getItemAt={getSearchItemAt}
             selectedIndex={selectedIndex}
             filter={searchFilter}

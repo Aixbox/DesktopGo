@@ -85,6 +85,8 @@ interface UseSearchResult {
   setKeyword: (value: string) => void;
   submitSearch: () => void;
   isKeywordCommitted: boolean;
+  searchPending: boolean;
+  hasCommittedQuery: boolean;
   loadedCount: number;
   getItemAt: (index: number) => SearchHit | null;
   setVisibleRange: (startIndex: number, endIndex: number) => void;
@@ -107,13 +109,14 @@ interface UseSearchResult {
 
 export function useSearch(): UseSearchResult {
   const [settings, setSettings] = useState<SearchSettings>(DEFAULT_SEARCH_SETTINGS);
-  const [keyword, setKeyword] = useState("");
+  const [keyword, setKeywordState] = useState("");
   const [committedKeyword, setCommittedKeyword] = useState("");
   const [filter, setFilterState] = useState<SearchDefaultFilter>(DEFAULT_SEARCH_SETTINGS.defaultFilter);
 
   const [pages, setPages] = useState<PageCache>({});
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [searchPending, setSearchPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [provider, setProvider] = useState<SearchProvider | null>(null);
   const [tookMs, setTookMs] = useState(0);
@@ -164,12 +167,25 @@ export function useSearch(): UseSearchResult {
     totalResultsRef.current = 0;
     setPagesAndRef({});
     setLoading(false);
+    setSearchPending(false);
     setError(null);
     setProvider(null);
     setTookMs(0);
     setTotalResults(0);
     setSelectedIndex(-1);
   }, [clearFlushTimer, invalidateRangeRequest, setPagesAndRef]);
+
+  const prepareSearchRefresh = useCallback(() => {
+    clearFlushTimer();
+    invalidateRangeRequest();
+    requestedOffsetsRef.current.clear();
+    visibleRangeRef.current = { start: 0, end: -1 };
+    displayedItemsRef.current.clear();
+    setLoading(true);
+    setSearchPending(true);
+    setError(null);
+    setSelectedIndex(-1);
+  }, [clearFlushTimer, invalidateRangeRequest]);
 
   const loadSettingsAndFilter = useCallback(async () => {
     const loaded = await loadSearchSettings();
@@ -243,6 +259,7 @@ export function useSearch(): UseSearchResult {
         .finally(() => {
           if (!isContextActive(context)) return;
           setLoading(false);
+          setSearchPending(false);
         });
     },
     [executeSearchWithRetry, isContextActive, setPagesAndRef],
@@ -513,7 +530,7 @@ export function useSearch(): UseSearchResult {
     const timer = window.setTimeout(() => {
       if (cancelled) return;
 
-      resetSearchState();
+      prepareSearchRefresh();
       const context: SearchContext = {
         seq,
         queryKey,
@@ -532,8 +549,8 @@ export function useSearch(): UseSearchResult {
   }, [
     committedKeyword,
     filter,
+    prepareSearchRefresh,
     requestInitialPage,
-    resetSearchState,
     settings,
   ]);
 
@@ -559,8 +576,22 @@ export function useSearch(): UseSearchResult {
     await loadSettingsAndFilter();
   }, [loadSettingsAndFilter]);
 
+  const setKeyword = useCallback(
+    (value: string) => {
+      setKeywordState(value);
+      if (value.trim().length === 0) {
+        setSearchPending(false);
+        return;
+      }
+      if (settings.liveOnType) {
+        setSearchPending(true);
+      }
+    },
+    [settings.liveOnType],
+  );
+
   const clear = useCallback(() => {
-    setKeyword("");
+    setKeywordState("");
     setCommittedKeyword("");
     resetSearchState();
   }, [resetSearchState]);
@@ -587,6 +618,7 @@ export function useSearch(): UseSearchResult {
         });
       }
       if (settings.liveOnType) {
+        setSearchPending(true);
         setCommittedKeyword(keyword.trim());
       }
     },
@@ -594,10 +626,14 @@ export function useSearch(): UseSearchResult {
   );
 
   const submitSearch = useCallback(() => {
+    if (keyword.trim().length > 0) {
+      setSearchPending(true);
+    }
     setCommittedKeyword(keyword.trim());
   }, [keyword]);
 
   const isKeywordCommitted = keyword.trim() === committedKeyword.trim();
+  const hasCommittedQuery = committedKeyword.trim().length > 0;
 
   return useMemo(
     () => ({
@@ -605,6 +641,8 @@ export function useSearch(): UseSearchResult {
       setKeyword,
       submitSearch,
       isKeywordCommitted,
+      searchPending,
+      hasCommittedQuery,
       loadedCount,
       getItemAt,
       setVisibleRange,
@@ -629,6 +667,7 @@ export function useSearch(): UseSearchResult {
       error,
       filter,
       getItemAt,
+      hasCommittedQuery,
       isKeywordCommitted,
       keyword,
       loadedCount,
@@ -638,6 +677,7 @@ export function useSearch(): UseSearchResult {
       provider,
       reloadSettings,
       requestRange,
+      searchPending,
       selectedIndex,
       setFilter,
       setVisibleRange,
