@@ -17,6 +17,11 @@ pub struct HttpServerConfig {
     pub port: u16,
 }
 
+pub struct HttpSearchResults {
+    pub items: Vec<SearchHit>,
+    pub total_results: u32,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct HttpSearchResponse {
@@ -238,10 +243,14 @@ pub fn probe(config: HttpServerConfig) -> Result<(), String> {
     Ok(())
 }
 
-pub fn search(config: HttpServerConfig, query: &SearchQuery) -> Result<Vec<SearchHit>, String> {
+pub fn search(config: HttpServerConfig, query: &SearchQuery) -> Result<HttpSearchResults, String> {
     let body = send_http_request(config.port, &build_query_string(config, Some(query)))?;
     let payload = parse_http_json(&body)?;
     let (_, removed_hidden_filter) = sanitize_keyword(&query.keyword);
+    let total_results = payload
+        .total_results
+        .unwrap_or(payload.results.len() as u64)
+        .min(u32::MAX as u64) as u32;
 
     let mut items = Vec::with_capacity(payload.results.len());
     for result in payload.results {
@@ -294,5 +303,8 @@ pub fn search(config: HttpServerConfig, query: &SearchQuery) -> Result<Vec<Searc
         }
     }
 
-    Ok(items)
+    Ok(HttpSearchResults {
+        items,
+        total_results,
+    })
 }

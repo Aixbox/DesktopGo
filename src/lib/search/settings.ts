@@ -15,11 +15,13 @@ export interface SearchSettings {
   matchCase: boolean;
   regex: boolean;
   matchWholeWord: boolean;
-  includeHidden: boolean;
   sortBy: SearchSort;
   rememberLastFilter: boolean;
   autoStartRuntime: boolean;
 }
+
+const SEARCH_PROFILE_VERSION = 3;
+const SEARCH_PROFILE_VERSION_KEY = "search.profileVersion";
 
 export const DEFAULT_SEARCH_SETTINGS: SearchSettings = {
   liveOnType: true,
@@ -28,15 +30,19 @@ export const DEFAULT_SEARCH_SETTINGS: SearchSettings = {
   openOnEnter: true,
   openOnDoubleClick: true,
   defaultFilter: "all",
-  maxResultsPerPage: 50,
+  maxResultsPerPage: 256,
   matchPath: false,
   matchCase: false,
   regex: false,
   matchWholeWord: false,
-  includeHidden: false,
-  sortBy: "name_asc",
+  sortBy: "path_asc",
   rememberLastFilter: true,
   autoStartRuntime: true,
+};
+
+const LEGACY_SEARCH_DEFAULTS = {
+  maxResultsPerPage: 50,
+  sortBy: "name_asc" as SearchSort,
 };
 
 const SEARCH_SETTING_KEYS: { [K in keyof SearchSettings]: string } = {
@@ -51,7 +57,6 @@ const SEARCH_SETTING_KEYS: { [K in keyof SearchSettings]: string } = {
   matchCase: "search.matchCase",
   regex: "search.regex",
   matchWholeWord: "search.matchWholeWord",
-  includeHidden: "search.includeHidden",
   sortBy: "search.sortBy",
   rememberLastFilter: "search.rememberLastFilter",
   autoStartRuntime: "search.autoStartRuntime",
@@ -68,7 +73,6 @@ const BOOLEAN_KEYS: Array<keyof SearchSettings> = [
   "matchCase",
   "regex",
   "matchWholeWord",
-  "includeHidden",
   "rememberLastFilter",
   "autoStartRuntime",
 ];
@@ -117,7 +121,7 @@ const normalizeValue = <K extends keyof SearchSettings>(
     return clampNumber(Number(value), 50, 500, fallback as number) as SearchSettings[K];
   }
   if (key === "maxResultsPerPage") {
-    return clampNumber(Number(value), 10, 200, fallback as number) as SearchSettings[K];
+    return clampNumber(Number(value), 10, 500, fallback as number) as SearchSettings[K];
   }
   if (key === "defaultFilter") {
     return normalizeFilter(value, fallback as SearchDefaultFilter) as SearchSettings[K];
@@ -146,6 +150,10 @@ const writeRawSetting = async (key: string, value: unknown): Promise<void> => {
   });
 };
 
+const shouldMigrateToToolbarDefaults = (settings: SearchSettings) =>
+  settings.maxResultsPerPage === LEGACY_SEARCH_DEFAULTS.maxResultsPerPage &&
+  settings.sortBy === LEGACY_SEARCH_DEFAULTS.sortBy;
+
 export const loadSearchSettings = async (): Promise<SearchSettings> => {
   const entries = await Promise.all(
     (Object.keys(SEARCH_SETTING_KEYS) as Array<keyof SearchSettings>).map(async (key) => {
@@ -164,6 +172,30 @@ export const loadSearchSettings = async (): Promise<SearchSettings> => {
   for (const [key, value] of entries) {
     (settings as unknown as Record<string, unknown>)[key] = value;
   }
+
+  const profileVersionRaw = await readRawSetting(SEARCH_PROFILE_VERSION_KEY);
+  const profileVersion =
+    typeof profileVersionRaw === "number" && Number.isFinite(profileVersionRaw)
+      ? profileVersionRaw
+      : 0;
+
+  if (profileVersion < SEARCH_PROFILE_VERSION) {
+    if (shouldMigrateToToolbarDefaults(settings)) {
+      settings.maxResultsPerPage = DEFAULT_SEARCH_SETTINGS.maxResultsPerPage;
+      settings.sortBy = DEFAULT_SEARCH_SETTINGS.sortBy;
+
+      await Promise.all([
+        writeRawSetting(
+          SEARCH_SETTING_KEYS.maxResultsPerPage,
+          settings.maxResultsPerPage,
+        ),
+        writeRawSetting(SEARCH_SETTING_KEYS.sortBy, settings.sortBy),
+      ]);
+    }
+
+    await writeRawSetting(SEARCH_PROFILE_VERSION_KEY, SEARCH_PROFILE_VERSION);
+  }
+
   return settings;
 };
 

@@ -26,6 +26,7 @@ export interface SearchPage {
   items: SearchHit[];
   offset: number;
   limit: number;
+  totalResults: number;
   hasMore: boolean;
   provider: SearchProvider;
   tookMs: number;

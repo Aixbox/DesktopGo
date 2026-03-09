@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { SearchPage, SearchQuery, SearchRuntimeStatus } from "./types";
 
-const SEARCH_COMMAND_TIMEOUT_MS = 8_000;
+const SEARCH_RUNTIME_TIMEOUT_MS = 8_000;
+const SEARCH_RESULTS_TIMEOUT_MS = 30_000;
 
 const withTimeout = <T>(promise: Promise<T>, timeoutMs: number, message: string) =>
   new Promise<T>((resolve, reject) => {
@@ -24,7 +25,7 @@ const withTimeout = <T>(promise: Promise<T>, timeoutMs: number, message: string)
 export const startSearchRuntime = () =>
   withTimeout(
     invoke<SearchRuntimeStatus>("start_search_runtime"),
-    SEARCH_COMMAND_TIMEOUT_MS,
+    SEARCH_RUNTIME_TIMEOUT_MS,
     "Everything runtime startup timed out.",
   );
 
@@ -34,6 +35,6 @@ export const getSearchRuntimeStatus = () =>
 export const searchFiles = (query: SearchQuery) =>
   withTimeout(
     invoke<SearchPage>("search_files", { query }),
-    SEARCH_COMMAND_TIMEOUT_MS,
+    SEARCH_RESULTS_TIMEOUT_MS,
     "Everything search timed out.",
   );

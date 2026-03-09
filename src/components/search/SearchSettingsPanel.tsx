@@ -186,11 +186,11 @@ export function SearchSettingsPanel() {
 
         <div className="rounded-md border border-border bg-secondary/30 px-3 py-2">
           <label className="block text-sm font-medium">Max Results Per Page</label>
-          <p className="mb-2 text-xs text-muted-foreground">Allowed range: 10 - 200</p>
+          <p className="mb-2 text-xs text-muted-foreground">Allowed range: 10 - 500</p>
           <input
             type="number"
             min={10}
-            max={200}
+            max={500}
             value={settings.maxResultsPerPage}
             onChange={(e) => void updateSetting("maxResultsPerPage", Number(e.target.value))}
             className="w-28 rounded-md border border-border bg-background px-2 py-1 text-sm"
@@ -230,12 +230,6 @@ export function SearchSettingsPanel() {
           desc="Match only whole words."
           checked={settings.matchWholeWord}
           onChange={(next) => void updateSetting("matchWholeWord", next)}
-        />
-        <ToggleRow
-          label="Include Hidden Files"
-          desc="Include hidden items in results."
-          checked={settings.includeHidden}
-          onChange={(next) => void updateSetting("includeHidden", next)}
         />
       </section>
 

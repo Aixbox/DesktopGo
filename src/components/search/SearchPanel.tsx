@@ -10,6 +10,7 @@ interface SearchPanelProps {
   error: string | null;
   provider: SearchProvider | null;
   tookMs: number;
+  totalResults: number;
   items: SearchHit[];
   selectedIndex: number;
   filter: SearchDefaultFilter;
@@ -28,6 +29,7 @@ export function SearchPanel({
   error,
   provider,
   tookMs,
+  totalResults,
   items,
   selectedIndex,
   filter,
@@ -47,7 +49,7 @@ export function SearchPanel({
       <div className="max-h-[60vh] overflow-hidden rounded-2xl border border-white/15 bg-black/70 shadow-2xl backdrop-blur-xl">
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs text-white/60">
           <span>{provider ? "Everything (installed)" : "Everything"}</span>
-          <span>{loading ? "Searching..." : `${items.length} result(s) · ${tookMs}ms`}</span>
+          <span>{loading ? "Searching..." : `${items.length}/${totalResults} result(s) · ${tookMs}ms`}</span>
         </div>
 
         <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">

@@ -19,7 +19,7 @@ impl Default for SearchSort {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchQuery {
     pub keyword: String,
@@ -71,6 +71,7 @@ pub struct SearchPage {
     pub items: Vec<SearchHit>,
     pub offset: u32,
     pub limit: u32,
+    pub total_results: u32,
     pub has_more: bool,
     pub provider: SearchProvider,
     pub took_ms: u64,

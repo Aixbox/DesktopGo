@@ -78,6 +78,7 @@ export function Launchpad() {
     error: searchError,
     provider: searchProvider,
     tookMs: searchTookMs,
+    totalResults: searchTotalResults,
     selectedIndex,
     setSelectedIndex,
     moveSelection,
@@ -317,6 +318,7 @@ export function Launchpad() {
             error={searchError}
             provider={searchProvider}
             tookMs={searchTookMs}
+            totalResults={searchTotalResults}
             items={searchItems}
             selectedIndex={selectedIndex}
             filter={searchFilter}

@@ -14,7 +14,6 @@ import type { SearchHit, SearchProvider, SearchQuery } from "./types";
 const buildSearchKeyword = (
   keyword: string,
   filter: SearchDefaultFilter,
-  includeHidden: boolean,
 ) => {
   const terms: string[] = [];
   if (filter === "files") {
@@ -24,10 +23,6 @@ const buildSearchKeyword = (
   }
 
   terms.push(keyword);
-
-  if (!includeHidden) {
-    terms.push("!attrib:h");
-  }
 
   return terms.join(" ").trim();
 };
@@ -73,6 +68,7 @@ interface UseSearchResult {
   error: string | null;
   provider: SearchProvider | null;
   tookMs: number;
+  totalResults: number;
   selectedIndex: number;
   setSelectedIndex: (index: number) => void;
   moveSelection: (delta: number) => void;
@@ -97,6 +93,7 @@ export function useSearch(): UseSearchResult {
   const [error, setError] = useState<string | null>(null);
   const [provider, setProvider] = useState<SearchProvider | null>(null);
   const [tookMs, setTookMs] = useState(0);
+  const [totalResults, setTotalResults] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(-1);
 
   const requestSeqRef = useRef(0);
@@ -137,6 +134,7 @@ export function useSearch(): UseSearchResult {
       setError(null);
       setProvider(null);
       setTookMs(0);
+      setTotalResults(0);
       setSelectedIndex(-1);
       activeQueryKeyRef.current = "";
     }
@@ -148,7 +146,7 @@ export function useSearch(): UseSearchResult {
       return;
     }
 
-    const queryKeyword = buildSearchKeyword(trimmedKeyword, filter, settings.includeHidden);
+    const queryKeyword = buildSearchKeyword(trimmedKeyword, filter);
     const queryKey = JSON.stringify({
       queryKeyword,
       filter,
@@ -183,6 +181,7 @@ export function useSearch(): UseSearchResult {
           setItems(page.items);
           setProvider(page.provider);
           setTookMs(page.tookMs);
+          setTotalResults(page.totalResults);
           setHasMore(page.hasMore);
           setSelectedIndex(
             page.items.length === 0 ? -1 : settings.autoSelectFirst ? 0 : -1,
@@ -201,6 +200,7 @@ export function useSearch(): UseSearchResult {
           setItems([]);
           setProvider(null);
           setTookMs(0);
+          setTotalResults(0);
           setHasMore(false);
           setSelectedIndex(-1);
           setError(describeSearchRuntimeError(asErrorMessage(e)));
@@ -231,7 +231,6 @@ export function useSearch(): UseSearchResult {
     filter,
     settings.autoSelectFirst,
     settings.debounceMs,
-    settings.includeHidden,
     settings.matchCase,
     settings.matchPath,
     settings.matchWholeWord,
@@ -254,6 +253,7 @@ export function useSearch(): UseSearchResult {
     setError(null);
     setProvider(null);
     setTookMs(0);
+    setTotalResults(0);
     setSelectedIndex(-1);
     activeQueryKeyRef.current = "";
   }, []);
@@ -298,7 +298,7 @@ export function useSearch(): UseSearchResult {
     setLoadingMore(true);
     setError(null);
 
-    const queryKeyword = buildSearchKeyword(trimmedKeyword, filter, settings.includeHidden);
+    const queryKeyword = buildSearchKeyword(trimmedKeyword, filter);
     void searchFiles({
       keyword: queryKeyword,
       ...buildQueryOptions(settings, items.length),
@@ -308,6 +308,7 @@ export function useSearch(): UseSearchResult {
         setItems((prev) => [...prev, ...page.items]);
         setProvider(page.provider);
         setTookMs((prev) => prev + page.tookMs);
+        setTotalResults(page.totalResults);
         setHasMore(page.hasMore);
       })
       .catch((e) => {
@@ -344,6 +345,7 @@ export function useSearch(): UseSearchResult {
       error,
       provider,
       tookMs,
+      totalResults,
       selectedIndex,
       setSelectedIndex,
       moveSelection,
@@ -372,6 +374,7 @@ export function useSearch(): UseSearchResult {
       settings,
       submitSearch,
       isKeywordCommitted,
+      totalResults,
       tookMs,
     ],
   );

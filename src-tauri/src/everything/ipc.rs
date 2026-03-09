@@ -4,6 +4,12 @@ use super::errors::map_ipc_error;
 use super::models::{SearchHit, SearchQuery, SearchSort};
 use super::runtime::append_debug_log;
 
+#[derive(Debug, Clone)]
+pub struct SearchResponse {
+    pub items: Vec<SearchHit>,
+    pub total_results: u32,
+}
+
 #[cfg(windows)]
 mod windows_impl {
     use super::*;
@@ -12,7 +18,6 @@ mod windows_impl {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use std::path::{Path, PathBuf};
-    use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
     use std::sync::Mutex;
     use std::thread;
@@ -21,10 +26,9 @@ mod windows_impl {
     use windows::Win32::Foundation::{GetLastError, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::WindowsAndMessaging::{
-        ChangeWindowMessageFilterEx, CreateWindowExW, DefWindowProcW, DestroyWindow,
-        DispatchMessageW, FindWindowW, MSG, MSGFLT_ALLOW, PM_REMOVE, PeekMessageW,
-        RegisterClassW, TranslateMessage, WINDOW_EX_STYLE, WINDOW_STYLE, WNDCLASSW,
-        WM_COPYDATA, WM_QUIT,
+        CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, HWND_MESSAGE, MSG,
+        PM_REMOVE, PeekMessageW, RegisterClassW, TranslateMessage, WINDOW_EX_STYLE, WINDOW_STYLE,
+        WNDCLASSW, WM_COPYDATA, WM_QUIT,
     };
 
     const EVERYTHING_SORT_NAME_ASCENDING: u32 = 1;
@@ -34,6 +38,9 @@ mod windows_impl {
     const EVERYTHING_REQUEST_FILE_NAME: u32 = 0x0000_0001;
     const EVERYTHING_REQUEST_PATH: u32 = 0x0000_0002;
     const REPLY_WINDOW_CLASS: &str = "DesktopGoEverythingSdkReplyWindow";
+    const REPLY_ID_COUNT: u32 = 1;
+    const REPLY_ID_RANGE: u32 = 2;
+    const REPLY_ID_PROBE: u32 = 3;
 
     type SetSearchW = unsafe extern "system" fn(*const u16);
     type SetBoolFlag = unsafe extern "system" fn(i32);
@@ -43,6 +50,7 @@ mod windows_impl {
     type QueryW = unsafe extern "system" fn(i32) -> i32;
     type IsQueryReply = unsafe extern "system" fn(u32, WPARAM, LPARAM, u32) -> i32;
     type GetNumResults = unsafe extern "system" fn() -> u32;
+    type GetTotResults = unsafe extern "system" fn() -> u32;
     type GetResultFullPathNameW = unsafe extern "system" fn(u32, *mut u16, u32) -> u32;
     type IsFolderResult = unsafe extern "system" fn(u32) -> i32;
     type IsFileResult = unsafe extern "system" fn(u32) -> i32;
@@ -66,6 +74,7 @@ mod windows_impl {
         query_w: QueryW,
         is_query_reply: IsQueryReply,
         get_num_results: GetNumResults,
+        get_tot_results: GetTotResults,
         get_result_full_path_name_w: GetResultFullPathNameW,
         is_folder_result: Option<IsFolderResult>,
         is_file_result: Option<IsFileResult>,
@@ -95,6 +104,7 @@ mod windows_impl {
                     query_w: load_symbol(&lib, b"Everything_QueryW\0")?,
                     is_query_reply: load_symbol(&lib, b"Everything_IsQueryReply\0")?,
                     get_num_results: load_symbol(&lib, b"Everything_GetNumResults\0")?,
+                    get_tot_results: load_symbol(&lib, b"Everything_GetTotResults\0")?,
                     get_result_full_path_name_w: load_symbol(
                         &lib,
                         b"Everything_GetResultFullPathNameW\0",
@@ -116,13 +126,41 @@ mod windows_impl {
         completed: bool,
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum SearchRequestKind {
+        Count,
+        Range,
+    }
+
+    impl SearchRequestKind {
+        fn reply_id(self) -> u32 {
+            match self {
+                Self::Count => REPLY_ID_COUNT,
+                Self::Range => REPLY_ID_RANGE,
+            }
+        }
+
+        fn reason(self) -> &'static str {
+            match self {
+                Self::Count => "count",
+                Self::Range => "range",
+            }
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct FirstPageCache {
+        query: SearchQuery,
+        response: SearchResponse,
+    }
+
     enum WorkerCommand {
         Probe {
             response: Sender<Result<(), String>>,
         },
         Search {
             query: SearchQuery,
-            response: Sender<Result<Vec<SearchHit>, String>>,
+            response: Sender<Result<SearchResponse, String>>,
         },
     }
 
@@ -137,7 +175,9 @@ mod windows_impl {
             reply_id: u32,
             started_at: Instant,
             timeout: Duration,
-            response: Sender<Result<Vec<SearchHit>, String>>,
+            query: SearchQuery,
+            request_kind: SearchRequestKind,
+            response: Sender<Result<SearchResponse, String>>,
         },
     }
 
@@ -163,14 +203,10 @@ mod windows_impl {
 
     static REPLY_WINDOW_CLASS_WIDE: Lazy<Vec<u16>> =
         Lazy::new(|| to_wide_null_terminated(REPLY_WINDOW_CLASS));
-    static EVERYTHING_WINDOW_CLASS_WIDE: Lazy<Vec<u16>> =
-        Lazy::new(|| to_wide_null_terminated("EVERYTHING_TASKBAR_NOTIFICATION"));
     static WINDOW_CLASS_REGISTERED: OnceCell<()> = OnceCell::new();
     static QUERY_REPLY_STATE: Lazy<Mutex<Option<ReplyState>>> = Lazy::new(|| Mutex::new(None));
     static WORKER_SENDER: OnceCell<Sender<WorkerCommand>> = OnceCell::new();
     static WORKER_INIT_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
-    static NEXT_REPLY_ID: AtomicU32 = AtomicU32::new(1);
-
     unsafe fn load_symbol<T: Copy>(lib: &Library, name: &[u8]) -> Result<T, String> {
         let symbol: Symbol<T> = lib.get(name).map_err(|e| {
             format!(
@@ -272,7 +308,7 @@ mod windows_impl {
                 0,
                 0,
                 0,
-                None,
+                Some(HWND_MESSAGE),
                 None,
                 Some(HINSTANCE(instance.0)),
                 None,
@@ -287,7 +323,6 @@ mod windows_impl {
             ));
         }
 
-        let _ = unsafe { ChangeWindowMessageFilterEx(hwnd, WM_COPYDATA, MSGFLT_ALLOW, None) };
         Ok(hwnd)
     }
 
@@ -317,21 +352,6 @@ mod windows_impl {
             .unwrap_or(false)
     }
 
-    fn find_everything_window() -> Result<HWND, String> {
-        let hwnd = unsafe {
-            FindWindowW(
-                PCWSTR(EVERYTHING_WINDOW_CLASS_WIDE.as_ptr()),
-                PCWSTR(std::ptr::null()),
-            )
-        }
-        .map_err(|e| format!("Failed to find Everything window: {}", e))?;
-        if hwnd.0.is_null() {
-            Err("Everything search client window was not found".to_string())
-        } else {
-            Ok(hwnd)
-        }
-    }
-
     fn begin_query(
         api: &EverythingApi,
         reply_hwnd: HWND,
@@ -339,7 +359,6 @@ mod windows_impl {
         app_handle: &tauri::AppHandle,
         reason: &str,
     ) -> Result<Instant, String> {
-        let _ = find_everything_window()?;
         set_reply_state(api.is_query_reply, reply_id)?;
 
         unsafe {
@@ -392,11 +411,15 @@ mod windows_impl {
     fn extract_search_results(
         api: &EverythingApi,
         app_handle: &tauri::AppHandle,
-    ) -> Result<Vec<SearchHit>, String> {
+    ) -> Result<SearchResponse, String> {
         let result_count = unsafe { (api.get_num_results)() };
+        let total_results = unsafe { (api.get_tot_results)() };
         append_debug_log(
             app_handle,
-            format!("ipc search: extracting {} results", result_count),
+            format!(
+                "ipc search: extracting {} results (total={})",
+                result_count, total_results
+            ),
         );
         let extraction_started_at = Instant::now();
         let mut items = Vec::with_capacity(result_count as usize);
@@ -439,13 +462,17 @@ mod windows_impl {
                 extraction_started_at.elapsed().as_millis()
             ),
         );
-        Ok(items)
+        Ok(SearchResponse {
+            items,
+            total_results,
+        })
     }
 
     fn finish_active_request(
         api: &EverythingApi,
         app_handle: &tauri::AppHandle,
         active: &mut Option<ActiveRequest>,
+        first_page_cache: &mut Option<FirstPageCache>,
         timed_out: bool,
     ) {
         let Some(request) = active.take() else {
@@ -455,9 +482,6 @@ mod windows_impl {
         let elapsed_ms = request.started_at().elapsed().as_millis();
         let reply_id = request.reply_id();
         clear_reply_state();
-        unsafe {
-            (api.set_reply_window)(HWND(std::ptr::null_mut()));
-        }
 
         match request {
             ActiveRequest::Probe { response, .. } => {
@@ -476,7 +500,12 @@ mod windows_impl {
                     let _ = response.send(Ok(()));
                 }
             }
-            ActiveRequest::Search { response, .. } => {
+            ActiveRequest::Search {
+                query,
+                request_kind,
+                response,
+                ..
+            } => {
                 if timed_out {
                     append_debug_log(
                         app_handle,
@@ -490,13 +519,17 @@ mod windows_impl {
                         format!("ipc search: reply received after {}ms", elapsed_ms),
                     );
                     let result = extract_search_results(api, app_handle);
+                    if let Ok(response_payload) = result.as_ref() {
+                        if request_kind == SearchRequestKind::Count && query.offset == 0 {
+                            *first_page_cache = Some(FirstPageCache {
+                                query,
+                                response: response_payload.clone(),
+                            });
+                        }
+                    }
                     let _ = response.send(result);
                 }
             }
-        }
-
-        unsafe {
-            (api.clean_up)();
         }
         append_debug_log(
             app_handle,
@@ -505,7 +538,7 @@ mod windows_impl {
     }
 
     fn cancel_active_request(
-        api: &EverythingApi,
+        _api: &EverythingApi,
         app_handle: &tauri::AppHandle,
         active: &mut Option<ActiveRequest>,
     ) {
@@ -514,11 +547,6 @@ mod windows_impl {
         };
 
         clear_reply_state();
-        unsafe {
-            (api.set_reply_window)(HWND(std::ptr::null_mut()));
-            (api.clean_up)();
-        }
-
         append_debug_log(app_handle, "ipc request superseded by newer query");
         match request {
             ActiveRequest::Probe { response, .. } => {
@@ -549,7 +577,7 @@ mod windows_impl {
             (api.set_max)(1);
         }
 
-        let reply_id = NEXT_REPLY_ID.fetch_add(1, Ordering::Relaxed);
+        let reply_id = REPLY_ID_PROBE;
         let started_at = begin_query(api, reply_hwnd, reply_id, app_handle, "probe")?;
         Ok(ActiveRequest::Probe {
             reply_id,
@@ -564,14 +592,18 @@ mod windows_impl {
         reply_hwnd: HWND,
         query: SearchQuery,
         app_handle: &tauri::AppHandle,
-        response: Sender<Result<Vec<SearchHit>, String>>,
+        response: Sender<Result<SearchResponse, String>>,
     ) -> Result<ActiveRequest, String> {
+        let request_kind = if query.offset == 0 {
+            SearchRequestKind::Count
+        } else {
+            SearchRequestKind::Range
+        };
         unsafe {
-            (api.reset)();
             (api.set_search_w)(to_wide_null_terminated(&query.keyword).as_ptr());
             (api.set_match_path)(query.match_path as i32);
             (api.set_match_case)(query.match_case as i32);
-            (api.set_match_whole_word)(query.whole_word as i32);
+            (api.set_match_whole_word)((query.whole_word && !query.regex) as i32);
             (api.set_regex)(query.regex as i32);
             (api.set_request_flags)(EVERYTHING_REQUEST_FILE_NAME | EVERYTHING_REQUEST_PATH);
             (api.set_sort)(sort_to_sdk_value(query.sort));
@@ -579,12 +611,14 @@ mod windows_impl {
             (api.set_max)(query.limit.max(1));
         }
 
-        let reply_id = NEXT_REPLY_ID.fetch_add(1, Ordering::Relaxed);
-        let started_at = begin_query(api, reply_hwnd, reply_id, app_handle, "search")?;
+        let reply_id = request_kind.reply_id();
+        let started_at = begin_query(api, reply_hwnd, reply_id, app_handle, request_kind.reason())?;
         Ok(ActiveRequest::Search {
             reply_id,
             started_at,
-            timeout: Duration::from_secs(5),
+            timeout: Duration::from_secs(30),
+            query,
+            request_kind,
             response,
         })
     }
@@ -596,6 +630,7 @@ mod windows_impl {
         app_handle: tauri::AppHandle,
     ) {
         let mut active: Option<ActiveRequest> = None;
+        let mut first_page_cache: Option<FirstPageCache> = None;
 
         loop {
             let mut message = MSG::default();
@@ -630,33 +665,58 @@ mod windows_impl {
                             let _ = response.send(Err(error));
                         }
                     },
-                    WorkerCommand::Search { query, response } => match start_search(
-                        &api,
-                        reply_hwnd,
-                        query,
-                        &app_handle,
-                        response.clone(),
-                    ) {
-                        Ok(request) => active = Some(request),
-                        Err(error) => {
-                            append_debug_log(
-                                &app_handle,
-                                format!("ipc worker failed to start search: {}", error),
-                            );
-                            let _ = response.send(Err(error));
+                    WorkerCommand::Search { query, response } => {
+                        if query.offset == 0 {
+                            if let Some(cache) = first_page_cache.as_ref() {
+                                if cache.query == query {
+                                    append_debug_log(
+                                        &app_handle,
+                                        "ipc search: reused cached first page",
+                                    );
+                                    let _ = response.send(Ok(cache.response.clone()));
+                                    continue;
+                                }
+                            }
+                            first_page_cache = None;
                         }
-                    },
+
+                        match start_search(&api, reply_hwnd, query, &app_handle, response.clone()) {
+                            Ok(request) => active = Some(request),
+                            Err(error) => {
+                                append_debug_log(
+                                    &app_handle,
+                                    format!("ipc worker failed to start search: {}", error),
+                                );
+                                let _ = response.send(Err(error));
+                            }
+                        }
+                    }
                 }
             }
 
             if is_reply_completed() {
-                finish_active_request(&api, &app_handle, &mut active, false);
+                finish_active_request(
+                    &api,
+                    &app_handle,
+                    &mut active,
+                    &mut first_page_cache,
+                    false,
+                );
             } else if active
                 .as_ref()
-                .map(|request| request.started_at().elapsed() >= request.timeout())
+                .map(|request| {
+                    matches!(request, ActiveRequest::Probe { .. })
+                        && request.started_at().elapsed() >= request.timeout()
+                })
                 .unwrap_or(false)
             {
-                finish_active_request(&api, &app_handle, &mut active, true);
+                finish_active_request(
+                    &api,
+                    &app_handle,
+                    &mut active,
+                    &mut first_page_cache,
+                    true,
+                );
             }
 
             thread::sleep(Duration::from_millis(10));
@@ -700,6 +760,10 @@ mod windows_impl {
                     return;
                 }
             };
+
+            unsafe {
+                (api.set_reply_window)(reply_hwnd);
+            }
 
             append_debug_log(
                 &app_handle_clone,
@@ -754,7 +818,7 @@ mod windows_impl {
         dll_path: &Path,
         query: &SearchQuery,
         app_handle: &tauri::AppHandle,
-    ) -> Result<Vec<SearchHit>, String> {
+    ) -> Result<SearchResponse, String> {
         let sender = ensure_worker(dll_path, app_handle)?;
         let (response_tx, response_rx) = mpsc::channel();
         sender
@@ -764,7 +828,7 @@ mod windows_impl {
             })
             .map_err(|_| "Everything IPC worker is unavailable".to_string())?;
 
-        match response_rx.recv_timeout(Duration::from_secs(7)) {
+        match response_rx.recv_timeout(Duration::from_secs(32)) {
             Ok(result) => result,
             Err(RecvTimeoutError::Timeout) => {
                 Err("Everything query timed out while waiting for reply".to_string())
@@ -786,7 +850,7 @@ pub fn search(
     dll_path: &Path,
     query: &SearchQuery,
     app_handle: &tauri::AppHandle,
-) -> Result<Vec<SearchHit>, String> {
+) -> Result<SearchResponse, String> {
     windows_impl::search(dll_path, query, app_handle)
 }
 
@@ -800,6 +864,6 @@ pub fn search(
     _dll_path: &Path,
     _query: &SearchQuery,
     _app_handle: &tauri::AppHandle,
-) -> Result<Vec<SearchHit>, String> {
+) -> Result<SearchResponse, String> {
     Err("Everything search is only supported on Windows".to_string())
 }

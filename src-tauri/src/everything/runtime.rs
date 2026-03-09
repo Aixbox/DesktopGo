@@ -325,6 +325,7 @@ pub fn search_files(
             items: Vec::new(),
             offset: query.offset,
             limit: query.limit,
+            total_results: 0,
             has_more: false,
             provider,
             took_ms: 0,
@@ -344,28 +345,30 @@ pub fn search_files(
             app_handle,
             format!("search_files: http search begin port={}", config.port),
         );
-        let items = http::search(config, &query).map_err(|e| {
+        let response = http::search(config, &query).map_err(|e| {
             build_error(
                 SearchErrorCode::EverythingIpcUnavailable,
                 format!("Everything HTTP search failed: {}", e),
             )
         })?;
         let took_ms = started_at.elapsed().as_millis() as u64;
-        let has_more = items.len() as u32 >= query.limit;
+        let has_more = query.offset.saturating_add(response.items.len() as u32) < response.total_results;
         append_debug_log(
             app_handle,
             format!(
-                "search_files: http search done items={} took_ms={} has_more={}",
-                items.len(),
+                "search_files: http search done items={} total_results={} took_ms={} has_more={}",
+                response.items.len(),
+                response.total_results,
                 took_ms,
                 has_more
             ),
         );
 
         return Ok(SearchPage {
-            items,
+            items: response.items,
             offset: query.offset,
             limit: query.limit,
+            total_results: response.total_results,
             has_more,
             provider,
             took_ms,
@@ -385,28 +388,30 @@ pub fn search_files(
 
     let started_at = Instant::now();
     append_debug_log(app_handle, "search_files: ipc search begin");
-    let items = ipc::search(&dll_path, &query, app_handle).map_err(|e| {
+    let response = ipc::search(&dll_path, &query, app_handle).map_err(|e| {
         build_error(
             SearchErrorCode::EverythingIpcUnavailable,
             format!("Everything query failed: {}", e),
         )
     })?;
     let took_ms = started_at.elapsed().as_millis() as u64;
-    let has_more = items.len() as u32 >= query.limit;
+    let has_more = query.offset.saturating_add(response.items.len() as u32) < response.total_results;
     append_debug_log(
         app_handle,
         format!(
-            "search_files: ipc search done items={} took_ms={} has_more={}",
-            items.len(),
+            "search_files: ipc search done items={} total_results={} took_ms={} has_more={}",
+            response.items.len(),
+            response.total_results,
             took_ms,
             has_more
         ),
     );
 
     Ok(SearchPage {
-        items,
+        items: response.items,
         offset: query.offset,
         limit: query.limit,
+        total_results: response.total_results,
         has_more,
         provider,
         took_ms,
