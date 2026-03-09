@@ -57,9 +57,8 @@ impl RuntimeState {
 }
 
 static RUNTIME_STATE: Lazy<Mutex<RuntimeState>> = Lazy::new(|| Mutex::new(RuntimeState::default()));
-static IPC_CALL_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
-fn append_debug_log(app_handle: &tauri::AppHandle, message: impl AsRef<str>) {
+pub(super) fn append_debug_log(app_handle: &tauri::AppHandle, message: impl AsRef<str>) {
     let text = message.as_ref();
     eprintln!("[search-debug] {}", text);
 
@@ -83,17 +82,10 @@ fn append_debug_log(app_handle: &tauri::AppHandle, message: impl AsRef<str>) {
     let _ = writeln!(file, "[{}] {}", ts, text);
 }
 
-fn with_ipc_lock<T>(f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
-    let _guard = IPC_CALL_LOCK
-        .lock()
-        .map_err(|_| "Failed to lock Everything IPC state".to_string())?;
-    f()
-}
-
-fn wait_for_ipc_ready(dll_path: &PathBuf, timeout: Duration) -> bool {
+fn wait_for_ipc_ready(app_handle: &tauri::AppHandle, dll_path: &PathBuf, timeout: Duration) -> bool {
     let started_at = Instant::now();
     while started_at.elapsed() < timeout {
-        if with_ipc_lock(|| ipc::probe_connection(dll_path)).is_ok() {
+        if ipc::probe_connection(dll_path, app_handle).is_ok() {
             return true;
         }
         std::thread::sleep(Duration::from_millis(100));
@@ -263,7 +255,7 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
         guard.dll_path.clone()
     };
     if let Some(dll_path) = cached_dll_path.as_ref() {
-        if with_ipc_lock(|| ipc::probe_connection(dll_path)).is_ok() {
+        if ipc::probe_connection(dll_path, app_handle).is_ok() {
             append_debug_log(app_handle, "start_search_runtime: probe ok");
             return set_runtime_ready(app_handle, None);
         }
@@ -281,7 +273,7 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
     }
     append_debug_log(app_handle, "start_search_runtime: desktop instance start requested");
 
-    if wait_for_ipc_ready(&dll_path, Duration::from_secs(5)) {
+    if wait_for_ipc_ready(app_handle, &dll_path, Duration::from_secs(5)) {
         append_debug_log(app_handle, "start_search_runtime: probe ok after desktop start");
         return set_runtime_ready(app_handle, None);
     }
@@ -393,7 +385,7 @@ pub fn search_files(
 
     let started_at = Instant::now();
     append_debug_log(app_handle, "search_files: ipc search begin");
-    let items = with_ipc_lock(|| ipc::search(&dll_path, &query)).map_err(|e| {
+    let items = ipc::search(&dll_path, &query, app_handle).map_err(|e| {
         build_error(
             SearchErrorCode::EverythingIpcUnavailable,
             format!("Everything query failed: {}", e),

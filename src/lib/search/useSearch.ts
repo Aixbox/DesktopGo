@@ -51,6 +51,16 @@ const asErrorMessage = (error: unknown) => {
   return String(error);
 };
 
+const SEARCH_BUSY_PREFIX = "EverythingBusy";
+const SEARCH_BUSY_RETRY_BASE_MS = 250;
+const SEARCH_BUSY_RETRY_MAX_MS = 1_000;
+
+const isSearchBusyError = (error: unknown) =>
+  asErrorMessage(error).startsWith(SEARCH_BUSY_PREFIX);
+
+const getBusyRetryDelay = (attempt: number) =>
+  Math.min(SEARCH_BUSY_RETRY_BASE_MS * (attempt + 1), SEARCH_BUSY_RETRY_MAX_MS);
+
 interface UseSearchResult {
   keyword: string;
   setKeyword: (value: string) => void;
@@ -152,10 +162,18 @@ export function useSearch(): UseSearchResult {
 
     activeQueryKeyRef.current = queryKey;
     const seq = ++requestSeqRef.current;
-    const timer = window.setTimeout(() => {
+    let retryTimer: number | null = null;
+    let cancelled = false;
+
+    const runSearch = (retryAttempt: number) => {
+      if (cancelled) return;
+      if (requestSeqRef.current !== seq || activeQueryKeyRef.current !== queryKey) return;
+
       setLoading(true);
       setLoadingMore(false);
       setError(null);
+
+      let scheduledRetry = false;
       void searchFiles({
         keyword: queryKeyword,
         ...buildQueryOptions(settings, 0),
@@ -172,6 +190,14 @@ export function useSearch(): UseSearchResult {
         })
         .catch((e) => {
           if (requestSeqRef.current !== seq || activeQueryKeyRef.current !== queryKey) return;
+          if (isSearchBusyError(e)) {
+            scheduledRetry = true;
+            retryTimer = window.setTimeout(() => {
+              retryTimer = null;
+              runSearch(retryAttempt + 1);
+            }, getBusyRetryDelay(retryAttempt));
+            return;
+          }
           setItems([]);
           setProvider(null);
           setTookMs(0);
@@ -180,14 +206,25 @@ export function useSearch(): UseSearchResult {
           setError(describeSearchRuntimeError(asErrorMessage(e)));
         })
         .finally(() => {
+          if (scheduledRetry || cancelled) {
+            return;
+          }
           if (requestSeqRef.current === seq && activeQueryKeyRef.current === queryKey) {
             setLoading(false);
           }
         });
+    };
+
+    const timer = window.setTimeout(() => {
+      runSearch(0);
     }, settings.debounceMs);
 
     return () => {
+      cancelled = true;
       window.clearTimeout(timer);
+      if (retryTimer !== null) {
+        window.clearTimeout(retryTimer);
+      }
     };
   }, [
     committedKeyword,

@@ -2,6 +2,7 @@ use std::path::Path;
 
 use super::errors::map_ipc_error;
 use super::models::{SearchHit, SearchQuery, SearchSort};
+use super::runtime::append_debug_log;
 
 #[cfg(windows)]
 mod windows_impl {
@@ -10,16 +11,20 @@ mod windows_impl {
     use once_cell::sync::{Lazy, OnceCell};
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
     use std::sync::Mutex;
+    use std::thread;
     use std::time::{Duration, Instant};
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::{GetLastError, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::WindowsAndMessaging::{
         ChangeWindowMessageFilterEx, CreateWindowExW, DefWindowProcW, DestroyWindow,
-        DispatchMessageW, MSG, MSGFLT_ALLOW, PM_REMOVE, PeekMessageW, RegisterClassW,
-        TranslateMessage, WINDOW_EX_STYLE, WINDOW_STYLE, WNDCLASSW, WM_COPYDATA,
+        DispatchMessageW, FindWindowW, MSG, MSGFLT_ALLOW, PM_REMOVE, PeekMessageW,
+        RegisterClassW, TranslateMessage, WINDOW_EX_STYLE, WINDOW_STYLE, WNDCLASSW,
+        WM_COPYDATA, WM_QUIT,
     };
 
     const EVERYTHING_SORT_NAME_ASCENDING: u32 = 1;
@@ -29,7 +34,6 @@ mod windows_impl {
     const EVERYTHING_REQUEST_FILE_NAME: u32 = 0x0000_0001;
     const EVERYTHING_REQUEST_PATH: u32 = 0x0000_0002;
     const REPLY_WINDOW_CLASS: &str = "DesktopGoEverythingSdkReplyWindow";
-    const REPLY_ID: u32 = 0;
 
     type SetSearchW = unsafe extern "system" fn(*const u16);
     type SetBoolFlag = unsafe extern "system" fn(i32);
@@ -112,10 +116,60 @@ mod windows_impl {
         completed: bool,
     }
 
+    enum WorkerCommand {
+        Probe {
+            response: Sender<Result<(), String>>,
+        },
+        Search {
+            query: SearchQuery,
+            response: Sender<Result<Vec<SearchHit>, String>>,
+        },
+    }
+
+    enum ActiveRequest {
+        Probe {
+            reply_id: u32,
+            started_at: Instant,
+            timeout: Duration,
+            response: Sender<Result<(), String>>,
+        },
+        Search {
+            reply_id: u32,
+            started_at: Instant,
+            timeout: Duration,
+            response: Sender<Result<Vec<SearchHit>, String>>,
+        },
+    }
+
+    impl ActiveRequest {
+        fn reply_id(&self) -> u32 {
+            match self {
+                Self::Probe { reply_id, .. } | Self::Search { reply_id, .. } => *reply_id,
+            }
+        }
+
+        fn started_at(&self) -> Instant {
+            match self {
+                Self::Probe { started_at, .. } | Self::Search { started_at, .. } => *started_at,
+            }
+        }
+
+        fn timeout(&self) -> Duration {
+            match self {
+                Self::Probe { timeout, .. } | Self::Search { timeout, .. } => *timeout,
+            }
+        }
+    }
+
     static REPLY_WINDOW_CLASS_WIDE: Lazy<Vec<u16>> =
         Lazy::new(|| to_wide_null_terminated(REPLY_WINDOW_CLASS));
+    static EVERYTHING_WINDOW_CLASS_WIDE: Lazy<Vec<u16>> =
+        Lazy::new(|| to_wide_null_terminated("EVERYTHING_TASKBAR_NOTIFICATION"));
     static WINDOW_CLASS_REGISTERED: OnceCell<()> = OnceCell::new();
     static QUERY_REPLY_STATE: Lazy<Mutex<Option<ReplyState>>> = Lazy::new(|| Mutex::new(None));
+    static WORKER_SENDER: OnceCell<Sender<WorkerCommand>> = OnceCell::new();
+    static WORKER_INIT_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+    static NEXT_REPLY_ID: AtomicU32 = AtomicU32::new(1);
 
     unsafe fn load_symbol<T: Copy>(lib: &Library, name: &[u8]) -> Result<T, String> {
         let symbol: Symbol<T> = lib.get(name).map_err(|e| {
@@ -243,6 +297,18 @@ mod windows_impl {
         }
     }
 
+    fn set_reply_state(is_query_reply: IsQueryReply, reply_id: u32) -> Result<(), String> {
+        let mut guard = QUERY_REPLY_STATE
+            .lock()
+            .map_err(|_| "Failed to lock Everything reply state".to_string())?;
+        *guard = Some(ReplyState {
+            is_query_reply,
+            reply_id,
+            completed: false,
+        });
+        Ok(())
+    }
+
     fn is_reply_completed() -> bool {
         QUERY_REPLY_STATE
             .lock()
@@ -251,73 +317,58 @@ mod windows_impl {
             .unwrap_or(false)
     }
 
-    fn execute_query(api: &EverythingApi, timeout: Duration) -> Result<(), String> {
-        let reply_hwnd = create_reply_window()?;
-        {
-            let mut guard = QUERY_REPLY_STATE
-                .lock()
-                .map_err(|_| "Failed to lock Everything reply state".to_string())?;
-            *guard = Some(ReplyState {
-                is_query_reply: api.is_query_reply,
-                reply_id: REPLY_ID,
-                completed: false,
-            });
+    fn find_everything_window() -> Result<HWND, String> {
+        let hwnd = unsafe {
+            FindWindowW(
+                PCWSTR(EVERYTHING_WINDOW_CLASS_WIDE.as_ptr()),
+                PCWSTR(std::ptr::null()),
+            )
         }
+        .map_err(|e| format!("Failed to find Everything window: {}", e))?;
+        if hwnd.0.is_null() {
+            Err("Everything search client window was not found".to_string())
+        } else {
+            Ok(hwnd)
+        }
+    }
+
+    fn begin_query(
+        api: &EverythingApi,
+        reply_hwnd: HWND,
+        reply_id: u32,
+        app_handle: &tauri::AppHandle,
+        reason: &str,
+    ) -> Result<Instant, String> {
+        let _ = find_everything_window()?;
+        set_reply_state(api.is_query_reply, reply_id)?;
 
         unsafe {
             (api.set_reply_window)(reply_hwnd);
-            (api.set_reply_id)(REPLY_ID);
+            (api.set_reply_id)(reply_id);
         }
 
+        append_debug_log(app_handle, format!("ipc {}: query_w call start", reason));
+        let query_started_at = Instant::now();
         let ok = unsafe { (api.query_w)(0) };
+        append_debug_log(
+            app_handle,
+            format!(
+                "ipc {}: query_w call returned ok={} took_ms={}",
+                reason,
+                ok,
+                query_started_at.elapsed().as_millis()
+            ),
+        );
         if ok == 0 {
-            let error = build_query_error(api, "Everything query failed");
             clear_reply_state();
             unsafe {
-                let _ = DestroyWindow(reply_hwnd);
+                (api.set_reply_window)(HWND(std::ptr::null_mut()));
+                (api.clean_up)();
             }
-            return Err(error);
+            return Err(build_query_error(api, "Everything query failed"));
         }
 
-        let started_at = Instant::now();
-        loop {
-            if is_reply_completed() {
-                clear_reply_state();
-                unsafe {
-                    (api.set_reply_window)(HWND(std::ptr::null_mut()));
-                    let _ = DestroyWindow(reply_hwnd);
-                }
-                return Ok(());
-            }
-
-            let mut message = MSG::default();
-            while unsafe { PeekMessageW(&mut message, None, 0, 0, PM_REMOVE) }.into() {
-                unsafe {
-                    let _ = TranslateMessage(&message);
-                    DispatchMessageW(&message);
-                }
-            }
-
-            if is_reply_completed() {
-                clear_reply_state();
-                unsafe {
-                    (api.set_reply_window)(HWND(std::ptr::null_mut()));
-                    let _ = DestroyWindow(reply_hwnd);
-                }
-                return Ok(());
-            }
-
-            if started_at.elapsed() >= timeout {
-                clear_reply_state();
-                unsafe {
-                    (api.set_reply_window)(HWND(std::ptr::null_mut()));
-                    let _ = DestroyWindow(reply_hwnd);
-                }
-                return Err("Everything query timed out while waiting for reply".to_string());
-            }
-
-            std::thread::sleep(Duration::from_millis(10));
-        }
+        Ok(Instant::now())
     }
 
     fn extract_path(api: &EverythingApi, index: u32) -> Option<String> {
@@ -338,8 +389,159 @@ mod windows_impl {
         Some(String::from_utf16_lossy(&buffer[..end]))
     }
 
-    pub(super) fn probe_connection(dll_path: &Path) -> Result<(), String> {
-        let api = EverythingApi::load(dll_path)?;
+    fn extract_search_results(
+        api: &EverythingApi,
+        app_handle: &tauri::AppHandle,
+    ) -> Result<Vec<SearchHit>, String> {
+        let result_count = unsafe { (api.get_num_results)() };
+        append_debug_log(
+            app_handle,
+            format!("ipc search: extracting {} results", result_count),
+        );
+        let extraction_started_at = Instant::now();
+        let mut items = Vec::with_capacity(result_count as usize);
+        for index in 0..result_count {
+            let Some(path) = extract_path(api, index) else {
+                continue;
+            };
+            let path_buf = PathBuf::from(&path);
+            let is_folder = api
+                .is_folder_result
+                .map(|func| unsafe { func(index) != 0 })
+                .unwrap_or(false);
+            let is_file = api
+                .is_file_result
+                .map(|func| unsafe { func(index) != 0 })
+                .unwrap_or(!is_folder);
+            let name = path_buf
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("")
+                .to_string();
+            let parent = path_buf
+                .parent()
+                .map(|value| value.to_string_lossy().to_string())
+                .unwrap_or_default();
+            items.push(SearchHit {
+                path,
+                name,
+                parent,
+                is_file,
+                is_folder,
+                icon_base64: String::new(),
+            });
+        }
+        append_debug_log(
+            app_handle,
+            format!(
+                "ipc search: extracted {} results in {}ms",
+                items.len(),
+                extraction_started_at.elapsed().as_millis()
+            ),
+        );
+        Ok(items)
+    }
+
+    fn finish_active_request(
+        api: &EverythingApi,
+        app_handle: &tauri::AppHandle,
+        active: &mut Option<ActiveRequest>,
+        timed_out: bool,
+    ) {
+        let Some(request) = active.take() else {
+            return;
+        };
+
+        let elapsed_ms = request.started_at().elapsed().as_millis();
+        let reply_id = request.reply_id();
+        clear_reply_state();
+        unsafe {
+            (api.set_reply_window)(HWND(std::ptr::null_mut()));
+        }
+
+        match request {
+            ActiveRequest::Probe { response, .. } => {
+                if timed_out {
+                    append_debug_log(
+                        app_handle,
+                        format!("ipc probe: timed out after {}ms waiting for reply", elapsed_ms),
+                    );
+                    let _ = response
+                        .send(Err("Everything query timed out while waiting for reply".to_string()));
+                } else {
+                    append_debug_log(
+                        app_handle,
+                        format!("ipc probe: reply received after {}ms", elapsed_ms),
+                    );
+                    let _ = response.send(Ok(()));
+                }
+            }
+            ActiveRequest::Search { response, .. } => {
+                if timed_out {
+                    append_debug_log(
+                        app_handle,
+                        format!("ipc search: timed out after {}ms waiting for reply", elapsed_ms),
+                    );
+                    let _ = response
+                        .send(Err("Everything query timed out while waiting for reply".to_string()));
+                } else {
+                    append_debug_log(
+                        app_handle,
+                        format!("ipc search: reply received after {}ms", elapsed_ms),
+                    );
+                    let result = extract_search_results(api, app_handle);
+                    let _ = response.send(result);
+                }
+            }
+        }
+
+        unsafe {
+            (api.clean_up)();
+        }
+        append_debug_log(
+            app_handle,
+            format!("ipc request {} finished", reply_id),
+        );
+    }
+
+    fn cancel_active_request(
+        api: &EverythingApi,
+        app_handle: &tauri::AppHandle,
+        active: &mut Option<ActiveRequest>,
+    ) {
+        let Some(request) = active.take() else {
+            return;
+        };
+
+        clear_reply_state();
+        unsafe {
+            (api.set_reply_window)(HWND(std::ptr::null_mut()));
+            (api.clean_up)();
+        }
+
+        append_debug_log(app_handle, "ipc request superseded by newer query");
+        match request {
+            ActiveRequest::Probe { response, .. } => {
+                let _ = response.send(Err(
+                    "EverythingBusy: Previous Everything IPC request was superseded by a newer request"
+                        .to_string(),
+                ));
+            }
+            ActiveRequest::Search { response, .. } => {
+                let _ = response.send(Err(
+                    "EverythingBusy: Previous Everything IPC request was superseded by a newer search"
+                        .to_string(),
+                ));
+            }
+        }
+    }
+
+    fn start_probe(
+        api: &EverythingApi,
+        reply_hwnd: HWND,
+        app_handle: &tauri::AppHandle,
+        response: Sender<Result<(), String>>,
+    ) -> Result<ActiveRequest, String> {
         unsafe {
             (api.reset)();
             (api.set_search_w)(to_wide_null_terminated("").as_ptr());
@@ -347,17 +549,23 @@ mod windows_impl {
             (api.set_max)(1);
         }
 
-        let result = execute_query(&api, Duration::from_secs(3))
-            .map_err(|error| format!("Everything probe failed: {}", error));
-
-        unsafe {
-            (api.clean_up)();
-        }
-        result
+        let reply_id = NEXT_REPLY_ID.fetch_add(1, Ordering::Relaxed);
+        let started_at = begin_query(api, reply_hwnd, reply_id, app_handle, "probe")?;
+        Ok(ActiveRequest::Probe {
+            reply_id,
+            started_at,
+            timeout: Duration::from_secs(3),
+            response,
+        })
     }
 
-    pub(super) fn search(dll_path: &Path, query: &SearchQuery) -> Result<Vec<SearchHit>, String> {
-        let api = EverythingApi::load(dll_path)?;
+    fn start_search(
+        api: &EverythingApi,
+        reply_hwnd: HWND,
+        query: SearchQuery,
+        app_handle: &tauri::AppHandle,
+        response: Sender<Result<Vec<SearchHit>, String>>,
+    ) -> Result<ActiveRequest, String> {
         unsafe {
             (api.reset)();
             (api.set_search_w)(to_wide_null_terminated(&query.keyword).as_ptr());
@@ -371,63 +579,227 @@ mod windows_impl {
             (api.set_max)(query.limit.max(1));
         }
 
-        let result = execute_query(&api, Duration::from_secs(5)).and_then(|_| {
-            let result_count = unsafe { (api.get_num_results)() };
-            let mut items = Vec::with_capacity(result_count as usize);
-            for index in 0..result_count {
-                let Some(path) = extract_path(&api, index) else {
-                    continue;
-                };
-                let path_buf = PathBuf::from(&path);
-                let is_folder = api.is_folder_result.map(|func| unsafe { func(index) != 0 }).unwrap_or(false);
-                let is_file = api
-                    .is_file_result
-                    .map(|func| unsafe { func(index) != 0 })
-                    .unwrap_or(!is_folder);
-                let name = path_buf
-                    .file_name()
-                    .and_then(|value| value.to_str())
-                    .unwrap_or("")
-                    .to_string();
-                let parent = path_buf
-                    .parent()
-                    .map(|value| value.to_string_lossy().to_string())
-                    .unwrap_or_default();
-                items.push(SearchHit {
-                    path,
-                    name,
-                    parent,
-                    is_file,
-                    is_folder,
-                    icon_base64: String::new(),
-                });
+        let reply_id = NEXT_REPLY_ID.fetch_add(1, Ordering::Relaxed);
+        let started_at = begin_query(api, reply_hwnd, reply_id, app_handle, "search")?;
+        Ok(ActiveRequest::Search {
+            reply_id,
+            started_at,
+            timeout: Duration::from_secs(5),
+            response,
+        })
+    }
+
+    fn worker_loop(
+        api: EverythingApi,
+        reply_hwnd: HWND,
+        command_rx: Receiver<WorkerCommand>,
+        app_handle: tauri::AppHandle,
+    ) {
+        let mut active: Option<ActiveRequest> = None;
+
+        loop {
+            let mut message = MSG::default();
+            while unsafe { PeekMessageW(&mut message, None, 0, 0, PM_REMOVE) }.into() {
+                if message.message == WM_QUIT {
+                    unsafe {
+                        let _ = DestroyWindow(reply_hwnd);
+                    }
+                    return;
+                }
+                unsafe {
+                    let _ = TranslateMessage(&message);
+                    DispatchMessageW(&message);
+                }
             }
-            Ok(items)
+
+            while let Ok(command) = command_rx.try_recv() {
+                cancel_active_request(&api, &app_handle, &mut active);
+                match command {
+                    WorkerCommand::Probe { response } => match start_probe(
+                        &api,
+                        reply_hwnd,
+                        &app_handle,
+                        response.clone(),
+                    ) {
+                        Ok(request) => active = Some(request),
+                        Err(error) => {
+                            append_debug_log(
+                                &app_handle,
+                                format!("ipc worker failed to start probe: {}", error),
+                            );
+                            let _ = response.send(Err(error));
+                        }
+                    },
+                    WorkerCommand::Search { query, response } => match start_search(
+                        &api,
+                        reply_hwnd,
+                        query,
+                        &app_handle,
+                        response.clone(),
+                    ) {
+                        Ok(request) => active = Some(request),
+                        Err(error) => {
+                            append_debug_log(
+                                &app_handle,
+                                format!("ipc worker failed to start search: {}", error),
+                            );
+                            let _ = response.send(Err(error));
+                        }
+                    },
+                }
+            }
+
+            if is_reply_completed() {
+                finish_active_request(&api, &app_handle, &mut active, false);
+            } else if active
+                .as_ref()
+                .map(|request| request.started_at().elapsed() >= request.timeout())
+                .unwrap_or(false)
+            {
+                finish_active_request(&api, &app_handle, &mut active, true);
+            }
+
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    fn ensure_worker(
+        dll_path: &Path,
+        app_handle: &tauri::AppHandle,
+    ) -> Result<Sender<WorkerCommand>, String> {
+        if let Some(sender) = WORKER_SENDER.get() {
+            return Ok(sender.clone());
+        }
+
+        let _guard = WORKER_INIT_LOCK
+            .lock()
+            .map_err(|_| "Failed to lock Everything IPC worker init".to_string())?;
+
+        if let Some(sender) = WORKER_SENDER.get() {
+            return Ok(sender.clone());
+        }
+
+        let dll_path = dll_path.to_path_buf();
+        let app_handle_clone = app_handle.clone();
+        let (command_tx, command_rx) = mpsc::channel();
+        let (init_tx, init_rx) = mpsc::channel();
+
+        thread::spawn(move || {
+            let api = match EverythingApi::load(&dll_path) {
+                Ok(api) => api,
+                Err(error) => {
+                    let _ = init_tx.send(Err(error));
+                    return;
+                }
+            };
+
+            let reply_hwnd = match create_reply_window() {
+                Ok(hwnd) => hwnd,
+                Err(error) => {
+                    let _ = init_tx.send(Err(error));
+                    return;
+                }
+            };
+
+            append_debug_log(
+                &app_handle_clone,
+                format!("ipc worker ready hwnd={:?}", reply_hwnd),
+            );
+            let _ = init_tx.send(Ok(()));
+            worker_loop(api, reply_hwnd, command_rx, app_handle_clone);
         });
 
-        unsafe {
-            (api.clean_up)();
+        match init_rx.recv_timeout(Duration::from_secs(5)) {
+            Ok(Ok(())) => {
+                let _ = WORKER_SENDER.set(command_tx.clone());
+                Ok(WORKER_SENDER
+                    .get()
+                    .cloned()
+                    .unwrap_or(command_tx))
+            }
+            Ok(Err(error)) => Err(error),
+            Err(RecvTimeoutError::Timeout) => {
+                Err("Everything IPC worker startup timed out".to_string())
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                Err("Everything IPC worker stopped during startup".to_string())
+            }
         }
-        result
+    }
+
+    pub(super) fn probe_connection(
+        dll_path: &Path,
+        app_handle: &tauri::AppHandle,
+    ) -> Result<(), String> {
+        let sender = ensure_worker(dll_path, app_handle)?;
+        let (response_tx, response_rx) = mpsc::channel();
+        sender
+            .send(WorkerCommand::Probe {
+                response: response_tx,
+            })
+            .map_err(|_| "Everything IPC worker is unavailable".to_string())?;
+
+        match response_rx.recv_timeout(Duration::from_secs(4)) {
+            Ok(result) => result,
+            Err(RecvTimeoutError::Timeout) => {
+                Err("Everything query timed out while waiting for reply".to_string())
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                Err("Everything IPC worker stopped".to_string())
+            }
+        }
+    }
+
+    pub(super) fn search(
+        dll_path: &Path,
+        query: &SearchQuery,
+        app_handle: &tauri::AppHandle,
+    ) -> Result<Vec<SearchHit>, String> {
+        let sender = ensure_worker(dll_path, app_handle)?;
+        let (response_tx, response_rx) = mpsc::channel();
+        sender
+            .send(WorkerCommand::Search {
+                query: query.clone(),
+                response: response_tx,
+            })
+            .map_err(|_| "Everything IPC worker is unavailable".to_string())?;
+
+        match response_rx.recv_timeout(Duration::from_secs(7)) {
+            Ok(result) => result,
+            Err(RecvTimeoutError::Timeout) => {
+                Err("Everything query timed out while waiting for reply".to_string())
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                Err("Everything IPC worker stopped".to_string())
+            }
+        }
     }
 }
 
 #[cfg(windows)]
-pub fn probe_connection(dll_path: &Path) -> Result<(), String> {
-    windows_impl::probe_connection(dll_path)
+pub fn probe_connection(dll_path: &Path, app_handle: &tauri::AppHandle) -> Result<(), String> {
+    windows_impl::probe_connection(dll_path, app_handle)
 }
 
 #[cfg(windows)]
-pub fn search(dll_path: &Path, query: &SearchQuery) -> Result<Vec<SearchHit>, String> {
-    windows_impl::search(dll_path, query)
+pub fn search(
+    dll_path: &Path,
+    query: &SearchQuery,
+    app_handle: &tauri::AppHandle,
+) -> Result<Vec<SearchHit>, String> {
+    windows_impl::search(dll_path, query, app_handle)
 }
 
 #[cfg(not(windows))]
-pub fn probe_connection(_dll_path: &Path) -> Result<(), String> {
+pub fn probe_connection(_dll_path: &Path, _app_handle: &tauri::AppHandle) -> Result<(), String> {
     Err("Everything search is only supported on Windows".to_string())
 }
 
 #[cfg(not(windows))]
-pub fn search(_dll_path: &Path, _query: &SearchQuery) -> Result<Vec<SearchHit>, String> {
+pub fn search(
+    _dll_path: &Path,
+    _query: &SearchQuery,
+    _app_handle: &tauri::AppHandle,
+) -> Result<Vec<SearchHit>, String> {
     Err("Everything search is only supported on Windows".to_string())
 }

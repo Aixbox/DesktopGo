@@ -199,6 +199,9 @@ export const describeSearchRuntimeError = (message: string) => {
   if (message.startsWith("EverythingIpcUnavailable")) {
     return "DesktopGo could not query the running Everything instance. Make sure Everything is already running and both apps use the same privilege level.";
   }
+  if (message.startsWith("EverythingBusy")) {
+    return "DesktopGo is waiting for the previous Everything IPC request to finish.";
+  }
   if (message === "Everything runtime startup timed out.") {
     return "DesktopGo timed out while preparing Everything. Retry the search.";
   }
