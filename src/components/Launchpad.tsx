@@ -10,7 +10,6 @@ import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { Check, ChevronDown } from 'lucide-react'
-import { IconSearchPanel } from '@/components/search/IconSearchPanel'
 import { applyTheme, getSavedTheme } from '@/lib/theme'
 import { getSearchPreview, recordSearchResultRun } from '@/lib/search/api'
 import { SEARCH_FILTERS } from '@/lib/search/filters'
@@ -145,7 +144,6 @@ export function Launchpad() {
       .slice(0, ICON_SEARCH_LIMIT)
   }, [icons, normalizedKeyword, searchSource])
   const isSearchPanelVisible = searchSource === 'everything' && isSearchPanelOpen
-  const isIconSearchVisible = searchSource === 'icons' && isSearchPanelOpen
 
   useEffect(() => {
     void (async () => {
@@ -218,7 +216,7 @@ export function Launchpad() {
   }, [hasSearchKeyword, searchSource])
 
   useEffect(() => {
-    if (!isIconSearchVisible || iconSearchResults.length === 0) {
+    if (searchSource !== 'icons' || !isSearchPanelOpen || iconSearchResults.length === 0) {
       setSelectedIconResultIndex(-1)
       return
     }
@@ -229,7 +227,7 @@ export function Launchpad() {
       }
       return 0
     })
-  }, [iconSearchResults.length, isIconSearchVisible])
+  }, [iconSearchResults.length, isSearchPanelOpen, searchSource])
 
   const selectedSearchItem = selectedIndex >= 0 ? getSearchItemAt(selectedIndex) : null
   const selectedSearchPath = selectedSearchItem?.path ?? ''
@@ -432,7 +430,7 @@ export function Launchpad() {
     const target = e.target as HTMLElement
     const clickedOutsideSearch = !target.closest('[data-search-placeholder]')
 
-    if ((isSearchPanelVisible || isIconSearchVisible) && clickedOutsideSearch) {
+    if (isSearchPanelOpen && clickedOutsideSearch) {
       setIsSearchPanelOpen(false)
       return
     }
@@ -576,8 +574,9 @@ export function Launchpad() {
 
           <SearchPanel
             source={searchSource}
+            keyword={keyword}
             onSourceChange={setSearchSource}
-            visible={isSearchPanelVisible}
+            visible={isSearchPanelOpen}
             loading={searchLoading}
             searchPending={searchPending}
             loadingMore={searchLoadingMore}
@@ -588,6 +587,12 @@ export function Launchpad() {
             getItemAt={getSearchItemAt}
             selectedItem={selectedSearchItem}
             selectedIndex={selectedIndex}
+            iconResults={iconSearchResults}
+            selectedIconIndex={selectedIconResultIndex}
+            onSelectIcon={setSelectedIconResultIndex}
+            onActivateIcon={icon => {
+              void launchIconItem(icon)
+            }}
             matchPath={searchMatchPath}
             onMatchPathChange={setSearchMatchPath}
             matchCase={searchMatchCase}
@@ -618,19 +623,6 @@ export function Launchpad() {
             allowDoubleClickOpen={searchSettings.openOnDoubleClick}
             onActivate={item => {
               void launchSearchItem(item.path)
-            }}
-          />
-
-          <IconSearchPanel
-            source={searchSource}
-            onSourceChange={setSearchSource}
-            visible={isIconSearchVisible}
-            keyword={keyword}
-            results={iconSearchResults}
-            selectedIndex={selectedIconResultIndex}
-            onSelect={setSelectedIconResultIndex}
-            onActivate={icon => {
-              void launchIconItem(icon)
             }}
           />
 
