@@ -1,7 +1,7 @@
-import { SEARCH_SORT_OPTIONS } from '@/lib/search/sorts'
+import { SEARCH_SORT_OPTIONS, getSearchSortLabel } from '@/lib/search/sorts'
 import type { SearchSort } from '@/lib/search/types'
-import { Eye, EyeOff, Settings2 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { ArrowUpDown, Check, Eye, EyeOff, Settings2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 interface SearchToolbarProps {
   matchPath: boolean
@@ -23,6 +23,12 @@ interface MatcherToggleRowProps {
   label: string
   onClick: () => void
 }
+
+const SORT_GROUP_LABELS = {
+  common: '常用排序',
+  metadata: '元数据',
+  history: '历史记录',
+} as const
 
 function MatcherToggleRow({ active, label, onClick }: MatcherToggleRowProps) {
   return (
@@ -61,16 +67,37 @@ export function SearchToolbar({
   previewVisible,
   onPreviewToggle,
 }: SearchToolbarProps) {
+  const [sortMenuOpen, setSortMenuOpen] = useState(false)
   const [matcherMenuOpen, setMatcherMenuOpen] = useState(false)
+  const sortMenuRef = useRef<HTMLDivElement | null>(null)
   const matcherMenuRef = useRef<HTMLDivElement | null>(null)
   const hasActiveMatcher = matchCase || wholeWord || matchPath || regex
+  const selectedSortLabel = getSearchSortLabel(sort)
+  const groupedSortOptions = useMemo(() => {
+    return SEARCH_SORT_OPTIONS.reduce(
+      (groups, option) => {
+        groups[option.group].push(option)
+        return groups
+      },
+      {
+        common: [] as typeof SEARCH_SORT_OPTIONS,
+        metadata: [] as typeof SEARCH_SORT_OPTIONS,
+        history: [] as typeof SEARCH_SORT_OPTIONS,
+      }
+    )
+  }, [])
 
   useEffect(() => {
-    if (!matcherMenuOpen) return
+    if (!matcherMenuOpen && !sortMenuOpen) return
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (!matcherMenuRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node
+
+      if (!matcherMenuRef.current?.contains(target)) {
         setMatcherMenuOpen(false)
+      }
+      if (!sortMenuRef.current?.contains(target)) {
+        setSortMenuOpen(false)
       }
     }
 
@@ -78,22 +105,73 @@ export function SearchToolbar({
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown)
     }
-  }, [matcherMenuOpen])
+  }, [matcherMenuOpen, sortMenuOpen])
 
   return (
     <div className="flex items-center justify-end gap-2">
-      <select
-        value={sort}
-        onChange={e => onSortChange(e.target.value as SearchSort)}
-        aria-label="搜索排序"
-        className="max-w-[11rem] rounded-md border border-white/20 bg-black/40 px-2 py-1 text-xs text-white/80 outline-none transition hover:bg-white/10"
-      >
-        {SEARCH_SORT_OPTIONS.map(option => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      <div ref={sortMenuRef} className="relative">
+        <button
+          type="button"
+          aria-label="搜索排序"
+          aria-expanded={sortMenuOpen}
+          className={`inline-flex h-8 max-w-[11rem] items-center gap-1.5 rounded-md border px-2.5 text-xs transition ${
+            sortMenuOpen
+              ? 'border-white/35 bg-white/15 text-white'
+              : 'border-white/20 text-white/70 hover:bg-white/10 hover:text-white'
+          }`}
+          onClick={() =>
+            setSortMenuOpen(open => {
+              const nextOpen = !open
+              if (nextOpen) {
+                setMatcherMenuOpen(false)
+              }
+              return nextOpen
+            })
+          }
+        >
+          <ArrowUpDown className="h-4 w-4 shrink-0" />
+          <span className="truncate">{selectedSortLabel}</span>
+        </button>
+
+        {sortMenuOpen ? (
+          <div className="absolute right-0 top-full z-20 mt-2 max-h-[18rem] w-64 overflow-y-auto rounded-xl border border-white/15 bg-black/90 p-2 shadow-2xl backdrop-blur-xl">
+            {(['common', 'metadata', 'history'] as const).map(group => {
+              const options = groupedSortOptions[group]
+              if (options.length === 0) return null
+
+              return (
+                <div key={group} className="mb-2 last:mb-0">
+                  <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.18em] text-white/35">
+                    {SORT_GROUP_LABELS[group]}
+                  </div>
+                  <div className="space-y-1">
+                    {options.map(option => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
+                          sort === option.value
+                            ? 'bg-white/14 text-white'
+                            : 'text-white/70 hover:bg-white/8 hover:text-white'
+                        }`}
+                        onClick={() => {
+                          onSortChange(option.value)
+                          setSortMenuOpen(false)
+                        }}
+                      >
+                        <span>{option.label}</span>
+                        {sort === option.value ? (
+                          <Check className="h-4 w-4 text-emerald-200" />
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : null}
+      </div>
 
       <div ref={matcherMenuRef} className="relative">
         <button
@@ -105,7 +183,15 @@ export function SearchToolbar({
               ? 'border-white/35 bg-white/15 text-white'
               : 'border-white/20 text-white/70 hover:bg-white/10 hover:text-white'
           }`}
-          onClick={() => setMatcherMenuOpen(open => !open)}
+          onClick={() =>
+            setMatcherMenuOpen(open => {
+              const nextOpen = !open
+              if (nextOpen) {
+                setSortMenuOpen(false)
+              }
+              return nextOpen
+            })
+          }
         >
           <Settings2 className="h-4 w-4" />
         </button>
