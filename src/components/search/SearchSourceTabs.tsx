@@ -20,7 +20,7 @@ export function SearchSourceTabs({ source, onChange }: SearchSourceTabsProps) {
         onClick={() => onChange('icons')}
       >
         <LayoutGrid className="h-3.5 w-3.5" />
-        <span>Icons</span>
+        <span>图标</span>
       </button>
 
       <button
@@ -33,7 +33,7 @@ export function SearchSourceTabs({ source, onChange }: SearchSourceTabsProps) {
         onClick={() => onChange('everything')}
       >
         <HardDrive className="h-3.5 w-3.5" />
-        <span>Everything</span>
+        <span>系统文件</span>
       </button>
     </div>
   )

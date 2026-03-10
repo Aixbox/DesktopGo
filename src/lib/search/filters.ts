@@ -7,16 +7,19 @@ export interface SearchFilterDefinition {
 }
 
 export const SEARCH_FILTERS: SearchFilterDefinition[] = [
-  { value: 'all', label: 'All', queryPrefix: '' },
-  { value: 'files', label: 'Files', queryPrefix: 'file:' },
-  { value: 'folders', label: 'Folders', queryPrefix: 'folder:' },
-  { value: 'audio', label: 'Audio', queryPrefix: 'audio:' },
-  { value: 'compressed', label: 'Compressed', queryPrefix: 'zip:' },
-  { value: 'documents', label: 'Documents', queryPrefix: 'doc:' },
-  { value: 'executables', label: 'Executables', queryPrefix: 'exe:' },
-  { value: 'pictures', label: 'Pictures', queryPrefix: 'pic:' },
-  { value: 'videos', label: 'Videos', queryPrefix: 'video:' },
+  { value: 'all', label: '全部', queryPrefix: '' },
+  { value: 'files', label: '文件', queryPrefix: 'file:' },
+  { value: 'folders', label: '文件夹', queryPrefix: 'folder:' },
+  { value: 'audio', label: '音频', queryPrefix: 'audio:' },
+  { value: 'compressed', label: '压缩包', queryPrefix: 'zip:' },
+  { value: 'documents', label: '文档', queryPrefix: 'doc:' },
+  { value: 'executables', label: '程序', queryPrefix: 'exe:' },
+  { value: 'pictures', label: '图片', queryPrefix: 'pic:' },
+  { value: 'videos', label: '视频', queryPrefix: 'video:' },
 ]
+
+export const getSearchFilterLabel = (filter: SearchDefaultFilter) =>
+  SEARCH_FILTERS.find(entry => entry.value === filter)?.label ?? filter
 
 export const buildSearchKeyword = (keyword: string, filter: SearchDefaultFilter) => {
   const trimmedKeyword = keyword.trim()

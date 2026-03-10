@@ -232,7 +232,7 @@ export function Launchpad() {
   const selectedSearchItem = selectedIndex >= 0 ? getSearchItemAt(selectedIndex) : null
   const selectedSearchPath = selectedSearchItem?.path ?? ''
   const selectedFilterLabel =
-    SEARCH_FILTERS.find(entry => entry.value === searchFilter)?.label ?? 'All'
+    SEARCH_FILTERS.find(entry => entry.value === searchFilter)?.label ?? '全部'
 
   useEffect(() => {
     if (!isSearchPanelVisible || !isSearchPreviewVisible || !selectedSearchPath) {
@@ -521,11 +521,9 @@ export function Launchpad() {
                 }}
                 onKeyDown={handleSearchInputKeyDown}
                 placeholder={
-                  searchSource === 'everything'
-                    ? 'Search files, folders and applications...'
-                    : 'Search desktop icons...'
+                  searchSource === 'everything' ? '搜索文件、文件夹和应用...' : '搜索桌面图标...'
                 }
-                aria-label={searchSource === 'everything' ? 'Search files' : 'Search desktop icons'}
+                aria-label={searchSource === 'everything' ? '搜索文件' : '搜索桌面图标'}
                 className={`h-11 w-full rounded-full border border-white/20 bg-black/25 px-4 text-sm text-white/90 shadow-lg backdrop-blur-md placeholder:text-white/50 ${
                   searchSource === 'everything' ? 'pr-32' : ''
                 }`}

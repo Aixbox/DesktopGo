@@ -318,8 +318,8 @@ export function SearchPanel({
 
   const showHistoryState = isEverything && !hasCommittedQuery && !error && virtualCount === 0
   const panelTransition = prefersReducedMotion ? { duration: 0 } : PANEL_TRANSITION
-  const iconEmptyText = trimmedKeyword ? 'No matching icons.' : 'Type to search desktop icons.'
-  const everythingEmptyText = searchPending && virtualCount === 0 ? 'Searching...' : 'No results'
+  const iconEmptyText = trimmedKeyword ? '没有匹配的图标。' : '输入关键词以搜索桌面图标。'
+  const everythingEmptyText = searchPending && virtualCount === 0 ? '搜索中...' : '没有结果'
   const bodyStateKey = isEverything
     ? error
       ? `everything-error-${error}`
@@ -506,7 +506,7 @@ export function SearchPanel({
 
             {loadingMore ? (
               <div className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-white/10 bg-black/50 px-4 py-2 text-xs text-white/60 backdrop-blur-sm">
-                Loading more...
+                正在加载更多...
               </div>
             ) : null}
           </div>

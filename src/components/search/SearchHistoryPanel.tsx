@@ -1,4 +1,5 @@
 import type { SearchHistoryEntry } from '@/lib/search/history'
+import { getSearchFilterLabel } from '@/lib/search/filters'
 import { getSearchSortLabel } from '@/lib/search/sorts'
 
 interface SearchHistoryPanelProps {
@@ -30,7 +31,7 @@ export function SearchHistoryPanel({
   if (entries.length === 0) {
     return (
       <div className="px-4 py-4 text-sm text-white/60">
-        Start typing to search. Your recent searches will appear here.
+        开始输入即可搜索，最近搜索会显示在这里。
       </div>
     )
   }
@@ -39,9 +40,9 @@ export function SearchHistoryPanel({
     <div className="px-3 py-3">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs uppercase tracking-[0.18em] text-white/35">Recent Searches</div>
+          <div className="text-xs uppercase tracking-[0.18em] text-white/35">最近搜索</div>
           <div className="mt-1 text-sm text-white/60">
-            Restore the keyword, filter, matcher options and sorting from a previous search.
+            可恢复之前搜索的关键词、筛选器、匹配选项和排序方式。
           </div>
         </div>
         <button
@@ -49,7 +50,7 @@ export function SearchHistoryPanel({
           className="rounded-md border border-white/20 px-2.5 py-1 text-xs text-white/70 transition hover:bg-white/10"
           onClick={onClear}
         >
-          Clear
+          清空
         </button>
       </div>
 
@@ -66,12 +67,12 @@ export function SearchHistoryPanel({
             >
               <div className="truncate text-sm text-white">{entry.keyword}</div>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/45">
-                <span>{entry.filter}</span>
+                <span>{getSearchFilterLabel(entry.filter)}</span>
                 <span>{getSearchSortLabel(entry.sort)}</span>
-                {entry.matchCase ? <span>Case</span> : null}
-                {entry.wholeWord ? <span>Whole</span> : null}
-                {entry.matchPath ? <span>Path</span> : null}
-                {entry.regex ? <span>Regex</span> : null}
+                {entry.matchCase ? <span>区分大小写</span> : null}
+                {entry.wholeWord ? <span>全字匹配</span> : null}
+                {entry.matchPath ? <span>匹配路径</span> : null}
+                {entry.regex ? <span>正则</span> : null}
                 <span>{formatHistoryTime(entry.usedAt)}</span>
               </div>
             </button>
@@ -81,7 +82,7 @@ export function SearchHistoryPanel({
               className="rounded-md border border-white/15 px-2 py-1 text-[11px] text-white/55 transition hover:bg-white/10 hover:text-white/80"
               onClick={() => onRemove(entry.id)}
             >
-              Remove
+              删除
             </button>
           </div>
         ))}

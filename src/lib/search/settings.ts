@@ -261,16 +261,16 @@ export const saveLastFilter = async (filter: SearchDefaultFilter): Promise<void>
 
 export const describeSearchRuntimeError = (message: string) => {
   if (message.startsWith('EverythingNotFound')) {
-    return 'Installed Everything was not found. Install it from the DesktopGo installer.'
+    return '未找到已安装的 Everything。请通过 DesktopGo 安装程序完成安装。'
   }
   if (message.startsWith('EverythingIpcUnavailable')) {
-    return 'DesktopGo could not query the running Everything instance. Make sure Everything is already running and both apps use the same privilege level.'
+    return 'DesktopGo 无法连接正在运行的 Everything。请确认 Everything 已启动，并且两个应用使用相同的权限级别。'
   }
   if (message.startsWith('EverythingBusy')) {
-    return 'DesktopGo is waiting for the previous Everything IPC request to finish.'
+    return 'DesktopGo 正在等待上一个 Everything IPC 请求完成。'
   }
   if (message === 'Everything runtime startup timed out.') {
-    return 'DesktopGo timed out while preparing Everything. Retry the search.'
+    return 'DesktopGo 在准备 Everything 时超时，请重试搜索。'
   }
   return message
 }

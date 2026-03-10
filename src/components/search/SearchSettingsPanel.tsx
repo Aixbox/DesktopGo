@@ -45,7 +45,7 @@ export function SearchSettingsPanel() {
         const next = await loadSearchSettings()
         setSettings(next)
       } catch (e) {
-        setStatusText(`Failed to load search settings: ${String(e)}`)
+        setStatusText(`加载搜索设置失败：${String(e)}`)
       } finally {
         setLoading(false)
       }
@@ -59,75 +59,73 @@ export function SearchSettingsPanel() {
     try {
       const normalized = await saveSearchSetting(key, value)
       setSettings(prev => ({ ...prev, [key]: normalized }) as SearchSettings)
-      setStatusText('Saved')
+      setStatusText('已保存')
     } catch (e) {
-      setStatusText(`Failed to save ${key}: ${String(e)}`)
+      setStatusText(`保存设置失败：${String(e)}`)
     }
   }
 
   const resetDefaults = async () => {
-    setStatusText('Applying defaults...')
+    setStatusText('正在恢复默认设置...')
     for (const [key, value] of Object.entries(DEFAULT_SEARCH_SETTINGS) as Array<
       [keyof SearchSettings, SearchSettings[keyof SearchSettings]]
     >) {
       // eslint-disable-next-line no-await-in-loop
       await updateSetting(key, value)
     }
-    setStatusText('Default settings restored')
+    setStatusText('默认设置已恢复')
   }
 
   if (loading) {
-    return <p className="text-sm text-muted-foreground">Loading search settings...</p>
+    return <p className="text-sm text-muted-foreground">正在加载搜索设置...</p>
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Search Settings</h2>
-          <p className="text-sm text-muted-foreground">
-            Settings are saved in SQLite and apply to the next query.
-          </p>
+          <h2 className="text-lg font-semibold">搜索设置</h2>
+          <p className="text-sm text-muted-foreground">设置会保存到 SQLite，并在下次搜索时生效。</p>
         </div>
         <button
           type="button"
           onClick={() => void resetDefaults()}
           className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
         >
-          Reset Defaults
+          恢复默认
         </button>
       </div>
 
       <section className="space-y-3">
-        <h3 className="text-sm font-medium text-muted-foreground">Basic Interaction</h3>
+        <h3 className="text-sm font-medium text-muted-foreground">基础交互</h3>
         <ToggleRow
-          label="Live Search"
-          desc="Search while typing. Disable to trigger search with Enter only."
+          label="实时搜索"
+          desc="输入时立即搜索。关闭后仅在按下 Enter 时触发搜索。"
           checked={settings.liveOnType}
           onChange={next => void updateSetting('liveOnType', next)}
         />
         <ToggleRow
-          label="Auto Select First Result"
-          desc="Automatically focus the first result when a new page is returned."
+          label="自动选中首个结果"
+          desc="返回新结果页时，自动聚焦到第一个结果。"
           checked={settings.autoSelectFirst}
           onChange={next => void updateSetting('autoSelectFirst', next)}
         />
         <ToggleRow
-          label="Open On Enter"
-          desc="Allow Enter to launch the currently selected result."
+          label="回车打开结果"
+          desc="允许按 Enter 打开当前选中的结果。"
           checked={settings.openOnEnter}
           onChange={next => void updateSetting('openOnEnter', next)}
         />
         <ToggleRow
-          label="Open On Double Click"
-          desc="Allow opening result items with mouse double click."
+          label="双击打开结果"
+          desc="允许通过鼠标双击打开结果项。"
           checked={settings.openOnDoubleClick}
           onChange={next => void updateSetting('openOnDoubleClick', next)}
         />
 
         <div className="rounded-md border border-border bg-secondary/30 px-3 py-2">
-          <label className="block text-sm font-medium">Debounce (ms)</label>
-          <p className="mb-2 text-xs text-muted-foreground">Allowed range: 50 - 500</p>
+          <label className="block text-sm font-medium">防抖时间（毫秒）</label>
+          <p className="mb-2 text-xs text-muted-foreground">允许范围：50 - 500</p>
           <input
             type="number"
             min={50}
@@ -140,9 +138,9 @@ export function SearchSettingsPanel() {
       </section>
 
       <section className="space-y-3">
-        <h3 className="text-sm font-medium text-muted-foreground">Search Strategy</h3>
+        <h3 className="text-sm font-medium text-muted-foreground">搜索策略</h3>
         <div className="rounded-md border border-border bg-secondary/30 px-3 py-2">
-          <label className="block text-sm font-medium">Default Filter</label>
+          <label className="block text-sm font-medium">默认筛选器</label>
           <select
             value={settings.defaultFilter}
             onChange={e =>
@@ -159,7 +157,7 @@ export function SearchSettingsPanel() {
         </div>
 
         <div className="rounded-md border border-border bg-secondary/30 px-3 py-2">
-          <label className="block text-sm font-medium">Sort</label>
+          <label className="block text-sm font-medium">默认排序</label>
           <select
             value={settings.sortBy}
             onChange={e => void updateSetting('sortBy', e.target.value as SearchSort)}
@@ -174,8 +172,8 @@ export function SearchSettingsPanel() {
         </div>
 
         <div className="rounded-md border border-border bg-secondary/30 px-3 py-2">
-          <label className="block text-sm font-medium">Max Results Per Page</label>
-          <p className="mb-2 text-xs text-muted-foreground">Allowed range: 10 - 200</p>
+          <label className="block text-sm font-medium">每页最大结果数</label>
+          <p className="mb-2 text-xs text-muted-foreground">允许范围：10 - 200</p>
           <input
             type="number"
             min={10}
@@ -187,54 +185,54 @@ export function SearchSettingsPanel() {
         </div>
 
         <ToggleRow
-          label="Remember Last Filter"
-          desc="Persist the latest filter selection for the next launch."
+          label="记住上次筛选器"
+          desc="保存最近一次使用的筛选器，并在下次启动时恢复。"
           checked={settings.rememberLastFilter}
           onChange={next => void updateSetting('rememberLastFilter', next)}
         />
       </section>
 
       <section className="space-y-3">
-        <h3 className="text-sm font-medium text-muted-foreground">Matchers And Filters</h3>
+        <h3 className="text-sm font-medium text-muted-foreground">匹配与筛选</h3>
         <ToggleRow
-          label="Match Path"
-          desc="Let keyword matching include full path segments."
+          label="匹配路径"
+          desc="让关键词匹配包含完整路径片段。"
           checked={settings.matchPath}
           onChange={next => void updateSetting('matchPath', next)}
         />
         <ToggleRow
-          label="Match Case"
-          desc="Use case-sensitive matching."
+          label="区分大小写"
+          desc="使用区分大小写的匹配方式。"
           checked={settings.matchCase}
           onChange={next => void updateSetting('matchCase', next)}
         />
         <ToggleRow
-          label="Regex"
-          desc="Treat keyword as regular expression syntax."
+          label="正则表达式"
+          desc="将关键词按正则表达式语法处理。"
           checked={settings.regex}
           onChange={next => void updateSetting('regex', next)}
         />
         <ToggleRow
-          label="Whole Word"
-          desc="Match only whole words."
+          label="全字匹配"
+          desc="只匹配完整单词。"
           checked={settings.matchWholeWord}
           onChange={next => void updateSetting('matchWholeWord', next)}
         />
       </section>
 
       <section className="space-y-3">
-        <h3 className="text-sm font-medium text-muted-foreground">Runtime</h3>
+        <h3 className="text-sm font-medium text-muted-foreground">运行时</h3>
         <ToggleRow
-          label="Auto Start Runtime"
-          desc="Automatically detect and connect to the installed Everything runtime."
+          label="自动连接运行时"
+          desc="自动检测并连接已安装的 Everything 运行时。"
           checked={settings.autoStartRuntime}
           onChange={next => void updateSetting('autoStartRuntime', next)}
         />
         <div className="rounded-md border border-border bg-secondary/30 px-3 py-2">
-          <label className="block text-sm font-medium">Installed Everything Only</label>
+          <label className="block text-sm font-medium">仅支持已安装的 Everything</label>
           <p className="text-xs text-muted-foreground">
-            DesktopGo search only works with the installed Everything application. If search is
-            unavailable, reinstall DesktopGo and select the Everything install option.
+            DesktopGo 的文件搜索仅支持已安装的 Everything 应用。如果搜索不可用，请重新安装
+            DesktopGo，并勾选 Everything 安装选项。
           </p>
         </div>
       </section>
