@@ -27,17 +27,41 @@ mod windows_impl {
     use windows::Win32::Foundation::{GetLastError, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, HWND_MESSAGE, MSG,
-        PM_REMOVE, PeekMessageW, RegisterClassW, TranslateMessage, WINDOW_EX_STYLE, WINDOW_STYLE,
-        WNDCLASSW, WM_COPYDATA, WM_QUIT,
+        CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, PeekMessageW,
+        RegisterClassW, TranslateMessage, HWND_MESSAGE, MSG, PM_REMOVE, WINDOW_EX_STYLE,
+        WINDOW_STYLE, WM_COPYDATA, WM_QUIT, WNDCLASSW,
     };
 
     const EVERYTHING_SORT_NAME_ASCENDING: u32 = 1;
     const EVERYTHING_SORT_NAME_DESCENDING: u32 = 2;
     const EVERYTHING_SORT_PATH_ASCENDING: u32 = 3;
+    const EVERYTHING_SORT_PATH_DESCENDING: u32 = 4;
+    const EVERYTHING_SORT_SIZE_ASCENDING: u32 = 5;
+    const EVERYTHING_SORT_SIZE_DESCENDING: u32 = 6;
+    const EVERYTHING_SORT_EXTENSION_ASCENDING: u32 = 7;
+    const EVERYTHING_SORT_EXTENSION_DESCENDING: u32 = 8;
+    const EVERYTHING_SORT_TYPE_NAME_ASCENDING: u32 = 9;
+    const EVERYTHING_SORT_TYPE_NAME_DESCENDING: u32 = 10;
+    const EVERYTHING_SORT_DATE_CREATED_ASCENDING: u32 = 11;
+    const EVERYTHING_SORT_DATE_CREATED_DESCENDING: u32 = 12;
+    const EVERYTHING_SORT_DATE_MODIFIED_ASCENDING: u32 = 13;
     const EVERYTHING_SORT_DATE_MODIFIED_DESCENDING: u32 = 14;
+    const EVERYTHING_SORT_ATTRIBUTES_ASCENDING: u32 = 15;
+    const EVERYTHING_SORT_ATTRIBUTES_DESCENDING: u32 = 16;
+    const EVERYTHING_SORT_FILE_LIST_FILENAME_ASCENDING: u32 = 17;
+    const EVERYTHING_SORT_FILE_LIST_FILENAME_DESCENDING: u32 = 18;
+    const EVERYTHING_SORT_RUN_COUNT_ASCENDING: u32 = 19;
+    const EVERYTHING_SORT_RUN_COUNT_DESCENDING: u32 = 20;
+    const EVERYTHING_SORT_DATE_RECENTLY_CHANGED_ASCENDING: u32 = 21;
+    const EVERYTHING_SORT_DATE_RECENTLY_CHANGED_DESCENDING: u32 = 22;
+    const EVERYTHING_SORT_DATE_ACCESSED_ASCENDING: u32 = 23;
+    const EVERYTHING_SORT_DATE_ACCESSED_DESCENDING: u32 = 24;
+    const EVERYTHING_SORT_DATE_RUN_ASCENDING: u32 = 25;
+    const EVERYTHING_SORT_DATE_RUN_DESCENDING: u32 = 26;
     const EVERYTHING_REQUEST_FILE_NAME: u32 = 0x0000_0001;
     const EVERYTHING_REQUEST_PATH: u32 = 0x0000_0002;
+    const EVERYTHING_REQUEST_HIGHLIGHTED_FILE_NAME: u32 = 0x0000_2000;
+    const EVERYTHING_REQUEST_HIGHLIGHTED_PATH: u32 = 0x0000_4000;
     const SEARCH_RESULT_ICON_SIZE: i32 = 32;
     const REPLY_WINDOW_CLASS: &str = "DesktopGoEverythingSdkReplyWindow";
     const REPLY_ID_COUNT: u32 = 1;
@@ -54,6 +78,7 @@ mod windows_impl {
     type GetNumResults = unsafe extern "system" fn() -> u32;
     type GetTotResults = unsafe extern "system" fn() -> u32;
     type GetResultFullPathNameW = unsafe extern "system" fn(u32, *mut u16, u32) -> u32;
+    type GetResultHighlightedTextW = unsafe extern "system" fn(u32) -> *const u16;
     type IsFolderResult = unsafe extern "system" fn(u32) -> i32;
     type IsFileResult = unsafe extern "system" fn(u32) -> i32;
     type GetLastError = unsafe extern "system" fn() -> u32;
@@ -78,6 +103,8 @@ mod windows_impl {
         get_num_results: GetNumResults,
         get_tot_results: GetTotResults,
         get_result_full_path_name_w: GetResultFullPathNameW,
+        get_result_highlighted_file_name_w: GetResultHighlightedTextW,
+        get_result_highlighted_path_w: GetResultHighlightedTextW,
         is_folder_result: Option<IsFolderResult>,
         is_file_result: Option<IsFileResult>,
         get_last_error: GetLastError,
@@ -110,6 +137,14 @@ mod windows_impl {
                     get_result_full_path_name_w: load_symbol(
                         &lib,
                         b"Everything_GetResultFullPathNameW\0",
+                    )?,
+                    get_result_highlighted_file_name_w: load_symbol(
+                        &lib,
+                        b"Everything_GetResultHighlightedFileNameW\0",
+                    )?,
+                    get_result_highlighted_path_w: load_symbol(
+                        &lib,
+                        b"Everything_GetResultHighlightedPathW\0",
                     )?,
                     is_folder_result: load_symbol_optional(&lib, b"Everything_IsFolderResult\0"),
                     is_file_result: load_symbol_optional(&lib, b"Everything_IsFileResult\0"),
@@ -237,18 +272,35 @@ mod windows_impl {
             SearchSort::NameAsc => EVERYTHING_SORT_NAME_ASCENDING,
             SearchSort::NameDesc => EVERYTHING_SORT_NAME_DESCENDING,
             SearchSort::PathAsc => EVERYTHING_SORT_PATH_ASCENDING,
+            SearchSort::PathDesc => EVERYTHING_SORT_PATH_DESCENDING,
+            SearchSort::SizeAsc => EVERYTHING_SORT_SIZE_ASCENDING,
+            SearchSort::SizeDesc => EVERYTHING_SORT_SIZE_DESCENDING,
+            SearchSort::ExtensionAsc => EVERYTHING_SORT_EXTENSION_ASCENDING,
+            SearchSort::ExtensionDesc => EVERYTHING_SORT_EXTENSION_DESCENDING,
+            SearchSort::TypeNameAsc => EVERYTHING_SORT_TYPE_NAME_ASCENDING,
+            SearchSort::TypeNameDesc => EVERYTHING_SORT_TYPE_NAME_DESCENDING,
+            SearchSort::DateCreatedAsc => EVERYTHING_SORT_DATE_CREATED_ASCENDING,
+            SearchSort::DateCreatedDesc => EVERYTHING_SORT_DATE_CREATED_DESCENDING,
+            SearchSort::DateModifiedAsc => EVERYTHING_SORT_DATE_MODIFIED_ASCENDING,
             SearchSort::DateModifiedDesc => EVERYTHING_SORT_DATE_MODIFIED_DESCENDING,
+            SearchSort::AttributesAsc => EVERYTHING_SORT_ATTRIBUTES_ASCENDING,
+            SearchSort::AttributesDesc => EVERYTHING_SORT_ATTRIBUTES_DESCENDING,
+            SearchSort::FileListFilenameAsc => EVERYTHING_SORT_FILE_LIST_FILENAME_ASCENDING,
+            SearchSort::FileListFilenameDesc => EVERYTHING_SORT_FILE_LIST_FILENAME_DESCENDING,
+            SearchSort::RunCountAsc => EVERYTHING_SORT_RUN_COUNT_ASCENDING,
+            SearchSort::RunCountDesc => EVERYTHING_SORT_RUN_COUNT_DESCENDING,
+            SearchSort::DateRecentlyChangedAsc => EVERYTHING_SORT_DATE_RECENTLY_CHANGED_ASCENDING,
+            SearchSort::DateRecentlyChangedDesc => EVERYTHING_SORT_DATE_RECENTLY_CHANGED_DESCENDING,
+            SearchSort::DateAccessedAsc => EVERYTHING_SORT_DATE_ACCESSED_ASCENDING,
+            SearchSort::DateAccessedDesc => EVERYTHING_SORT_DATE_ACCESSED_DESCENDING,
+            SearchSort::DateRunAsc => EVERYTHING_SORT_DATE_RUN_ASCENDING,
+            SearchSort::DateRunDesc => EVERYTHING_SORT_DATE_RUN_DESCENDING,
         }
     }
 
     fn build_query_error(api: &EverythingApi, context: &str) -> String {
         let code = unsafe { (api.get_last_error)() };
-        format!(
-            "{} (code={}): {}",
-            context,
-            code,
-            map_ipc_error(code)
-        )
+        format!("{} (code={}): {}", context, code, map_ipc_error(code))
     }
 
     unsafe extern "system" fn reply_window_proc(
@@ -410,6 +462,33 @@ mod windows_impl {
         Some(String::from_utf16_lossy(&buffer[..end]))
     }
 
+    fn extract_result_text(pointer: *const u16) -> String {
+        if pointer.is_null() {
+            return String::new();
+        }
+
+        let mut len = 0usize;
+        unsafe {
+            while *pointer.add(len) != 0 {
+                len += 1;
+            }
+
+            if len == 0 {
+                return String::new();
+            }
+
+            String::from_utf16_lossy(std::slice::from_raw_parts(pointer, len))
+        }
+    }
+
+    fn extract_highlighted_name(api: &EverythingApi, index: u32) -> String {
+        extract_result_text(unsafe { (api.get_result_highlighted_file_name_w)(index) })
+    }
+
+    fn extract_highlighted_path(api: &EverythingApi, index: u32) -> String {
+        extract_result_text(unsafe { (api.get_result_highlighted_path_w)(index) })
+    }
+
     fn extract_search_results(
         api: &EverythingApi,
         app_handle: &tauri::AppHandle,
@@ -448,6 +527,8 @@ mod windows_impl {
                 .map(|value| value.to_string_lossy().to_string())
                 .unwrap_or_default();
             let icon_base64 = icons::get_path_icon_base64(&path, SEARCH_RESULT_ICON_SIZE);
+            let highlighted_name = extract_highlighted_name(api, index);
+            let highlighted_path = extract_highlighted_path(api, index);
             items.push(SearchHit {
                 path,
                 name,
@@ -455,6 +536,8 @@ mod windows_impl {
                 is_file,
                 is_folder,
                 icon_base64,
+                highlighted_name,
+                highlighted_path,
             });
         }
         append_debug_log(
@@ -491,10 +574,14 @@ mod windows_impl {
                 if timed_out {
                     append_debug_log(
                         app_handle,
-                        format!("ipc probe: timed out after {}ms waiting for reply", elapsed_ms),
+                        format!(
+                            "ipc probe: timed out after {}ms waiting for reply",
+                            elapsed_ms
+                        ),
                     );
-                    let _ = response
-                        .send(Err("Everything query timed out while waiting for reply".to_string()));
+                    let _ = response.send(Err(
+                        "Everything query timed out while waiting for reply".to_string(),
+                    ));
                 } else {
                     append_debug_log(
                         app_handle,
@@ -512,10 +599,14 @@ mod windows_impl {
                 if timed_out {
                     append_debug_log(
                         app_handle,
-                        format!("ipc search: timed out after {}ms waiting for reply", elapsed_ms),
+                        format!(
+                            "ipc search: timed out after {}ms waiting for reply",
+                            elapsed_ms
+                        ),
                     );
-                    let _ = response
-                        .send(Err("Everything query timed out while waiting for reply".to_string()));
+                    let _ = response.send(Err(
+                        "Everything query timed out while waiting for reply".to_string(),
+                    ));
                 } else {
                     append_debug_log(
                         app_handle,
@@ -534,10 +625,7 @@ mod windows_impl {
                 }
             }
         }
-        append_debug_log(
-            app_handle,
-            format!("ipc request {} finished", reply_id),
-        );
+        append_debug_log(app_handle, format!("ipc request {} finished", reply_id));
     }
 
     fn cancel_active_request(
@@ -608,7 +696,12 @@ mod windows_impl {
             (api.set_match_case)(query.match_case as i32);
             (api.set_match_whole_word)((query.whole_word && !query.regex) as i32);
             (api.set_regex)(query.regex as i32);
-            (api.set_request_flags)(EVERYTHING_REQUEST_FILE_NAME | EVERYTHING_REQUEST_PATH);
+            (api.set_request_flags)(
+                EVERYTHING_REQUEST_FILE_NAME
+                    | EVERYTHING_REQUEST_PATH
+                    | EVERYTHING_REQUEST_HIGHLIGHTED_FILE_NAME
+                    | EVERYTHING_REQUEST_HIGHLIGHTED_PATH,
+            );
             (api.set_sort)(sort_to_sdk_value(query.sort));
             (api.set_offset)(query.offset);
             (api.set_max)(query.limit.max(1));
@@ -653,21 +746,18 @@ mod windows_impl {
             while let Ok(command) = command_rx.try_recv() {
                 cancel_active_request(&api, &app_handle, &mut active);
                 match command {
-                    WorkerCommand::Probe { response } => match start_probe(
-                        &api,
-                        reply_hwnd,
-                        &app_handle,
-                        response.clone(),
-                    ) {
-                        Ok(request) => active = Some(request),
-                        Err(error) => {
-                            append_debug_log(
-                                &app_handle,
-                                format!("ipc worker failed to start probe: {}", error),
-                            );
-                            let _ = response.send(Err(error));
+                    WorkerCommand::Probe { response } => {
+                        match start_probe(&api, reply_hwnd, &app_handle, response.clone()) {
+                            Ok(request) => active = Some(request),
+                            Err(error) => {
+                                append_debug_log(
+                                    &app_handle,
+                                    format!("ipc worker failed to start probe: {}", error),
+                                );
+                                let _ = response.send(Err(error));
+                            }
                         }
-                    },
+                    }
                     WorkerCommand::Search { query, response } => {
                         if query.offset == 0 {
                             if let Some(cache) = first_page_cache.as_ref() {
@@ -698,13 +788,7 @@ mod windows_impl {
             }
 
             if is_reply_completed() {
-                finish_active_request(
-                    &api,
-                    &app_handle,
-                    &mut active,
-                    &mut first_page_cache,
-                    false,
-                );
+                finish_active_request(&api, &app_handle, &mut active, &mut first_page_cache, false);
             } else if active
                 .as_ref()
                 .map(|request| {
@@ -713,13 +797,7 @@ mod windows_impl {
                 })
                 .unwrap_or(false)
             {
-                finish_active_request(
-                    &api,
-                    &app_handle,
-                    &mut active,
-                    &mut first_page_cache,
-                    true,
-                );
+                finish_active_request(&api, &app_handle, &mut active, &mut first_page_cache, true);
             }
 
             thread::sleep(Duration::from_millis(10));
@@ -779,10 +857,7 @@ mod windows_impl {
         match init_rx.recv_timeout(Duration::from_secs(5)) {
             Ok(Ok(())) => {
                 let _ = WORKER_SENDER.set(command_tx.clone());
-                Ok(WORKER_SENDER
-                    .get()
-                    .cloned()
-                    .unwrap_or(command_tx))
+                Ok(WORKER_SENDER.get().cloned().unwrap_or(command_tx))
             }
             Ok(Err(error)) => Err(error),
             Err(RecvTimeoutError::Timeout) => {
@@ -811,9 +886,7 @@ mod windows_impl {
             Err(RecvTimeoutError::Timeout) => {
                 Err("Everything query timed out while waiting for reply".to_string())
             }
-            Err(RecvTimeoutError::Disconnected) => {
-                Err("Everything IPC worker stopped".to_string())
-            }
+            Err(RecvTimeoutError::Disconnected) => Err("Everything IPC worker stopped".to_string()),
         }
     }
 
@@ -836,10 +909,30 @@ mod windows_impl {
             Err(RecvTimeoutError::Timeout) => {
                 Err("Everything query timed out while waiting for reply".to_string())
             }
-            Err(RecvTimeoutError::Disconnected) => {
-                Err("Everything IPC worker stopped".to_string())
-            }
+            Err(RecvTimeoutError::Disconnected) => Err("Everything IPC worker stopped".to_string()),
         }
+    }
+
+    pub(super) fn increment_run_count(dll_path: &Path, file_name: &str) -> Result<u32, String> {
+        type IncRunCountFromFileNameW = unsafe extern "system" fn(*const u16) -> u32;
+
+        let lib = unsafe { Library::new(dll_path) }
+            .map_err(|e| format!("Failed to load Everything DLL {:?}: {}", dll_path, e))?;
+
+        let value = unsafe {
+            let increment: Symbol<IncRunCountFromFileNameW> = lib
+                .get(b"Everything_IncRunCountFromFileNameW\0")
+                .map_err(|e| {
+                    format!(
+                        "Failed to load symbol {}: {}",
+                        "Everything_IncRunCountFromFileNameW", e
+                    )
+                })?;
+            let file_name_wide = to_wide_null_terminated(file_name);
+            increment(file_name_wide.as_ptr())
+        };
+
+        Ok(value)
     }
 }
 
@@ -857,6 +950,11 @@ pub fn search(
     windows_impl::search(dll_path, query, app_handle)
 }
 
+#[cfg(windows)]
+pub fn increment_run_count(dll_path: &Path, file_name: &str) -> Result<u32, String> {
+    windows_impl::increment_run_count(dll_path, file_name)
+}
+
 #[cfg(not(windows))]
 pub fn probe_connection(_dll_path: &Path, _app_handle: &tauri::AppHandle) -> Result<(), String> {
     Err("Everything search is only supported on Windows".to_string())
@@ -868,5 +966,10 @@ pub fn search(
     _query: &SearchQuery,
     _app_handle: &tauri::AppHandle,
 ) -> Result<SearchResponse, String> {
+    Err("Everything search is only supported on Windows".to_string())
+}
+
+#[cfg(not(windows))]
+pub fn increment_run_count(_dll_path: &Path, _file_name: &str) -> Result<u32, String> {
     Err("Everything search is only supported on Windows".to_string())
 }

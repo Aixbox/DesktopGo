@@ -10,7 +10,29 @@ pub enum SearchSort {
     NameAsc,
     NameDesc,
     PathAsc,
+    PathDesc,
+    SizeAsc,
+    SizeDesc,
+    ExtensionAsc,
+    ExtensionDesc,
+    TypeNameAsc,
+    TypeNameDesc,
+    DateCreatedAsc,
+    DateCreatedDesc,
+    DateModifiedAsc,
     DateModifiedDesc,
+    AttributesAsc,
+    AttributesDesc,
+    FileListFilenameAsc,
+    FileListFilenameDesc,
+    RunCountAsc,
+    RunCountDesc,
+    DateRecentlyChangedAsc,
+    DateRecentlyChangedDesc,
+    DateAccessedAsc,
+    DateAccessedDesc,
+    DateRunAsc,
+    DateRunDesc,
 }
 
 impl Default for SearchSort {
@@ -63,6 +85,8 @@ pub struct SearchHit {
     pub is_file: bool,
     pub is_folder: bool,
     pub icon_base64: String,
+    pub highlighted_name: String,
+    pub highlighted_path: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

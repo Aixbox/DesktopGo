@@ -80,7 +80,11 @@ pub(super) fn append_debug_log(app_handle: &tauri::AppHandle, message: impl AsRe
     let _ = writeln!(file, "[{}] {}", ts, text);
 }
 
-fn wait_for_ipc_ready(app_handle: &tauri::AppHandle, dll_path: &PathBuf, timeout: Duration) -> bool {
+fn wait_for_ipc_ready(
+    app_handle: &tauri::AppHandle,
+    dll_path: &PathBuf,
+    timeout: Duration,
+) -> bool {
     let started_at = Instant::now();
     while started_at.elapsed() < timeout {
         if ipc::probe_connection(dll_path, app_handle).is_ok() {
@@ -118,9 +122,7 @@ fn persist_last_provider(app_handle: &tauri::AppHandle) {
     );
 }
 
-fn set_runtime_ready(
-    app_handle: &tauri::AppHandle,
-) -> Result<SearchRuntimeStatus, String> {
+fn set_runtime_ready(app_handle: &tauri::AppHandle) -> Result<SearchRuntimeStatus, String> {
     let mut guard = RUNTIME_STATE
         .lock()
         .map_err(|_| "Failed to lock search runtime state".to_string())?;
@@ -167,9 +169,13 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
         let guard = RUNTIME_STATE
             .lock()
             .map_err(|_| "Failed to lock search runtime state".to_string())?;
-        if matches!(guard.state, Some(SearchRuntimeState::InstalledReady)) && guard.dll_path.is_some()
+        if matches!(guard.state, Some(SearchRuntimeState::InstalledReady))
+            && guard.dll_path.is_some()
         {
-            append_debug_log(app_handle, "start_search_runtime: reuse installed_ready state");
+            append_debug_log(
+                app_handle,
+                "start_search_runtime: reuse installed_ready state",
+            );
             return Ok(guard.snapshot());
         }
     }
@@ -179,7 +185,10 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
             SearchErrorCode::EverythingNotFound,
             "Installed Everything was not found",
         );
-        append_debug_log(app_handle, format!("start_search_runtime: not installed: {}", error));
+        append_debug_log(
+            app_handle,
+            format!("start_search_runtime: not installed: {}", error),
+        );
         let _ = set_not_installed_state(error.clone());
         return Err(error);
     };
@@ -226,16 +235,28 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
     if let Err(error) = installed::start_installed_everything(&installation.exe_path) {
         let error = build_error(
             SearchErrorCode::EverythingIpcUnavailable,
-            format!("Failed to start installed Everything desktop instance: {}", error),
+            format!(
+                "Failed to start installed Everything desktop instance: {}",
+                error
+            ),
         );
-        append_debug_log(app_handle, format!("start_search_runtime: start failed: {}", error));
+        append_debug_log(
+            app_handle,
+            format!("start_search_runtime: start failed: {}", error),
+        );
         let _ = set_unavailable_state(error.clone());
         return Err(error);
     }
-    append_debug_log(app_handle, "start_search_runtime: desktop instance start requested");
+    append_debug_log(
+        app_handle,
+        "start_search_runtime: desktop instance start requested",
+    );
 
     if wait_for_ipc_ready(app_handle, &dll_path, Duration::from_secs(5)) {
-        append_debug_log(app_handle, "start_search_runtime: probe ok after desktop start");
+        append_debug_log(
+            app_handle,
+            "start_search_runtime: probe ok after desktop start",
+        );
         return set_runtime_ready(app_handle);
     }
 
@@ -250,7 +271,10 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
             version_text
         ),
     );
-    append_debug_log(app_handle, format!("start_search_runtime: ipc unavailable: {}", error));
+    append_debug_log(
+        app_handle,
+        format!("start_search_runtime: ipc unavailable: {}", error),
+    );
     let _ = set_unavailable_state(error.clone());
     Err(error)
 }
@@ -278,7 +302,10 @@ pub fn search_files(
 
     let status = start_search_runtime(app_handle)?;
     let provider = status.provider.unwrap_or(SearchProvider::Installed);
-    append_debug_log(app_handle, format!("search_files: runtime provider={:?}", provider));
+    append_debug_log(
+        app_handle,
+        format!("search_files: runtime provider={:?}", provider),
+    );
 
     if query.keyword.is_empty() {
         append_debug_log(app_handle, "search_files: empty keyword, return empty page");
@@ -302,7 +329,10 @@ pub fn search_files(
             .clone()
             .ok_or_else(|| "Everything DLL path is not initialized".to_string())?
     };
-    append_debug_log(app_handle, format!("search_files: using dll {:?}", dll_path));
+    append_debug_log(
+        app_handle,
+        format!("search_files: using dll {:?}", dll_path),
+    );
 
     let started_at = Instant::now();
     append_debug_log(app_handle, "search_files: ipc search begin");
@@ -313,7 +343,8 @@ pub fn search_files(
         )
     })?;
     let took_ms = started_at.elapsed().as_millis() as u64;
-    let has_more = query.offset.saturating_add(response.items.len() as u32) < response.total_results;
+    let has_more =
+        query.offset.saturating_add(response.items.len() as u32) < response.total_results;
     append_debug_log(
         app_handle,
         format!(
@@ -334,4 +365,31 @@ pub fn search_files(
         provider,
         took_ms,
     })
+}
+
+pub fn record_search_result_run(app_handle: &tauri::AppHandle, path: &str) -> Result<(), String> {
+    let trimmed_path = path.trim();
+    if trimmed_path.is_empty() {
+        return Ok(());
+    }
+
+    let _ = start_search_runtime(app_handle)?;
+    let dll_path = {
+        let guard = RUNTIME_STATE
+            .lock()
+            .map_err(|_| "Failed to lock search runtime state".to_string())?;
+        guard
+            .dll_path
+            .clone()
+            .ok_or_else(|| "Everything DLL path is not initialized".to_string())?
+    };
+
+    ipc::increment_run_count(&dll_path, trimmed_path).map_err(|e| {
+        build_error(
+            SearchErrorCode::EverythingIpcUnavailable,
+            format!("Failed to update Everything run count: {}", e),
+        )
+    })?;
+
+    Ok(())
 }

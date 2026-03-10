@@ -10,7 +10,10 @@ const SDK_DLL_NAME: &str = "Everything32.dll";
 
 fn resolve_sdk_root(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
     if let Ok(resource_dir) = app_handle.path().resource_dir() {
-        let resource_root = resource_dir.join("everything").join("Everything-SDK").join("dll");
+        let resource_root = resource_dir
+            .join("everything")
+            .join("Everything-SDK")
+            .join("dll");
         if resource_root.exists() {
             return Ok(resource_root);
         }

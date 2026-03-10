@@ -16,7 +16,8 @@ mod windows_impl {
     use winreg::RegKey;
 
     const UNINSTALL_PATH: &str = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
-    const UNINSTALL_PATH_WOW64: &str = "SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
+    const UNINSTALL_PATH_WOW64: &str =
+        "SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
 
     fn parse_display_icon_path(value: &str) -> Option<PathBuf> {
         let trimmed = value.trim().trim_matches('"');
@@ -55,7 +56,9 @@ mod windows_impl {
                 Err(_) => continue,
             };
 
-            let display_name = subkey.get_value::<String, _>("DisplayName").unwrap_or_default();
+            let display_name = subkey
+                .get_value::<String, _>("DisplayName")
+                .unwrap_or_default();
             if !is_everything_display_name(&display_name) {
                 continue;
             }
@@ -75,10 +78,7 @@ mod windows_impl {
                 .or_else(|| standard_paths().into_iter().find(|path| path.exists()))?;
             let version = subkey.get_value::<String, _>("DisplayVersion").ok();
 
-            return Some(InstalledEverything {
-                exe_path,
-                version,
-            });
+            return Some(InstalledEverything { exe_path, version });
         }
 
         None
@@ -88,10 +88,18 @@ mod windows_impl {
         let mut paths = Vec::new();
 
         if let Ok(program_files) = std::env::var("ProgramFiles") {
-            paths.push(PathBuf::from(program_files).join("Everything").join("Everything.exe"));
+            paths.push(
+                PathBuf::from(program_files)
+                    .join("Everything")
+                    .join("Everything.exe"),
+            );
         }
         if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
-            paths.push(PathBuf::from(program_files_x86).join("Everything").join("Everything.exe"));
+            paths.push(
+                PathBuf::from(program_files_x86)
+                    .join("Everything")
+                    .join("Everything.exe"),
+            );
         }
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             paths.push(
@@ -150,12 +158,18 @@ pub fn detect_installed_everything() -> Result<Option<InstalledEverything>, Stri
 
 pub fn start_installed_everything(exe_path: &std::path::Path) -> Result<(), String> {
     if !exe_path.exists() {
-        return Err(format!("Installed Everything executable not found: {:?}", exe_path));
+        return Err(format!(
+            "Installed Everything executable not found: {:?}",
+            exe_path
+        ));
     }
 
-    let workdir = exe_path
-        .parent()
-        .ok_or_else(|| format!("Failed to resolve Everything parent directory for {:?}", exe_path))?;
+    let workdir = exe_path.parent().ok_or_else(|| {
+        format!(
+            "Failed to resolve Everything parent directory for {:?}",
+            exe_path
+        )
+    })?;
 
     let startup_result = Command::new(exe_path)
         .arg("-startup")

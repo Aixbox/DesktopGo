@@ -110,7 +110,9 @@ pub fn get_icon_manager_items(
 pub fn sync_new_desktop_icons(app_handle: tauri::AppHandle) -> Result<IconSyncResult, String> {
     #[cfg(windows)]
     {
-        sync_new_icons_windows(&app_handle, IconSource::Desktop, || Ok(collect_desktop_items()))
+        sync_new_icons_windows(&app_handle, IconSource::Desktop, || {
+            Ok(collect_desktop_items())
+        })
     }
     #[cfg(not(windows))]
     {
@@ -122,7 +124,9 @@ pub fn sync_new_desktop_icons(app_handle: tauri::AppHandle) -> Result<IconSyncRe
 pub fn sync_full_desktop_icons(app_handle: tauri::AppHandle) -> Result<IconSyncResult, String> {
     #[cfg(windows)]
     {
-        sync_full_icons_windows(&app_handle, IconSource::Desktop, || Ok(collect_desktop_items()))
+        sync_full_icons_windows(&app_handle, IconSource::Desktop, || {
+            Ok(collect_desktop_items())
+        })
     }
     #[cfg(not(windows))]
     {
@@ -265,10 +269,7 @@ fn get_path_icon_base64_windows(path: &str, icon_size: i32) -> String {
 
     let item_path_text = item_path.to_string_lossy().to_string();
     let (target_path, item_type) = if has_extension(&item_path, "lnk") {
-        (
-            resolve_lnk(&item_path).unwrap_or_default(),
-            "shortcut",
-        )
+        (resolve_lnk(&item_path).unwrap_or_default(), "shortcut")
     } else if item_path.is_dir() {
         (item_path_text.clone(), "folder")
     } else if has_extension(&item_path, "exe") {
@@ -289,7 +290,10 @@ fn snapshot_base_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 #[cfg(windows)]
-fn snapshot_file_path(app_handle: &tauri::AppHandle, source: IconSource) -> Result<PathBuf, String> {
+fn snapshot_file_path(
+    app_handle: &tauri::AppHandle,
+    source: IconSource,
+) -> Result<PathBuf, String> {
     Ok(snapshot_base_dir(app_handle)?.join(source.snapshot_file_name()))
 }
 
@@ -540,7 +544,10 @@ fn collect_desktop_items() -> Vec<ScannedDesktopItem> {
                 "shortcut".to_string(),
             )
         } else if item_path.is_dir() {
-            (item_path.to_string_lossy().to_string(), "folder".to_string())
+            (
+                item_path.to_string_lossy().to_string(),
+                "folder".to_string(),
+            )
         } else if has_extension(&item_path, "exe") {
             (
                 item_path.to_string_lossy().to_string(),
@@ -587,7 +594,10 @@ fn collect_items_from_single_dir(dir: &PathBuf) -> Result<Vec<ScannedDesktopItem
             .to_string();
 
         let (target_path, item_type) = if has_extension(&path, "lnk") {
-            (resolve_lnk(&path).unwrap_or_default(), "shortcut".to_string())
+            (
+                resolve_lnk(&path).unwrap_or_default(),
+                "shortcut".to_string(),
+            )
         } else if path.is_dir() {
             (path.to_string_lossy().to_string(), "folder".to_string())
         } else if has_extension(&path, "exe") {
@@ -825,13 +835,12 @@ where
         Some(snapshot) => Ok(snapshot),
         None => {
             let scanned_items = collect_items()?;
-            let start_display_order = if let Some(other_snapshot) =
-                read_icon_snapshot(app_handle, source.other())?
-            {
-                max_snapshot_display_order(&other_snapshot).saturating_add(1)
-            } else {
-                1
-            };
+            let start_display_order =
+                if let Some(other_snapshot) = read_icon_snapshot(app_handle, source.other())? {
+                    max_snapshot_display_order(&other_snapshot).saturating_add(1)
+                } else {
+                    1
+                };
             let snapshot =
                 build_full_snapshot(app_handle, source, &scanned_items, start_display_order)?;
             write_icon_snapshot(app_handle, source, &snapshot)?;
@@ -1077,10 +1086,18 @@ fn hide_icons_windows(
     }
 
     let (desktop_ids, customapp_ids) = split_targets_by_source(targets);
-    let desktop_hidden =
-        set_icons_hidden_state_in_snapshot_windows(app_handle, IconSource::Desktop, &desktop_ids, true)?;
-    let customapp_hidden =
-        set_icons_hidden_state_in_snapshot_windows(app_handle, IconSource::CustomApp, &customapp_ids, true)?;
+    let desktop_hidden = set_icons_hidden_state_in_snapshot_windows(
+        app_handle,
+        IconSource::Desktop,
+        &desktop_ids,
+        true,
+    )?;
+    let customapp_hidden = set_icons_hidden_state_in_snapshot_windows(
+        app_handle,
+        IconSource::CustomApp,
+        &customapp_ids,
+        true,
+    )?;
 
     Ok(desktop_hidden + customapp_hidden)
 }
@@ -1133,9 +1150,12 @@ fn delete_icons_windows(
 fn default_customapp_dir_windows(_app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
     let exe_path =
         std::env::current_exe().map_err(|e| format!("Failed to resolve executable path: {}", e))?;
-    let exe_dir = exe_path
-        .parent()
-        .ok_or_else(|| format!("Failed to resolve executable parent directory: {:?}", exe_path))?;
+    let exe_dir = exe_path.parent().ok_or_else(|| {
+        format!(
+            "Failed to resolve executable parent directory: {:?}",
+            exe_path
+        )
+    })?;
     let custom_dir = exe_dir.join("customapp");
     if !custom_dir.exists() {
         std::fs::create_dir_all(&custom_dir).map_err(|e| {
@@ -1181,11 +1201,13 @@ fn get_all_icons_windows(
         })?;
 
     let custom_dir = resolve_customapp_dir_windows(app_handle, custom_app_dir)?;
-    let custom_snapshot = load_or_init_icon_snapshot_windows(app_handle, IconSource::CustomApp, || {
-        collect_items_from_single_dir(&custom_dir)
-    })?;
+    let custom_snapshot =
+        load_or_init_icon_snapshot_windows(app_handle, IconSource::CustomApp, || {
+            collect_items_from_single_dir(&custom_dir)
+        })?;
 
-    let mut all_icons = Vec::with_capacity(desktop_snapshot.icons.len() + custom_snapshot.icons.len());
+    let mut all_icons =
+        Vec::with_capacity(desktop_snapshot.icons.len() + custom_snapshot.icons.len());
     all_icons.extend(snapshot_to_ordered_desktop_icons(
         app_handle,
         &desktop_snapshot,
@@ -1215,11 +1237,13 @@ fn get_all_icon_manager_items_windows(
         })?;
 
     let custom_dir = resolve_customapp_dir_windows(app_handle, custom_app_dir)?;
-    let custom_snapshot = load_or_init_icon_snapshot_windows(app_handle, IconSource::CustomApp, || {
-        collect_items_from_single_dir(&custom_dir)
-    })?;
+    let custom_snapshot =
+        load_or_init_icon_snapshot_windows(app_handle, IconSource::CustomApp, || {
+            collect_items_from_single_dir(&custom_dir)
+        })?;
 
-    let mut all_icons = Vec::with_capacity(desktop_snapshot.icons.len() + custom_snapshot.icons.len());
+    let mut all_icons =
+        Vec::with_capacity(desktop_snapshot.icons.len() + custom_snapshot.icons.len());
     all_icons.extend(snapshot_to_ordered_icon_manager_items(
         app_handle,
         &desktop_snapshot,

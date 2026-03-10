@@ -1,6 +1,7 @@
 use crate::everything::{self, SearchPage, SearchQuery, SearchRuntimeStatus};
 use crate::icons::{self, DesktopIcon, IconManagerItem, IconMutationTarget, IconSyncResult};
 use crate::layout_db;
+use crate::search_preview::{self, SearchPreview};
 use tauri::Manager;
 
 #[tauri::command]
@@ -124,7 +125,9 @@ pub fn set_layout_payload(
 }
 
 #[tauri::command]
-pub async fn start_search_runtime(app_handle: tauri::AppHandle) -> Result<SearchRuntimeStatus, String> {
+pub async fn start_search_runtime(
+    app_handle: tauri::AppHandle,
+) -> Result<SearchRuntimeStatus, String> {
     tauri::async_runtime::spawn_blocking(move || everything::start_search_runtime(&app_handle))
         .await
         .map_err(|e| format!("Failed to join start_search_runtime task: {}", e))?
@@ -143,4 +146,23 @@ pub async fn search_files(
     tauri::async_runtime::spawn_blocking(move || everything::search_files(&app_handle, query))
         .await
         .map_err(|e| format!("Failed to join search_files task: {}", e))?
+}
+
+#[tauri::command]
+pub async fn get_search_preview(path: String) -> Result<SearchPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || search_preview::get_search_preview(&path))
+        .await
+        .map_err(|e| format!("Failed to join get_search_preview task: {}", e))?
+}
+
+#[tauri::command]
+pub async fn record_search_result_run(
+    app_handle: tauri::AppHandle,
+    path: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        everything::record_search_result_run(&app_handle, &path)
+    })
+    .await
+    .map_err(|e| format!("Failed to join record_search_result_run task: {}", e))?
 }
