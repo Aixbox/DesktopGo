@@ -503,7 +503,7 @@ export function Launchpad() {
         >
           <div
             data-search-placeholder
-            className="absolute left-1/2 top-6 z-20 w-full max-w-2xl -translate-x-1/2 px-6"
+            className="absolute left-1/2 top-6 z-40 w-full max-w-2xl -translate-x-1/2 px-6"
           >
             <div className="relative min-w-0" ref={filterMenuRef}>
               <input
@@ -542,7 +542,7 @@ export function Launchpad() {
                   </button>
 
                   {isFilterMenuOpen ? (
-                    <div className="absolute right-0 top-full z-30 mt-2 w-48 overflow-hidden rounded-2xl border border-white/15 bg-black/90 p-1.5 shadow-2xl backdrop-blur-xl">
+                    <div className="absolute right-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-2xl border border-white/15 bg-black/90 p-1.5 shadow-2xl backdrop-blur-xl">
                       {SEARCH_FILTERS.map(entry => (
                         <button
                           key={entry.value}
