@@ -32,21 +32,21 @@ import type { DesktopIcon, IconSize, TitleLineCount, WindowMode } from '@/types'
 import { IconGrid } from './IconGrid'
 
 const ICON_SIZE_OPTIONS: { label: string; value: IconSize }[] = [
-  { label: 'Large', value: 'large' },
-  { label: 'Medium', value: 'medium' },
-  { label: 'Small', value: 'small' },
+  { label: '大图标', value: 'large' },
+  { label: '中图标', value: 'medium' },
+  { label: '小图标', value: 'small' },
 ]
 
 const WINDOW_MODE_OPTIONS: { label: string; value: WindowMode }[] = [
-  { label: 'Fullscreen', value: 'fullscreen' },
-  { label: 'Large Window', value: 'large' },
-  { label: 'Medium Window', value: 'medium' },
-  { label: 'Small Window', value: 'small' },
+  { label: '全屏', value: 'fullscreen' },
+  { label: '大窗口', value: 'large' },
+  { label: '中窗口', value: 'medium' },
+  { label: '小窗口', value: 'small' },
 ]
 
 const TITLE_LINE_OPTIONS: { label: string; value: TitleLineCount }[] = [
-  { label: 'One Line', value: 'one' },
-  { label: 'Two Lines', value: 'two' },
+  { label: '单行标题', value: 'one' },
+  { label: '双行标题', value: 'two' },
 ]
 
 const LONG_PRESS_MS = 420
@@ -457,7 +457,7 @@ export function Launchpad() {
   const handleDeleteSelected = () => {
     if (selectedIconKeys.length === 0) return
     const confirmed = window.confirm(
-      `Delete ${selectedIconKeys.length} selected icon(s)? This cannot be undone.`
+      `确定要删除已选中的 ${selectedIconKeys.length} 个图标吗？此操作无法撤销。`
     )
     if (!confirmed) return
     void deleteSelectedIcons()
@@ -475,7 +475,7 @@ export function Launchpad() {
 
     const settingsWindow = new WebviewWindow('settings', {
       url: 'index.html?page=settings',
-      title: 'Settings',
+      title: '设置',
       width: 800,
       height: 600,
       center: true,
@@ -629,27 +629,27 @@ export function Launchpad() {
               data-selection-toolbar
               className="absolute left-1/2 top-20 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-black/55 px-3 py-2 text-sm text-white/90 backdrop-blur-md"
             >
-              <span className="px-2">Selected: {selectedIconKeys.length}</span>
+              <span className="px-2">已选择：{selectedIconKeys.length}</span>
               <button
                 type="button"
                 onClick={handleHideSelected}
                 className="rounded-full border border-white/25 px-3 py-1 text-xs hover:bg-white/15"
               >
-                Hide
+                隐藏
               </button>
               <button
                 type="button"
                 onClick={handleDeleteSelected}
                 className="rounded-full border border-red-300/40 px-3 py-1 text-xs text-red-200 hover:bg-red-500/25"
               >
-                Delete
+                删除
               </button>
               <button
                 type="button"
                 onClick={clearSelection}
                 className="rounded-full border border-white/25 px-3 py-1 text-xs hover:bg-white/15"
               >
-                Cancel
+                取消
               </button>
             </div>
           ) : null}
@@ -669,7 +669,7 @@ export function Launchpad() {
 
       <ContextMenuContent className="w-44">
         <ContextMenuSub>
-          <ContextMenuSubTrigger>Icon Size</ContextMenuSubTrigger>
+          <ContextMenuSubTrigger>图标大小</ContextMenuSubTrigger>
           <ContextMenuSubContent className="w-44">
             <ContextMenuRadioGroup
               value={iconSize}
@@ -685,7 +685,7 @@ export function Launchpad() {
         </ContextMenuSub>
 
         <ContextMenuSub>
-          <ContextMenuSubTrigger>Window Size</ContextMenuSubTrigger>
+          <ContextMenuSubTrigger>窗口大小</ContextMenuSubTrigger>
           <ContextMenuSubContent className="w-44">
             <ContextMenuRadioGroup
               value={windowMode}
@@ -701,7 +701,7 @@ export function Launchpad() {
         </ContextMenuSub>
 
         <ContextMenuSub>
-          <ContextMenuSubTrigger>Title Lines</ContextMenuSubTrigger>
+          <ContextMenuSubTrigger>标题行数</ContextMenuSubTrigger>
           <ContextMenuSubContent className="w-44">
             <ContextMenuRadioGroup
               value={titleLineCount}
@@ -717,9 +717,9 @@ export function Launchpad() {
         </ContextMenuSub>
 
         <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => enterSelectionMode()}>Edit Icons</ContextMenuItem>
+        <ContextMenuItem onSelect={() => enterSelectionMode()}>编辑图标</ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem onSelect={openSettings}>Settings</ContextMenuItem>
+        <ContextMenuItem onSelect={openSettings}>设置</ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   )
