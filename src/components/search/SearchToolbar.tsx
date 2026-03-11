@@ -146,6 +146,7 @@ function FloatingMenu({
   return createPortal(
     <div
       ref={menuRef}
+      data-search-floating-menu="true"
       className={className}
       style={
         style ?? {

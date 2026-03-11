@@ -500,7 +500,7 @@ export function SearchPanel({
                 >
                   <button
                     type="button"
-                    className={`flex h-full w-full items-center gap-3 px-4 py-3 text-left transition ${
+                    className={`flex h-full w-full items-center gap-3 px-4 py-3 text-left ${
                       selectedIndex === index ? 'bg-white/15' : 'hover:bg-white/10'
                     }`}
                     onMouseEnter={() => onSelect(index)}

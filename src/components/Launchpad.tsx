@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -120,6 +121,7 @@ export function Launchpad() {
   const longPressTimerRef = useRef<number | null>(null)
   const longPressTriggeredRef = useRef(false)
   const filterMenuRef = useRef<HTMLDivElement | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
   const [isSearchPanelOpen, setIsSearchPanelOpen] = useState(false)
   const [isSearchPreviewVisible, setIsSearchPreviewVisible] = useState(true)
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false)
@@ -330,96 +332,153 @@ export function Launchpad() {
     }
   }
 
-  const handleSearchInputKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (searchSource === 'icons') {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        if (iconSearchResults.length === 0) return
-        setSelectedIconResultIndex(current => {
-          const safeCurrent = current < 0 ? 0 : current
-          return (safeCurrent + 1) % iconSearchResults.length
-        })
-        return
-      }
-
-      if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        if (iconSearchResults.length === 0) return
-        setSelectedIconResultIndex(current => {
-          const safeCurrent = current < 0 ? 0 : current
-          return (safeCurrent - 1 + iconSearchResults.length) % iconSearchResults.length
-        })
-        return
-      }
-
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        const selectedIcon = iconSearchResults[selectedIconResultIndex] ?? iconSearchResults[0]
-        if (selectedIcon) {
-          void launchIconItem(selectedIcon)
-        }
-        return
-      }
-
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        if (hasSearchKeyword) {
-          clearSearch()
+  const handleSearchNavigationKey = useCallback(
+    (key: string, preventDefault: () => void) => {
+      if (searchSource === 'icons') {
+        if (key === 'ArrowDown') {
+          preventDefault()
+          if (iconSearchResults.length === 0) return
+          setSelectedIconResultIndex(current => {
+            const safeCurrent = current < 0 ? 0 : current
+            return (safeCurrent + 1) % iconSearchResults.length
+          })
           return
         }
-        setIsSearchPanelOpen(false)
-      }
-      return
-    }
 
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      if (!isSearchPanelVisible && hasSearchKeyword) {
-        setIsSearchPanelOpen(true)
+        if (key === 'ArrowUp') {
+          preventDefault()
+          if (iconSearchResults.length === 0) return
+          setSelectedIconResultIndex(current => {
+            const safeCurrent = current < 0 ? 0 : current
+            return (safeCurrent - 1 + iconSearchResults.length) % iconSearchResults.length
+          })
+          return
+        }
+
+        if (key === 'Enter') {
+          preventDefault()
+          const selectedIcon = iconSearchResults[selectedIconResultIndex] ?? iconSearchResults[0]
+          if (selectedIcon) {
+            void launchIconItem(selectedIcon)
+          }
+          return
+        }
+
+        if (key === 'Escape') {
+          preventDefault()
+          if (hasSearchKeyword) {
+            clearSearch()
+            return
+          }
+          setIsSearchPanelOpen(false)
+        }
+        return
       }
-      moveSelection(1)
-      return
-    }
-    if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      if (!isSearchPanelVisible && hasSearchKeyword) {
-        setIsSearchPanelOpen(true)
+
+      if (key === 'ArrowDown') {
+        preventDefault()
+        if (!isSearchPanelVisible && hasSearchKeyword) {
+          setIsSearchPanelOpen(true)
+        }
+        moveSelection(1)
+        return
       }
-      moveSelection(-1)
-      return
-    }
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      if (!isSearchPanelVisible && hasSearchKeyword) {
-        setIsSearchPanelOpen(true)
+
+      if (key === 'ArrowUp') {
+        preventDefault()
+        if (!isSearchPanelVisible && hasSearchKeyword) {
+          setIsSearchPanelOpen(true)
+        }
+        moveSelection(-1)
+        return
       }
-      if (!searchSettings.liveOnType) {
-        if (!isKeywordCommitted) {
+
+      if (key === 'Enter') {
+        preventDefault()
+        if (!isSearchPanelVisible && hasSearchKeyword) {
+          setIsSearchPanelOpen(true)
+        }
+        if (!searchSettings.liveOnType) {
+          if (!isKeywordCommitted) {
+            submitSearch()
+            return
+          }
           submitSearch()
+        }
+        if (!searchSettings.openOnEnter) {
           return
         }
-        submitSearch()
-      }
-      if (!searchSettings.openOnEnter) {
+        const selectedItem = getSearchItemAt(selectedIndex)
+        if (selectedItem) {
+          void launchSearchItem(selectedItem.path)
+        } else if (selectedIndex >= 0) {
+          requestSearchRange(selectedIndex, selectedIndex)
+        }
         return
       }
-      const selectedItem = getSearchItemAt(selectedIndex)
-      if (selectedItem) {
-        void launchSearchItem(selectedItem.path)
-      } else if (selectedIndex >= 0) {
-        requestSearchRange(selectedIndex, selectedIndex)
+
+      if (key === 'Escape') {
+        preventDefault()
+        if (isSearchPanelVisible) {
+          setIsSearchPanelOpen(false)
+          return
+        }
+        clearSearch()
       }
+    },
+    [
+      clearSearch,
+      getSearchItemAt,
+      hasSearchKeyword,
+      iconSearchResults,
+      isKeywordCommitted,
+      isSearchPanelVisible,
+      moveSelection,
+      requestSearchRange,
+      searchSettings.liveOnType,
+      searchSettings.openOnEnter,
+      searchSource,
+      selectedIconResultIndex,
+      selectedIndex,
+      submitSearch,
+    ]
+  )
+
+  const handleSearchInputKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    handleSearchNavigationKey(e.key, () => e.preventDefault())
+  }
+
+  useEffect(() => {
+    if (!isSearchPanelOpen) {
       return
     }
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      if (isSearchPanelVisible) {
-        setIsSearchPanelOpen(false)
+
+    const handleDocumentKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      const isSearchInput = target === searchInputRef.current
+      const isEditable =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target?.isContentEditable === true
+
+      if (isSearchInput) {
         return
       }
-      clearSearch()
+      if (target?.closest('[data-search-floating-menu="true"]')) {
+        return
+      }
+      if (isEditable) {
+        return
+      }
+
+      handleSearchNavigationKey(event.key, () => event.preventDefault())
     }
-  }
+
+    document.addEventListener('keydown', handleDocumentKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleDocumentKeyDown)
+    }
+  }, [handleSearchNavigationKey, isSearchPanelOpen])
 
   const handleBackgroundClick = (e: React.MouseEvent) => {
     if (longPressTriggeredRef.current) {
@@ -507,6 +566,7 @@ export function Launchpad() {
           >
             <div className="relative min-w-0" ref={filterMenuRef}>
               <input
+                ref={searchInputRef}
                 data-search-placeholder
                 type="text"
                 value={keyword}
@@ -542,7 +602,10 @@ export function Launchpad() {
                   </button>
 
                   {isFilterMenuOpen ? (
-                    <div className="absolute left-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-2xl border border-white/15 bg-black/90 p-1.5 shadow-2xl backdrop-blur-xl">
+                    <div
+                      data-search-floating-menu="true"
+                      className="absolute left-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-2xl border border-white/15 bg-black/90 p-1.5 shadow-2xl backdrop-blur-xl"
+                    >
                       {SEARCH_FILTERS.map(entry => (
                         <button
                           key={entry.value}
