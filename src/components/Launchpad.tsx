@@ -530,11 +530,11 @@ export function Launchpad() {
               />
 
               {searchSource === 'everything' ? (
-                <>
+                <div className="absolute right-2 top-1/2 -translate-y-1/2">
                   <button
                     data-search-placeholder
                     type="button"
-                    className="absolute right-2 top-1/2 inline-flex h-8 -translate-y-1/2 items-center gap-1 rounded-full border border-white/15 bg-white/8 px-3 text-xs text-white/80 transition hover:bg-white/12"
+                    className="inline-flex h-8 items-center gap-1 rounded-full border border-white/15 bg-white/8 px-3 text-xs text-white/80 transition hover:bg-white/12"
                     onClick={() => setIsFilterMenuOpen(open => !open)}
                   >
                     <span className="truncate">{selectedFilterLabel}</span>
@@ -542,7 +542,7 @@ export function Launchpad() {
                   </button>
 
                   {isFilterMenuOpen ? (
-                    <div className="absolute right-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-2xl border border-white/15 bg-black/90 p-1.5 shadow-2xl backdrop-blur-xl">
+                    <div className="absolute left-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-2xl border border-white/15 bg-black/90 p-1.5 shadow-2xl backdrop-blur-xl">
                       {SEARCH_FILTERS.map(entry => (
                         <button
                           key={entry.value}
@@ -565,7 +565,7 @@ export function Launchpad() {
                       ))}
                     </div>
                   ) : null}
-                </>
+                </div>
               ) : null}
             </div>
           </div>

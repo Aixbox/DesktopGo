@@ -1,7 +1,18 @@
 import { SEARCH_SORT_OPTIONS, getSearchSortLabel } from '@/lib/search/sorts'
 import type { SearchSort } from '@/lib/search/types'
 import { ArrowUpDown, Check, Eye, EyeOff, Settings2 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from 'react'
+import { createPortal } from 'react-dom'
 
 interface SearchToolbarProps {
   matchPath: boolean
@@ -29,6 +40,132 @@ const SORT_GROUP_LABELS = {
   metadata: '元数据',
   history: '历史记录',
 } as const
+
+const FLOATING_MENU_GAP = 8
+const FLOATING_MENU_MARGIN = 12
+const FLOATING_MENU_Z_INDEX = 90
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
+}
+
+function getFloatingMenuStyle(
+  triggerElement: HTMLElement,
+  menuElement: HTMLDivElement,
+  preferredWidth: number,
+  align: 'start' | 'end'
+): CSSProperties {
+  const triggerRect = triggerElement.getBoundingClientRect()
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const menuWidth = Math.min(preferredWidth, viewportWidth - FLOATING_MENU_MARGIN * 2)
+  const menuHeight = menuElement.scrollHeight
+  const naturalLeft = align === 'start' ? triggerRect.left : triggerRect.right - menuWidth
+  const left = clamp(
+    naturalLeft,
+    FLOATING_MENU_MARGIN,
+    Math.max(FLOATING_MENU_MARGIN, viewportWidth - menuWidth - FLOATING_MENU_MARGIN)
+  )
+  const spaceBelow = viewportHeight - triggerRect.bottom - FLOATING_MENU_MARGIN
+  const spaceAbove = triggerRect.top - FLOATING_MENU_MARGIN
+  const shouldOpenUpward =
+    spaceBelow < Math.min(menuHeight, 320) + FLOATING_MENU_GAP && spaceAbove > spaceBelow
+  const maxHeight = Math.max(
+    140,
+    shouldOpenUpward
+      ? triggerRect.top - FLOATING_MENU_GAP - FLOATING_MENU_MARGIN
+      : viewportHeight - triggerRect.bottom - FLOATING_MENU_GAP - FLOATING_MENU_MARGIN
+  )
+
+  return {
+    position: 'fixed',
+    left,
+    width: menuWidth,
+    maxHeight,
+    zIndex: FLOATING_MENU_Z_INDEX,
+    top: shouldOpenUpward ? undefined : triggerRect.bottom + FLOATING_MENU_GAP,
+    bottom: shouldOpenUpward ? viewportHeight - triggerRect.top + FLOATING_MENU_GAP : undefined,
+  }
+}
+
+function FloatingMenu({
+  open,
+  triggerRef,
+  menuRef,
+  width,
+  align,
+  className,
+  children,
+}: {
+  open: boolean
+  triggerRef: RefObject<HTMLElement | null>
+  menuRef: RefObject<HTMLDivElement | null>
+  width: number
+  align: 'start' | 'end'
+  className: string
+  children: ReactNode
+}) {
+  const [style, setStyle] = useState<CSSProperties | null>(null)
+
+  const updatePosition = useCallback(() => {
+    const triggerElement = triggerRef.current
+    const menuElement = menuRef.current
+
+    if (!triggerElement || !menuElement) {
+      return
+    }
+
+    setStyle(getFloatingMenuStyle(triggerElement, menuElement, width, align))
+  }, [align, menuRef, triggerRef, width])
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setStyle(null)
+      return
+    }
+
+    updatePosition()
+
+    const handleViewportChange = () => {
+      updatePosition()
+    }
+
+    window.addEventListener('resize', handleViewportChange)
+    window.addEventListener('scroll', handleViewportChange, true)
+
+    return () => {
+      window.removeEventListener('resize', handleViewportChange)
+      window.removeEventListener('scroll', handleViewportChange, true)
+    }
+  }, [open, updatePosition])
+
+  if (!open) {
+    return null
+  }
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      className={className}
+      style={
+        style ?? {
+          position: 'fixed',
+          top: FLOATING_MENU_MARGIN,
+          left: FLOATING_MENU_MARGIN,
+          width:
+            typeof window === 'undefined'
+              ? width
+              : Math.min(width, window.innerWidth - FLOATING_MENU_MARGIN * 2),
+          visibility: 'hidden',
+          zIndex: FLOATING_MENU_Z_INDEX,
+        }
+      }
+    >
+      {children}
+    </div>,
+    document.body
+  )
+}
 
 function MatcherToggleRow({ active, label, onClick }: MatcherToggleRowProps) {
   return (
@@ -71,32 +208,38 @@ export function SearchToolbar({
   const [matcherMenuOpen, setMatcherMenuOpen] = useState(false)
   const sortMenuRef = useRef<HTMLDivElement | null>(null)
   const matcherMenuRef = useRef<HTMLDivElement | null>(null)
+  const sortButtonRef = useRef<HTMLButtonElement | null>(null)
+  const matcherButtonRef = useRef<HTMLButtonElement | null>(null)
   const hasActiveMatcher = matchCase || wholeWord || matchPath || regex
   const selectedSortLabel = getSearchSortLabel(sort)
-  const groupedSortOptions = useMemo(() => {
-    return SEARCH_SORT_OPTIONS.reduce(
-      (groups, option) => {
-        groups[option.group].push(option)
-        return groups
-      },
-      {
-        common: [] as typeof SEARCH_SORT_OPTIONS,
-        metadata: [] as typeof SEARCH_SORT_OPTIONS,
-        history: [] as typeof SEARCH_SORT_OPTIONS,
-      }
-    )
-  }, [])
+  const groupedSortOptions = useMemo(
+    () =>
+      SEARCH_SORT_OPTIONS.reduce(
+        (groups, option) => {
+          groups[option.group].push(option)
+          return groups
+        },
+        {
+          common: [] as typeof SEARCH_SORT_OPTIONS,
+          metadata: [] as typeof SEARCH_SORT_OPTIONS,
+          history: [] as typeof SEARCH_SORT_OPTIONS,
+        }
+      ),
+    []
+  )
 
   useEffect(() => {
     if (!matcherMenuOpen && !sortMenuOpen) return
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node
+      const clickedMatcherButton = matcherButtonRef.current?.contains(target) ?? false
+      const clickedSortButton = sortButtonRef.current?.contains(target) ?? false
 
-      if (!matcherMenuRef.current?.contains(target)) {
+      if (!matcherMenuRef.current?.contains(target) && !clickedMatcherButton) {
         setMatcherMenuOpen(false)
       }
-      if (!sortMenuRef.current?.contains(target)) {
+      if (!sortMenuRef.current?.contains(target) && !clickedSortButton) {
         setSortMenuOpen(false)
       }
     }
@@ -107,10 +250,27 @@ export function SearchToolbar({
     }
   }, [matcherMenuOpen, sortMenuOpen])
 
+  useEffect(() => {
+    if (!matcherMenuOpen && !sortMenuOpen) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMatcherMenuOpen(false)
+        setSortMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [matcherMenuOpen, sortMenuOpen])
+
   return (
     <div className="flex items-center justify-end gap-2">
-      <div ref={sortMenuRef} className="relative">
+      <div className="relative">
         <button
+          ref={sortButtonRef}
           type="button"
           aria-label="搜索排序"
           aria-expanded={sortMenuOpen}
@@ -133,8 +293,15 @@ export function SearchToolbar({
           <span className="truncate">{selectedSortLabel}</span>
         </button>
 
-        {sortMenuOpen ? (
-          <div className="absolute right-0 top-full z-20 mt-2 max-h-[18rem] w-64 overflow-y-auto rounded-xl border border-white/15 bg-black/90 p-2 shadow-2xl backdrop-blur-xl">
+        <FloatingMenu
+          open={sortMenuOpen}
+          triggerRef={sortButtonRef}
+          menuRef={sortMenuRef}
+          width={256}
+          align="start"
+          className="overflow-y-auto rounded-xl border border-white/15 bg-black/90 p-2 shadow-2xl backdrop-blur-xl"
+        >
+          <div className="space-y-0.5">
             {(['common', 'metadata', 'history'] as const).map(group => {
               const options = groupedSortOptions[group]
               if (options.length === 0) return null
@@ -170,11 +337,12 @@ export function SearchToolbar({
               )
             })}
           </div>
-        ) : null}
+        </FloatingMenu>
       </div>
 
-      <div ref={matcherMenuRef} className="relative">
+      <div className="relative">
         <button
+          ref={matcherButtonRef}
           type="button"
           aria-label="搜索选项"
           aria-expanded={matcherMenuOpen}
@@ -196,8 +364,15 @@ export function SearchToolbar({
           <Settings2 className="h-4 w-4" />
         </button>
 
-        {matcherMenuOpen ? (
-          <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border border-white/15 bg-black/90 p-2 shadow-2xl backdrop-blur-xl">
+        <FloatingMenu
+          open={matcherMenuOpen}
+          triggerRef={matcherButtonRef}
+          menuRef={matcherMenuRef}
+          width={224}
+          align="start"
+          className="rounded-xl border border-white/15 bg-black/90 p-2 shadow-2xl backdrop-blur-xl"
+        >
+          <div>
             <div className="px-3 pb-2 pt-1 text-[11px] uppercase tracking-[0.18em] text-white/35">
               匹配选项
             </div>
@@ -224,7 +399,7 @@ export function SearchToolbar({
               />
             </div>
           </div>
-        ) : null}
+        </FloatingMenu>
       </div>
 
       <button
