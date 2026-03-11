@@ -14,6 +14,12 @@ import { SearchToolbar } from './SearchToolbar'
 const ROW_HEIGHT = 68
 const OVERSCAN_ROWS = 6
 const LOAD_AHEAD_ROWS = 24
+const EVERYTHING_BODY_HEIGHT = '56vh'
+const EVERYTHING_LIST_PANE_MIN_WIDTH = 220
+const EVERYTHING_LIST_CONTENT_MIN_WIDTH = 420
+const EVERYTHING_PREVIEW_MIN_WIDTH = 0
+const SPLIT_DIVIDER_WIDTH = 10
+const DEFAULT_LIST_PANE_RATIO = 0.58
 const PANEL_TRANSITION = {
   duration: 0.18,
   ease: [0.22, 1, 0.36, 1] as const,
@@ -105,7 +111,6 @@ function IconResultTile({
 }) {
   const { iconSize } = useIconStore()
   const config = ICON_SIZE_CONFIG[iconSize]
-  const imageMotionClass = 'group-hover:scale-105 group-active:scale-95'
 
   return (
     <button
@@ -122,7 +127,7 @@ function IconResultTile({
       onDoubleClick={onActivate}
     >
       <div
-        className={`flex items-center justify-center overflow-hidden transition-all duration-200 ${imageMotionClass}`}
+        className="flex items-center justify-center overflow-hidden transition-all duration-200 group-hover:scale-105 group-active:scale-95"
         style={{ width: config.imgSize, height: config.imgSize }}
       >
         {icon.icon_base64 ? (
@@ -207,14 +212,28 @@ export function SearchPanel({
   const { iconSize, titleLineCount } = useIconStore()
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const bodyContentRef = useRef<HTMLDivElement | null>(null)
+  const splitContainerRef = useRef<HTMLDivElement | null>(null)
   const [viewportHeight, setViewportHeight] = useState(0)
   const [scrollTop, setScrollTop] = useState(0)
   const [bodyHeight, setBodyHeight] = useState(0)
+  const [listPaneWidth, setListPaneWidth] = useState<number | null>(null)
+  const [isResizingSplit, setIsResizingSplit] = useState(false)
   const prefersReducedMotion = useReducedMotion()
   const isEverything = source === 'everything'
   const trimmedKeyword = keyword.trim()
   const iconConfig = ICON_SIZE_CONFIG[iconSize]
   const singleLineTitle = titleLineCount === 'one'
+
+  const clampListPaneWidth = useCallback((nextWidth: number, containerWidth: number) => {
+    const availableWidth = Math.max(containerWidth - SPLIT_DIVIDER_WIDTH, 0)
+    const maxListWidth = Math.max(
+      EVERYTHING_LIST_PANE_MIN_WIDTH,
+      availableWidth - EVERYTHING_PREVIEW_MIN_WIDTH
+    )
+    const minListWidth = Math.min(EVERYTHING_LIST_PANE_MIN_WIDTH, maxListWidth)
+
+    return Math.min(Math.max(nextWidth, minListWidth), maxListWidth)
+  }, [])
 
   const virtualCount = totalResults > 0 ? totalResults : loadedCount
   const visibleRowCount = Math.ceil(viewportHeight / ROW_HEIGHT) + OVERSCAN_ROWS * 2
@@ -271,6 +290,69 @@ export function SearchPanel({
   }, [isEverything, visible])
 
   useEffect(() => {
+    if (!visible || !isEverything || !previewVisible) return
+
+    const container = splitContainerRef.current
+    if (!container) return
+
+    const syncWidth = () => {
+      const containerWidth = container.clientWidth
+      if (containerWidth <= 0) return
+
+      setListPaneWidth(current => {
+        if (current === null) {
+          return clampListPaneWidth(containerWidth * DEFAULT_LIST_PANE_RATIO, containerWidth)
+        }
+        return clampListPaneWidth(current, containerWidth)
+      })
+    }
+
+    syncWidth()
+
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(() => {
+            syncWidth()
+          })
+
+    resizeObserver?.observe(container)
+
+    return () => {
+      resizeObserver?.disconnect()
+    }
+  }, [clampListPaneWidth, isEverything, previewVisible, visible])
+
+  useEffect(() => {
+    if (!isResizingSplit) return
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const container = splitContainerRef.current
+      if (!container) return
+
+      const rect = container.getBoundingClientRect()
+      const nextWidth = clampListPaneWidth(event.clientX - rect.left, rect.width)
+      setListPaneWidth(nextWidth)
+    }
+
+    const stopResize = () => {
+      setIsResizingSplit(false)
+    }
+
+    document.addEventListener('pointermove', handlePointerMove)
+    document.addEventListener('pointerup', stopResize)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    return () => {
+      document.removeEventListener('pointermove', handlePointerMove)
+      document.removeEventListener('pointerup', stopResize)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [clampListPaneWidth, isResizingSplit])
+
+  useEffect(() => {
     if (!isEverything) return
 
     const element = viewportRef.current
@@ -297,9 +379,7 @@ export function SearchPanel({
   }, [isEverything, loading, loadingMore])
 
   useEffect(() => {
-    if (!isEverything) {
-      return
-    }
+    if (!isEverything) return
     notifyVisibleRange(scrollTop, viewportHeight)
   }, [isEverything, notifyVisibleRange, scrollTop, viewportHeight])
 
@@ -329,7 +409,7 @@ export function SearchPanel({
           ? searchPending
             ? 'everything-searching-empty'
             : 'everything-empty'
-          : 'everything-results'
+          : `everything-results-${previewVisible ? 'split' : 'list'}`
     : trimmedKeyword
       ? iconResults.length > 0
         ? `icons-results-${iconResults.length}`
@@ -361,6 +441,151 @@ export function SearchPanel({
       resizeObserver?.disconnect()
     }
   }, [bodyStateKey, visible])
+
+  const everythingResultsContent = (
+    <div
+      ref={splitContainerRef}
+      className={`relative ${previewVisible ? 'flex' : 'block'}`}
+      style={{ height: EVERYTHING_BODY_HEIGHT }}
+    >
+      <div
+        className="relative min-w-0"
+        style={
+          previewVisible && listPaneWidth !== null ? { width: listPaneWidth } : { width: '100%' }
+        }
+      >
+        <div
+          ref={viewportRef}
+          className="h-full overflow-auto"
+          onScroll={e => {
+            const nextScrollTop = e.currentTarget.scrollTop
+            const nextViewportHeight = e.currentTarget.clientHeight
+            setScrollTop(nextScrollTop)
+            notifyVisibleRange(nextScrollTop, nextViewportHeight)
+          }}
+        >
+          <div
+            className="relative"
+            style={{
+              height: virtualCount * ROW_HEIGHT,
+              minWidth: EVERYTHING_LIST_CONTENT_MIN_WIDTH,
+            }}
+          >
+            {virtualRows.map(({ index, item }) => {
+              const top = index * ROW_HEIGHT
+
+              if (!item) {
+                return (
+                  <div
+                    key={`placeholder-${index}`}
+                    className="absolute left-0 right-0 px-4 py-2"
+                    style={{ top, height: ROW_HEIGHT }}
+                  >
+                    <div className="flex h-full animate-pulse items-center gap-3 rounded-md bg-white/5 px-4">
+                      <span className="h-8 w-8 rounded-md bg-white/10" />
+                      <span className="min-w-0 flex-1">
+                        <span className="mb-2 block h-3 w-1/3 rounded bg-white/10" />
+                        <span className="block h-2.5 w-2/3 rounded bg-white/10" />
+                      </span>
+                    </div>
+                  </div>
+                )
+              }
+
+              return (
+                <div
+                  key={`${item.path}-${index}`}
+                  className="absolute left-0 right-0 px-0"
+                  style={{ top, height: ROW_HEIGHT }}
+                >
+                  <button
+                    type="button"
+                    className={`flex h-full w-full items-center gap-3 px-4 py-3 text-left transition ${
+                      selectedIndex === index ? 'bg-white/15' : 'hover:bg-white/10'
+                    }`}
+                    onMouseEnter={() => onSelect(index)}
+                    onDoubleClick={() => {
+                      if (allowDoubleClickOpen) {
+                        onActivate(item)
+                      }
+                    }}
+                    onClick={() => onSelect(index)}
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden">
+                      {item.iconBase64 ? (
+                        <img
+                          src={item.iconBase64}
+                          alt={item.name || item.path}
+                          className="h-7 w-7 object-contain"
+                          draggable={false}
+                        />
+                      ) : item.isFolder ? (
+                        <Folder className="h-4 w-4 text-white/70" />
+                      ) : (
+                        <File className="h-4 w-4 text-white/70" />
+                      )}
+                    </span>
+
+                    <span className="min-w-0 flex-1">
+                      <HighlightedText
+                        highlightedText={item.highlightedName}
+                        fallbackText={item.name || item.path}
+                        className="block truncate text-sm text-white"
+                        highlightClassName="text-emerald-200"
+                      />
+                      <HighlightedText
+                        highlightedText={item.highlightedPath}
+                        fallbackText={item.parent}
+                        className="block truncate text-xs text-white/55"
+                        highlightClassName="text-white/90"
+                      />
+                    </span>
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {loadingMore ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-white/10 bg-black/50 px-4 py-2 text-xs text-white/60 backdrop-blur-sm">
+            正在加载更多...
+          </div>
+        ) : null}
+      </div>
+
+      {previewVisible ? (
+        <>
+          <button
+            type="button"
+            aria-label="调整预览宽度"
+            className={`relative z-10 shrink-0 border-l border-r border-white/10 bg-white/[0.03] transition hover:bg-white/10 ${
+              isResizingSplit ? 'bg-white/12' : ''
+            }`}
+            style={{ width: SPLIT_DIVIDER_WIDTH, cursor: 'col-resize' }}
+            onPointerDown={event => {
+              event.preventDefault()
+              setIsResizingSplit(true)
+            }}
+          >
+            <span className="absolute left-1/2 top-1/2 h-14 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/20" />
+          </button>
+
+          <div
+            className="min-w-0 flex-1 overflow-hidden"
+            style={{ minWidth: EVERYTHING_PREVIEW_MIN_WIDTH }}
+          >
+            <SearchPreviewPane
+              item={selectedItem}
+              preview={preview}
+              loading={previewLoading}
+              error={previewError}
+            />
+          </div>
+        </>
+      ) : null}
+    </div>
+  )
 
   const bodyContent = (
     <div ref={bodyContentRef}>
@@ -409,119 +634,7 @@ export function SearchPanel({
         <div className="px-4 py-3 text-sm text-white/60">{everythingEmptyText}</div>
       ) : null}
 
-      {isEverything && !error && virtualCount > 0 ? (
-        <div>
-          <div className="relative">
-            <div
-              ref={viewportRef}
-              className={`${previewVisible ? 'h-[38vh]' : 'h-[56vh]'} overflow-auto`}
-              onScroll={e => {
-                const nextScrollTop = e.currentTarget.scrollTop
-                const nextViewportHeight = e.currentTarget.clientHeight
-                setScrollTop(nextScrollTop)
-                notifyVisibleRange(nextScrollTop, nextViewportHeight)
-              }}
-            >
-              <div
-                className="relative"
-                style={{
-                  height: virtualCount * ROW_HEIGHT,
-                }}
-              >
-                {virtualRows.map(({ index, item }) => {
-                  const top = index * ROW_HEIGHT
-
-                  if (!item) {
-                    return (
-                      <div
-                        key={`placeholder-${index}`}
-                        className="absolute left-0 right-0 px-4 py-2"
-                        style={{ top, height: ROW_HEIGHT }}
-                      >
-                        <div className="flex h-full animate-pulse items-center gap-3 rounded-md bg-white/5 px-4">
-                          <span className="h-8 w-8 rounded-md bg-white/10" />
-                          <span className="min-w-0 flex-1">
-                            <span className="mb-2 block h-3 w-1/3 rounded bg-white/10" />
-                            <span className="block h-2.5 w-2/3 rounded bg-white/10" />
-                          </span>
-                        </div>
-                      </div>
-                    )
-                  }
-
-                  return (
-                    <div
-                      key={`${item.path}-${index}`}
-                      className="absolute left-0 right-0 px-0"
-                      style={{ top, height: ROW_HEIGHT }}
-                    >
-                      <button
-                        type="button"
-                        className={`flex h-full w-full items-center gap-3 px-4 py-3 text-left transition ${
-                          selectedIndex === index ? 'bg-white/15' : 'hover:bg-white/10'
-                        }`}
-                        onMouseEnter={() => onSelect(index)}
-                        onDoubleClick={() => {
-                          if (allowDoubleClickOpen) {
-                            onActivate(item)
-                          }
-                        }}
-                        onClick={() => onSelect(index)}
-                      >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden">
-                          {item.iconBase64 ? (
-                            <img
-                              src={item.iconBase64}
-                              alt={item.name || item.path}
-                              className="h-7 w-7 object-contain"
-                              draggable={false}
-                            />
-                          ) : item.isFolder ? (
-                            <Folder className="h-4 w-4 text-white/70" />
-                          ) : (
-                            <File className="h-4 w-4 text-white/70" />
-                          )}
-                        </span>
-
-                        <span className="min-w-0 flex-1">
-                          <HighlightedText
-                            highlightedText={item.highlightedName}
-                            fallbackText={item.name || item.path}
-                            className="block truncate text-sm text-white"
-                            highlightClassName="text-emerald-200"
-                          />
-                          <HighlightedText
-                            highlightedText={item.highlightedPath}
-                            fallbackText={item.parent}
-                            className="block truncate text-xs text-white/55"
-                            highlightClassName="text-white/90"
-                          />
-                        </span>
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            {loadingMore ? (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-white/10 bg-black/50 px-4 py-2 text-xs text-white/60 backdrop-blur-sm">
-                正在加载更多...
-              </div>
-            ) : null}
-          </div>
-
-          {previewVisible ? (
-            <SearchPreviewPane
-              stacked
-              item={selectedItem}
-              preview={preview}
-              loading={previewLoading}
-              error={previewError}
-            />
-          ) : null}
-        </div>
-      ) : null}
+      {isEverything && !error && virtualCount > 0 ? everythingResultsContent : null}
     </div>
   )
 
