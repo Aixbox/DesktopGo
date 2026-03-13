@@ -59,6 +59,7 @@ interface UseIconGridDragWorkflowParams {
   folderItemHeight: number
   folderOrderLength: number
   itemById: Map<string, GridItem>
+  iconItemByKey: Map<string, IconItem>
   itemIds: string[]
   containerRef: MutableRefObject<HTMLDivElement | null>
   gridRef: MutableRefObject<HTMLDivElement | null>
@@ -95,6 +96,7 @@ interface UseIconGridDragWorkflowResult {
     folderId: string,
     itemId: string
   ) => void
+  handleDockItemPointerDown: (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => void
   handleTileClickCapture: (event: React.MouseEvent<HTMLDivElement>) => void
   clearEdgeSwitchTimer: () => void
   clearOuterDragInteractionForPageSwitch: () => void
@@ -113,6 +115,7 @@ export function useIconGridDragWorkflow({
   folderItemHeight,
   folderOrderLength,
   itemById,
+  iconItemByKey,
   itemIds,
   containerRef,
   gridRef,
@@ -241,19 +244,23 @@ export function useIconGridDragWorkflow({
     }
   }
 
-  const findHitByContext = (state: DragState, x: number, y: number): DragHit | null =>
-    findHitByMetrics(state, x, y, resolveGridMetrics(state.context), config.gridGap)
+  const findHitByContext = (state: DragState, x: number, y: number): DragHit | null => {
+    if (state.context === 'dock') return null
+    return findHitByMetrics(state, x, y, resolveGridMetrics(state.context), config.gridGap)
+  }
 
   const resolveNearestSlotIndexByContext = (
     state: DragState,
     options?: { allowOutside?: boolean }
-  ): number | null =>
-    resolveNearestSlotIndexByMetrics(
+  ): number | null => {
+    if (state.context === 'dock') return null
+    return resolveNearestSlotIndexByMetrics(
       state,
       resolveGridMetrics(state.context),
       config.gridGap,
       options
     )
+  }
 
   const resolveNearestDropOrderByContext = (state: DragState): Array<string | null> => {
     const globalSlotIndex = resolveNearestSlotIndexByContext(state, { allowOutside: true })
@@ -274,7 +281,13 @@ export function useIconGridDragWorkflow({
     if (!withinHorizontal || !withinVertical) return null
 
     const draggingKey = state.draggingItem.key
-    const withoutDragging = dockKeysRef.current.filter(key => key !== draggingKey)
+    const currentDockKeys = dockKeysRef.current
+    const isExistingDockItem = currentDockKeys.includes(draggingKey)
+    if (!isExistingDockItem && currentDockKeys.length >= dockCapacity) {
+      return null
+    }
+
+    const withoutDragging = currentDockKeys.filter(key => key !== draggingKey)
     const slotEntries = Array.from(dockSlotRefs.current.entries()).sort(([a], [b]) => a - b)
     if (slotEntries.length === 0) return 0
 
@@ -493,7 +506,9 @@ export function useIconGridDragWorkflow({
     const sourceOrder =
       pending.context === 'folder' && pending.sourceFolderId
         ? getFolderChildrenById(itemsRef.current, pending.sourceFolderId).map(child => child.key)
-        : normalizeOuterSlots(outerSlotsRef.current, itemIds, pageSizeRef.current)
+        : pending.context === 'dock'
+          ? dockKeysRef.current
+          : normalizeOuterSlots(outerSlotsRef.current, itemIds, pageSizeRef.current)
     if (pending.context === 'outer' && !areSlotsEqual(sourceOrder, outerSlotsRef.current)) {
       outerSlotsRef.current = sourceOrder
       setOuterSlots(sourceOrder)
@@ -507,15 +522,22 @@ export function useIconGridDragWorkflow({
     const draggingItem =
       pending.context === 'folder' && pending.sourceFolderId
         ? getFolderMapById(pending.sourceFolderId, itemsRef.current).get(pending.itemId)
-        : itemById.get(pending.itemId)
+        : pending.context === 'dock'
+          ? iconItemByKey.get(pending.itemId)
+          : itemById.get(pending.itemId)
     if (!draggingItem) {
       clearPending()
       return
     }
 
     const workingOrder: Array<string | null> = [...sourceOrder]
-    if (pending.context === 'folder') workingOrder[sourceIndex] = DRAG_HOLE_ID
-    else workingOrder[sourceIndex] = null
+    if (pending.context === 'folder') {
+      workingOrder[sourceIndex] = DRAG_HOLE_ID
+    } else if (pending.context === 'dock') {
+      workingOrder.splice(sourceIndex, 1)
+    } else {
+      workingOrder[sourceIndex] = null
+    }
     const nextState: DragState = {
       context: pending.context,
       sourceFolderId: pending.sourceFolderId,
@@ -529,7 +551,7 @@ export function useIconGridDragWorkflow({
       workingOrder,
       sourceSlotIndex: pending.context === 'outer' ? sourceIndex : null,
       previewSlotIndex: pending.context === 'outer' ? sourceIndex : null,
-      dockPreviewIndex: null,
+      dockPreviewIndex: pending.context === 'dock' ? sourceIndex : null,
       hoverTargetId: null,
       hoverZone: null,
       hoverIou: 0,
@@ -542,7 +564,9 @@ export function useIconGridDragWorkflow({
       initialCenters:
         pending.context === 'folder'
           ? collectCenters(folderTileRefs.current)
-          : collectCenters(tileRefs.current),
+          : pending.context === 'dock'
+            ? {}
+            : collectCenters(tileRefs.current),
     }
     dragRef.current = nextState
     setDragState(nextState)
@@ -567,6 +591,26 @@ export function useIconGridDragWorkflow({
     }
 
     const dockPreviewIndex = resolveDockPreviewIndex(baseState, x, y)
+    if (baseState.context === 'dock') {
+      clearOuterDwellTimer()
+      clearEdgeSwitchTimer()
+      const dockState: DragState = {
+        ...baseState,
+        previewSlotIndex: null,
+        dockPreviewIndex,
+        hoverTargetId: null,
+        hoverZone: null,
+        hoverIou: 0,
+        centerStartedAt: null,
+        dwellStartedAt: null,
+        folderPreviewTargetId: null,
+        lastEvasionSignature: null,
+      }
+      dragRef.current = dockState
+      setDragState(dockState)
+      return
+    }
+
     if (dockPreviewIndex !== null) {
       clearOuterDwellTimer()
       clearEdgeSwitchTimer()
@@ -883,6 +927,27 @@ export function useIconGridDragWorkflow({
     }, config.dragLongPressMs)
   }
 
+  const handleDockItemPointerDown = (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => {
+    if (selectionMode || event.button !== 0) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    pendingRef.current = {
+      context: 'dock',
+      sourceFolderId: null,
+      pointerId: event.pointerId,
+      itemId,
+      startX: event.clientX,
+      startY: event.clientY,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+    }
+    clearTimer()
+    timerRef.current = window.setTimeout(() => {
+      const pending = pendingRef.current
+      if (!pending || pending.pointerId !== event.pointerId) return
+      beginDrag(pending, pending.startX, pending.startY)
+    }, config.dragLongPressMs)
+  }
+
   const handleTileClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
     if (performance.now() < suppressClickUntilRef.current) {
       event.preventDefault()
@@ -918,6 +983,7 @@ export function useIconGridDragWorkflow({
     frozenOuterOrder,
     handleTilePointerDown,
     handleFolderTilePointerDown,
+    handleDockItemPointerDown,
     handleTileClickCapture,
     clearEdgeSwitchTimer,
     clearOuterDragInteractionForPageSwitch,

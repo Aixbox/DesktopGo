@@ -267,6 +267,13 @@ export function useDragDropCommit({
       return true
     }
 
+    if (current.context === 'dock') {
+      resetDropVisuals()
+      dragRef.current = null
+      setDragState(null)
+      return true
+    }
+
     if (current.context === 'folder') {
       const folderMap = getFolderMapById(current.sourceFolderId, itemsRef.current)
       const target = current.hoverTargetId ? folderMap.get(current.hoverTargetId) : null

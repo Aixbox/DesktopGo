@@ -196,6 +196,15 @@ export function IconGrid({ icons }: IconGridProps) {
     return map
   }, [icons])
 
+  const iconItemByKey = useMemo(() => {
+    const map = new Map<string, IconItem>()
+    icons.forEach(icon => {
+      const key = buildIconSelectionKey(icon)
+      map.set(key, { kind: 'icon', key, icon })
+    })
+    return map
+  }, [icons])
+
   const openFolder = useMemo(() => {
     if (!openFolderId) return null
     const found = items.find(item => item.kind === 'folder' && item.id === openFolderId)
@@ -227,6 +236,7 @@ export function IconGrid({ icons }: IconGridProps) {
     frozenOuterOrder,
     handleTilePointerDown,
     handleFolderTilePointerDown,
+    handleDockItemPointerDown,
     handleTileClickCapture,
     clearEdgeSwitchTimer,
     clearOuterDragInteractionForPageSwitch,
@@ -252,6 +262,7 @@ export function IconGrid({ icons }: IconGridProps) {
     folderItemHeight,
     folderOrderLength: folderOrder.length,
     itemById,
+    iconItemByKey,
     itemIds,
     containerRef,
     gridRef,
@@ -608,7 +619,7 @@ export function IconGrid({ icons }: IconGridProps) {
           pageSize={pageSize}
           currentPage={currentPage}
           itemById={outerViewItemById}
-          dragContext={dragState?.context ?? null}
+          dragContext={dragState?.context === 'dock' ? null : (dragState?.context ?? null)}
           dragPreviewSlotIndex={dragState?.previewSlotIndex ?? null}
           dragFolderPreviewTargetId={dragState?.folderPreviewTargetId ?? null}
           folderPreviewFreezeTargetId={folderPreviewFreezeTargetId}
@@ -668,6 +679,8 @@ export function IconGrid({ icons }: IconGridProps) {
           if (node) dockSlotRefs.current.set(index, node)
           else dockSlotRefs.current.delete(index)
         }}
+        onDockItemPointerDown={handleDockItemPointerDown}
+        onDockItemClickCapture={handleTileClickCapture}
         onLaunchIcon={icon => {
           void launchApp(icon.path)
         }}
@@ -678,7 +691,7 @@ export function IconGrid({ icons }: IconGridProps) {
 
       <FolderModalView
         openFolder={openFolder}
-        dragContext={dragState?.context ?? null}
+        dragContext={dragState?.context === 'dock' ? null : (dragState?.context ?? null)}
         selectionMode={selectionMode}
         selectedSet={selectedSet}
         onToggleSelectIcon={toggleSelectIcon}

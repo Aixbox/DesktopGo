@@ -1,4 +1,11 @@
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import type { DesktopIcon } from '../../../types'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '../../ui/context-menu'
 import { getDockPreviewKeys } from '../domain/dock'
 
 interface DockBarProps {
@@ -11,6 +18,8 @@ interface DockBarProps {
   selectionMode: boolean
   bindDockContainerRef: (node: HTMLDivElement | null) => void
   bindDockSlotRef: (index: number, node: HTMLDivElement | null) => void
+  onDockItemPointerDown: (event: ReactPointerEvent<HTMLDivElement>, key: string) => void
+  onDockItemClickCapture: (event: ReactMouseEvent<HTMLDivElement>) => void
   onLaunchIcon: (icon: DesktopIcon) => void
   onRemoveIcon: (key: string) => void
 }
@@ -27,11 +36,16 @@ export function DockBar({
   selectionMode,
   bindDockContainerRef,
   bindDockSlotRef,
+  onDockItemPointerDown,
+  onDockItemClickCapture,
   onLaunchIcon,
   onRemoveIcon,
 }: DockBarProps) {
-  const previewKeys = getDockPreviewKeys(dockKeys, draggingKey, dockPreviewIndex, dockCapacity)
-  const isPreviewVisible = dockPreviewIndex !== null && draggingKey !== null
+  const fallbackPreviewIndex =
+    draggingKey && dockKeys.includes(draggingKey) ? dockKeys.indexOf(draggingKey) : null
+  const resolvedPreviewIndex = dockPreviewIndex ?? fallbackPreviewIndex
+  const previewKeys = getDockPreviewKeys(dockKeys, draggingKey, resolvedPreviewIndex, dockCapacity)
+  const isPreviewVisible = draggingKey !== null && resolvedPreviewIndex !== null
 
   return (
     <div
@@ -64,52 +78,73 @@ export function DockBar({
                 }`}
                 style={{ width: SLOT_SIZE, height: SLOT_SIZE }}
               >
-                {icon ? (
-                  <div className="group relative flex h-[56px] w-[56px] items-center justify-center">
-                    <button
-                      data-dock-item
-                      data-dock-key={key ?? undefined}
-                      type="button"
-                      title={icon.name}
-                      className={`flex h-[56px] w-[56px] cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
-                        selectionMode || isPreviewGhost
-                          ? 'pointer-events-none'
-                          : 'hover:bg-white/10 active:scale-95'
-                      } ${isPreviewGhost ? 'scale-[0.96] opacity-70' : 'opacity-100'}`}
-                      onClick={event => {
-                        event.stopPropagation()
-                        if (selectionMode || !icon) return
-                        onLaunchIcon(icon)
-                      }}
-                    >
-                      {icon.icon_base64 ? (
-                        <img
-                          src={icon.icon_base64}
-                          alt={icon.name}
-                          className="h-10 w-10 object-contain"
-                          draggable={false}
-                        />
-                      ) : (
-                        <div className="h-10 w-10 rounded-xl bg-white/12" aria-hidden="true" />
-                      )}
-                    </button>
-
-                    {!selectionMode && !isPreviewGhost ? (
-                      <button
-                        data-dock-remove
-                        type="button"
-                        aria-label={`Remove ${icon.name} from dock`}
-                        className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-black/70 p-0 text-[10px] leading-none text-white/75 opacity-0 shadow-none transition group-hover:opacity-100 hover:bg-black/85 hover:text-white"
-                        onClick={event => {
+                {icon && key ? (
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <div
+                        data-dock-item
+                        data-dock-key={key}
+                        className="group relative flex h-[56px] w-[56px] items-center justify-center"
+                        onPointerDown={event => {
+                          onDockItemPointerDown(event, key)
+                        }}
+                        onClickCapture={onDockItemClickCapture}
+                        onContextMenu={event => {
                           event.stopPropagation()
-                          if (!key) return
-                          onRemoveIcon(key)
                         }}
                       >
-                        x
-                      </button>
+                        <button
+                          type="button"
+                          title={icon.name}
+                          className={`flex h-[56px] w-[56px] cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
+                            selectionMode || isPreviewGhost
+                              ? 'pointer-events-none'
+                              : 'hover:bg-white/10 active:scale-95'
+                          } ${isPreviewGhost ? 'scale-[0.96] opacity-70' : 'opacity-100'}`}
+                          onClick={event => {
+                            event.stopPropagation()
+                            if (selectionMode || !icon) return
+                            onLaunchIcon(icon)
+                          }}
+                        >
+                          {icon.icon_base64 ? (
+                            <img
+                              src={icon.icon_base64}
+                              alt={icon.name}
+                              className="h-10 w-10 object-contain"
+                              draggable={false}
+                            />
+                          ) : (
+                            <div className="h-10 w-10 rounded-xl bg-white/12" aria-hidden="true" />
+                          )}
+                        </button>
+                      </div>
+                    </ContextMenuTrigger>
+
+                    {!selectionMode && !isPreviewGhost ? (
+                      <ContextMenuContent
+                        data-dock-menu="true"
+                        className="w-44 rounded-2xl border-white/15 bg-black/90 p-1.5 text-white shadow-2xl backdrop-blur-xl"
+                      >
+                        <ContextMenuItem
+                          className="rounded-xl px-3 py-2 text-white/85 focus:bg-white/12 focus:text-white"
+                          onSelect={() => {
+                            onLaunchIcon(icon)
+                          }}
+                        >
+                          ��
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                          className="rounded-xl px-3 py-2 text-red-200 focus:bg-red-500/20 focus:text-red-100"
+                          onSelect={() => {
+                            onRemoveIcon(key)
+                          }}
+                        >
+                          �Ƴ� Dock
+                        </ContextMenuItem>
+                      </ContextMenuContent>
                     ) : null}
-                  </div>
+                  </ContextMenu>
                 ) : null}
               </div>
             )

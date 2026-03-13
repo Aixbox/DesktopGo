@@ -17,7 +17,7 @@ export type FolderItem = {
 }
 
 export type GridItem = IconItem | FolderItem
-export type DragContext = 'outer' | 'folder'
+export type DragContext = 'outer' | 'folder' | 'dock'
 
 export type PersistedItem =
   | {

@@ -288,6 +288,7 @@ export function Launchpad() {
   const isBackgroundInteraction = (target: HTMLElement) =>
     !target.closest('[data-icon]') &&
     !target.closest('[data-dock]') &&
+    !target.closest('[data-dock-menu="true"]') &&
     !target.closest('[data-search-placeholder]') &&
     !target.closest('[data-search-floating-menu="true"]') &&
     !target.closest('[data-pagination]') &&
@@ -491,7 +492,8 @@ export function Launchpad() {
     const target = e.target as HTMLElement
     const clickedOutsideSearch =
       !target.closest('[data-search-placeholder]') &&
-      !target.closest('[data-search-floating-menu="true"]')
+      !target.closest('[data-search-floating-menu="true"]') &&
+      !target.closest('[data-dock-menu="true"]')
 
     if (isSearchPanelOpen && clickedOutsideSearch) {
       setIsSearchPanelOpen(false)
