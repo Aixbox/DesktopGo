@@ -268,17 +268,18 @@ export function SearchToolbar({
   }, [matcherMenuOpen, sortMenuOpen])
 
   return (
-    <div className="flex items-center justify-end gap-2">
-      <div className="relative">
+    <div className="inline-flex h-8 items-center gap-0.5 rounded-lg bg-white/5 p-1 shadow-inner ring-1 ring-white/10">
+      {/* 1. 排序下拉按钮 */}
+      <div className="relative h-full">
         <button
           ref={sortButtonRef}
           type="button"
           aria-label="搜索排序"
           aria-expanded={sortMenuOpen}
-          className={`inline-flex h-8 max-w-[11rem] items-center gap-1.5 rounded-md border px-2.5 text-xs transition ${
+          className={`group relative inline-flex h-full max-w-[10rem] items-center justify-center rounded-md px-3 text-xs font-medium transition-colors duration-200 ${
             sortMenuOpen
-              ? 'border-white/35 bg-white/15 text-white'
-              : 'border-white/20 text-white/70 hover:bg-white/10 hover:text-white'
+              ? 'text-white drop-shadow-md'
+              : 'text-white/55 hover:text-white/85'
           }`}
           onClick={() =>
             setSortMenuOpen(open => {
@@ -290,8 +291,14 @@ export function SearchToolbar({
             })
           }
         >
-          <ArrowUpDown className="h-4 w-4 shrink-0" />
-          <span className="truncate">{selectedSortLabel}</span>
+          {sortMenuOpen && (
+            <div className="absolute inset-0 rounded-md bg-white/15 shadow-[0_1px_3px_rgba(0,0,0,0.1)] ring-1 ring-white/10" />
+          )}
+
+          <span className="relative z-10 flex items-center gap-1.5">
+            <ArrowUpDown className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{selectedSortLabel}</span>
+          </span>
         </button>
 
         <FloatingMenu
@@ -300,7 +307,7 @@ export function SearchToolbar({
           menuRef={sortMenuRef}
           width={256}
           align="start"
-          className="overflow-y-auto rounded-xl border border-white/15 bg-black/90 p-2 shadow-2xl backdrop-blur-xl"
+          className="overflow-y-auto rounded-xl border border-white/[0.15] bg-black/90 p-2 shadow-[0_4px_24px_rgba(0,0,0,0.5)] ring-1 ring-white/5 backdrop-blur-xl"
         >
           <div className="space-y-0.5">
             {(['common', 'metadata', 'history'] as const).map(group => {
@@ -317,10 +324,10 @@ export function SearchToolbar({
                       <button
                         key={option.value}
                         type="button"
-                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
+                        className={`group flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-all duration-200 ${
                           sort === option.value
-                            ? 'bg-white/14 text-white'
-                            : 'text-white/70 hover:bg-white/8 hover:text-white'
+                            ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10'
+                            : 'text-white/70 hover:bg-white/10 hover:text-white/95 active:scale-[0.98]'
                         }`}
                         onClick={() => {
                           onSortChange(option.value)
@@ -329,7 +336,7 @@ export function SearchToolbar({
                       >
                         <span>{option.label}</span>
                         {sort === option.value ? (
-                          <Check className="h-4 w-4 text-emerald-200" />
+                          <Check className="h-4 w-4 text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]" />
                         ) : null}
                       </button>
                     ))}
@@ -341,16 +348,19 @@ export function SearchToolbar({
         </FloatingMenu>
       </div>
 
-      <div className="relative">
+      <div className="mx-0.5 h-3.5 w-[1px] bg-white/10" />
+
+      {/* 2. 匹配选项下拉按钮 */}
+      <div className="relative h-full">
         <button
           ref={matcherButtonRef}
           type="button"
           aria-label="搜索选项"
           aria-expanded={matcherMenuOpen}
-          className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition ${
+          className={`relative inline-flex h-full w-8 items-center justify-center rounded-md transition-colors duration-200 ${
             matcherMenuOpen || hasActiveMatcher
-              ? 'border-white/35 bg-white/15 text-white'
-              : 'border-white/20 text-white/70 hover:bg-white/10 hover:text-white'
+              ? 'text-white drop-shadow-md'
+              : 'text-white/55 hover:text-white/85'
           }`}
           onClick={() =>
             setMatcherMenuOpen(open => {
@@ -362,7 +372,16 @@ export function SearchToolbar({
             })
           }
         >
-          <Settings2 className="h-4 w-4" />
+          {(matcherMenuOpen || hasActiveMatcher) && (
+            <div className="absolute inset-0 rounded-md bg-white/15 shadow-[0_1px_3px_rgba(0,0,0,0.1)] ring-1 ring-white/10" />
+          )}
+
+          <span className="relative z-10 flex items-center justify-center">
+            <Settings2 className="h-4 w-4" />
+            {hasActiveMatcher && (
+              <span className="absolute right-[-0.375rem] top-[-0.375rem] h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+            )}
+          </span>
         </button>
 
         <FloatingMenu
@@ -371,7 +390,7 @@ export function SearchToolbar({
           menuRef={matcherMenuRef}
           width={224}
           align="start"
-          className="rounded-xl border border-white/15 bg-black/90 p-2 shadow-2xl backdrop-blur-xl"
+          className="rounded-xl border border-white/[0.15] bg-black/90 p-2 shadow-[0_4px_24px_rgba(0,0,0,0.5)] ring-1 ring-white/5 backdrop-blur-xl"
         >
           <div>
             <div className="px-3 pb-2 pt-1 text-[11px] uppercase tracking-[0.18em] text-white/35">
@@ -403,18 +422,26 @@ export function SearchToolbar({
         </FloatingMenu>
       </div>
 
+      <div className="mx-0.5 h-3.5 w-[1px] bg-white/10" />
+
+      {/* 3. 预览开关按钮 */}
       <button
         type="button"
+        title={previewVisible ? '隐藏预览' : '显示预览'}
         aria-label={previewVisible ? '隐藏预览' : '显示预览'}
-        className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs transition ${
+        className={`relative inline-flex h-full w-8 items-center justify-center rounded-md transition-colors duration-200 ${
           previewVisible
-            ? 'border-white/35 bg-white/15 text-white'
-            : 'border-white/20 text-white/70 hover:bg-white/10 hover:text-white'
+            ? 'text-white drop-shadow-md'
+            : 'text-white/55 hover:text-white/85'
         }`}
         onClick={onPreviewToggle}
       >
-        {previewVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-        <span className="hidden sm:inline">{previewVisible ? '隐藏预览' : '显示预览'}</span>
+        {previewVisible && (
+          <div className="absolute inset-0 rounded-md bg-white/15 shadow-[0_1px_3px_rgba(0,0,0,0.1)] ring-1 ring-white/10" />
+        )}
+        <span className="relative z-10 flex items-center justify-center">
+          {previewVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </span>
       </button>
     </div>
   )
