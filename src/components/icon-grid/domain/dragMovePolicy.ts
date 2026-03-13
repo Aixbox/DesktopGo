@@ -138,7 +138,7 @@ export const findOuterMaxOverlapHitByMetrics = ({
   currentPage,
   tileRefs,
 }: FindOuterMaxOverlapHitParams): OuterOverlapHit | null => {
-  if (state.context !== 'outer') return null
+  if (state.context === 'folder') return null
   if (!gridElement || columns <= 0 || rows <= 0) return null
 
   const dragRect = new DOMRect(

@@ -1,9 +1,9 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { DesktopIcon } from '../../../types'
-import { buildIconSelectionKey } from '../../../stores/iconStore'
 import { normalizeDockKeys } from '../domain/dock'
 import type { GridItem, IconItem, PersistedItem, PersistedLayout } from '../model'
 import { makeFolderId } from '../model'
+import type { DesktopIcon } from '../../../types'
+import { buildIconSelectionKey } from '../../../stores/iconStore'
 
 const LAYOUT_KEY = 'desktopgo.launchpad.layout.v1'
 
@@ -42,7 +42,7 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
     return {
       items: parsed.items,
       slots: parsed.slots.map(slot => (typeof slot === 'string' ? slot : null)),
-      dockKeys: parsed.dockKeys.filter((key): key is string => typeof key === 'string'),
+      dockKeys: parsed.dockKeys.map(key => (typeof key === 'string' ? key : null)),
     }
   } catch {
     return null
@@ -52,7 +52,7 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
 export const writeLayout = async (
   items: GridItem[],
   slots: Array<string | null>,
-  dockKeys: string[]
+  dockKeys: Array<string | null>
 ) => {
   const payload = {
     version: 3,
@@ -64,12 +64,11 @@ export const writeLayout = async (
 }
 
 export const hydrateDockKeys = (
-  icons: DesktopIcon[],
-  persisted: string[] | null | undefined,
+  itemIds: string[],
+  persisted: Array<string | null> | null | undefined,
   capacity: number
-): string[] => {
-  const validKeys = icons.map(icon => buildIconSelectionKey(icon))
-  return normalizeDockKeys(persisted, validKeys, capacity)
+): Array<string | null> => {
+  return normalizeDockKeys(persisted, itemIds, capacity)
 }
 
 export const hydrateItems = (

@@ -11,7 +11,7 @@ import { getId } from '../model'
 import { DRAG_HOLE_ID, normalizeOuterSlots } from '../domain/slots'
 import { moveDragHoleToIndex } from '../domain/evasionPolicy'
 import {
-  finalizeFolderExtractionInOuterLayout,
+  finalizeFolderExtractionInTopLevelLayout,
   getFolderChildrenById,
   replaceFolderChildren,
 } from '../domain/folderPolicy'
@@ -20,7 +20,7 @@ import {
   applyFolderCreateFromSession,
   applyOuterDropFromSession,
 } from '../domain/dropPolicy'
-import { applyDockDrop } from '../domain/dock'
+import { normalizeDockKeys, resolveOuterItemIds } from '../domain/dock'
 import type { DragState, FolderDropFlight } from '../state/types'
 import { OUTER_DRAG_RULES } from '../constants'
 import {
@@ -44,10 +44,10 @@ interface UseDragDropCommitParams {
   tileRefs: MutableRefObject<Map<string, HTMLDivElement>>
   itemsRef: MutableRefObject<GridItem[]>
   outerSlotsRef: MutableRefObject<Array<string | null>>
-  dockKeysRef: MutableRefObject<string[]>
+  dockKeysRef: MutableRefObject<Array<string | null>>
   setItems: Dispatch<SetStateAction<GridItem[]>>
   setOuterSlots: Dispatch<SetStateAction<Array<string | null>>>
-  setDockKeys: Dispatch<SetStateAction<string[]>>
+  setDockKeys: Dispatch<SetStateAction<Array<string | null>>>
   dockCapacity: number
   dragRef: MutableRefObject<DragState | null>
   setDragState: Dispatch<SetStateAction<DragState | null>>
@@ -107,17 +107,17 @@ export function useDragDropCommit({
     return map
   }
 
-  const hasIconRepresentation = (
-    items: GridItem[],
-    slots: Array<string | null>,
-    iconKey: string
-  ): boolean => {
-    if (slots.includes(iconKey)) return true
+  const hasIconRepresentation = (items: GridItem[], iconKey: string): boolean => {
     return items.some(
       item =>
         (item.kind === 'icon' && item.key === iconKey) ||
         (item.kind === 'folder' && item.children.some(child => child.key === iconKey))
     )
+  }
+
+  const resolveSourceTopLevelContext = (session: DragState): 'outer' | 'dock' | null => {
+    if (session.sourceFolderId) return null
+    return dockKeysRef.current.includes(session.draggingId) ? 'dock' : 'outer'
   }
 
   const extractDraggedIconFromSourceFolder = (base: GridItem[], session: DragState): GridItem[] => {
@@ -131,32 +131,58 @@ export function useDragDropCommit({
     })
   }
 
-  const commitOuterSessionResult = (
-    session: DragState,
-    originalItems: GridItem[],
-    originalSlots: Array<string | null>,
-    result: { items: GridItem[]; slots: Array<string | null> }
+  const commitLayouts = (
+    nextItems: GridItem[],
+    nextOuterSlotsInput: Array<string | null>,
+    nextDockKeysInput: Array<string | null>
   ) => {
-    const normalizedResultSlots = normalizeOuterSlots(
-      result.slots,
-      result.items.map(getId),
+    const nextItemIds = nextItems.map(getId)
+    const normalizedDockKeys = normalizeDockKeys(nextDockKeysInput, nextItemIds, dockCapacity)
+    const normalizedOuterSlots = normalizeOuterSlots(
+      nextOuterSlotsInput,
+      resolveOuterItemIds(nextItemIds, normalizedDockKeys),
       pageSizeRef.current
     )
+    itemsRef.current = nextItems
+    outerSlotsRef.current = normalizedOuterSlots
+    dockKeysRef.current = normalizedDockKeys
+    setItems(nextItems)
+    setOuterSlots(normalizedOuterSlots)
+    setDockKeys(normalizedDockKeys)
+  }
+
+  const commitTopLevelSessionResult = (
+    session: DragState,
+    originalItems: GridItem[],
+    originalOuterSlots: Array<string | null>,
+    originalDockKeys: Array<string | null>,
+    targetContext: 'outer' | 'dock',
+    result: { items: GridItem[]; slots: Array<string | null> }
+  ) => {
     if (
       session.sourceFolderId &&
       session.draggingItem.kind === 'icon' &&
-      !hasIconRepresentation(result.items, normalizedResultSlots, session.draggingItem.key)
+      !hasIconRepresentation(result.items, session.draggingItem.key)
     ) {
-      commitOuterLayout(originalItems, originalSlots)
+      commitLayouts(originalItems, originalOuterSlots, originalDockKeys)
       return
     }
 
-    const finalized = finalizeFolderExtractionInOuterLayout(
+    const sourceTopLevelContext = resolveSourceTopLevelContext(session)
+    let nextOuterSlots = targetContext === 'outer' ? result.slots : originalOuterSlots
+    let nextDockKeys =
+      targetContext === 'dock' ? [...result.slots] : [...originalDockKeys]
+    if (sourceTopLevelContext === 'dock' && targetContext !== 'dock') {
+      nextDockKeys = nextDockKeys.map(key => (key === session.draggingId ? null : key))
+    }
+
+    const finalized = finalizeFolderExtractionInTopLevelLayout(
       result.items,
-      normalizedResultSlots,
+      nextOuterSlots,
+      nextDockKeys,
       session.sourceFolderId
     )
-    commitOuterLayout(finalized.items, finalized.slots)
+    commitLayouts(finalized.items, finalized.outerSlots, finalized.dockKeys)
   }
 
   const resolveFolderSecondSlotCenter = (
@@ -184,23 +210,6 @@ export function useDragDropCommit({
       y: slotTop + slotSize / 2,
       size: slotSize,
     }
-  }
-
-  const commitOuterLayout = (nextItems: GridItem[], nextSlotsInput: Array<string | null>) => {
-    const normalizedSlots = normalizeOuterSlots(
-      nextSlotsInput,
-      nextItems.map(getId),
-      pageSizeRef.current
-    )
-    itemsRef.current = nextItems
-    outerSlotsRef.current = normalizedSlots
-    setItems(nextItems)
-    setOuterSlots(normalizedSlots)
-  }
-
-  const commitDockLayout = (nextDockKeys: string[]) => {
-    dockKeysRef.current = nextDockKeys
-    setDockKeys(nextDockKeys)
   }
 
   const scheduleFolderCreateTransition = (folderId: string | null) => {
@@ -253,27 +262,6 @@ export function useDragDropCommit({
     if (!current || current.pointerId !== pointerId) return false
     clearEdgeSwitchTimer()
 
-    if (current.dockPreviewIndex !== null && current.draggingItem.kind === 'icon') {
-      resetDropVisuals()
-      const nextDockKeys = applyDockDrop(
-        dockKeysRef.current,
-        current.draggingItem.key,
-        current.dockPreviewIndex,
-        dockCapacity
-      )
-      commitDockLayout(nextDockKeys)
-      dragRef.current = null
-      setDragState(null)
-      return true
-    }
-
-    if (current.context === 'dock') {
-      resetDropVisuals()
-      dragRef.current = null
-      setDragState(null)
-      return true
-    }
-
     if (current.context === 'folder') {
       const folderMap = getFolderMapById(current.sourceFolderId, itemsRef.current)
       const target = current.hoverTargetId ? folderMap.get(current.hoverTargetId) : null
@@ -310,42 +298,68 @@ export function useDragDropCommit({
         return replaceFolderChildren(base, current.sourceFolderId, nextChildren)
       })
     } else {
-      const outerMap = new Map<string, GridItem>()
-      itemsRef.current.forEach(item => outerMap.set(getId(item), item))
+      const targetContext: 'outer' | 'dock' = current.context
+      const topLevelMap = new Map<string, GridItem>()
+      itemsRef.current.forEach(item => topLevelMap.set(getId(item), item))
       const source = current.draggingItem
+      const sourceTopLevelContext = resolveSourceTopLevelContext(current)
+      const switchingContainers =
+        sourceTopLevelContext !== null && sourceTopLevelContext !== current.context
+      const hasExplicitDropTarget =
+        current.previewSlotIndex !== null ||
+        current.folderPreviewTargetId !== null ||
+        current.hoverTargetId !== null
+      if ((current.sourceFolderId || switchingContainers) && !hasExplicitDropTarget) {
+        resetDropVisuals()
+        dragRef.current = null
+        setDragState(null)
+        return true
+      }
+
       const existingFolderTarget = current.hoverTargetId
-        ? outerMap.get(current.hoverTargetId)
+        ? topLevelMap.get(current.hoverTargetId)
         : null
       const canAddToExistingFolder =
         source.kind === 'icon' &&
         existingFolderTarget?.kind === 'folder' &&
         current.hoverIou >= OUTER_DRAG_RULES.folderOverlapThreshold
       const folderTarget =
-        current.folderPreviewTargetId !== null ? outerMap.get(current.folderPreviewTargetId) : null
+        current.folderPreviewTargetId !== null
+          ? topLevelMap.get(current.folderPreviewTargetId)
+          : null
       const canCreateFolder =
         current.folderPreviewTargetId !== null &&
         source.kind === 'icon' &&
         folderTarget?.kind === 'icon'
+      const originalItems = itemsRef.current
+      const originalOuterSlots = outerSlotsRef.current
+      const originalDockKeys = dockKeysRef.current
+      const baseForDrop = extractDraggedIconFromSourceFolder(originalItems, current)
 
       if (canAddToExistingFolder) {
         setFolderPreviewFreezeTargetId(null)
         scheduleFolderCreateTransition(null)
         setHiddenOuterItemIds([])
         setFrozenOuterOrder(null)
-        const originalItems = itemsRef.current
-        const originalSlots = outerSlotsRef.current
-        const baseForDrop = extractDraggedIconFromSourceFolder(originalItems, current)
         const result = applyAddToFolderFromSession(
           baseForDrop,
           current,
           current.hoverTargetId as string
         )
-        commitOuterSessionResult(current, originalItems, originalSlots, result)
+        commitTopLevelSessionResult(
+          current,
+          originalItems,
+          originalOuterSlots,
+          originalDockKeys,
+          targetContext,
+          result
+        )
       } else if (canCreateFolder) {
         const targetId = current.folderPreviewTargetId as string
         const sourceItem = source.kind === 'icon' ? source : null
-        const slotCenter = resolveFolderSecondSlotCenter(targetId)
-        if (sourceItem && slotCenter) {
+        const slotCenter =
+          targetContext === 'outer' ? resolveFolderSecondSlotCenter(targetId) : null
+        if (targetContext === 'outer' && sourceItem && slotCenter) {
           if (folderDropFlightTimerRef.current !== null) {
             window.clearTimeout(folderDropFlightTimerRef.current)
             folderDropFlightTimerRef.current = null
@@ -371,12 +385,16 @@ export function useDragDropCommit({
           })
 
           folderDropFlightTimerRef.current = window.setTimeout(() => {
-            const originalItems = itemsRef.current
-            const originalSlots = outerSlotsRef.current
-            const baseForDrop = extractDraggedIconFromSourceFolder(originalItems, current)
             const result = applyFolderCreateFromSession(baseForDrop, current)
             const createdFolderId = resolveCreatedFolderId(current, result)
-            commitOuterSessionResult(current, originalItems, originalSlots, result)
+            commitTopLevelSessionResult(
+              current,
+              originalItems,
+              originalOuterSlots,
+              originalDockKeys,
+              targetContext,
+              result
+            )
             scheduleFolderCreateTransition(createdFolderId)
             setFolderDropFlight(prev => (prev && prev.id === flightId ? null : prev))
             setFolderPreviewFreezeTargetId(prev => (prev === targetId ? null : prev))
@@ -397,12 +415,16 @@ export function useDragDropCommit({
           scheduleFolderCreateTransition(null)
           setHiddenOuterItemIds([])
           setFrozenOuterOrder(null)
-          const originalItems = itemsRef.current
-          const originalSlots = outerSlotsRef.current
-          const baseForDrop = extractDraggedIconFromSourceFolder(originalItems, current)
           const result = applyFolderCreateFromSession(baseForDrop, current)
           const createdFolderId = resolveCreatedFolderId(current, result)
-          commitOuterSessionResult(current, originalItems, originalSlots, result)
+          commitTopLevelSessionResult(
+            current,
+            originalItems,
+            originalOuterSlots,
+            originalDockKeys,
+            targetContext,
+            result
+          )
           scheduleFolderCreateTransition(createdFolderId)
         }
       } else {
@@ -410,17 +432,21 @@ export function useDragDropCommit({
         scheduleFolderCreateTransition(null)
         setHiddenOuterItemIds([])
         setFrozenOuterOrder(null)
-        const originalItems = itemsRef.current
-        const originalSlots = outerSlotsRef.current
-        const baseForDrop = extractDraggedIconFromSourceFolder(originalItems, current)
         const result = applyOuterDropFromSession({
           base: baseForDrop,
           session: current,
-          pageSize: pageSizeRef.current,
-          columns,
+          pageSize: targetContext === 'dock' ? dockCapacity : pageSizeRef.current,
+          columns: targetContext === 'dock' ? dockCapacity : columns,
           resolveNearestSlotIndexByContext,
         })
-        commitOuterSessionResult(current, originalItems, originalSlots, result)
+        commitTopLevelSessionResult(
+          current,
+          originalItems,
+          originalOuterSlots,
+          originalDockKeys,
+          targetContext,
+          result
+        )
       }
     }
 

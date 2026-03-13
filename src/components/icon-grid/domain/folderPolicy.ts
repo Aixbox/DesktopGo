@@ -45,31 +45,36 @@ export const replaceFolderChildren = (
   return next
 }
 
-export const finalizeFolderExtractionInOuterLayout = (
+export const finalizeFolderExtractionInTopLevelLayout = (
   items: GridItem[],
-  slots: Array<string | null>,
+  outerSlots: Array<string | null>,
+  dockKeys: Array<string | null>,
   folderId: string | null
-): { items: GridItem[]; slots: Array<string | null> } => {
-  if (!folderId) return { items, slots }
+): { items: GridItem[]; outerSlots: Array<string | null>; dockKeys: Array<string | null> } => {
+  if (!folderId) return { items, outerSlots, dockKeys }
   const index = findFolderIndexById(items, folderId)
-  if (index < 0) return { items, slots }
+  if (index < 0) return { items, outerSlots, dockKeys }
   const folder = items[index]
-  if (!folder || folder.kind !== 'folder') return { items, slots }
-  if (folder.children.length >= 2) return { items, slots }
+  if (!folder || folder.kind !== 'folder') return { items, outerSlots, dockKeys }
+  if (folder.children.length >= 2) return { items, outerSlots, dockKeys }
 
   const folderSlotId = `folder:${folderId}`
   const nextItems = [...items]
-  const nextSlots = slots.map(slot => {
+  const nextOuterSlots = outerSlots.map(slot => {
     if (slot !== folderSlotId) return slot
     if (folder.children.length === 1) return folder.children[0].key
     return null
   })
+  const nextDockKeys =
+    folder.children.length === 1
+      ? dockKeys.map(key => (key === folderSlotId ? folder.children[0].key : key))
+      : dockKeys.filter(key => key !== folderSlotId)
 
   if (folder.children.length === 1) {
     nextItems[index] = folder.children[0]
-    return { items: nextItems, slots: nextSlots }
+    return { items: nextItems, outerSlots: nextOuterSlots, dockKeys: nextDockKeys }
   }
 
   nextItems.splice(index, 1)
-  return { items: nextItems, slots: nextSlots }
+  return { items: nextItems, outerSlots: nextOuterSlots, dockKeys: nextDockKeys }
 }

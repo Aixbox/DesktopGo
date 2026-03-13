@@ -1,53 +1,75 @@
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
-import type { DesktopIcon } from '../../../types'
+import type {
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from 'react'
+import type { GridItem } from '../model'
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
 } from '../../ui/context-menu'
-import { getDockPreviewKeys } from '../domain/dock'
+import {
+  DOCK_GAP,
+  DOCK_SLOT_SIZE,
+  getDockPreviewSlots,
+} from '../domain/dock'
+import { FolderCreatePreview, FolderIconVisual } from './FolderVisuals'
 
 interface DockBarProps {
-  dockKeys: string[]
-  iconByKey: Map<string, DesktopIcon>
+  dockKeys: Array<string | null>
+  itemById: Map<string, GridItem>
   dockCapacity: number
   dockPreviewIndex: number | null
-  draggingKey: string | null
-  draggingIcon: DesktopIcon | null
+  dragContext: 'outer' | 'folder' | 'dock' | null
+  dragFolderPreviewTargetId: string | null
+  folderPreviewFreezeTargetId: string | null
+  folderCreateTransitionTargetId: string | null
+  draggingId: string | null
   selectionMode: boolean
   bindDockContainerRef: (node: HTMLDivElement | null) => void
+  bindDockGridRef: (node: HTMLDivElement | null) => void
   bindDockSlotRef: (index: number, node: HTMLDivElement | null) => void
-  onDockItemPointerDown: (event: ReactPointerEvent<HTMLDivElement>, key: string) => void
+  bindDockItemRef: (id: string, node: HTMLDivElement | null) => void
+  onDockItemPointerDown: (event: ReactPointerEvent<HTMLDivElement>, id: string) => void
   onDockItemClickCapture: (event: ReactMouseEvent<HTMLDivElement>) => void
-  onLaunchIcon: (icon: DesktopIcon) => void
-  onRemoveIcon: (key: string) => void
+  onLaunchIcon: (path: string) => void
+  onOpenFolder: (folderId: string) => void
+  onRemoveItem: (id: string) => void
 }
 
-const SLOT_SIZE = 64
 const MENU_OPEN_LABEL = '\u6253\u5f00'
 const MENU_REMOVE_LABEL = '\u79fb\u51fa Dock'
+const DOCK_ICON_SIZE = 40
+const DOCK_BUTTON_SIZE = 56
+const DOCK_FOLDER_SIZE = 48
 
 export function DockBar({
   dockKeys,
-  iconByKey,
+  itemById,
   dockCapacity,
   dockPreviewIndex,
-  draggingKey,
-  draggingIcon,
+  dragContext,
+  dragFolderPreviewTargetId,
+  folderPreviewFreezeTargetId,
+  folderCreateTransitionTargetId,
+  draggingId,
   selectionMode,
   bindDockContainerRef,
+  bindDockGridRef,
   bindDockSlotRef,
+  bindDockItemRef,
   onDockItemPointerDown,
   onDockItemClickCapture,
   onLaunchIcon,
-  onRemoveIcon,
+  onOpenFolder,
+  onRemoveItem,
 }: DockBarProps) {
-  const fallbackPreviewIndex =
-    draggingKey && dockKeys.includes(draggingKey) ? dockKeys.indexOf(draggingKey) : null
-  const resolvedPreviewIndex = dockPreviewIndex ?? fallbackPreviewIndex
-  const previewKeys = getDockPreviewKeys(dockKeys, draggingKey, resolvedPreviewIndex, dockCapacity)
-  const isPreviewVisible = draggingKey !== null && resolvedPreviewIndex !== null
+  const displayDockSlots = getDockPreviewSlots(
+    dockKeys,
+    dragContext === 'dock' ? draggingId : null
+  )
+  const isPreviewVisible = dragContext === 'dock' && dockPreviewIndex !== null
 
   return (
     <div
@@ -60,13 +82,20 @@ export function DockBar({
           isPreviewVisible ? 'ring-1 ring-white/30' : ''
         }`}
       >
-        <div className="flex items-center gap-2">
+        <div
+          ref={bindDockGridRef}
+          className="flex items-center"
+          style={{ columnGap: `${DOCK_GAP}px` }}
+        >
           {Array.from({ length: dockCapacity }, (_, index) => {
-            const key = previewKeys[index] ?? null
-            const icon = key
-              ? (iconByKey.get(key) ?? (key === draggingKey ? draggingIcon : null))
-              : null
-            const isPreviewGhost = isPreviewVisible && key === draggingKey
+            const id = displayDockSlots[index] ?? null
+            const item = id ? itemById.get(id) ?? null : null
+            const isDropSlot = isPreviewVisible && dockPreviewIndex === index
+            const folderPreview =
+              Boolean(id) &&
+              ((dragContext === 'dock' && dragFolderPreviewTargetId === id) ||
+                folderPreviewFreezeTargetId === id ||
+                folderCreateTransitionTargetId === id)
 
             return (
               <div
@@ -76,19 +105,22 @@ export function DockBar({
                 }}
                 data-dock-slot
                 className={`relative flex items-center justify-center rounded-2xl border transition ${
-                  icon ? 'border-white/14 bg-white/10' : 'border-white/10 border-dashed bg-white/4'
-                }`}
-                style={{ width: SLOT_SIZE, height: SLOT_SIZE }}
+                  item ? 'border-white/14 bg-white/10' : 'border-white/10 border-dashed bg-white/4'
+                } ${isDropSlot ? 'ring-1 ring-white/35 bg-white/8' : ''}`}
+                style={{ width: DOCK_SLOT_SIZE, height: DOCK_SLOT_SIZE }}
               >
-                {icon && key ? (
+                {item && id ? (
                   <ContextMenu>
                     <ContextMenuTrigger asChild>
                       <div
+                        ref={node => {
+                          bindDockItemRef(id, node)
+                        }}
                         data-dock-item
-                        data-dock-key={key}
+                        data-dock-key={id}
                         className="group relative flex h-[56px] w-[56px] items-center justify-center"
                         onPointerDown={event => {
-                          onDockItemPointerDown(event, key)
+                          onDockItemPointerDown(event, id)
                         }}
                         onClickCapture={onDockItemClickCapture}
                         onContextMenu={event => {
@@ -97,33 +129,67 @@ export function DockBar({
                       >
                         <button
                           type="button"
-                          title={icon.name}
-                          className={`flex h-[56px] w-[56px] cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
-                            selectionMode || isPreviewGhost
-                              ? 'pointer-events-none'
-                              : 'hover:bg-white/10 active:scale-95'
-                          } ${isPreviewGhost ? 'scale-[0.96] opacity-70' : 'opacity-100'}`}
+                          title={item.kind === 'icon' ? item.icon.name : item.name}
+                          className={`relative flex h-[56px] w-[56px] cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
+                            selectionMode ? 'pointer-events-none' : 'hover:bg-white/10 active:scale-95'
+                          }`}
                           onClick={event => {
                             event.stopPropagation()
-                            if (selectionMode || !icon) return
-                            onLaunchIcon(icon)
+                            if (selectionMode) return
+                            if (item.kind === 'icon') {
+                              onLaunchIcon(item.icon.path)
+                              return
+                            }
+                            onOpenFolder(item.id)
                           }}
                         >
-                          {icon.icon_base64 ? (
-                            <img
-                              src={icon.icon_base64}
-                              alt={icon.name}
-                              className="h-10 w-10 object-contain"
-                              draggable={false}
-                            />
+                          {item.kind === 'icon' ? (
+                            <>
+                              <div
+                                className={`transition-opacity duration-150 ${
+                                  folderPreview ? 'opacity-0' : 'opacity-100'
+                                }`}
+                              >
+                                {item.icon.icon_base64 ? (
+                                  <img
+                                    src={item.icon.icon_base64}
+                                    alt={item.icon.name}
+                                    className="object-contain"
+                                    style={{ width: DOCK_ICON_SIZE, height: DOCK_ICON_SIZE }}
+                                    draggable={false}
+                                  />
+                                ) : (
+                                  <div
+                                    className="rounded-xl bg-white/12"
+                                    style={{ width: DOCK_ICON_SIZE, height: DOCK_ICON_SIZE }}
+                                    aria-hidden="true"
+                                  />
+                                )}
+                              </div>
+                              <FolderCreatePreview
+                                active={folderPreview}
+                                icon={item.icon}
+                                imgSize={DOCK_ICON_SIZE}
+                                reorderAnimationMs={220}
+                              />
+                            </>
                           ) : (
-                            <div className="h-10 w-10 rounded-xl bg-white/12" aria-hidden="true" />
+                            <div
+                              className="flex h-full w-full items-center justify-center transition-opacity duration-150"
+                              style={{ width: DOCK_BUTTON_SIZE, height: DOCK_BUTTON_SIZE }}
+                            >
+                              <FolderIconVisual
+                                icons={item.children.map(child => child.icon)}
+                                imgSize={DOCK_FOLDER_SIZE}
+                                expanded={folderPreview}
+                              />
+                            </div>
                           )}
                         </button>
                       </div>
                     </ContextMenuTrigger>
 
-                    {!selectionMode && !isPreviewGhost ? (
+                    {!selectionMode ? (
                       <ContextMenuContent
                         data-dock-menu="true"
                         className="w-44 rounded-2xl border-white/15 bg-black/90 p-1.5 text-white shadow-2xl backdrop-blur-xl"
@@ -131,7 +197,11 @@ export function DockBar({
                         <ContextMenuItem
                           className="rounded-xl px-3 py-2 text-white/85 focus:bg-white/12 focus:text-white"
                           onSelect={() => {
-                            onLaunchIcon(icon)
+                            if (item.kind === 'icon') {
+                              onLaunchIcon(item.icon.path)
+                              return
+                            }
+                            onOpenFolder(item.id)
                           }}
                         >
                           {MENU_OPEN_LABEL}
@@ -139,7 +209,7 @@ export function DockBar({
                         <ContextMenuItem
                           className="rounded-xl px-3 py-2 text-red-200 focus:bg-red-500/20 focus:text-red-100"
                           onSelect={() => {
-                            onRemoveIcon(key)
+                            onRemoveItem(id)
                           }}
                         >
                           {MENU_REMOVE_LABEL}

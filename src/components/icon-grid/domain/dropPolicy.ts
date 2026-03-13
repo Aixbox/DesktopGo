@@ -37,11 +37,29 @@ export const applyFolderCreateFromSession = (
   map.delete(targetId)
   map.set(folderId, folder)
   const nextSlots = [...baseSlots]
+  const sourceSlotIndex = nextSlots.indexOf(session.draggingId)
+  if (sourceSlotIndex >= 0) {
+    nextSlots[sourceSlotIndex] = null
+  }
   nextSlots[targetSlotIndex] = folderId
-  const normalizedOrder = nextSlots.filter((id): id is string => id !== null)
-  const nextItems = normalizedOrder.map(id => map.get(id)).filter((item): item is GridItem => Boolean(item))
-  const expectedLength = sourceExistsInBase ? base.length - 1 : base.length
-  if (nextItems.length !== expectedLength) return { items: base, slots: baseSlots }
+  const nextItems: GridItem[] = []
+  let insertedFolder = false
+  base.forEach(item => {
+    const id = getId(item)
+    if (id === session.draggingId) {
+      if (!sourceExistsInBase) {
+        nextItems.push(item)
+      }
+      return
+    }
+    if (id === targetId) {
+      nextItems.push(folder)
+      insertedFolder = true
+      return
+    }
+    nextItems.push(item)
+  })
+  if (!insertedFolder) return { items: base, slots: baseSlots }
   return { items: nextItems, slots: nextSlots }
 }
 
@@ -63,14 +81,25 @@ export const applyAddToFolderFromSession = (
   const nextFolderChildren = targetFolder.children.some(child => child.key === sourceItem.key)
     ? targetFolder.children
     : [...targetFolder.children, sourceItem]
-  map.set(targetFolderId, { ...targetFolder, children: nextFolderChildren })
-  map.delete(session.draggingId)
+  const nextTargetFolder = { ...targetFolder, children: nextFolderChildren }
+  map.set(targetFolderId, nextTargetFolder)
+  if (sourceExistsInBase) {
+    map.delete(session.draggingId)
+  }
 
   const nextSlots = baseSlots.map(slot => (slot === session.draggingId ? null : slot))
-  const normalizedOrder = nextSlots.filter((id): id is string => id !== null)
-  const nextItems = normalizedOrder.map(id => map.get(id)).filter((item): item is GridItem => Boolean(item))
-  const expectedLength = sourceExistsInBase ? base.length - 1 : base.length
-  if (nextItems.length !== expectedLength) return { items: base, slots: baseSlots }
+  const nextItems: GridItem[] = []
+  base.forEach(item => {
+    const id = getId(item)
+    if (id === session.draggingId && sourceExistsInBase) {
+      return
+    }
+    if (id === targetFolderId) {
+      nextItems.push(nextTargetFolder)
+      return
+    }
+    nextItems.push(item)
+  })
   return { items: nextItems, slots: nextSlots }
 }
 
@@ -161,11 +190,6 @@ export const applyOuterDropFromSession = ({
     }
   }
 
-  const normalized = nextSlots.filter((id): id is string => id !== null)
-  const nextItems = normalized.map(id => map.get(id)).filter((item): item is GridItem => Boolean(item))
-  const expectedLength = hadDraggedInBase ? base.length : base.length + 1
-  if (nextItems.length !== expectedLength) {
-    return { items: base, slots: baseSlots }
-  }
+  const nextItems = hadDraggedInBase ? base : [...base, session.draggingItem]
   return { items: nextItems, slots: nextSlots }
 }

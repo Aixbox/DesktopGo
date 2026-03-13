@@ -1,50 +1,45 @@
 export const DOCK_CAPACITY = 8
+export const DOCK_SLOT_SIZE = 64
+export const DOCK_GAP = 8
 
 export const normalizeDockKeys = (
-  source: string[] | null | undefined,
+  source: Array<string | null> | null | undefined,
   validKeys: Iterable<string>,
   capacity: number = DOCK_CAPACITY
-): string[] => {
+): Array<string | null> => {
   const safeCapacity = Math.max(1, capacity)
   const validKeySet = new Set(validKeys)
-  const next: string[] = []
+  const consumed = new Set<string>()
+  const next = Array.from({ length: safeCapacity }, () => null as string | null)
 
-  ;(source ?? []).forEach(key => {
-    if (next.length >= safeCapacity) return
-    if (typeof key !== 'string' || !validKeySet.has(key) || next.includes(key)) return
-    next.push(key)
+  ;(source ?? []).slice(0, safeCapacity).forEach((slot, index) => {
+    if (slot === null) return
+    if (typeof slot !== 'string' || !validKeySet.has(slot) || consumed.has(slot)) return
+    next[index] = slot
+    consumed.add(slot)
   })
 
   return next
 }
 
-export const applyDockDrop = (
-  dockKeys: string[],
-  draggingKey: string,
-  insertIndex: number,
+export const createDockSlots = (
+  dockKeys: Array<string | null>,
   capacity: number = DOCK_CAPACITY
-): string[] => {
-  const safeCapacity = Math.max(1, capacity)
-  const exists = dockKeys.includes(draggingKey)
-  const next = dockKeys.filter(key => key !== draggingKey)
-  if (!exists && next.length >= safeCapacity) {
-    return dockKeys.slice(0, safeCapacity)
-  }
+): Array<string | null> => normalizeDockKeys(dockKeys, dockKeys.filter((key): key is string => Boolean(key)), capacity)
 
-  const clampedIndex = Math.max(0, Math.min(insertIndex, next.length))
-  next.splice(clampedIndex, 0, draggingKey)
-  return next.slice(0, safeCapacity)
+export const getDockOccupiedCount = (dockKeys: Array<string | null>): number =>
+  dockKeys.reduce((count, key) => (typeof key === 'string' ? count + 1 : count), 0)
+
+export const resolveOuterItemIds = (
+  itemIds: string[],
+  dockKeys: Array<string | null>
+): string[] => {
+  const dockSet = new Set(dockKeys.filter((key): key is string => typeof key === 'string'))
+  return itemIds.filter(id => !dockSet.has(id))
 }
 
-export const getDockPreviewKeys = (
-  dockKeys: string[],
-  draggingKey: string | null,
-  previewIndex: number | null,
-  capacity: number = DOCK_CAPACITY
-): string[] => {
-  if (!draggingKey || previewIndex === null) {
-    return dockKeys.slice(0, Math.max(1, capacity))
-  }
-
-  return applyDockDrop(dockKeys, draggingKey, previewIndex, capacity)
-}
+export const getDockPreviewSlots = (
+  dockKeys: Array<string | null>,
+  draggingKey: string | null
+): Array<string | null> =>
+  dockKeys.map(slot => (slot === draggingKey ? null : slot))
