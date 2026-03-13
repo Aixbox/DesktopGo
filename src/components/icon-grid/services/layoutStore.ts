@@ -65,11 +65,8 @@ export const writeLayout = async (
 
 export const hydrateDockKeys = (
   itemIds: string[],
-  persisted: Array<string | null> | null | undefined,
-  capacity: number
-): Array<string | null> => {
-  return normalizeDockKeys(persisted, itemIds, capacity)
-}
+  persisted: Array<string | null> | null | undefined
+): string[] => normalizeDockKeys(persisted, itemIds)
 
 export const hydrateItems = (
   icons: DesktopIcon[],

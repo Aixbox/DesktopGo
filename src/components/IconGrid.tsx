@@ -26,7 +26,7 @@ import {
   FOLDER_MODAL_MAX_WIDTH,
   FOLDER_PREVIEW_EASING,
 } from './icon-grid/views/FolderVisuals'
-import { DOCK_CAPACITY, resolveOuterItemIds } from './icon-grid/domain/dock'
+import { resolveOuterItemIds } from './icon-grid/domain/dock'
 import { DragOverlays } from './icon-grid/views/DragOverlays'
 import { OuterGridView } from './icon-grid/views/OuterGridView'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
@@ -140,7 +140,7 @@ export function IconGrid({ icons }: IconGridProps) {
       const nextItems = hydrateItems(icons, persisted?.items ?? null)
       const nextItemIds = nextItems.map(getId)
       const nextSlots = normalizeOuterSlots(persisted?.slots, nextItemIds, pageSizeRef.current)
-      const nextDockKeys = hydrateDockKeys(nextItemIds, persisted?.dockKeys, DOCK_CAPACITY)
+      const nextDockKeys = hydrateDockKeys(nextItemIds, persisted?.dockKeys)
       const nextOuterItemIds = resolveOuterItemIds(nextItemIds, nextDockKeys)
       const normalizedNextSlots = normalizeOuterSlots(
         nextSlots,
@@ -273,7 +273,6 @@ export function IconGrid({ icons }: IconGridProps) {
     currentPageRef,
     setCurrentPage,
     pageSizeRef,
-    dockCapacity: DOCK_CAPACITY,
     setOpenFolderId,
   })
   const renderOrder = useMemo(() => {
@@ -662,13 +661,13 @@ export function IconGrid({ icons }: IconGridProps) {
       <DockBar
         dockKeys={dockKeys}
         itemById={itemById}
-        dockCapacity={DOCK_CAPACITY}
         dockPreviewIndex={dragState?.dockPreviewIndex ?? null}
         dragContext={dragState?.context ?? null}
         dragFolderPreviewTargetId={dragState?.folderPreviewTargetId ?? null}
         folderPreviewFreezeTargetId={folderPreviewFreezeTargetId}
         folderCreateTransitionTargetId={folderCreateTransitionTargetId}
         draggingId={dockDraggingId}
+        iconImageSize={iconConfig.imgSize}
         selectionMode={selectionMode}
         bindDockContainerRef={node => {
           dockContainerRef.current = node
@@ -691,7 +690,7 @@ export function IconGrid({ icons }: IconGridProps) {
         }}
         onOpenFolder={setOpenFolderId}
         onRemoveItem={key => {
-          setDockKeys(current => current.map(entry => (entry === key ? null : entry)))
+          setDockKeys(current => current.filter(entry => entry !== key))
         }}
       />
 

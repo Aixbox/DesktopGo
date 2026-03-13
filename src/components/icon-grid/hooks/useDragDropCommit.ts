@@ -48,7 +48,6 @@ interface UseDragDropCommitParams {
   setItems: Dispatch<SetStateAction<GridItem[]>>
   setOuterSlots: Dispatch<SetStateAction<Array<string | null>>>
   setDockKeys: Dispatch<SetStateAction<Array<string | null>>>
-  dockCapacity: number
   dragRef: MutableRefObject<DragState | null>
   setDragState: Dispatch<SetStateAction<DragState | null>>
   clearEdgeSwitchTimer: () => void
@@ -78,7 +77,6 @@ export function useDragDropCommit({
   setItems,
   setOuterSlots,
   setDockKeys,
-  dockCapacity,
   dragRef,
   setDragState,
   clearEdgeSwitchTimer,
@@ -137,7 +135,7 @@ export function useDragDropCommit({
     nextDockKeysInput: Array<string | null>
   ) => {
     const nextItemIds = nextItems.map(getId)
-    const normalizedDockKeys = normalizeDockKeys(nextDockKeysInput, nextItemIds, dockCapacity)
+    const normalizedDockKeys = normalizeDockKeys(nextDockKeysInput, nextItemIds)
     const normalizedOuterSlots = normalizeOuterSlots(
       nextOuterSlotsInput,
       resolveOuterItemIds(nextItemIds, normalizedDockKeys),
@@ -435,9 +433,10 @@ export function useDragDropCommit({
         const result = applyOuterDropFromSession({
           base: baseForDrop,
           session: current,
-          pageSize: targetContext === 'dock' ? dockCapacity : pageSizeRef.current,
-          columns: targetContext === 'dock' ? dockCapacity : columns,
+          pageSize: pageSizeRef.current,
+          columns,
           resolveNearestSlotIndexByContext,
+          mode: targetContext === 'dock' ? 'linear' : 'paged',
         })
         commitTopLevelSessionResult(
           current,

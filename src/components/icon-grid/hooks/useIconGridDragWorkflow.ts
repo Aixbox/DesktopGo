@@ -20,9 +20,7 @@ import {
   resolveNearestSlotIndexByMetrics,
 } from '../domain/dragMovePolicy'
 import {
-  createDockSlots,
-  DOCK_SLOT_SIZE,
-  getDockOccupiedCount,
+  getDockItemKeys,
   resolveOuterItemIds,
 } from '../domain/dock'
 import { OUTER_DRAG_RULES } from '../constants'
@@ -85,7 +83,6 @@ interface UseIconGridDragWorkflowParams {
   currentPageRef: MutableRefObject<number>
   setCurrentPage: Dispatch<SetStateAction<number>>
   pageSizeRef: MutableRefObject<number>
-  dockCapacity: number
   setOpenFolderId: Dispatch<SetStateAction<string | null>>
 }
 
@@ -141,7 +138,6 @@ export function useIconGridDragWorkflow({
   currentPageRef,
   setCurrentPage,
   pageSizeRef,
-  dockCapacity,
   setOpenFolderId,
 }: UseIconGridDragWorkflowParams): UseIconGridDragWorkflowResult {
   const pendingRef = useRef<PendingDrag | null>(null)
@@ -220,9 +216,12 @@ export function useIconGridDragWorkflow({
   const resolveOuterItemIdsForLayout = (dockOrder: Array<string | null> = dockKeysRef.current) =>
     resolveOuterItemIds(resolveAllItemIds(), dockOrder)
 
+  const resolveDockItemOrder = (draggingId: string | null = null): string[] =>
+    getDockItemKeys(dockKeysRef.current, draggingId)
+
   const resolveTopLevelOrder = (context: 'outer' | 'dock'): Array<string | null> =>
     context === 'dock'
-      ? createDockSlots(dockKeysRef.current, dockCapacity)
+      ? resolveDockItemOrder()
       : normalizeOuterSlots(
           outerSlotsRef.current,
           resolveOuterItemIdsForLayout(),
@@ -266,12 +265,13 @@ export function useIconGridDragWorkflow({
     }
 
     if (context === 'dock') {
+      const dockItemCount = Math.max(1, resolveDockItemOrder().length)
       return {
         gridElement: dockGridRef.current,
-        columns: Math.max(1, dockCapacity),
+        columns: dockItemCount,
         rows: 1,
-        itemWidth: DOCK_SLOT_SIZE,
-        itemHeight: DOCK_SLOT_SIZE,
+        itemWidth: iconConfig.imgSize,
+        itemHeight: iconConfig.imgSize,
         pageOffset: 0,
       }
     }
@@ -292,7 +292,8 @@ export function useIconGridDragWorkflow({
       for (const [index, node] of slotEntries) {
         const rect = node.getBoundingClientRect()
         if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) continue
-        const rawTargetId = state.workingOrder[index]
+        const rawTargetId =
+          node.querySelector<HTMLElement>('[data-dock-key]')?.dataset.dockKey ?? state.workingOrder[index]
         const targetId =
           !rawTargetId || rawTargetId === DRAG_HOLE_ID || rawTargetId === state.draggingId
             ? null
@@ -316,7 +317,6 @@ export function useIconGridDragWorkflow({
     if (state.context === 'dock') {
       const container = dockContainerRef.current
       const slotEntries = Array.from(dockSlotRefs.current.entries()).sort(([a], [b]) => a - b)
-      if (slotEntries.length === 0) return null
       if (!options?.allowOutside && container) {
         const rect = container.getBoundingClientRect()
         const dockBuffer = 16
@@ -327,20 +327,32 @@ export function useIconGridDragWorkflow({
         if (!withinHorizontal || !withinVertical) return null
       }
 
-      let nearestIndex = 0
-      let nearestDistance = Number.POSITIVE_INFINITY
-      slotEntries.forEach(([index, node]) => {
-        const rect = node.getBoundingClientRect()
-        const centerX = rect.left + rect.width / 2
-        const centerY = rect.top + rect.height / 2
-        const distance =
-          Math.abs(state.pointerX - centerX) + Math.abs(state.pointerY - centerY)
-        if (distance < nearestDistance) {
-          nearestDistance = distance
-          nearestIndex = index
+      const itemRects = resolveDockItemOrder(state.draggingId)
+        .map((id, index) => ({
+          index,
+          rect: dockItemRefs.current.get(id)?.getBoundingClientRect() ?? null,
+        }))
+        .filter(
+          (entry): entry is { index: number; rect: DOMRect } => entry.rect !== null
+        )
+
+      if (itemRects.length === 0) {
+        return slotEntries.length > 0 ? 0 : null
+      }
+
+      const pointerX = state.pointerX
+      const firstCenter = itemRects[0].rect.left + itemRects[0].rect.width / 2
+      if (pointerX <= firstCenter) return 0
+
+      for (let index = 0; index < itemRects.length - 1; index += 1) {
+        const currentCenter = itemRects[index].rect.left + itemRects[index].rect.width / 2
+        const nextCenter = itemRects[index + 1].rect.left + itemRects[index + 1].rect.width / 2
+        if (pointerX < (currentCenter + nextCenter) / 2) {
+          return index + 1
         }
-      })
-      return nearestIndex
+      }
+
+      return itemRects.length
     }
 
     return resolveNearestSlotIndexByMetrics(
@@ -362,13 +374,14 @@ export function useIconGridDragWorkflow({
 
     if (state.context === 'dock') {
       const metrics = resolveGridMetrics('dock')
+      const dockPageSize = Math.max(1, state.workingOrder.length)
       return findOuterMaxOverlapHitByMetrics({
         state,
         gridElement: metrics.gridElement,
         columns: metrics.columns,
         rows: metrics.rows,
         iconImageSize: iconConfig.imgSize,
-        pageSize: dockCapacity,
+        pageSize: dockPageSize,
         currentPage: 0,
         tileRefs: dockItemRefs.current,
       })
@@ -394,8 +407,8 @@ export function useIconGridDragWorkflow({
     applyOuterEvasionPolicy(
       state.workingOrder,
       hit,
-      state.context === 'dock' ? dockCapacity : pageSizeRef.current,
-      state.context === 'dock' ? dockCapacity : columns,
+      state.context === 'dock' ? Math.max(1, state.workingOrder.length) : pageSizeRef.current,
+      state.context === 'dock' ? Math.max(1, state.workingOrder.length) : columns,
       OUTER_DRAG_RULES.directionTieBreakByOverlap
     )
 
@@ -436,6 +449,7 @@ export function useIconGridDragWorkflow({
   const triggerTopLevelDwellEvasion = (expectedTargetId: string) => {
     const latest = dragRef.current
     if (!latest || latest.context === 'folder') return
+    if (latest.context === 'dock') return
     if (latest.hoverTargetId !== expectedTargetId) return
     if (latest.folderPreviewTargetId) return
 
@@ -456,7 +470,7 @@ export function useIconGridDragWorkflow({
       const nextState: DragState = {
         ...latest,
         previewSlotIndex: overlapHit.targetIndex,
-        dockPreviewIndex: latest.context === 'dock' ? overlapHit.targetIndex : null,
+        dockPreviewIndex: null,
         hoverTargetId: overlapHit.targetId,
         hoverZone: overlapHit.zone,
         hoverIou: overlapHit.iou,
@@ -474,7 +488,7 @@ export function useIconGridDragWorkflow({
       const previewState: DragState = {
         ...latest,
         previewSlotIndex: overlapHit.targetIndex,
-        dockPreviewIndex: latest.context === 'dock' ? overlapHit.targetIndex : null,
+        dockPreviewIndex: null,
         hoverTargetId: overlapHit.targetId,
         hoverZone: overlapHit.zone,
         hoverIou: overlapHit.iou,
@@ -490,7 +504,7 @@ export function useIconGridDragWorkflow({
     const base: DragState = {
       ...latest,
       previewSlotIndex: overlapHit.targetIndex,
-      dockPreviewIndex: latest.context === 'dock' ? overlapHit.targetIndex : null,
+      dockPreviewIndex: null,
       hoverTargetId: overlapHit.targetId,
       hoverZone: overlapHit.zone,
       hoverIou: overlapHit.iou,
@@ -521,7 +535,6 @@ export function useIconGridDragWorkflow({
     setItems,
     setOuterSlots,
     setDockKeys,
-    dockCapacity,
     dragRef,
     setDragState,
     clearEdgeSwitchTimer,
@@ -587,7 +600,7 @@ export function useIconGridDragWorkflow({
       pending.context === 'folder' && pending.sourceFolderId
         ? getFolderChildrenById(itemsRef.current, pending.sourceFolderId).map(child => child.key)
         : pending.context === 'dock'
-          ? createDockSlots(dockKeysRef.current, dockCapacity)
+          ? resolveDockItemOrder()
           : normalizeOuterSlots(
               outerSlotsRef.current,
               resolveOuterItemIdsForLayout(),
@@ -691,18 +704,12 @@ export function useIconGridDragWorkflow({
         allowOutside: true,
       })
       const overlapHit = findTopLevelMaxOverlapHit(baseState)
-      const dockCanInsertTopLevelItem =
-        baseState.context !== 'dock' ||
-        dockKeysRef.current.includes(baseState.draggingId) ||
-        getDockOccupiedCount(dockKeysRef.current) < dockCapacity
 
       if (!overlapHit) {
         clearOuterDwellTimer()
-        const previewSlotIndex =
-          baseState.context === 'dock' && !dockCanInsertTopLevelItem ? null : nearestSlotIndex
         const resetState: DragState = {
-          ...resetOuterInteraction(baseState, previewSlotIndex),
-          dockPreviewIndex: baseState.context === 'dock' ? previewSlotIndex : null,
+          ...resetOuterInteraction(baseState, nearestSlotIndex),
+          dockPreviewIndex: baseState.context === 'dock' ? nearestSlotIndex : null,
         }
         dragRef.current = resetState
         setDragState(resetState)
@@ -714,9 +721,54 @@ export function useIconGridDragWorkflow({
       const target = itemMap.get(overlapHit.targetId)
       if (!target) {
         clearOuterDwellTimer()
-        const resetState = resetOuterInteraction(baseState, nearestSlotIndex)
+        const resetState: DragState = {
+          ...resetOuterInteraction(baseState, nearestSlotIndex),
+          dockPreviewIndex: baseState.context === 'dock' ? nearestSlotIndex : null,
+        }
         dragRef.current = resetState
         setDragState(resetState)
+        return
+      }
+
+      if (baseState.context === 'dock') {
+        clearOuterDwellTimer()
+
+        const canCreateFolder =
+          source.kind === 'icon' &&
+          target.kind === 'icon' &&
+          overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
+        const canAddToExistingFolder =
+          source.kind === 'icon' &&
+          target.kind === 'folder' &&
+          overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
+
+        if (canCreateFolder || canAddToExistingFolder) {
+          const previewState: DragState = {
+            ...baseState,
+            previewSlotIndex: overlapHit.targetIndex,
+            dockPreviewIndex: null,
+            hoverTargetId: overlapHit.targetId,
+            hoverZone: overlapHit.zone,
+            hoverIou: overlapHit.iou,
+            centerStartedAt: null,
+            dwellStartedAt: null,
+            folderPreviewTargetId: overlapHit.targetId,
+            lastEvasionSignature: null,
+          }
+          dragRef.current = previewState
+          setDragState(previewState)
+          return
+        }
+
+        const insertState: DragState = {
+          ...resetOuterInteraction(baseState, nearestSlotIndex),
+          dockPreviewIndex: nearestSlotIndex,
+          hoverTargetId: overlapHit.targetId,
+          hoverZone: overlapHit.zone,
+          hoverIou: overlapHit.iou,
+        }
+        dragRef.current = insertState
+        setDragState(insertState)
         return
       }
 
@@ -724,7 +776,7 @@ export function useIconGridDragWorkflow({
       const next: DragState = {
         ...baseState,
         previewSlotIndex: overlapHit.targetIndex,
-        dockPreviewIndex: baseState.context === 'dock' ? overlapHit.targetIndex : null,
+        dockPreviewIndex: null,
         hoverTargetId: overlapHit.targetId,
         hoverZone: overlapHit.zone,
         hoverIou: overlapHit.iou,
@@ -753,25 +805,6 @@ export function useIconGridDragWorkflow({
         next.lastEvasionSignature = null
         dragRef.current = next
         setDragState(next)
-        return
-      }
-
-      if (baseState.context === 'dock' && !dockCanInsertTopLevelItem) {
-        clearOuterDwellTimer()
-        const blockedState: DragState = {
-          ...baseState,
-          previewSlotIndex: null,
-          dockPreviewIndex: null,
-          hoverTargetId: null,
-          hoverZone: null,
-          hoverIou: 0,
-          centerStartedAt: null,
-          dwellStartedAt: null,
-          folderPreviewTargetId: null,
-          lastEvasionSignature: null,
-        }
-        dragRef.current = blockedState
-        setDragState(blockedState)
         return
       }
 

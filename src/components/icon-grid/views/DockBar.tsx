@@ -9,23 +9,19 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '../../ui/context-menu'
-import {
-  DOCK_GAP,
-  DOCK_SLOT_SIZE,
-  getDockPreviewSlots,
-} from '../domain/dock'
+import { DOCK_GAP, getDockRenderSlots } from '../domain/dock'
 import { FolderCreatePreview, FolderIconVisual } from './FolderVisuals'
 
 interface DockBarProps {
   dockKeys: Array<string | null>
   itemById: Map<string, GridItem>
-  dockCapacity: number
   dockPreviewIndex: number | null
   dragContext: 'outer' | 'folder' | 'dock' | null
   dragFolderPreviewTargetId: string | null
   folderPreviewFreezeTargetId: string | null
   folderCreateTransitionTargetId: string | null
   draggingId: string | null
+  iconImageSize: number
   selectionMode: boolean
   bindDockContainerRef: (node: HTMLDivElement | null) => void
   bindDockGridRef: (node: HTMLDivElement | null) => void
@@ -40,20 +36,17 @@ interface DockBarProps {
 
 const MENU_OPEN_LABEL = '\u6253\u5f00'
 const MENU_REMOVE_LABEL = '\u79fb\u51fa Dock'
-const DOCK_ICON_SIZE = 40
-const DOCK_BUTTON_SIZE = 56
-const DOCK_FOLDER_SIZE = 48
 
 export function DockBar({
   dockKeys,
   itemById,
-  dockCapacity,
   dockPreviewIndex,
   dragContext,
   dragFolderPreviewTargetId,
   folderPreviewFreezeTargetId,
   folderCreateTransitionTargetId,
   draggingId,
+  iconImageSize,
   selectionMode,
   bindDockContainerRef,
   bindDockGridRef,
@@ -65,11 +58,23 @@ export function DockBar({
   onOpenFolder,
   onRemoveItem,
 }: DockBarProps) {
-  const displayDockSlots = getDockPreviewSlots(
+  const dockButtonSize = Math.max(iconImageSize + 12, 52)
+  const hiddenDraggingId =
+    draggingId !== null && dockKeys.includes(draggingId) ? draggingId : null
+  const showInsertionPreview =
+    dragContext === 'dock' &&
+    dockPreviewIndex !== null &&
+    dragFolderPreviewTargetId === null &&
+    folderPreviewFreezeTargetId === null
+
+  const displayDockSlots = getDockRenderSlots(
     dockKeys,
-    dragContext === 'dock' ? draggingId : null
+    hiddenDraggingId,
+    showInsertionPreview ? dockPreviewIndex : null,
+    { showPlaceholderWhenEmpty: true }
   )
-  const isPreviewVisible = dragContext === 'dock' && dockPreviewIndex !== null
+
+  const hasVisibleItems = displayDockSlots.some(slot => typeof slot === 'string')
 
   return (
     <div
@@ -77,20 +82,14 @@ export function DockBar({
       data-dock
       className="pointer-events-auto absolute bottom-5 left-1/2 z-20 -translate-x-1/2"
     >
-      <div
-        className={`rounded-[28px] border border-white/18 bg-black/22 px-3 py-3 shadow-[0_20px_60px_rgba(0,0,0,0.25)] backdrop-blur-2xl transition ${
-          isPreviewVisible ? 'ring-1 ring-white/30' : ''
-        }`}
-      >
+      <div className="rounded-[28px] border border-white/16 bg-black/24 px-4 py-3 shadow-[0_20px_60px_rgba(0,0,0,0.24)] backdrop-blur-2xl">
         <div
           ref={bindDockGridRef}
           className="flex items-center"
           style={{ columnGap: `${DOCK_GAP}px` }}
         >
-          {Array.from({ length: dockCapacity }, (_, index) => {
-            const id = displayDockSlots[index] ?? null
+          {displayDockSlots.map((id, index) => {
             const item = id ? itemById.get(id) ?? null : null
-            const isDropSlot = isPreviewVisible && dockPreviewIndex === index
             const folderPreview =
               Boolean(id) &&
               ((dragContext === 'dock' && dragFolderPreviewTargetId === id) ||
@@ -99,15 +98,13 @@ export function DockBar({
 
             return (
               <div
-                key={index}
+                key={id ?? `dock-empty-${index}`}
                 ref={node => {
                   bindDockSlotRef(index, node)
                 }}
                 data-dock-slot
-                className={`relative flex items-center justify-center rounded-2xl border transition ${
-                  item ? 'border-white/14 bg-white/10' : 'border-white/10 border-dashed bg-white/4'
-                } ${isDropSlot ? 'ring-1 ring-white/35 bg-white/8' : ''}`}
-                style={{ width: DOCK_SLOT_SIZE, height: DOCK_SLOT_SIZE }}
+                className="relative flex items-center justify-center"
+                style={{ width: dockButtonSize, height: dockButtonSize }}
               >
                 {item && id ? (
                   <ContextMenu>
@@ -118,7 +115,8 @@ export function DockBar({
                         }}
                         data-dock-item
                         data-dock-key={id}
-                        className="group relative flex h-[56px] w-[56px] items-center justify-center"
+                        className="group relative flex items-center justify-center"
+                        style={{ width: dockButtonSize, height: dockButtonSize }}
                         onPointerDown={event => {
                           onDockItemPointerDown(event, id)
                         }}
@@ -130,9 +128,12 @@ export function DockBar({
                         <button
                           type="button"
                           title={item.kind === 'icon' ? item.icon.name : item.name}
-                          className={`relative flex h-[56px] w-[56px] cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
-                            selectionMode ? 'pointer-events-none' : 'hover:bg-white/10 active:scale-95'
+                          className={`relative flex cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
+                            selectionMode
+                              ? 'pointer-events-none'
+                              : 'hover:-translate-y-0.5 active:translate-y-0'
                           }`}
+                          style={{ width: dockButtonSize, height: dockButtonSize }}
                           onClick={event => {
                             event.stopPropagation()
                             if (selectionMode) return
@@ -154,14 +155,14 @@ export function DockBar({
                                   <img
                                     src={item.icon.icon_base64}
                                     alt={item.icon.name}
-                                    className="object-contain"
-                                    style={{ width: DOCK_ICON_SIZE, height: DOCK_ICON_SIZE }}
+                                    className="icon-image object-contain"
+                                    style={{ width: iconImageSize, height: iconImageSize }}
                                     draggable={false}
                                   />
                                 ) : (
                                   <div
-                                    className="rounded-xl bg-white/12"
-                                    style={{ width: DOCK_ICON_SIZE, height: DOCK_ICON_SIZE }}
+                                    className="icon-image rounded-xl bg-white/12"
+                                    style={{ width: iconImageSize, height: iconImageSize }}
                                     aria-hidden="true"
                                   />
                                 )}
@@ -169,18 +170,18 @@ export function DockBar({
                               <FolderCreatePreview
                                 active={folderPreview}
                                 icon={item.icon}
-                                imgSize={DOCK_ICON_SIZE}
+                                imgSize={iconImageSize}
                                 reorderAnimationMs={220}
                               />
                             </>
                           ) : (
                             <div
-                              className="flex h-full w-full items-center justify-center transition-opacity duration-150"
-                              style={{ width: DOCK_BUTTON_SIZE, height: DOCK_BUTTON_SIZE }}
+                              className="flex items-center justify-center transition-opacity duration-150"
+                              style={{ width: dockButtonSize, height: dockButtonSize }}
                             >
                               <FolderIconVisual
                                 icons={item.children.map(child => child.icon)}
-                                imgSize={DOCK_FOLDER_SIZE}
+                                imgSize={iconImageSize}
                                 expanded={folderPreview}
                               />
                             </div>
@@ -217,7 +218,17 @@ export function DockBar({
                       </ContextMenuContent>
                     ) : null}
                   </ContextMenu>
-                ) : null}
+                ) : (
+                  <div
+                    className={`pointer-events-none flex items-center justify-center rounded-[18px] border border-dashed transition ${
+                      hasVisibleItems
+                        ? 'border-white/18 bg-white/[0.04]'
+                        : 'border-white/24 bg-white/[0.06]'
+                    } ${showInsertionPreview ? 'scale-100 opacity-100' : 'opacity-80'}`}
+                    style={{ width: iconImageSize + 8, height: iconImageSize + 8 }}
+                    aria-hidden="true"
+                  />
+                )}
               </div>
             )
           })}

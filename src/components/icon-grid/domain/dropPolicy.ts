@@ -109,6 +109,7 @@ interface ApplyOuterDropFromSessionParams {
   pageSize: number
   columns: number
   resolveNearestSlotIndexByContext: (state: DragState) => number | null
+  mode?: 'paged' | 'linear'
 }
 
 export const applyOuterDropFromSession = ({
@@ -117,6 +118,7 @@ export const applyOuterDropFromSession = ({
   pageSize,
   columns,
   resolveNearestSlotIndexByContext,
+  mode = 'paged',
 }: ApplyOuterDropFromSessionParams): { items: GridItem[]; slots: Array<string | null> } => {
   const safePageSize = Math.max(1, pageSize)
   const safeColumns = Math.max(1, columns)
@@ -139,6 +141,14 @@ export const applyOuterDropFromSession = ({
     session.previewSlotIndex ?? nearestDropIndex ?? sourceFallbackIndex ?? emptyFallbackIndex
   if (candidateDropIndex === null || candidateDropIndex < 0) {
     return { items: base, slots: baseSlots }
+  }
+
+  if (mode === 'linear') {
+    const compactSlots = nextSlots.filter((slot): slot is string => typeof slot === 'string')
+    const dropIndex = clampNumber(candidateDropIndex, 0, compactSlots.length)
+    compactSlots.splice(dropIndex, 0, session.draggingId)
+    const nextItems = hadDraggedInBase ? base : [...base, session.draggingItem]
+    return { items: nextItems, slots: compactSlots }
   }
 
   if (candidateDropIndex >= nextSlots.length) {
