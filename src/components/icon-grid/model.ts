@@ -34,6 +34,7 @@ export type PersistedItem =
 export interface PersistedLayout {
   items: PersistedItem[]
   slots: Array<string | null> | null
+  dockKeys: string[]
 }
 
 export const getId = (item: GridItem): string =>

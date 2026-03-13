@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { DesktopIcon } from '../../../types'
 import { buildIconSelectionKey } from '../../../stores/iconStore'
+import { normalizeDockKeys } from '../domain/dock'
 import type { GridItem, IconItem, PersistedItem, PersistedLayout } from '../model'
 import { makeFolderId } from '../model'
 
@@ -25,28 +26,56 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
     const parsed = JSON.parse(raw) as
       | { version: 1; items: PersistedItem[] }
       | { version: 2; items: PersistedItem[]; slots: unknown[] }
+      | { version: 3; items: PersistedItem[]; slots: unknown[]; dockKeys: unknown[] }
     if (!Array.isArray(parsed.items)) return null
-    if (parsed.version === 1) return { items: parsed.items, slots: null }
-    if (parsed.version !== 2 || !Array.isArray(parsed.slots)) return null
+    if (parsed.version === 1) return { items: parsed.items, slots: null, dockKeys: [] }
+    if (parsed.version === 2 && Array.isArray(parsed.slots)) {
+      return {
+        items: parsed.items,
+        slots: parsed.slots.map(slot => (typeof slot === 'string' ? slot : null)),
+        dockKeys: [],
+      }
+    }
+    if (parsed.version !== 3 || !Array.isArray(parsed.slots) || !Array.isArray(parsed.dockKeys)) {
+      return null
+    }
     return {
       items: parsed.items,
       slots: parsed.slots.map(slot => (typeof slot === 'string' ? slot : null)),
+      dockKeys: parsed.dockKeys.filter((key): key is string => typeof key === 'string'),
     }
   } catch {
     return null
   }
 }
 
-export const writeLayout = async (items: GridItem[], slots: Array<string | null>) => {
+export const writeLayout = async (
+  items: GridItem[],
+  slots: Array<string | null>,
+  dockKeys: string[]
+) => {
   const payload = {
-    version: 2,
+    version: 3,
     items: serializeItems(items),
     slots,
+    dockKeys,
   }
   await invoke('set_layout_payload', { key: LAYOUT_KEY, payload: JSON.stringify(payload) })
 }
 
-export const hydrateItems = (icons: DesktopIcon[], persisted: PersistedItem[] | null): GridItem[] => {
+export const hydrateDockKeys = (
+  icons: DesktopIcon[],
+  persisted: string[] | null | undefined,
+  capacity: number
+): string[] => {
+  const validKeys = icons.map(icon => buildIconSelectionKey(icon))
+  return normalizeDockKeys(persisted, validKeys, capacity)
+}
+
+export const hydrateItems = (
+  icons: DesktopIcon[],
+  persisted: PersistedItem[] | null
+): GridItem[] => {
   const iconMap = new Map<string, IconItem>()
   icons.forEach(icon => {
     const key = buildIconSelectionKey(icon)

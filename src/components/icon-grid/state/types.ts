@@ -14,6 +14,7 @@ export interface DragState {
   workingOrder: Array<string | null>
   sourceSlotIndex: number | null
   previewSlotIndex: number | null
+  dockPreviewIndex: number | null
   hoverTargetId: string | null
   hoverZone: HoverZone | null
   hoverIou: number

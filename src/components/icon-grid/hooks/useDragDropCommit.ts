@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+} from 'react'
 import type { GridItem, IconItem } from '../model'
 import { getId } from '../model'
 import { DRAG_HOLE_ID, normalizeOuterSlots } from '../domain/slots'
@@ -13,6 +20,7 @@ import {
   applyFolderCreateFromSession,
   applyOuterDropFromSession,
 } from '../domain/dropPolicy'
+import { applyDockDrop } from '../domain/dock'
 import type { DragState, FolderDropFlight } from '../state/types'
 import { OUTER_DRAG_RULES } from '../constants'
 import {
@@ -36,8 +44,11 @@ interface UseDragDropCommitParams {
   tileRefs: MutableRefObject<Map<string, HTMLDivElement>>
   itemsRef: MutableRefObject<GridItem[]>
   outerSlotsRef: MutableRefObject<Array<string | null>>
+  dockKeysRef: MutableRefObject<string[]>
   setItems: Dispatch<SetStateAction<GridItem[]>>
   setOuterSlots: Dispatch<SetStateAction<Array<string | null>>>
+  setDockKeys: Dispatch<SetStateAction<string[]>>
+  dockCapacity: number
   dragRef: MutableRefObject<DragState | null>
   setDragState: Dispatch<SetStateAction<DragState | null>>
   clearEdgeSwitchTimer: () => void
@@ -63,8 +74,11 @@ export function useDragDropCommit({
   tileRefs,
   itemsRef,
   outerSlotsRef,
+  dockKeysRef,
   setItems,
   setOuterSlots,
+  setDockKeys,
+  dockCapacity,
   dragRef,
   setDragState,
   clearEdgeSwitchTimer,
@@ -75,8 +89,12 @@ export function useDragDropCommit({
   const folderCreateTransitionTimerRef = useRef<number | null>(null)
   const folderDropFlightIdRef = useRef(0)
   const [folderDropFlight, setFolderDropFlight] = useState<FolderDropFlight | null>(null)
-  const [folderPreviewFreezeTargetId, setFolderPreviewFreezeTargetId] = useState<string | null>(null)
-  const [folderCreateTransitionTargetId, setFolderCreateTransitionTargetId] = useState<string | null>(null)
+  const [folderPreviewFreezeTargetId, setFolderPreviewFreezeTargetId] = useState<string | null>(
+    null
+  )
+  const [folderCreateTransitionTargetId, setFolderCreateTransitionTargetId] = useState<
+    string | null
+  >(null)
   const [hiddenOuterItemIds, setHiddenOuterItemIds] = useState<string[]>([])
   const [frozenOuterOrder, setFrozenOuterOrder] = useState<Array<string | null> | null>(null)
 
@@ -141,7 +159,9 @@ export function useDragDropCommit({
     commitOuterLayout(finalized.items, finalized.slots)
   }
 
-  const resolveFolderSecondSlotCenter = (targetId: string): { x: number; y: number; size: number } | null => {
+  const resolveFolderSecondSlotCenter = (
+    targetId: string
+  ): { x: number; y: number; size: number } | null => {
     const targetNode = tileRefs.current.get(targetId)
     if (!targetNode) return null
 
@@ -152,7 +172,11 @@ export function useDragDropCommit({
     const frameLeft = rect.left + (rect.width - frameSize) / 2
     const frameTop = rect.top + FOLDER_PREVIEW_TOP_OFFSET - FOLDER_PREVIEW_OUTER_EXPAND
     const slotLeft =
-      frameLeft + FOLDER_PREVIEW_OUTER_EXPAND + FOLDER_PREVIEW_PADDING + slotSize + FOLDER_PREVIEW_GAP
+      frameLeft +
+      FOLDER_PREVIEW_OUTER_EXPAND +
+      FOLDER_PREVIEW_PADDING +
+      slotSize +
+      FOLDER_PREVIEW_GAP
     const slotTop = frameTop + FOLDER_PREVIEW_OUTER_EXPAND + FOLDER_PREVIEW_PADDING
 
     return {
@@ -163,11 +187,20 @@ export function useDragDropCommit({
   }
 
   const commitOuterLayout = (nextItems: GridItem[], nextSlotsInput: Array<string | null>) => {
-    const normalizedSlots = normalizeOuterSlots(nextSlotsInput, nextItems.map(getId), pageSizeRef.current)
+    const normalizedSlots = normalizeOuterSlots(
+      nextSlotsInput,
+      nextItems.map(getId),
+      pageSizeRef.current
+    )
     itemsRef.current = nextItems
     outerSlotsRef.current = normalizedSlots
     setItems(nextItems)
     setOuterSlots(normalizedSlots)
+  }
+
+  const commitDockLayout = (nextDockKeys: string[]) => {
+    dockKeysRef.current = nextDockKeys
+    setDockKeys(nextDockKeys)
   }
 
   const scheduleFolderCreateTransition = (folderId: string | null) => {
@@ -193,7 +226,9 @@ export function useDragDropCommit({
     if (targetSlotIndex < 0 || targetSlotIndex >= result.slots.length) return null
     const candidateId = result.slots[targetSlotIndex]
     if (!candidateId) return null
-    const createdFolder = result.items.find(item => item.kind === 'folder' && getId(item) === candidateId)
+    const createdFolder = result.items.find(
+      item => item.kind === 'folder' && getId(item) === candidateId
+    )
     return createdFolder ? candidateId : null
   }
 
@@ -218,13 +253,29 @@ export function useDragDropCommit({
     if (!current || current.pointerId !== pointerId) return false
     clearEdgeSwitchTimer()
 
+    if (current.dockPreviewIndex !== null && current.draggingItem.kind === 'icon') {
+      resetDropVisuals()
+      const nextDockKeys = applyDockDrop(
+        dockKeysRef.current,
+        current.draggingItem.key,
+        current.dockPreviewIndex,
+        dockCapacity
+      )
+      commitDockLayout(nextDockKeys)
+      dragRef.current = null
+      setDragState(null)
+      return true
+    }
+
     if (current.context === 'folder') {
       const folderMap = getFolderMapById(current.sourceFolderId, itemsRef.current)
       const target = current.hoverTargetId ? folderMap.get(current.hoverTargetId) : null
       const hasValidHoverTarget = Boolean(current.hoverTargetId && target)
       const dropOrder =
         hasValidHoverTarget && current.hoverTargetId
-          ? current.hoverZone === 'center' && current.draggingItem.kind === 'icon' && target?.kind === 'icon'
+          ? current.hoverZone === 'center' &&
+            current.draggingItem.kind === 'icon' &&
+            target?.kind === 'icon'
             ? (() => {
                 const targetIndex = current.workingOrder.indexOf(current.hoverTargetId)
                 if (targetIndex < 0) return current.workingOrder
@@ -245,7 +296,9 @@ export function useDragDropCommit({
         if (holeIndex < 0) return base
         nextOrder[holeIndex] = current.draggingId
         const normalized = nextOrder.filter((id): id is string => id !== null)
-        const nextChildren = normalized.map(id => map.get(id)).filter((item): item is IconItem => Boolean(item))
+        const nextChildren = normalized
+          .map(id => map.get(id))
+          .filter((item): item is IconItem => Boolean(item))
         if (nextChildren.length !== children.length) return base
         return replaceFolderChildren(base, current.sourceFolderId, nextChildren)
       })
@@ -253,14 +306,19 @@ export function useDragDropCommit({
       const outerMap = new Map<string, GridItem>()
       itemsRef.current.forEach(item => outerMap.set(getId(item), item))
       const source = current.draggingItem
-      const existingFolderTarget = current.hoverTargetId ? outerMap.get(current.hoverTargetId) : null
+      const existingFolderTarget = current.hoverTargetId
+        ? outerMap.get(current.hoverTargetId)
+        : null
       const canAddToExistingFolder =
         source.kind === 'icon' &&
         existingFolderTarget?.kind === 'folder' &&
         current.hoverIou >= OUTER_DRAG_RULES.folderOverlapThreshold
-      const folderTarget = current.folderPreviewTargetId !== null ? outerMap.get(current.folderPreviewTargetId) : null
+      const folderTarget =
+        current.folderPreviewTargetId !== null ? outerMap.get(current.folderPreviewTargetId) : null
       const canCreateFolder =
-        current.folderPreviewTargetId !== null && source.kind === 'icon' && folderTarget?.kind === 'icon'
+        current.folderPreviewTargetId !== null &&
+        source.kind === 'icon' &&
+        folderTarget?.kind === 'icon'
 
       if (canAddToExistingFolder) {
         setFolderPreviewFreezeTargetId(null)
@@ -270,7 +328,11 @@ export function useDragDropCommit({
         const originalItems = itemsRef.current
         const originalSlots = outerSlotsRef.current
         const baseForDrop = extractDraggedIconFromSourceFolder(originalItems, current)
-        const result = applyAddToFolderFromSession(baseForDrop, current, current.hoverTargetId as string)
+        const result = applyAddToFolderFromSession(
+          baseForDrop,
+          current,
+          current.hoverTargetId as string
+        )
         commitOuterSessionResult(current, originalItems, originalSlots, result)
       } else if (canCreateFolder) {
         const targetId = current.folderPreviewTargetId as string
@@ -286,7 +348,9 @@ export function useDragDropCommit({
           folderDropFlightIdRef.current = flightId
           setFolderPreviewFreezeTargetId(targetId)
           setHiddenOuterItemIds([current.draggingId, targetId])
-          setFrozenOuterOrder(current.workingOrder.map(slot => (slot === DRAG_HOLE_ID ? null : slot)))
+          setFrozenOuterOrder(
+            current.workingOrder.map(slot => (slot === DRAG_HOLE_ID ? null : slot))
+          )
           setFolderDropFlight({
             id: flightId,
             icon: sourceItem.icon,
@@ -310,10 +374,14 @@ export function useDragDropCommit({
             setFolderDropFlight(prev => (prev && prev.id === flightId ? null : prev))
             setFolderPreviewFreezeTargetId(prev => (prev === targetId ? null : prev))
             setHiddenOuterItemIds(prev =>
-              prev.length === 2 && prev.includes(current.draggingId) && prev.includes(targetId) ? [] : prev
+              prev.length === 2 && prev.includes(current.draggingId) && prev.includes(targetId)
+                ? []
+                : prev
             )
             setFrozenOuterOrder(prev =>
-              prev && prev.some(slot => slot === current.draggingId || slot === targetId) ? null : prev
+              prev && prev.some(slot => slot === current.draggingId || slot === targetId)
+                ? null
+                : prev
             )
             folderDropFlightTimerRef.current = null
           }, reorderAnimationMs + 30)

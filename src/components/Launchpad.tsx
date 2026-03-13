@@ -287,6 +287,7 @@ export function Launchpad() {
 
   const isBackgroundInteraction = (target: HTMLElement) =>
     !target.closest('[data-icon]') &&
+    !target.closest('[data-dock]') &&
     !target.closest('[data-search-placeholder]') &&
     !target.closest('[data-search-floating-menu="true"]') &&
     !target.closest('[data-pagination]') &&

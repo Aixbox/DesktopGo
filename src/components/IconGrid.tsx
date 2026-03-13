@@ -8,25 +8,29 @@ import {
 } from 'react'
 import type { DesktopIcon } from '../types'
 import { ICON_SIZE_CONFIG } from '../types'
-import { useIconStore } from '../stores/iconStore'
+import { buildIconSelectionKey, useIconStore } from '../stores/iconStore'
 import type { GridItem, IconItem, PersistedLayout } from './icon-grid/model'
 import { getId } from './icon-grid/model'
-import {
-  DRAG_HOLE_ID,
-  areSlotsEqual,
-  normalizeOuterSlots,
-} from './icon-grid/domain/slots'
+import { DRAG_HOLE_ID, areSlotsEqual, normalizeOuterSlots } from './icon-grid/domain/slots'
 import { clampNumber } from './icon-grid/domain/geometry'
-import { hydrateItems, readLayout, serializeItems, writeLayout } from './icon-grid/services/layoutStore'
+import {
+  hydrateDockKeys,
+  hydrateItems,
+  readLayout,
+  serializeItems,
+  writeLayout,
+} from './icon-grid/services/layoutStore'
 import { useIconGridDragWorkflow } from './icon-grid/hooks/useIconGridDragWorkflow'
 import {
   FOLDER_MODAL_MAX_HEIGHT,
   FOLDER_MODAL_MAX_WIDTH,
   FOLDER_PREVIEW_EASING,
 } from './icon-grid/views/FolderVisuals'
+import { DOCK_CAPACITY } from './icon-grid/domain/dock'
 import { DragOverlays } from './icon-grid/views/DragOverlays'
 import { OuterGridView } from './icon-grid/views/OuterGridView'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
+import { DockBar } from './icon-grid/views/DockBar'
 
 interface IconGridProps {
   icons: DesktopIcon[]
@@ -61,14 +65,16 @@ const fitCount = (container: number, item: number) => {
 }
 
 export function IconGrid({ icons }: IconGridProps) {
-  const { iconSize, selectionMode, selectedIconKeys, toggleSelectIcon } = useIconStore()
+  const { iconSize, selectionMode, selectedIconKeys, toggleSelectIcon, launchApp } = useIconStore()
   const containerRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const folderPanelRef = useRef<HTMLDivElement>(null)
   const folderGridContainerRef = useRef<HTMLDivElement>(null)
   const folderGridRef = useRef<HTMLDivElement>(null)
+  const dockContainerRef = useRef<HTMLDivElement>(null)
   const tileRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const folderTileRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const dockSlotRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const prevPageEntriesRef = useRef<Array<string | null>>([])
   const prevPageRef = useRef<number>(0)
   const prevFolderEntriesRef = useRef<Array<string | null>>([])
@@ -81,6 +87,7 @@ export function IconGrid({ icons }: IconGridProps) {
   const layoutWriteQueueRef = useRef<Promise<void>>(Promise.resolve())
   const itemsRef = useRef<GridItem[]>([])
   const outerSlotsRef = useRef<Array<string | null>>([])
+  const dockKeysRef = useRef<string[]>([])
   const currentPageRef = useRef(0)
   const pageSizeRef = useRef(1)
   const wheelDeltaRef = useRef(0)
@@ -97,6 +104,7 @@ export function IconGrid({ icons }: IconGridProps) {
   const [itemHeight, setItemHeight] = useState<number>(fallbackRowHeight)
   const [items, setItems] = useState<GridItem[]>([])
   const [outerSlots, setOuterSlots] = useState<Array<string | null>>([])
+  const [dockKeys, setDockKeys] = useState<string[]>([])
   const [openFolderId, setOpenFolderId] = useState<string | null>(null)
   const [folderItemWidth, setFolderItemWidth] = useState<number>(columnWidth)
   const [folderItemHeight, setFolderItemHeight] = useState<number>(fallbackRowHeight)
@@ -113,6 +121,7 @@ export function IconGrid({ icons }: IconGridProps) {
         persisted = {
           items: serializeItems(itemsRef.current),
           slots: outerSlotsRef.current,
+          dockKeys: dockKeysRef.current,
         }
       } else {
         if (!persistedLayoutLoadedRef.current) {
@@ -129,10 +138,13 @@ export function IconGrid({ icons }: IconGridProps) {
       const nextItems = hydrateItems(icons, persisted?.items ?? null)
       const nextItemIds = nextItems.map(getId)
       const nextSlots = normalizeOuterSlots(persisted?.slots, nextItemIds, pageSizeRef.current)
+      const nextDockKeys = hydrateDockKeys(icons, persisted?.dockKeys, DOCK_CAPACITY)
       itemsRef.current = nextItems
       outerSlotsRef.current = nextSlots
+      dockKeysRef.current = nextDockKeys
       setItems(nextItems)
       setOuterSlots(nextSlots)
+      setDockKeys(nextDockKeys)
       hydratedRef.current = true
     }
 
@@ -145,16 +157,18 @@ export function IconGrid({ icons }: IconGridProps) {
   useEffect(() => {
     itemsRef.current = items
     outerSlotsRef.current = outerSlots
+    dockKeysRef.current = dockKeys
     if (!hydratedRef.current) return
 
     const nextItems = items
     const nextSlots = outerSlots
+    const nextDockKeys = dockKeys
     layoutWriteQueueRef.current = layoutWriteQueueRef.current
-      .then(() => writeLayout(nextItems, nextSlots))
-      .catch((e) => {
+      .then(() => writeLayout(nextItems, nextSlots, nextDockKeys))
+      .catch(e => {
         console.error('Failed to persist launchpad layout:', e)
       })
-  }, [items, outerSlots])
+  }, [dockKeys, items, outerSlots])
 
   useEffect(() => {
     currentPageRef.current = currentPage
@@ -173,6 +187,14 @@ export function IconGrid({ icons }: IconGridProps) {
     items.forEach(item => map.set(getId(item), item))
     return map
   }, [items])
+
+  const iconByKey = useMemo(() => {
+    const map = new Map<string, DesktopIcon>()
+    icons.forEach(icon => {
+      map.set(buildIconSelectionKey(icon), icon)
+    })
+    return map
+  }, [icons])
 
   const openFolder = useMemo(() => {
     if (!openFolderId) return null
@@ -235,21 +257,26 @@ export function IconGrid({ icons }: IconGridProps) {
     gridRef,
     folderPanelRef,
     folderGridRef,
+    dockContainerRef,
     tileRefs,
     folderTileRefs,
+    dockSlotRefs,
     itemsRef,
     setItems,
     outerSlotsRef,
+    dockKeysRef,
     setOuterSlots,
+    setDockKeys,
     currentPageRef,
     setCurrentPage,
     pageSizeRef,
+    dockCapacity: DOCK_CAPACITY,
     setOpenFolderId,
   })
   const renderOrder =
     dragState && dragState.context === 'outer'
       ? dragState.workingOrder
-      : frozenOuterOrder ?? outerSlots
+      : (frozenOuterOrder ?? outerSlots)
   const folderRenderOrder =
     dragState && dragState.context === 'folder' ? dragState.workingOrder : folderOrder
 
@@ -378,19 +405,26 @@ export function IconGrid({ icons }: IconGridProps) {
   }, [items.length, iconSize, pageSize])
 
   const handleWheelPageSwitch = (event: ReactWheelEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | null
+    if (target?.closest('[data-dock]')) return
+
     const isOuterDrag = dragState?.context === 'outer'
     if (openFolder && !isOuterDrag) return
     if (dragState && dragState.context !== 'outer') return
     if (pageCount <= 1) return
 
-    const primaryDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
+    const primaryDelta =
+      Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
     if (Math.abs(primaryDelta) < 0.1) return
     event.preventDefault()
 
     const now = performance.now()
     if (now < wheelCooldownUntilRef.current) return
 
-    if (wheelDeltaRef.current !== 0 && Math.sign(wheelDeltaRef.current) !== Math.sign(primaryDelta)) {
+    if (
+      wheelDeltaRef.current !== 0 &&
+      Math.sign(wheelDeltaRef.current) !== Math.sign(primaryDelta)
+    ) {
       wheelDeltaRef.current = 0
     }
     wheelDeltaRef.current += primaryDelta
@@ -553,11 +587,15 @@ export function IconGrid({ icons }: IconGridProps) {
   const gridWidth = columns * itemWidth + Math.max(0, columns - 1) * GRID_GAP
   const gridHeight = rows * itemHeight + Math.max(0, rows - 1) * GRID_GAP
   const ghostItem = dragState ? dragState.draggingItem : null
+  const dockDraggingKey =
+    dragState?.draggingItem.kind === 'icon' ? dragState.draggingItem.key : null
+  const dockDraggingIcon =
+    dragState?.draggingItem.kind === 'icon' ? dragState.draggingItem.icon : null
   const canGoLeft = currentPage > 0
   const canGoRight = currentPage < pageCount - 1
 
   return (
-    <div className="relative h-full w-full px-16 pb-20 pt-24" onWheel={handleWheelPageSwitch}>
+    <div className="relative h-full w-full px-16 pb-32 pt-24" onWheel={handleWheelPageSwitch}>
       <div ref={containerRef} className="flex h-full w-full items-center justify-center">
         <OuterGridView
           gridRef={gridRef}
@@ -615,6 +653,29 @@ export function IconGrid({ icons }: IconGridProps) {
         />
       </div>
 
+      <DockBar
+        dockKeys={dockKeys}
+        iconByKey={iconByKey}
+        dockCapacity={DOCK_CAPACITY}
+        dockPreviewIndex={dragState?.dockPreviewIndex ?? null}
+        draggingKey={dockDraggingKey}
+        draggingIcon={dockDraggingIcon}
+        selectionMode={selectionMode}
+        bindDockContainerRef={node => {
+          dockContainerRef.current = node
+        }}
+        bindDockSlotRef={(index, node) => {
+          if (node) dockSlotRefs.current.set(index, node)
+          else dockSlotRefs.current.delete(index)
+        }}
+        onLaunchIcon={icon => {
+          void launchApp(icon.path)
+        }}
+        onRemoveIcon={key => {
+          setDockKeys(current => current.filter(entry => entry !== key))
+        }}
+      />
+
       <FolderModalView
         openFolder={openFolder}
         dragContext={dragState?.context ?? null}
@@ -653,7 +714,9 @@ export function IconGrid({ icons }: IconGridProps) {
       />
 
       <DragOverlays
-        dragPointer={dragState ? { pointerX: dragState.pointerX, pointerY: dragState.pointerY } : null}
+        dragPointer={
+          dragState ? { pointerX: dragState.pointerX, pointerY: dragState.pointerY } : null
+        }
         ghostItem={ghostItem}
         iconImageSize={iconConfig.imgSize}
         folderDropFlight={folderDropFlight}
@@ -663,4 +726,3 @@ export function IconGrid({ icons }: IconGridProps) {
     </div>
   )
 }
-
