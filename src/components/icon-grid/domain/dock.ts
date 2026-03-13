@@ -58,3 +58,42 @@ export const getDockRenderSlots = (
 
   return showPlaceholderWhenEmpty ? [null] : []
 }
+
+interface ResolveDockDisplaySlotsParams {
+  dockKeys: Array<string | null>
+  draggingKey: string | null
+  previewIndex: number | null
+  workingOrder?: Array<string | null> | null
+  showPlaceholderWhenEmpty?: boolean
+}
+
+export const resolveDockDisplaySlots = ({
+  dockKeys,
+  draggingKey,
+  previewIndex,
+  workingOrder,
+  showPlaceholderWhenEmpty = true,
+}: ResolveDockDisplaySlotsParams): Array<string | null> => {
+  if (workingOrder && workingOrder.length > 0) {
+    const consumed = new Set<string>()
+    const next: Array<string | null> = []
+
+    workingOrder.forEach(slot => {
+      if (slot === null) {
+        next.push(null)
+        return
+      }
+      if (slot === draggingKey || consumed.has(slot)) return
+      next.push(slot)
+      consumed.add(slot)
+    })
+
+    if (next.length > 0) {
+      return next
+    }
+  }
+
+  return getDockRenderSlots(dockKeys, draggingKey, previewIndex, {
+    showPlaceholderWhenEmpty,
+  })
+}

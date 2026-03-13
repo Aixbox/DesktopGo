@@ -26,7 +26,7 @@ import {
   FOLDER_MODAL_MAX_WIDTH,
   FOLDER_PREVIEW_EASING,
 } from './icon-grid/views/FolderVisuals'
-import { resolveOuterItemIds } from './icon-grid/domain/dock'
+import { DOCK_GAP, resolveDockDisplaySlots, resolveOuterItemIds } from './icon-grid/domain/dock'
 import { DragOverlays } from './icon-grid/views/DragOverlays'
 import { OuterGridView } from './icon-grid/views/OuterGridView'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
@@ -80,8 +80,10 @@ export function IconGrid({ icons }: IconGridProps) {
   const prevPageEntriesRef = useRef<Array<string | null>>([])
   const prevPageRef = useRef<number>(0)
   const prevFolderEntriesRef = useRef<Array<string | null>>([])
+  const prevDockEntriesRef = useRef<Array<string | null>>([])
   const tileAnimationTimerRef = useRef<Map<string, number>>(new Map())
   const folderTileAnimationTimerRef = useRef<Map<string, number>>(new Map())
+  const dockTileAnimationTimerRef = useRef<Map<string, number>>(new Map())
   const hydratedRef = useRef(false)
   const persistedLayoutRef = useRef<PersistedLayout | null>(null)
   const persistedLayoutLoadedRef = useRef(false)
@@ -287,6 +289,23 @@ export function IconGrid({ icons }: IconGridProps) {
   }, [dragState, frozenOuterOrder, outerSlots])
   const folderRenderOrder =
     dragState && dragState.context === 'folder' ? dragState.workingOrder : folderOrder
+  const hiddenDockDraggingId =
+    dragState?.draggingId && dockKeys.includes(dragState.draggingId) ? dragState.draggingId : null
+  const dockWorkingOrder =
+    dragState?.context === 'dock' && hiddenDockDraggingId
+      ? dragState.workingOrder.map(slot => (slot === DRAG_HOLE_ID ? null : slot))
+      : null
+  const dockRenderSlots = useMemo(
+    () =>
+      resolveDockDisplaySlots({
+        dockKeys,
+        draggingKey: hiddenDockDraggingId,
+        previewIndex: dragState?.context === 'dock' ? (dragState.dockPreviewIndex ?? null) : null,
+        workingOrder: dockWorkingOrder,
+        showPlaceholderWhenEmpty: true,
+      }),
+    [dockKeys, hiddenDockDraggingId, dragState?.context, dragState?.dockPreviewIndex, dockWorkingOrder]
+  )
 
   const outerViewItemById = useMemo(() => {
     if (!dragState || dragState.context !== 'outer' || !dragState.sourceFolderId) {
@@ -578,6 +597,52 @@ export function IconGrid({ icons }: IconGridProps) {
     prevFolderEntriesRef.current = currentEntries
   }, [openFolder, folderRenderOrder, folderColumns, folderItemWidth, folderItemHeight])
 
+  useLayoutEffect(() => {
+    const currentEntries = dockRenderSlots
+    const prevIndexMap = new Map<string, number>()
+    prevDockEntriesRef.current.forEach((entry, index) => {
+      if (entry === null || entry === DRAG_HOLE_ID) return
+      prevIndexMap.set(entry, index)
+    })
+
+    const dockButtonSize = Math.max(iconConfig.imgSize + 12, 52)
+    const stepX = dockButtonSize + DOCK_GAP
+    currentEntries.forEach((entry, newIndex) => {
+      if (entry === null || entry === DRAG_HOLE_ID) return
+      const prevIndex = prevIndexMap.get(entry)
+      if (prevIndex === undefined || prevIndex === newIndex) return
+
+      const deltaX = (prevIndex - newIndex) * stepX
+      if (Math.abs(deltaX) < 0.5) return
+
+      const node = dockItemRefs.current.get(entry)
+      if (!node) return
+
+      const existingTimer = dockTileAnimationTimerRef.current.get(entry)
+      if (existingTimer !== undefined) {
+        window.clearTimeout(existingTimer)
+        dockTileAnimationTimerRef.current.delete(entry)
+      }
+
+      node.style.transition = 'none'
+      node.style.willChange = 'transform'
+      node.style.transform = `translate3d(${deltaX}px, 0px, 0px)`
+      void node.offsetWidth
+      node.style.transition = `transform ${REORDER_ANIMATION_MS}ms ${REORDER_EASING}`
+      node.style.transform = 'translate3d(0px, 0px, 0px)'
+
+      const timer = window.setTimeout(() => {
+        node.style.transition = ''
+        node.style.transform = ''
+        node.style.willChange = ''
+        dockTileAnimationTimerRef.current.delete(entry)
+      }, REORDER_ANIMATION_MS + 40)
+      dockTileAnimationTimerRef.current.set(entry, timer)
+    })
+
+    prevDockEntriesRef.current = currentEntries
+  }, [dockRenderSlots, iconConfig.imgSize])
+
   useEffect(() => {
     return () => {
       tileAnimationTimerRef.current.forEach(timer => {
@@ -588,6 +653,10 @@ export function IconGrid({ icons }: IconGridProps) {
         window.clearTimeout(timer)
       })
       folderTileAnimationTimerRef.current.clear()
+      dockTileAnimationTimerRef.current.forEach(timer => {
+        window.clearTimeout(timer)
+      })
+      dockTileAnimationTimerRef.current.clear()
       clearEdgeSwitchTimer()
     }
   }, [])
@@ -595,7 +664,6 @@ export function IconGrid({ icons }: IconGridProps) {
   const gridWidth = columns * itemWidth + Math.max(0, columns - 1) * GRID_GAP
   const gridHeight = rows * itemHeight + Math.max(0, rows - 1) * GRID_GAP
   const ghostItem = dragState ? dragState.draggingItem : null
-  const dockDraggingId = dragState?.draggingId ?? null
   const canGoLeft = currentPage > 0
   const canGoRight = currentPage < pageCount - 1
 
@@ -659,14 +727,13 @@ export function IconGrid({ icons }: IconGridProps) {
       </div>
 
       <DockBar
-        dockKeys={dockKeys}
+        displaySlots={dockRenderSlots}
         itemById={itemById}
         dockPreviewIndex={dragState?.dockPreviewIndex ?? null}
         dragContext={dragState?.context ?? null}
         dragFolderPreviewTargetId={dragState?.folderPreviewTargetId ?? null}
         folderPreviewFreezeTargetId={folderPreviewFreezeTargetId}
         folderCreateTransitionTargetId={folderCreateTransitionTargetId}
-        draggingId={dockDraggingId}
         iconImageSize={iconConfig.imgSize}
         selectionMode={selectionMode}
         bindDockContainerRef={node => {

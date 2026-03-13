@@ -9,18 +9,17 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '../../ui/context-menu'
-import { DOCK_GAP, getDockRenderSlots } from '../domain/dock'
+import { DOCK_GAP } from '../domain/dock'
 import { FolderCreatePreview, FolderIconVisual } from './FolderVisuals'
 
 interface DockBarProps {
-  dockKeys: Array<string | null>
+  displaySlots: Array<string | null>
   itemById: Map<string, GridItem>
   dockPreviewIndex: number | null
   dragContext: 'outer' | 'folder' | 'dock' | null
   dragFolderPreviewTargetId: string | null
   folderPreviewFreezeTargetId: string | null
   folderCreateTransitionTargetId: string | null
-  draggingId: string | null
   iconImageSize: number
   selectionMode: boolean
   bindDockContainerRef: (node: HTMLDivElement | null) => void
@@ -38,14 +37,13 @@ const MENU_OPEN_LABEL = '\u6253\u5f00'
 const MENU_REMOVE_LABEL = '\u79fb\u51fa Dock'
 
 export function DockBar({
-  dockKeys,
+  displaySlots,
   itemById,
   dockPreviewIndex,
   dragContext,
   dragFolderPreviewTargetId,
   folderPreviewFreezeTargetId,
   folderCreateTransitionTargetId,
-  draggingId,
   iconImageSize,
   selectionMode,
   bindDockContainerRef,
@@ -59,22 +57,13 @@ export function DockBar({
   onRemoveItem,
 }: DockBarProps) {
   const dockButtonSize = Math.max(iconImageSize + 12, 52)
-  const hiddenDraggingId =
-    draggingId !== null && dockKeys.includes(draggingId) ? draggingId : null
   const showInsertionPreview =
     dragContext === 'dock' &&
     dockPreviewIndex !== null &&
     dragFolderPreviewTargetId === null &&
     folderPreviewFreezeTargetId === null
 
-  const displayDockSlots = getDockRenderSlots(
-    dockKeys,
-    hiddenDraggingId,
-    showInsertionPreview ? dockPreviewIndex : null,
-    { showPlaceholderWhenEmpty: true }
-  )
-
-  const hasVisibleItems = displayDockSlots.some(slot => typeof slot === 'string')
+  const hasVisibleItems = displaySlots.some(slot => typeof slot === 'string')
 
   return (
     <div
@@ -88,7 +77,7 @@ export function DockBar({
           className="flex items-center"
           style={{ columnGap: `${DOCK_GAP}px` }}
         >
-          {displayDockSlots.map((id, index) => {
+          {displaySlots.map((id, index) => {
             const item = id ? itemById.get(id) ?? null : null
             const folderPreview =
               Boolean(id) &&

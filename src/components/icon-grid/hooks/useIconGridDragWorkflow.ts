@@ -218,6 +218,8 @@ export function useIconGridDragWorkflow({
 
   const resolveDockItemOrder = (draggingId: string | null = null): string[] =>
     getDockItemKeys(dockKeysRef.current, draggingId)
+  const isDraggingFromDock = (draggingId: string): boolean =>
+    dockKeysRef.current.includes(draggingId)
 
   const resolveTopLevelOrder = (context: 'outer' | 'dock'): Array<string | null> =>
     context === 'dock'
@@ -449,7 +451,7 @@ export function useIconGridDragWorkflow({
   const triggerTopLevelDwellEvasion = (expectedTargetId: string) => {
     const latest = dragRef.current
     if (!latest || latest.context === 'folder') return
-    if (latest.context === 'dock') return
+    if (latest.context === 'dock' && !isDraggingFromDock(latest.draggingId)) return
     if (latest.hoverTargetId !== expectedTargetId) return
     if (latest.folderPreviewTargetId) return
 
@@ -704,6 +706,7 @@ export function useIconGridDragWorkflow({
         allowOutside: true,
       })
       const overlapHit = findTopLevelMaxOverlapHit(baseState)
+      const draggingFromDock = isDraggingFromDock(baseState.draggingId)
 
       if (!overlapHit) {
         clearOuterDwellTimer()
@@ -730,8 +733,10 @@ export function useIconGridDragWorkflow({
         return
       }
 
-      if (baseState.context === 'dock') {
+      if (baseState.context === 'dock' && !draggingFromDock) {
         clearOuterDwellTimer()
+        const stableDockPreviewIndex =
+          baseState.dockPreviewIndex ?? nearestSlotIndex ?? overlapHit.targetIndex
 
         const canCreateFolder =
           source.kind === 'icon' &&
@@ -746,7 +751,7 @@ export function useIconGridDragWorkflow({
           const previewState: DragState = {
             ...baseState,
             previewSlotIndex: overlapHit.targetIndex,
-            dockPreviewIndex: null,
+            dockPreviewIndex: stableDockPreviewIndex,
             hoverTargetId: overlapHit.targetId,
             hoverZone: overlapHit.zone,
             hoverIou: overlapHit.iou,
