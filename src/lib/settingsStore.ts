@@ -1,7 +1,7 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
 import type { IconSize, ThemeMode, TitleLineCount, WindowMode } from "@/types";
 
-type SettingKey = "iconSize" | "windowMode" | "titleLineCount" | "themeMode";
+type SettingKey = "iconSize" | "windowMode" | "titleLineCount" | "themeMode" | "dockEnabled";
 type ExtendedSettingKey = SettingKey | "customAppDir";
 
 type SettingValueMap = {
@@ -9,6 +9,7 @@ type SettingValueMap = {
   windowMode: WindowMode;
   titleLineCount: TitleLineCount;
   themeMode: ThemeMode;
+  dockEnabled: boolean;
   customAppDir: string;
 };
 
@@ -17,6 +18,7 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   windowMode: "fullscreen",
   titleLineCount: "two",
   themeMode: "dark",
+  dockEnabled: true,
   customAppDir: "",
 };
 
@@ -34,6 +36,8 @@ const isTitleLineCount = (value: unknown): value is TitleLineCount =>
 const isThemeMode = (value: unknown): value is ThemeMode =>
   value === "system" || value === "dark" || value === "light";
 
+const isDockEnabled = (value: unknown): value is boolean => typeof value === "boolean";
+
 const isCustomAppDir = (value: unknown): value is string => typeof value === "string";
 
 const validators: {
@@ -43,6 +47,7 @@ const validators: {
   windowMode: isWindowMode,
   titleLineCount: isTitleLineCount,
   themeMode: isThemeMode,
+  dockEnabled: isDockEnabled,
   customAppDir: isCustomAppDir,
 };
 

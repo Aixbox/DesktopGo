@@ -52,6 +52,7 @@ const EVASION_REARM_DISTANCE = 14
 const EVASION_COOLDOWN_MS = 80
 const REORDER_ANIMATION_MS = 220
 const REORDER_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
+const DOCK_HIDDEN_LAYOUT_RESERVE_PX = 80
 
 const FALLBACK_ICON_ROW_HEIGHT = {
   large: 130,
@@ -65,7 +66,8 @@ const fitCount = (container: number, item: number) => {
 }
 
 export function IconGrid({ icons }: IconGridProps) {
-  const { iconSize, selectionMode, selectedIconKeys, toggleSelectIcon, launchApp } = useIconStore()
+  const { iconSize, dockEnabled, selectionMode, selectedIconKeys, toggleSelectIcon, launchApp } =
+    useIconStore()
   const containerRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const folderPanelRef = useRef<HTMLDivElement>(null)
@@ -142,7 +144,7 @@ export function IconGrid({ icons }: IconGridProps) {
       const nextItems = hydrateItems(icons, persisted?.items ?? null)
       const nextItemIds = nextItems.map(getId)
       const nextSlots = normalizeOuterSlots(persisted?.slots, nextItemIds, pageSizeRef.current)
-      const nextDockKeys = hydrateDockKeys(nextItemIds, persisted?.dockKeys)
+      const nextDockKeys = dockEnabled ? hydrateDockKeys(nextItemIds, persisted?.dockKeys) : []
       const nextOuterItemIds = resolveOuterItemIds(nextItemIds, nextDockKeys)
       const normalizedNextSlots = normalizeOuterSlots(
         nextSlots,
@@ -162,7 +164,7 @@ export function IconGrid({ icons }: IconGridProps) {
     return () => {
       cancelled = true
     }
-  }, [icons])
+  }, [dockEnabled, icons])
 
   useEffect(() => {
     itemsRef.current = items
@@ -212,13 +214,17 @@ export function IconGrid({ icons }: IconGridProps) {
   }, [openFolder])
 
   const itemIds = useMemo(() => items.map(getId), [items])
-  const outerItemIds = useMemo(() => resolveOuterItemIds(itemIds, dockKeys), [itemIds, dockKeys])
   const folderOrder = useMemo(
     () => openFolder?.children.map(child => child.key) ?? [],
     [openFolder]
   )
   const selectedSet = useMemo(() => new Set(selectedIconKeys), [selectedIconKeys])
   const iconConfig = ICON_SIZE_CONFIG[iconSize]
+  const activeDockKeys = dockEnabled ? dockKeys : []
+  const outerItemIds = useMemo(
+    () => resolveOuterItemIds(itemIds, activeDockKeys),
+    [activeDockKeys, itemIds]
+  )
 
   const {
     dragState,
@@ -290,7 +296,9 @@ export function IconGrid({ icons }: IconGridProps) {
   const folderRenderOrder =
     dragState && dragState.context === 'folder' ? dragState.workingOrder : folderOrder
   const hiddenDockDraggingId =
-    dragState?.draggingId && dockKeys.includes(dragState.draggingId) ? dragState.draggingId : null
+    dragState?.draggingId && activeDockKeys.includes(dragState.draggingId)
+      ? dragState.draggingId
+      : null
   const dockWorkingOrder =
     dragState?.context === 'dock' && hiddenDockDraggingId
       ? dragState.workingOrder.map(slot => (slot === DRAG_HOLE_ID ? null : slot))
@@ -298,13 +306,19 @@ export function IconGrid({ icons }: IconGridProps) {
   const dockRenderSlots = useMemo(
     () =>
       resolveDockDisplaySlots({
-        dockKeys,
+        dockKeys: activeDockKeys,
         draggingKey: hiddenDockDraggingId,
         previewIndex: dragState?.context === 'dock' ? (dragState.dockPreviewIndex ?? null) : null,
         workingOrder: dockWorkingOrder,
         showPlaceholderWhenEmpty: true,
       }),
-    [dockKeys, hiddenDockDraggingId, dragState?.context, dragState?.dockPreviewIndex, dockWorkingOrder]
+    [
+      activeDockKeys,
+      hiddenDockDraggingId,
+      dragState?.context,
+      dragState?.dockPreviewIndex,
+      dockWorkingOrder,
+    ]
   )
 
   const outerViewItemById = useMemo(() => {
@@ -346,13 +360,16 @@ export function IconGrid({ icons }: IconGridProps) {
     const recalc = () => {
       const width = el.clientWidth
       const height = el.clientHeight
+      const effectiveHeight = dockEnabled
+        ? height
+        : Math.max(1, height - DOCK_HIDDEN_LAYOUT_RESERVE_PX)
       const first = gridRef.current?.querySelector<HTMLElement>('[data-grid-item]')
       const tileWidth = first?.offsetWidth ?? columnWidth
       const tileHeight = first?.offsetHeight ?? fallbackRowHeight
       setItemWidth(tileWidth)
       setItemHeight(tileHeight)
       setColumns(fitCount(width, tileWidth))
-      setRows(fitCount(height, tileHeight))
+      setRows(fitCount(effectiveHeight, tileHeight))
     }
     const schedule = () => {
       cancelAnimationFrame(raf)
@@ -369,7 +386,7 @@ export function IconGrid({ icons }: IconGridProps) {
       observer.disconnect()
       window.removeEventListener('resize', schedule)
     }
-  }, [columnWidth, fallbackRowHeight, items.length, currentPage])
+  }, [columnWidth, dockEnabled, fallbackRowHeight, items.length, currentPage])
 
   useEffect(() => {
     const container = folderGridContainerRef.current
@@ -413,6 +430,22 @@ export function IconGrid({ icons }: IconGridProps) {
     outerSlotsRef.current = normalized
     setOuterSlots(normalized)
   }, [outerItemIds, pageSize])
+
+  useEffect(() => {
+    if (!hydratedRef.current || dockEnabled) return
+    const hasDockItems = dockKeysRef.current.some((entry): entry is string => typeof entry === 'string')
+    if (!hasDockItems) return
+
+    const nextOuterSlots = normalizeOuterSlots(
+      outerSlotsRef.current,
+      itemsRef.current.map(getId),
+      pageSizeRef.current
+    )
+    outerSlotsRef.current = nextOuterSlots
+    dockKeysRef.current = []
+    setOuterSlots(nextOuterSlots)
+    setDockKeys([])
+  }, [dockEnabled])
 
   const outerRenderCount = Math.max(pageSize, renderOrder.length)
   const pageCount = Math.max(1, Math.ceil(outerRenderCount / pageSize))
@@ -668,7 +701,10 @@ export function IconGrid({ icons }: IconGridProps) {
   const canGoRight = currentPage < pageCount - 1
 
   return (
-    <div className="relative h-full w-full px-16 pb-32 pt-24" onWheel={handleWheelPageSwitch}>
+    <div
+      className={`relative h-full w-full px-16 pt-24 ${dockEnabled ? 'pb-32' : 'pb-12'}`}
+      onWheel={handleWheelPageSwitch}
+    >
       <div ref={containerRef} className="flex h-full w-full items-center justify-center">
         <OuterGridView
           gridRef={gridRef}
@@ -726,40 +762,42 @@ export function IconGrid({ icons }: IconGridProps) {
         />
       </div>
 
-      <DockBar
-        displaySlots={dockRenderSlots}
-        itemById={itemById}
-        dockPreviewIndex={dragState?.dockPreviewIndex ?? null}
-        dragContext={dragState?.context ?? null}
-        dragFolderPreviewTargetId={dragState?.folderPreviewTargetId ?? null}
-        folderPreviewFreezeTargetId={folderPreviewFreezeTargetId}
-        folderCreateTransitionTargetId={folderCreateTransitionTargetId}
-        iconImageSize={iconConfig.imgSize}
-        selectionMode={selectionMode}
-        bindDockContainerRef={node => {
-          dockContainerRef.current = node
-        }}
-        bindDockGridRef={node => {
-          dockGridRef.current = node
-        }}
-        bindDockSlotRef={(index, node) => {
-          if (node) dockSlotRefs.current.set(index, node)
-          else dockSlotRefs.current.delete(index)
-        }}
-        bindDockItemRef={(id, node) => {
-          if (node) dockItemRefs.current.set(id, node)
-          else dockItemRefs.current.delete(id)
-        }}
-        onDockItemPointerDown={handleDockItemPointerDown}
-        onDockItemClickCapture={handleTileClickCapture}
-        onLaunchIcon={path => {
-          void launchApp(path)
-        }}
-        onOpenFolder={setOpenFolderId}
-        onRemoveItem={key => {
-          setDockKeys(current => current.filter(entry => entry !== key))
-        }}
-      />
+      {dockEnabled ? (
+        <DockBar
+          displaySlots={dockRenderSlots}
+          itemById={itemById}
+          dockPreviewIndex={dragState?.dockPreviewIndex ?? null}
+          dragContext={dragState?.context ?? null}
+          dragFolderPreviewTargetId={dragState?.folderPreviewTargetId ?? null}
+          folderPreviewFreezeTargetId={folderPreviewFreezeTargetId}
+          folderCreateTransitionTargetId={folderCreateTransitionTargetId}
+          iconImageSize={iconConfig.imgSize}
+          selectionMode={selectionMode}
+          bindDockContainerRef={node => {
+            dockContainerRef.current = node
+          }}
+          bindDockGridRef={node => {
+            dockGridRef.current = node
+          }}
+          bindDockSlotRef={(index, node) => {
+            if (node) dockSlotRefs.current.set(index, node)
+            else dockSlotRefs.current.delete(index)
+          }}
+          bindDockItemRef={(id, node) => {
+            if (node) dockItemRefs.current.set(id, node)
+            else dockItemRefs.current.delete(id)
+          }}
+          onDockItemPointerDown={handleDockItemPointerDown}
+          onDockItemClickCapture={handleTileClickCapture}
+          onLaunchIcon={path => {
+            void launchApp(path)
+          }}
+          onOpenFolder={setOpenFolderId}
+          onRemoveItem={key => {
+            setDockKeys(current => current.filter(entry => entry !== key))
+          }}
+        />
+      ) : null}
 
       <FolderModalView
         openFolder={openFolder}

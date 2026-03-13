@@ -175,8 +175,48 @@ function OptionButton({
   );
 }
 
+function ToggleSettingRow({
+  title,
+  description,
+  checked,
+  onChange,
+}: {
+  title: string;
+  description: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="mb-6">
+      <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-secondary/30 p-4">
+        <div className="space-y-1">
+          <h2 className="text-sm font-medium text-foreground">{title}</h2>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          onClick={() => onChange(!checked)}
+          className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 ${
+            checked
+              ? "border-blue-500 bg-blue-500/90"
+              : "border-border bg-zinc-500/30"
+          }`}
+        >
+          <span
+            className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+              checked ? "translate-x-6" : "translate-x-1"
+            }`}
+          />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SettingsPanel() {
-  const { iconSize, windowMode, titleLineCount } = useIconStore();
+  const { iconSize, windowMode, titleLineCount, dockEnabled, setDockEnabled } = useIconStore();
   const [themeMode, setThemeMode] = useState<ThemeMode>("dark");
   const [defaultCustomAppDir, setDefaultCustomAppDir] = useState("");
   const [customAppDirInput, setCustomAppDirInput] = useState("");
@@ -190,6 +230,7 @@ function SettingsPanel() {
           savedIconSize,
           savedWindowMode,
           savedTitleLineCount,
+          savedDockEnabled,
           savedThemeMode,
           savedCustomAppDir,
           resolvedDefaultCustomAppDir,
@@ -197,6 +238,7 @@ function SettingsPanel() {
           getSetting("iconSize"),
           getSetting("windowMode"),
           getSetting("titleLineCount"),
+          getSetting("dockEnabled"),
           getSetting("themeMode"),
           getSetting("customAppDir"),
           invoke<string>("get_default_customapp_dir"),
@@ -206,6 +248,7 @@ function SettingsPanel() {
           iconSize: savedIconSize,
           windowMode: savedWindowMode,
           titleLineCount: savedTitleLineCount,
+          dockEnabled: savedDockEnabled,
         });
         setThemeMode(savedThemeMode);
         setDefaultCustomAppDir(resolvedDefaultCustomAppDir);
@@ -243,6 +286,10 @@ function SettingsPanel() {
       console.error("Failed to save title line count:", e),
     );
     useIconStore.setState({ titleLineCount: value });
+  };
+
+  const handleDockEnabled = (value: boolean) => {
+    setDockEnabled(value);
   };
 
   const handleThemeMode = (value: ThemeMode) => {
@@ -355,6 +402,17 @@ function SettingsPanel() {
           />
         ))}
       </SettingGroup>
+
+      <ToggleSettingRow
+        title="\u663e\u793a Dock \u680f"
+        description={
+          dockEnabled
+            ? "\u5f53\u524d\u5df2\u5f00\u542f\uff0cDock \u4f1a\u5728\u542f\u52a8\u53f0\u5e95\u90e8\u663e\u793a\u3002"
+            : "\u5f53\u524d\u5df2\u5173\u95ed\uff0cDock \u4e2d\u7684\u56fe\u6807\u4f1a\u56de\u5230\u56fe\u6807\u7f51\u683c\u3002"
+        }
+        checked={dockEnabled}
+        onChange={handleDockEnabled}
+      />
 
       <div className="mb-6">
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">自定义图标文件夹</h2>

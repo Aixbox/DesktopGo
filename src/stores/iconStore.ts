@@ -20,6 +20,7 @@ interface IconStore {
   iconSize: IconSize
   windowMode: WindowMode
   titleLineCount: TitleLineCount
+  dockEnabled: boolean
   selectionMode: boolean
   selectedIconKeys: string[]
   fetchIcons: () => Promise<void>
@@ -27,6 +28,7 @@ interface IconStore {
   setIconSize: (size: IconSize) => void
   setWindowMode: (mode: WindowMode) => void
   setTitleLineCount: (count: TitleLineCount) => void
+  setDockEnabled: (enabled: boolean) => void
   enterSelectionMode: (initialKey?: string) => void
   toggleSelectIcon: (key: string) => void
   clearSelection: () => void
@@ -43,6 +45,7 @@ export const useIconStore = create<IconStore>((set, get) => ({
   iconSize: 'medium',
   windowMode: 'fullscreen',
   titleLineCount: 'two',
+  dockEnabled: true,
   selectionMode: false,
   selectedIconKeys: [],
 
@@ -99,6 +102,13 @@ export const useIconStore = create<IconStore>((set, get) => ({
     set({ titleLineCount: count })
     void setSetting('titleLineCount', count).catch((e) => {
       console.error('Failed to persist title line count:', e)
+    })
+  },
+
+  setDockEnabled: (enabled: boolean) => {
+    set({ dockEnabled: enabled })
+    void setSetting('dockEnabled', enabled).catch((e) => {
+      console.error('Failed to persist dock enabled state:', e)
     })
   },
 
@@ -192,10 +202,11 @@ export const useIconStore = create<IconStore>((set, get) => ({
   },
 
   hydrateSettings: async () => {
-    const [iconSize, windowMode, titleLineCount] = await Promise.all([
+    const [iconSize, windowMode, titleLineCount, dockEnabled] = await Promise.all([
       getSetting('iconSize'),
       getSetting('windowMode'),
       getSetting('titleLineCount'),
+      getSetting('dockEnabled'),
     ])
     const current = get()
     const nextState: Partial<IconStore> = {}
@@ -208,6 +219,9 @@ export const useIconStore = create<IconStore>((set, get) => ({
     }
     if (current.titleLineCount !== titleLineCount) {
       nextState.titleLineCount = titleLineCount
+    }
+    if (current.dockEnabled !== dockEnabled) {
+      nextState.dockEnabled = dockEnabled
     }
 
     if (Object.keys(nextState).length > 0) {
