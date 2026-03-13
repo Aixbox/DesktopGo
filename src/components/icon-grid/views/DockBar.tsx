@@ -1,4 +1,7 @@
-import type {
+import {
+  useLayoutEffect,
+  useEffect,
+  useRef,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
 } from 'react'
@@ -35,6 +38,8 @@ interface DockBarProps {
 
 const MENU_OPEN_LABEL = '\u6253\u5f00'
 const MENU_REMOVE_LABEL = '\u79fb\u51fa Dock'
+const DOCK_CONTAINER_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
+const DOCK_CONTAINER_TRANSITION_MS = 220
 
 export function DockBar({
   displaySlots,
@@ -56,6 +61,10 @@ export function DockBar({
   onOpenFolder,
   onRemoveItem,
 }: DockBarProps) {
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const gridRef = useRef<HTMLDivElement | null>(null)
+  const hasMountedRef = useRef(false)
+  const clearWidthTimerRef = useRef<number | null>(null)
   const dockButtonSize = Math.max(iconImageSize + 12, 52)
   const showInsertionPreview =
     dragContext === 'dock' &&
@@ -65,15 +74,72 @@ export function DockBar({
 
   const hasVisibleItems = displaySlots.some(slot => typeof slot === 'string')
 
+  useLayoutEffect(() => {
+    const panel = panelRef.current
+    const grid = gridRef.current
+    if (!panel || !grid) return
+
+    const panelStyle = window.getComputedStyle(panel)
+    const horizontalChrome =
+      parseFloat(panelStyle.paddingLeft) +
+      parseFloat(panelStyle.paddingRight) +
+      parseFloat(panelStyle.borderLeftWidth) +
+      parseFloat(panelStyle.borderRightWidth)
+    const nextWidth = Math.ceil(grid.getBoundingClientRect().width + horizontalChrome)
+
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true
+      panel.style.width = ''
+      return
+    }
+
+    const currentWidth = Math.ceil(panel.getBoundingClientRect().width)
+    if (Math.abs(currentWidth - nextWidth) < 1) return
+
+    if (clearWidthTimerRef.current !== null) {
+      window.clearTimeout(clearWidthTimerRef.current)
+      clearWidthTimerRef.current = null
+    }
+
+    panel.style.width = `${currentWidth}px`
+    void panel.offsetWidth
+    panel.style.width = `${nextWidth}px`
+
+    clearWidthTimerRef.current = window.setTimeout(() => {
+      const latestPanel = panelRef.current
+      if (!latestPanel) return
+      latestPanel.style.width = ''
+      clearWidthTimerRef.current = null
+    }, DOCK_CONTAINER_TRANSITION_MS + 40)
+  }, [displaySlots.length, iconImageSize])
+
+  useEffect(() => {
+    return () => {
+      if (clearWidthTimerRef.current !== null) {
+        window.clearTimeout(clearWidthTimerRef.current)
+        clearWidthTimerRef.current = null
+      }
+    }
+  }, [])
+
   return (
     <div
       ref={bindDockContainerRef}
       data-dock
       className="pointer-events-auto absolute bottom-5 left-1/2 z-20 -translate-x-1/2"
     >
-      <div className="rounded-[28px] border border-white/16 bg-black/24 px-4 py-3 shadow-[0_20px_60px_rgba(0,0,0,0.24)] backdrop-blur-2xl">
+      <div
+        ref={panelRef}
+        className="overflow-hidden rounded-[28px] border border-white/16 bg-black/24 px-4 py-3 shadow-[0_20px_60px_rgba(0,0,0,0.24)] backdrop-blur-2xl transition-[width] duration-[220ms]"
+        style={{
+          transitionTimingFunction: DOCK_CONTAINER_EASING,
+        }}
+      >
         <div
-          ref={bindDockGridRef}
+          ref={node => {
+            gridRef.current = node
+            bindDockGridRef(node)
+          }}
           className="flex items-center"
           style={{ columnGap: `${DOCK_GAP}px` }}
         >
