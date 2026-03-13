@@ -25,6 +25,8 @@ interface DockBarProps {
 }
 
 const SLOT_SIZE = 64
+const MENU_OPEN_LABEL = '\u6253\u5f00'
+const MENU_REMOVE_LABEL = '\u79fb\u51fa Dock'
 
 export function DockBar({
   dockKeys,
@@ -132,7 +134,7 @@ export function DockBar({
                             onLaunchIcon(icon)
                           }}
                         >
-                          ��
+                          {MENU_OPEN_LABEL}
                         </ContextMenuItem>
                         <ContextMenuItem
                           className="rounded-xl px-3 py-2 text-red-200 focus:bg-red-500/20 focus:text-red-100"
@@ -140,7 +142,7 @@ export function DockBar({
                             onRemoveIcon(key)
                           }}
                         >
-                          �Ƴ� Dock
+                          {MENU_REMOVE_LABEL}
                         </ContextMenuItem>
                       </ContextMenuContent>
                     ) : null}
