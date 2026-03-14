@@ -15,6 +15,7 @@ export const serializeItems = (items: GridItem[]): PersistedItem[] =>
           type: 'folder',
           id: item.id,
           name: item.name,
+          size: item.size,
           children: item.children.map(child => child.key),
         }
   )
@@ -27,6 +28,7 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
       | { version: 1; items: PersistedItem[] }
       | { version: 2; items: PersistedItem[]; slots: unknown[] }
       | { version: 3; items: PersistedItem[]; slots: unknown[]; dockKeys: unknown[] }
+      | { version: 4; items: PersistedItem[]; slots: unknown[]; dockKeys: unknown[] }
     if (!Array.isArray(parsed.items)) return null
     if (parsed.version === 1) return { items: parsed.items, slots: null, dockKeys: [] }
     if (parsed.version === 2 && Array.isArray(parsed.slots)) {
@@ -36,7 +38,11 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
         dockKeys: [],
       }
     }
-    if (parsed.version !== 3 || !Array.isArray(parsed.slots) || !Array.isArray(parsed.dockKeys)) {
+    if (
+      (parsed.version !== 3 && parsed.version !== 4) ||
+      !Array.isArray(parsed.slots) ||
+      !Array.isArray(parsed.dockKeys)
+    ) {
       return null
     }
     return {
@@ -55,7 +61,7 @@ export const writeLayout = async (
   dockKeys: Array<string | null>
 ) => {
   const payload = {
-    version: 3,
+    version: 4,
     items: serializeItems(items),
     slots,
     dockKeys,
@@ -106,6 +112,7 @@ export const hydrateItems = (
           kind: 'folder',
           id: item.id || makeFolderId(),
           name: item.name || 'New Folder',
+          size: item.size ?? '1x1',
           children,
         })
       } else if (children.length === 1) {

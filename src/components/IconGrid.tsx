@@ -7,11 +7,15 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from 'react'
 import type { DesktopIcon } from '../types'
-import { ICON_SIZE_CONFIG } from '../types'
+import {
+  getIconGridLayoutRowHeight,
+  getIconGridRowHeight,
+  ICON_SIZE_CONFIG,
+} from '../types'
 import { useIconStore } from '../stores/iconStore'
-import type { GridItem, IconItem, PersistedLayout } from './icon-grid/model'
-import { getId } from './icon-grid/model'
-import { DRAG_HOLE_ID, areSlotsEqual, normalizeOuterSlots } from './icon-grid/domain/slots'
+import type { FolderSize, GridItem, IconItem, PersistedLayout } from './icon-grid/model'
+import { getGridItemSpan, getId } from './icon-grid/model'
+import { DRAG_HOLE_ID, areSlotsEqual } from './icon-grid/domain/slots'
 import { clampNumber } from './icon-grid/domain/geometry'
 import {
   hydrateDockKeys,
@@ -27,6 +31,12 @@ import {
   FOLDER_PREVIEW_EASING,
 } from './icon-grid/views/FolderVisuals'
 import { DOCK_GAP, resolveDockDisplaySlots, resolveOuterItemIds } from './icon-grid/domain/dock'
+import {
+  canPlaceItemAtAnchorIndex,
+  getFootprintIndices,
+  getPageAnchorEntries,
+  normalizeOuterSlots,
+} from './icon-grid/domain/topLevelLayout'
 import { DragOverlays } from './icon-grid/views/DragOverlays'
 import { OuterGridView } from './icon-grid/views/OuterGridView'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
@@ -54,15 +64,28 @@ const REORDER_ANIMATION_MS = 220
 const REORDER_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
 const DOCK_HIDDEN_LAYOUT_RESERVE_PX = 80
 
-const FALLBACK_ICON_ROW_HEIGHT = {
-  large: 130,
-  medium: 112,
-  small: 96,
-} as const
-
 const fitCount = (container: number, item: number) => {
   if (item <= 0 || container <= item) return 1
   return Math.floor((container - item) / (item + GRID_GAP)) + 1
+}
+
+const filterItemsByIds = (items: GridItem[], ids: string[]): GridItem[] => {
+  const idSet = new Set(ids)
+  return items.filter(item => idSet.has(getId(item)))
+}
+
+const getLayoutNormalizationMetrics = (
+  items: GridItem[],
+  columns: number,
+  pageSize: number
+): { columns: number; pageSize: number } => {
+  const minColumns = items.some(item => getGridItemSpan(item).cols > 1) ? 2 : 1
+  const minRows = items.some(item => getGridItemSpan(item).rows > 1) ? 2 : 1
+  const safeColumns = Math.max(minColumns, columns)
+  return {
+    columns: safeColumns,
+    pageSize: Math.max(pageSize, safeColumns * minRows),
+  }
 }
 
 export function IconGrid({ icons }: IconGridProps) {
@@ -100,20 +123,21 @@ export function IconGrid({ icons }: IconGridProps) {
   const wheelCooldownUntilRef = useRef(0)
 
   const columnWidth = ICON_SIZE_CONFIG[iconSize].columnWidth
-  const fallbackRowHeight = FALLBACK_ICON_ROW_HEIGHT[iconSize]
+  const layoutRowHeight = getIconGridLayoutRowHeight(iconSize)
+  const rowHeight = getIconGridRowHeight(iconSize)
 
   const [columns, setColumns] = useState(1)
   const [rows, setRows] = useState(1)
   const [currentPage, setCurrentPage] = useState(0)
   const [hoverPage, setHoverPage] = useState<number | null>(null)
   const [itemWidth, setItemWidth] = useState<number>(columnWidth)
-  const [itemHeight, setItemHeight] = useState<number>(fallbackRowHeight)
+  const [itemHeight, setItemHeight] = useState<number>(rowHeight)
   const [items, setItems] = useState<GridItem[]>([])
   const [outerSlots, setOuterSlots] = useState<Array<string | null>>([])
   const [dockKeys, setDockKeys] = useState<Array<string | null>>([])
   const [openFolderId, setOpenFolderId] = useState<string | null>(null)
   const [folderItemWidth, setFolderItemWidth] = useState<number>(columnWidth)
-  const [folderItemHeight, setFolderItemHeight] = useState<number>(fallbackRowHeight)
+  const [folderItemHeight, setFolderItemHeight] = useState<number>(rowHeight)
   const [folderColumns, setFolderColumns] = useState<number>(1)
 
   useEffect(() => {
@@ -143,13 +167,19 @@ export function IconGrid({ icons }: IconGridProps) {
 
       const nextItems = hydrateItems(icons, persisted?.items ?? null)
       const nextItemIds = nextItems.map(getId)
-      const nextSlots = normalizeOuterSlots(persisted?.slots, nextItemIds, pageSizeRef.current)
       const nextDockKeys = dockEnabled ? hydrateDockKeys(nextItemIds, persisted?.dockKeys) : []
       const nextOuterItemIds = resolveOuterItemIds(nextItemIds, nextDockKeys)
-      const normalizedNextSlots = normalizeOuterSlots(
-        nextSlots,
-        nextOuterItemIds,
+      const outerItems = filterItemsByIds(nextItems, nextOuterItemIds)
+      const layoutMetrics = getLayoutNormalizationMetrics(
+        outerItems,
+        Math.max(1, columns),
         pageSizeRef.current
+      )
+      const normalizedNextSlots = normalizeOuterSlots(
+        persisted?.slots,
+        outerItems,
+        layoutMetrics.pageSize,
+        layoutMetrics.columns
       )
       itemsRef.current = nextItems
       outerSlotsRef.current = normalizedNextSlots
@@ -225,6 +255,7 @@ export function IconGrid({ icons }: IconGridProps) {
     () => resolveOuterItemIds(itemIds, activeDockKeys),
     [activeDockKeys, itemIds]
   )
+  const pageSize = Math.max(1, columns * rows)
 
   const {
     dragState,
@@ -283,16 +314,6 @@ export function IconGrid({ icons }: IconGridProps) {
     pageSizeRef,
     setOpenFolderId,
   })
-  const renderOrder = useMemo(() => {
-    if (dragState?.context === 'outer') {
-      return dragState.workingOrder
-    }
-    const baseOrder = frozenOuterOrder ?? outerSlots
-    if (dragState?.context === 'dock' && dragState.draggingId) {
-      return baseOrder.map(slot => (slot === dragState.draggingId ? null : slot))
-    }
-    return baseOrder
-  }, [dragState, frozenOuterOrder, outerSlots])
   const folderRenderOrder =
     dragState && dragState.context === 'folder' ? dragState.workingOrder : folderOrder
   const hiddenDockDraggingId =
@@ -339,6 +360,17 @@ export function IconGrid({ icons }: IconGridProps) {
     return next
   }, [itemById, dragState])
 
+  const renderOrder = useMemo(() => {
+    if (dragState?.context === 'outer') {
+      return dragState.workingOrder
+    }
+    const baseOrder = frozenOuterOrder ?? outerSlots
+    if (dragState?.context === 'dock' && dragState.draggingId) {
+      return baseOrder.map(slot => (slot === dragState.draggingId ? null : slot))
+    }
+    return baseOrder
+  }, [dragState, frozenOuterOrder, outerSlots])
+
   useEffect(() => {
     if (!openFolderId) return
     const onKeyDown = (event: KeyboardEvent) => {
@@ -363,13 +395,14 @@ export function IconGrid({ icons }: IconGridProps) {
       const effectiveHeight = dockEnabled
         ? height
         : Math.max(1, height - DOCK_HIDDEN_LAYOUT_RESERVE_PX)
-      const first = gridRef.current?.querySelector<HTMLElement>('[data-grid-item]')
-      const tileWidth = first?.offsetWidth ?? columnWidth
-      const tileHeight = first?.offsetHeight ?? fallbackRowHeight
+      const tileWidth = columnWidth
+      const tileHeight = rowHeight
+      const hasWideItems = itemsRef.current.some(item => getGridItemSpan(item).cols > 1)
+      const hasTallItems = itemsRef.current.some(item => getGridItemSpan(item).rows > 1)
       setItemWidth(tileWidth)
       setItemHeight(tileHeight)
-      setColumns(fitCount(width, tileWidth))
-      setRows(fitCount(effectiveHeight, tileHeight))
+      setColumns(Math.max(hasWideItems ? 2 : 1, fitCount(width, tileWidth)))
+      setRows(Math.max(hasTallItems ? 2 : 1, fitCount(effectiveHeight, layoutRowHeight)))
     }
     const schedule = () => {
       cancelAnimationFrame(raf)
@@ -386,7 +419,7 @@ export function IconGrid({ icons }: IconGridProps) {
       observer.disconnect()
       window.removeEventListener('resize', schedule)
     }
-  }, [columnWidth, dockEnabled, fallbackRowHeight, items.length, currentPage])
+  }, [columnWidth, dockEnabled, layoutRowHeight, rowHeight, items.length, currentPage])
 
   useEffect(() => {
     const container = folderGridContainerRef.current
@@ -397,7 +430,7 @@ export function IconGrid({ icons }: IconGridProps) {
       const width = container.clientWidth
       const first = folderGridRef.current?.querySelector<HTMLElement>('[data-folder-grid-item]')
       const tileWidth = first?.offsetWidth ?? columnWidth
-      const tileHeight = first?.offsetHeight ?? fallbackRowHeight
+      const tileHeight = first?.offsetHeight ?? rowHeight
       setFolderItemWidth(tileWidth)
       setFolderItemHeight(tileHeight)
       setFolderColumns(fitCount(width, tileWidth))
@@ -417,35 +450,47 @@ export function IconGrid({ icons }: IconGridProps) {
       observer.disconnect()
       window.removeEventListener('resize', schedule)
     }
-  }, [openFolder, folderRenderOrder.length, columnWidth, fallbackRowHeight])
+  }, [openFolder, folderRenderOrder.length, columnWidth, rowHeight])
 
-  const pageSize = Math.max(1, columns * rows)
   useEffect(() => {
     pageSizeRef.current = pageSize
   }, [pageSize])
 
   useEffect(() => {
-    const normalized = normalizeOuterSlots(outerSlotsRef.current, outerItemIds, pageSize)
+    const outerItems = filterItemsByIds(itemsRef.current, outerItemIds)
+    const layoutMetrics = getLayoutNormalizationMetrics(outerItems, Math.max(1, columns), pageSize)
+    const normalized = normalizeOuterSlots(
+      outerSlotsRef.current,
+      outerItems,
+      layoutMetrics.pageSize,
+      layoutMetrics.columns
+    )
     if (areSlotsEqual(normalized, outerSlotsRef.current)) return
     outerSlotsRef.current = normalized
     setOuterSlots(normalized)
-  }, [outerItemIds, pageSize])
+  }, [columns, outerItemIds, pageSize])
 
   useEffect(() => {
     if (!hydratedRef.current || dockEnabled) return
     const hasDockItems = dockKeysRef.current.some((entry): entry is string => typeof entry === 'string')
     if (!hasDockItems) return
 
+    const layoutMetrics = getLayoutNormalizationMetrics(
+      itemsRef.current,
+      Math.max(1, columns),
+      pageSizeRef.current
+    )
     const nextOuterSlots = normalizeOuterSlots(
       outerSlotsRef.current,
-      itemsRef.current.map(getId),
-      pageSizeRef.current
+      itemsRef.current,
+      layoutMetrics.pageSize,
+      layoutMetrics.columns
     )
     outerSlotsRef.current = nextOuterSlots
     dockKeysRef.current = []
     setOuterSlots(nextOuterSlots)
     setDockKeys([])
-  }, [dockEnabled])
+  }, [columns, dockEnabled])
 
   const outerRenderCount = Math.max(pageSize, renderOrder.length)
   const pageCount = Math.max(1, Math.ceil(outerRenderCount / pageSize))
@@ -506,6 +551,34 @@ export function IconGrid({ icons }: IconGridProps) {
     setCurrentPage(nextPage)
   }
 
+  const handleResizeFolder = (folderId: string, size: FolderSize) => {
+    const nextItems = itemsRef.current.map(item =>
+      item.kind === 'folder' && item.id === folderId ? { ...item, size } : item
+    )
+    const nextDockKeys = dockKeysRef.current
+    const nextOuterItemIds = resolveOuterItemIds(
+      nextItems.map(getId),
+      dockEnabled ? nextDockKeys : []
+    )
+    const outerItems = filterItemsByIds(nextItems, nextOuterItemIds)
+    const layoutMetrics = getLayoutNormalizationMetrics(
+      outerItems,
+      Math.max(1, columns),
+      pageSizeRef.current
+    )
+    const nextOuterSlots = normalizeOuterSlots(
+      outerSlotsRef.current,
+      outerItems,
+      layoutMetrics.pageSize,
+      layoutMetrics.columns
+    )
+
+    itemsRef.current = nextItems
+    outerSlotsRef.current = nextOuterSlots
+    setItems(nextItems)
+    setOuterSlots(nextOuterSlots)
+  }
+
   const pageItems = useMemo(() => {
     const start = currentPage * pageSize
     const currentSlice = [...renderOrder.slice(start, start + pageSize)]
@@ -514,6 +587,49 @@ export function IconGrid({ icons }: IconGridProps) {
     }
     return currentSlice
   }, [renderOrder, currentPage, pageSize])
+
+  const pageAnchorEntries = useMemo(
+    () =>
+      getPageAnchorEntries(
+        renderOrder,
+        Array.from(outerViewItemById.values()),
+        currentPage,
+        pageSize,
+        columns
+      ),
+    [columns, currentPage, outerViewItemById, pageSize, renderOrder]
+  )
+
+  const previewFootprint = useMemo(() => {
+    if (dragState?.context !== 'outer') return null
+    if (dragState.previewSlotIndex === null || dragState.folderPreviewTargetId) return null
+    const span = getGridItemSpan(dragState.draggingItem)
+    if (
+      !canPlaceItemAtAnchorIndex(
+        renderOrder,
+        Array.from(outerViewItemById.values()),
+        dragState.previewSlotIndex,
+        span,
+        columns,
+        pageSize
+      )
+    ) {
+      return null
+    }
+    const indices = getFootprintIndices(dragState.previewSlotIndex, span, columns, pageSize)
+    if (!indices) return null
+
+    const pageStart = currentPage * pageSize
+    const pageEnd = pageStart + pageSize
+    if (indices.some(index => index < pageStart || index >= pageEnd)) return null
+
+    const localIndex = dragState.previewSlotIndex - pageStart
+    return {
+      row: Math.floor(localIndex / columns),
+      col: localIndex % columns,
+      span,
+    }
+  }, [columns, currentPage, dragState, outerViewItemById, pageSize, renderOrder])
 
   useLayoutEffect(() => {
     const currentPageEntries = pageItems
@@ -711,18 +827,24 @@ export function IconGrid({ icons }: IconGridProps) {
           gridWidth={gridWidth}
           gridHeight={gridHeight}
           columns={columns}
+          rows={rows}
           itemWidth={itemWidth}
           itemHeight={itemHeight}
-          pageItems={pageItems}
-          pageSize={pageSize}
+          gridGap={GRID_GAP}
+          pageCellCount={pageSize}
           currentPage={currentPage}
-          itemById={outerViewItemById}
+          pageAnchorEntries={pageAnchorEntries}
           dragContext={dragState?.context === 'dock' ? null : (dragState?.context ?? null)}
-          dragPreviewSlotIndex={dragState?.previewSlotIndex ?? null}
+          dragPreviewSlotIndex={
+            dragState?.context === 'outer'
+              ? (dragState.previewSlotIndex ?? null)
+              : (dragState?.previewSlotIndex ?? null)
+          }
           dragFolderPreviewTargetId={dragState?.folderPreviewTargetId ?? null}
           folderPreviewFreezeTargetId={folderPreviewFreezeTargetId}
           folderCreateTransitionTargetId={folderCreateTransitionTargetId}
           hiddenOuterItemIds={hiddenOuterItemIds}
+          previewFootprint={previewFootprint}
           iconConfig={iconConfig}
           selectionMode={selectionMode}
           selectedSet={selectedSet}
@@ -730,6 +852,10 @@ export function IconGrid({ icons }: IconGridProps) {
           onTilePointerDown={handleTilePointerDown}
           onTileClickCapture={handleTileClickCapture}
           onOpenFolder={setOpenFolderId}
+          onLaunchIcon={path => {
+            void launchApp(path)
+          }}
+          onResizeFolder={handleResizeFolder}
           bindTileRef={(id, node) => {
             if (node) tileRefs.current.set(id, node)
             else tileRefs.current.delete(id)
@@ -842,6 +968,9 @@ export function IconGrid({ icons }: IconGridProps) {
         }
         ghostItem={ghostItem}
         iconImageSize={iconConfig.imgSize}
+        slotWidth={itemWidth}
+        slotHeight={itemHeight}
+        gridGap={GRID_GAP}
         folderDropFlight={folderDropFlight}
         reorderAnimationMs={REORDER_ANIMATION_MS}
         folderPreviewEasing={FOLDER_PREVIEW_EASING}

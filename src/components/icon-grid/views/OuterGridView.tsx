@@ -1,9 +1,10 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, RefObject } from 'react'
 import { Icon } from '../../Icon'
-import type { GridItem } from '../model'
-import { DRAG_HOLE_ID } from '../domain/slots'
-import { FolderCreatePreview, FolderIconVisual } from './FolderVisuals'
+import type { FolderSize, GridSpan } from '../model'
+import type { PageAnchorEntry } from '../domain/topLevelLayout'
+import { FolderCreatePreview } from './FolderVisuals'
+import { OuterFolderTile } from './OuterFolderTile'
 
 interface IconConfigLike {
   imgSize: number
@@ -15,18 +16,20 @@ interface OuterGridViewProps {
   gridWidth: number
   gridHeight: number
   columns: number
+  rows: number
   itemWidth: number
   itemHeight: number
-  pageItems: Array<string | null>
-  pageSize: number
+  gridGap: number
+  pageCellCount: number
   currentPage: number
-  itemById: Map<string, GridItem>
+  pageAnchorEntries: PageAnchorEntry[]
   dragContext: 'outer' | 'folder' | null
   dragPreviewSlotIndex: number | null
   dragFolderPreviewTargetId: string | null
   folderPreviewFreezeTargetId: string | null
   folderCreateTransitionTargetId: string | null
   hiddenOuterItemIds: string[]
+  previewFootprint: { row: number; col: number; span: GridSpan } | null
   iconConfig: IconConfigLike
   selectionMode: boolean
   selectedSet: Set<string>
@@ -34,6 +37,8 @@ interface OuterGridViewProps {
   onTilePointerDown: (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => void
   onTileClickCapture: (event: ReactMouseEvent<HTMLDivElement>) => void
   onOpenFolder: (folderId: string) => void
+  onLaunchIcon: (path: string) => void
+  onResizeFolder: (folderId: string, size: FolderSize) => void
   bindTileRef: (id: string, node: HTMLDivElement | null) => void
   reorderAnimationMs: number
   canGoLeft: boolean
@@ -56,18 +61,20 @@ export function OuterGridView({
   gridWidth,
   gridHeight,
   columns,
+  rows,
   itemWidth,
   itemHeight,
-  pageItems,
-  pageSize,
+  gridGap,
+  pageCellCount,
   currentPage,
-  itemById,
+  pageAnchorEntries,
   dragContext,
   dragPreviewSlotIndex,
   dragFolderPreviewTargetId,
   folderPreviewFreezeTargetId,
   folderCreateTransitionTargetId,
   hiddenOuterItemIds,
+  previewFootprint,
   iconConfig,
   selectionMode,
   selectedSet,
@@ -75,6 +82,8 @@ export function OuterGridView({
   onTilePointerDown,
   onTileClickCapture,
   onOpenFolder,
+  onLaunchIcon,
+  onResizeFolder,
   bindTileRef,
   reorderAnimationMs,
   canGoLeft,
@@ -95,99 +104,104 @@ export function OuterGridView({
     <div className="relative" style={{ width: `${gridWidth}px`, height: `${gridHeight}px`, maxWidth: '100%', maxHeight: '100%' }}>
       <div
         ref={gridRef}
-        className="grid h-full w-full content-start justify-items-center gap-2"
-        style={{ gridTemplateColumns: `repeat(${columns}, ${itemWidth}px)` }}
+        className="grid h-full w-full content-start"
+        style={{
+          gridTemplateColumns: `repeat(${columns}, ${itemWidth}px)`,
+          gridTemplateRows: `repeat(${rows}, ${itemHeight}px)`,
+          gap: `${gridGap}px`,
+        }}
       >
-        {pageItems.map((entry, index) => {
-          const globalSlotIndex = currentPage * pageSize + index
-          const isOuterDropTarget = dragContext === 'outer' && dragPreviewSlotIndex === globalSlotIndex
-          if (entry === null || entry === DRAG_HOLE_ID) {
-            const showDropSlot = isOuterDropTarget
-            return (
-              <div
-                key={`${showDropSlot ? 'drop' : 'empty'}-${currentPage}-${index}`}
-                data-grid-item
-                className={`h-full w-full rounded-2xl ${
-                  showDropSlot
-                    ? 'border border-white/20 bg-white/8'
-                    : 'border border-transparent bg-transparent'
-                }`}
-                style={{ minHeight: `${itemHeight}px` }}
-                aria-hidden="true"
-              />
-            )
-          }
+        {Array.from({ length: pageCellCount }, (_, index) => {
+          return (
+            <div
+              key={`cell-${currentPage}-${index}`}
+              data-grid-item
+              className="h-full w-full rounded-2xl border border-transparent bg-transparent"
+              style={{ minHeight: `${itemHeight}px` }}
+              aria-hidden="true"
+            />
+          )
+        })}
 
-          const item = itemById.get(entry)
-          if (!item) return null
-          const hideItem = hiddenOuterItemIds.includes(entry)
+        {dragContext === 'outer' &&
+        dragPreviewSlotIndex !== null &&
+        previewFootprint !== null ? (
+          <div
+            className="pointer-events-none rounded-2xl border border-white/22 bg-white/8"
+            style={{
+              gridColumn: `${previewFootprint.col + 1} / span ${previewFootprint.span.cols}`,
+              gridRow: `${previewFootprint.row + 1} / span ${previewFootprint.span.rows}`,
+            }}
+            aria-hidden="true"
+          />
+        ) : null}
+
+        {pageAnchorEntries.map(entry => {
+          const hideItem = hiddenOuterItemIds.includes(entry.id)
           const folderPreview =
-            (dragContext === 'outer' && dragFolderPreviewTargetId === entry) ||
-            folderPreviewFreezeTargetId === entry ||
-            folderCreateTransitionTargetId === entry
+            (dragContext === 'outer' && dragFolderPreviewTargetId === entry.id) ||
+            folderPreviewFreezeTargetId === entry.id ||
+            folderCreateTransitionTargetId === entry.id
 
           return (
             <div
-              key={entry}
+              key={entry.id}
               ref={node => {
-                bindTileRef(entry, node)
+                bindTileRef(entry.id, node)
               }}
-              data-grid-item
-              className={`relative touch-none ${
-                isOuterDropTarget ? 'rounded-2xl ring-1 ring-white/35 bg-white/5' : ''
-              }`}
-              onPointerDown={event => onTilePointerDown(event, entry)}
-              onClickCapture={onTileClickCapture}
+              className="relative justify-self-center self-start"
+              style={{
+                gridColumn: `${entry.col + 1} / span ${entry.span.cols}`,
+                gridRow: `${entry.row + 1} / span ${entry.span.rows}`,
+                width: `${entry.span.cols * itemWidth + Math.max(0, entry.span.cols - 1) * gridGap}px`,
+                height: `${entry.span.rows * itemHeight + Math.max(0, entry.span.rows - 1) * gridGap}px`,
+              }}
             >
-              {item.kind === 'icon' ? (
+              {entry.item.kind === 'icon' ? (
                 <div
-                  className={`transition-opacity duration-150 ${
-                    hideItem || folderPreview ? 'opacity-0' : 'opacity-100'
+                  className={`relative touch-none transition-opacity duration-150 ${
+                    hideItem ? 'opacity-0' : 'opacity-100'
                   }`}
+                  onPointerDown={event => onTilePointerDown(event, entry.id)}
+                  onClickCapture={onTileClickCapture}
                 >
-                  <Icon
-                    icon={item.icon}
-                    selectionKey={item.key}
-                    selectionMode={selectionMode}
-                    selected={selectedSet.has(item.key)}
-                    onToggleSelect={onToggleSelectIcon}
+                  <div
+                    className={`transition-opacity duration-150 ${
+                      folderPreview ? 'opacity-0' : 'opacity-100'
+                    }`}
+                  >
+                    <Icon
+                      icon={entry.item.icon}
+                      selectionKey={entry.item.key}
+                      selectionMode={selectionMode}
+                      selected={selectedSet.has(entry.item.key)}
+                      onToggleSelect={onToggleSelectIcon}
+                    />
+                  </div>
+                  <FolderCreatePreview
+                    active={folderPreview}
+                    icon={entry.item.icon}
+                    imgSize={iconConfig.imgSize}
+                    reorderAnimationMs={reorderAnimationMs}
                   />
                 </div>
               ) : (
-                <button
-                  data-icon
-                  type="button"
-                  className="relative flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-none p-3"
-                  style={{ width: iconConfig.containerWidth }}
-                  title={item.name}
-                  onClick={event => {
-                    event.stopPropagation()
-                    if (selectionMode) return
-                    onOpenFolder(item.id)
-                  }}
-                >
-                  <FolderIconVisual
-                    icons={item.children.map(child => child.icon)}
-                    imgSize={iconConfig.imgSize}
-                    expanded={folderPreview}
-                  />
-                  <span
-                    className="truncate text-center text-[11px] leading-tight text-foreground"
-                    style={{ maxWidth: iconConfig.containerWidth - 10 }}
-                  >
-                    {item.name}
-                  </span>
-                </button>
-              )}
-
-              {item.kind === 'icon' ? (
-                <FolderCreatePreview
-                  active={folderPreview}
-                  icon={item.icon}
-                  imgSize={iconConfig.imgSize}
-                  reorderAnimationMs={reorderAnimationMs}
+                <OuterFolderTile
+                  folder={entry.item}
+                  span={entry.span}
+                  slotWidth={itemWidth}
+                  slotHeight={itemHeight}
+                  gridGap={gridGap}
+                  iconConfig={iconConfig}
+                  folderPreview={folderPreview}
+                  selectionMode={selectionMode}
+                  onPointerDown={event => onTilePointerDown(event, entry.id)}
+                  onClickCapture={onTileClickCapture}
+                  onOpenFolder={onOpenFolder}
+                  onLaunchIcon={onLaunchIcon}
+                  onResizeFolder={onResizeFolder}
                 />
-              ) : null}
+              )}
             </div>
           )
         })}

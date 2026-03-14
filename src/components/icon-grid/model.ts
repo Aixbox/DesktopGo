@@ -9,10 +9,18 @@ export type IconItem = {
   icon: DesktopIcon
 }
 
+export type FolderSize = '1x1' | '1x2' | '2x1' | '2x2'
+
+export interface GridSpan {
+  cols: number
+  rows: number
+}
+
 export type FolderItem = {
   kind: 'folder'
   id: string
   name: string
+  size: FolderSize
   children: IconItem[]
 }
 
@@ -28,6 +36,7 @@ export type PersistedItem =
       type: 'folder'
       id: string
       name: string
+      size?: FolderSize
       children: string[]
     }
 
@@ -39,6 +48,23 @@ export interface PersistedLayout {
 
 export const getId = (item: GridItem): string =>
   item.kind === 'icon' ? item.key : `folder:${item.id}`
+
+export const getGridItemSpan = (item: GridItem): GridSpan => {
+  if (item.kind === 'icon') {
+    return { cols: 1, rows: 1 }
+  }
+
+  switch (item.size) {
+    case '1x2':
+      return { cols: 1, rows: 2 }
+    case '2x1':
+      return { cols: 2, rows: 1 }
+    case '2x2':
+      return { cols: 2, rows: 2 }
+    default:
+      return { cols: 1, rows: 1 }
+  }
+}
 
 export const makeFolderId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {

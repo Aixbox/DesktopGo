@@ -1,11 +1,7 @@
 import type { FolderItem, GridItem } from '../model'
 import { getId, makeFolderId } from '../model'
 import { clampNumber } from './geometry'
-import {
-  DRAG_HOLE_ID,
-  findFirstNullInRange,
-  findNearestEmptyOnPageByManhattan,
-} from './slots'
+import { DRAG_HOLE_ID } from './slots'
 import type { DragState } from '../state/types'
 
 export const applyFolderCreateFromSession = (
@@ -30,6 +26,7 @@ export const applyFolderCreateFromSession = (
     kind: 'folder',
     id: makeFolderId(),
     name: 'New Folder',
+    size: '1x1',
     children: [targetItem, sourceItem],
   }
   const folderId = getId(folder)
@@ -107,7 +104,6 @@ interface ApplyOuterDropFromSessionParams {
   base: GridItem[]
   session: DragState
   pageSize: number
-  columns: number
   resolveNearestSlotIndexByContext: (state: DragState) => number | null
   mode?: 'paged' | 'linear'
 }
@@ -116,12 +112,10 @@ export const applyOuterDropFromSession = ({
   base,
   session,
   pageSize,
-  columns,
   resolveNearestSlotIndexByContext,
   mode = 'paged',
 }: ApplyOuterDropFromSessionParams): { items: GridItem[]; slots: Array<string | null> } => {
   const safePageSize = Math.max(1, pageSize)
-  const safeColumns = Math.max(1, columns)
   const baseSlots = session.workingOrder.map(slot => (slot === DRAG_HOLE_ID ? null : slot))
   const map = new Map<string, GridItem>()
   base.forEach(item => map.set(getId(item), item))
@@ -152,7 +146,9 @@ export const applyOuterDropFromSession = ({
   }
 
   if (candidateDropIndex >= nextSlots.length) {
-    nextSlots.push(...Array.from({ length: candidateDropIndex - nextSlots.length + 1 }, () => null))
+    nextSlots.push(
+      ...Array.from({ length: candidateDropIndex - nextSlots.length + 1 }, () => null)
+    )
   }
   const remainder = nextSlots.length % safePageSize
   if (remainder > 0) {
@@ -160,45 +156,7 @@ export const applyOuterDropFromSession = ({
   }
 
   const dropIndex = clampNumber(candidateDropIndex, 0, Math.max(0, nextSlots.length - 1))
-  const dropPage = Math.floor(dropIndex / safePageSize)
-  const pageStart = dropPage * safePageSize
-  const pageEndExclusive = pageStart + safePageSize
-  const pageHasEmpty = findFirstNullInRange(nextSlots, pageStart, pageEndExclusive) !== null
-  const currentAtDrop = nextSlots[dropIndex]
-
-  if (currentAtDrop === null) {
-    nextSlots[dropIndex] = session.draggingId
-  } else if (pageHasEmpty) {
-    const nearestEmpty = findNearestEmptyOnPageByManhattan(
-      nextSlots,
-      pageStart,
-      safePageSize,
-      safeColumns,
-      dropIndex
-    )
-    if (nearestEmpty === null) return { items: base, slots: baseSlots }
-    nextSlots[nearestEmpty] = currentAtDrop
-    nextSlots[dropIndex] = session.draggingId
-  } else {
-    const pageLastIndex = pageEndExclusive - 1
-    const carried = nextSlots[pageLastIndex]
-    nextSlots[pageLastIndex] = session.draggingId
-    if (carried && carried !== session.draggingId) {
-      const nextPage = dropPage + 1
-      const nextPageStart = nextPage * safePageSize
-      if (nextPageStart + safePageSize > nextSlots.length) {
-        nextSlots.push(...Array.from({ length: safePageSize }, () => null))
-      }
-      const nextPageEndExclusive = nextPageStart + safePageSize
-      const nextPageEmpty = findFirstNullInRange(nextSlots, nextPageStart, nextPageEndExclusive)
-      if (nextPageEmpty !== null) {
-        nextSlots[nextPageEmpty] = carried
-      } else {
-        nextSlots.splice(nextPageStart, 0, ...Array.from({ length: safePageSize }, () => null))
-        nextSlots[nextPageStart] = carried
-      }
-    }
-  }
+  nextSlots[dropIndex] = session.draggingId
 
   const nextItems = hadDraggedInBase ? base : [...base, session.draggingItem]
   return { items: nextItems, slots: nextSlots }

@@ -1,5 +1,11 @@
 import type { DesktopIcon } from '../types'
-import { ICON_SIZE_CONFIG } from '../types'
+import {
+  getIconGridRowHeight,
+  ICON_GRID_TILE_PADDING_Y,
+  ICON_GRID_TITLE_GAP,
+  ICON_GRID_TITLE_HEIGHT,
+  ICON_SIZE_CONFIG,
+} from '../types'
 import { useIconStore } from '../stores/iconStore'
 import { AppWindow, Check } from 'lucide-react'
 
@@ -20,6 +26,7 @@ export function Icon({
 }: IconProps) {
   const { launchApp, iconSize, titleLineCount } = useIconStore()
   const config = ICON_SIZE_CONFIG[iconSize]
+  const tileHeight = getIconGridRowHeight(iconSize)
   const isSingleLineTitle = titleLineCount === 'one'
 
   const handleClick = () => {
@@ -47,8 +54,14 @@ export function Icon({
     <button
       data-icon
       data-selection-mode={selectionMode ? 'on' : 'off'}
-      className={`icon-item relative flex flex-col items-center gap-2 rounded-2xl border-none p-3 shadow-none transition-all duration-200 cursor-pointer group ${buttonStateClass} ${layerClass}`}
-      style={{ width: config.containerWidth }}
+      className={`icon-item relative flex flex-col items-center justify-start rounded-2xl border-none px-3 shadow-none transition-all duration-200 cursor-pointer group ${buttonStateClass} ${layerClass}`}
+      style={{
+        width: config.containerWidth,
+        height: tileHeight,
+        paddingTop: ICON_GRID_TILE_PADDING_Y,
+        paddingBottom: ICON_GRID_TILE_PADDING_Y,
+        rowGap: ICON_GRID_TITLE_GAP,
+      }}
       onClick={handleClick}
       title={icon.name}
       aria-pressed={selectionMode ? selected : undefined}
@@ -66,7 +79,7 @@ export function Icon({
       ) : null}
 
       <div
-        className={`icon-image flex items-center justify-center overflow-hidden transition-all duration-200 ${imageMotionClass}`}
+        className={`icon-image flex flex-1 items-center justify-center overflow-hidden transition-all duration-200 ${imageMotionClass}`}
         style={{ width: config.imgSize, height: config.imgSize }}
       >
         {icon.icon_base64 ? (
@@ -82,11 +95,12 @@ export function Icon({
         )}
       </div>
       <span
-        className={`icon-label text-[11px] text-center leading-tight drop-shadow-md ${
+        className={`icon-label text-[11px] text-center leading-[1.05] drop-shadow-md ${
           selectionMode && selected ? 'text-blue-200' : 'text-foreground'
         }`}
         style={{
           maxWidth: config.containerWidth - 10,
+          minHeight: ICON_GRID_TITLE_HEIGHT,
           display: isSingleLineTitle ? 'block' : '-webkit-box',
           WebkitLineClamp: isSingleLineTitle ? 1 : 2,
           WebkitBoxOrient: isSingleLineTitle ? undefined : 'vertical',

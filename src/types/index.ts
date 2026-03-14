@@ -27,6 +27,22 @@ export const ICON_SIZE_CONFIG = {
   small: { logicalSize: 32, columnWidth: 60, imgSize: 32, containerWidth: 60 },
 } as const
 
+export const ICON_GRID_LAYOUT_ROW_HEIGHT = {
+  large: 130,
+  medium: 112,
+  small: 96,
+} as const
+export const ICON_GRID_TILE_PADDING_Y = 4
+export const ICON_GRID_TITLE_GAP = 4
+export const ICON_GRID_TITLE_HEIGHT = 26
+
+export const getIconGridLayoutRowHeight = (iconSize: IconSize): number =>
+  ICON_GRID_LAYOUT_ROW_HEIGHT[iconSize]
+
+export const getIconGridRowHeight = (iconSize: IconSize): number =>
+  ICON_SIZE_CONFIG[iconSize].columnWidth +
+  Math.ceil((ICON_GRID_TITLE_HEIGHT + ICON_GRID_TITLE_GAP) / 2)
+
 export type WindowMode = 'fullscreen' | 'large' | 'medium' | 'small'
 
 export const WINDOW_SIZE_CONFIG: Record<Exclude<WindowMode, 'fullscreen'>, { width: number; height: number }> = {

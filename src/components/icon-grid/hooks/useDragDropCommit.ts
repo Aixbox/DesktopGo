@@ -8,7 +8,7 @@ import {
 } from 'react'
 import type { GridItem, IconItem } from '../model'
 import { getId } from '../model'
-import { DRAG_HOLE_ID, normalizeOuterSlots } from '../domain/slots'
+import { DRAG_HOLE_ID } from '../domain/slots'
 import { moveDragHoleToIndex } from '../domain/evasionPolicy'
 import {
   finalizeFolderExtractionInTopLevelLayout,
@@ -31,6 +31,7 @@ import {
   getFolderPreviewFrameSize,
   getFolderPreviewSlotSize,
 } from '../views/FolderVisuals'
+import { normalizeOuterSlots } from '../domain/topLevelLayout'
 
 interface IconConfigLike {
   imgSize: number
@@ -118,6 +119,11 @@ export function useDragDropCommit({
     return dockKeysRef.current.includes(session.draggingId) ? 'dock' : 'outer'
   }
 
+  const filterItemsByIds = (items: GridItem[], ids: string[]) => {
+    const idSet = new Set(ids)
+    return items.filter(item => idSet.has(getId(item)))
+  }
+
   const extractDraggedIconFromSourceFolder = (base: GridItem[], session: DragState): GridItem[] => {
     if (!session.sourceFolderId || session.draggingItem.kind !== 'icon') return base
     const iconKey = session.draggingItem.key
@@ -136,10 +142,12 @@ export function useDragDropCommit({
   ) => {
     const nextItemIds = nextItems.map(getId)
     const normalizedDockKeys = normalizeDockKeys(nextDockKeysInput, nextItemIds)
+    const nextOuterItemIds = resolveOuterItemIds(nextItemIds, normalizedDockKeys)
     const normalizedOuterSlots = normalizeOuterSlots(
       nextOuterSlotsInput,
-      resolveOuterItemIds(nextItemIds, normalizedDockKeys),
-      pageSizeRef.current
+      filterItemsByIds(nextItems, nextOuterItemIds),
+      pageSizeRef.current,
+      Math.max(1, columns)
     )
     itemsRef.current = nextItems
     outerSlotsRef.current = normalizedOuterSlots
@@ -434,7 +442,6 @@ export function useDragDropCommit({
           base: baseForDrop,
           session: current,
           pageSize: pageSizeRef.current,
-          columns,
           resolveNearestSlotIndexByContext,
           mode: targetContext === 'dock' ? 'linear' : 'paged',
         })
