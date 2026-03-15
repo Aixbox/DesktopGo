@@ -46,13 +46,19 @@ const MENU_OPEN_LABEL = 'Open Folder'
 const MENU_SIZE_LABEL = 'Folder Size'
 
 const SURFACE_CLASS =
-  'relative overflow-hidden rounded-[24px] border border-white/14 bg-[linear-gradient(145deg,rgba(20,31,52,0.94),rgba(8,12,22,0.9))] shadow-[0_16px_36px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-md'
+  'relative overflow-hidden border border-white/14 bg-[linear-gradient(145deg,rgba(20,31,52,0.94),rgba(8,12,22,0.9))] shadow-[0_16px_36px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-md'
 
 const TITLE_HEIGHT = ICON_GRID_TITLE_HEIGHT
 const TILE_PADDING = ICON_GRID_TILE_PADDING_Y
 const BODY_TITLE_GAP = ICON_GRID_TITLE_GAP
 const INNER_PADDING = 10
 const INNER_GAP = 8
+
+const clampNumber = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, value))
+
+const getFolderSurfaceRadius = (panelBase: number) =>
+  Math.round(clampNumber(panelBase * 0.2, 16, 24))
 
 interface PreviewIconButtonProps {
   path: string
@@ -131,6 +137,7 @@ function FolderBody({
   const shapeWidth = isSquare ? Math.min(bodyWidth, bodyHeight) : bodyWidth
   const shapeHeight = isSquare ? shapeWidth : bodyHeight
   const panelBase = Math.max(32, Math.min(shapeWidth, shapeHeight))
+  const surfaceRadius = getFolderSurfaceRadius(panelBase)
   const innerPadding = Math.min(INNER_PADDING, Math.max(4, Math.floor(panelBase / 8)))
   const innerGap = Math.min(INNER_GAP, Math.max(4, Math.floor(panelBase / 16)))
 
@@ -139,10 +146,14 @@ function FolderBody({
       <div
         role="button"
         tabIndex={selectionMode ? -1 : 0}
-        className={`relative flex items-center justify-center rounded-[24px] transition ${
+        className={`relative flex items-center justify-center transition ${
           selectionMode ? 'cursor-default' : 'cursor-pointer'
         }`}
-        style={{ width: `${bodyWidth}px`, height: `${bodyHeight}px` }}
+        style={{
+          width: `${bodyWidth}px`,
+          height: `${bodyHeight}px`,
+          borderRadius: `${surfaceRadius}px`,
+        }}
         title={folder.name}
         onClick={event => {
           event.stopPropagation()
@@ -161,7 +172,11 @@ function FolderBody({
           className={`${SURFACE_CLASS} flex items-center justify-center transition-all duration-200 ${
             folderPreview ? 'ring-1 ring-white/35 shadow-[0_18px_42px_rgba(0,0,0,0.42)]' : ''
           }`}
-          style={{ width: `${shapeWidth}px`, height: `${shapeHeight}px` }}
+          style={{
+            width: `${shapeWidth}px`,
+            height: `${shapeHeight}px`,
+            borderRadius: `${surfaceRadius}px`,
+          }}
         >
           <FolderIconVisual
             icons={folder.children.map(child => child.icon)}
@@ -196,10 +211,14 @@ function FolderBody({
     <div
       role="button"
       tabIndex={selectionMode ? -1 : 0}
-      className={`relative flex items-center justify-center rounded-[26px] transition ${
+      className={`relative flex items-center justify-center transition ${
         selectionMode ? 'cursor-default' : 'cursor-pointer'
       }`}
-      style={{ width: `${bodyWidth}px`, height: `${bodyHeight}px` }}
+      style={{
+        width: `${bodyWidth}px`,
+        height: `${bodyHeight}px`,
+        borderRadius: `${surfaceRadius}px`,
+      }}
       title={folder.name}
       onClick={event => {
         event.stopPropagation()
@@ -218,7 +237,11 @@ function FolderBody({
         className={`${SURFACE_CLASS} transition-all duration-200 ${
           folderPreview ? 'ring-1 ring-white/35 shadow-[0_18px_42px_rgba(0,0,0,0.42)]' : ''
         }`}
-        style={{ width: `${shapeWidth}px`, height: `${shapeHeight}px` }}
+        style={{
+          width: `${shapeWidth}px`,
+          height: `${shapeHeight}px`,
+          borderRadius: `${surfaceRadius}px`,
+        }}
       >
         <div
           className="absolute inset-0 grid place-items-center"
