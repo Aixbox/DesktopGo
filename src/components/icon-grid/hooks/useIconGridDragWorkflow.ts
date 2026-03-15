@@ -38,6 +38,7 @@ import type {
   DragHit,
   DragState,
   FolderDropFlight,
+  MultiDropFlightItem,
   OuterOverlapHit,
   PendingDrag,
 } from '../state/types'
@@ -60,6 +61,8 @@ interface IconConfigLike {
 interface UseIconGridDragWorkflowParams {
   config: DragWorkflowConfig
   selectionMode: boolean
+  selectedIconKeys: string[]
+  unselectIcons: (keys: string[]) => void
   iconConfig: IconConfigLike
   columns: number
   rows: number
@@ -96,6 +99,7 @@ interface UseIconGridDragWorkflowResult {
   dragState: DragState | null
   dragRef: MutableRefObject<DragState | null>
   folderDropFlight: FolderDropFlight | null
+  multiDropFlight: MultiDropFlightItem[] | null
   folderPreviewFreezeTargetId: string | null
   folderCreateTransitionTargetId: string | null
   hiddenOuterItemIds: string[]
@@ -115,6 +119,8 @@ interface UseIconGridDragWorkflowResult {
 export function useIconGridDragWorkflow({
   config,
   selectionMode,
+  selectedIconKeys,
+  unselectIcons,
   iconConfig,
   columns,
   rows,
@@ -146,6 +152,7 @@ export function useIconGridDragWorkflow({
   pageSizeRef,
   setOpenFolderId,
 }: UseIconGridDragWorkflowParams): UseIconGridDragWorkflowResult {
+  const selectedIconKeySet = new Set(selectedIconKeys)
   const pendingRef = useRef<PendingDrag | null>(null)
   const dragRef = useRef<DragState | null>(null)
   const beginDragFnRef = useRef<(pending: PendingDrag, x: number, y: number) => void>(
@@ -230,6 +237,24 @@ export function useIconGridDragWorkflow({
     getDockItemKeys(dockKeysRef.current, draggingId)
   const isDraggingFromDock = (draggingId: string): boolean =>
     dockKeysRef.current.includes(draggingId)
+
+  const resolveOuterDragIds = (sourceOrder: Array<string | null>, leadId: string): string[] => {
+    const leadItem = itemById.get(leadId)
+    if (!selectionMode || !leadItem || leadItem.kind !== 'icon') {
+      return [leadId]
+    }
+    if (!selectedIconKeySet.has(leadItem.key)) {
+      return [leadId]
+    }
+
+    const orderedSelectedIds = sourceOrder.filter((slot): slot is string => {
+      if (!slot || slot === DRAG_HOLE_ID || slot === leadId) return false
+      const candidate = itemById.get(slot)
+      return Boolean(candidate && candidate.kind === 'icon' && selectedIconKeySet.has(candidate.key))
+    })
+
+    return [leadId, ...orderedSelectedIds]
+  }
 
   const resolveTopLevelOrder = (context: 'outer' | 'dock'): Array<string | null> =>
     context === 'dock'
@@ -664,6 +689,7 @@ export function useIconGridDragWorkflow({
 
   const {
     folderDropFlight,
+    multiDropFlight,
     folderPreviewFreezeTargetId,
     folderCreateTransitionTargetId,
     hiddenOuterItemIds,
@@ -773,6 +799,9 @@ export function useIconGridDragWorkflow({
       return
     }
 
+    const draggingIds =
+      pending.context === 'outer' ? resolveOuterDragIds(sourceOrder, pending.itemId) : [pending.itemId]
+
     const workingOrder: Array<string | null> = [...sourceOrder]
     if (pending.context === 'folder') {
       workingOrder[sourceIndex] = DRAG_HOLE_ID
@@ -783,8 +812,10 @@ export function useIconGridDragWorkflow({
       context: pending.context,
       sourceFolderId: pending.sourceFolderId,
       pointerId: pending.pointerId,
+      dragStartedAt: performance.now(),
       draggingId: pending.itemId,
       draggingItem,
+      draggingIds,
       pointerX: x,
       pointerY: y,
       offsetX: pending.offsetX,
@@ -837,8 +868,9 @@ export function useIconGridDragWorkflow({
     }
 
     if (baseState.context !== 'folder') {
-      const topLevelContext = resolveTopLevelContextAtPoint(x, y)
-      if (baseState.context !== topLevelContext) {
+      const isMultiOuterDrag = baseState.context === 'outer' && baseState.draggingIds.length > 1
+      const topLevelContext = isMultiOuterDrag ? 'outer' : resolveTopLevelContextAtPoint(x, y)
+      if (!isMultiOuterDrag && baseState.context !== topLevelContext) {
         baseState = moveDragToTopLevelContext(baseState, topLevelContext, x, y)
       }
 
@@ -854,7 +886,10 @@ export function useIconGridDragWorkflow({
       const candidateAnchorIndex = resolveCandidateAnchorIndexByContext(baseState, {
         allowOutside: true,
       })
-      const overlapHit = findTopLevelMaxOverlapHit(baseState)
+      let overlapHit = findTopLevelMaxOverlapHit(baseState)
+      if (overlapHit && baseState.draggingIds.includes(overlapHit.targetId)) {
+        overlapHit = null
+      }
       const draggingFromDock = isDraggingFromDock(baseState.draggingId)
 
       if (!overlapHit) {
@@ -879,6 +914,33 @@ export function useIconGridDragWorkflow({
         }
         dragRef.current = resetState
         setDragState(resetState)
+        return
+      }
+
+      if (isMultiOuterDrag) {
+        clearOuterDwellTimer()
+        const now = performance.now()
+        const previewSlotIndex = resolveTopLevelOverlapPreviewIndex(
+          baseState,
+          target,
+          overlapHit,
+          nearestSlotIndex,
+          candidateAnchorIndex
+        )
+        const next: DragState = {
+          ...baseState,
+          previewSlotIndex,
+          dockPreviewIndex: null,
+          hoverTargetId: overlapHit.targetId,
+          hoverZone: overlapHit.zone,
+          hoverIou: overlapHit.iou,
+          centerStartedAt: null,
+          dwellStartedAt: null,
+          folderPreviewTargetId: null,
+        }
+        const evaded = tryApplyTopLevelEvasion(next, overlapHit, now)
+        dragRef.current = evaded
+        setDragState(evaded)
         return
       }
 
@@ -1128,11 +1190,15 @@ export function useIconGridDragWorkflow({
 
   useEffect(() => {
     finishDragFnRef.current = (pointerId: number) => {
+      const completedDrag = dragRef.current
       if (!finishDrag(pointerId)) return
+      if (completedDrag && completedDrag.draggingIds.length > 0) {
+        unselectIcons(completedDrag.draggingIds)
+      }
       clearOuterDwellTimer()
       suppressClickUntilRef.current = performance.now() + 300
     }
-  }, [finishDrag])
+  }, [finishDrag, unselectIcons])
 
   useEffect(() => {
     clearPendingFnRef.current = clearPending
@@ -1169,7 +1235,15 @@ export function useIconGridDragWorkflow({
   })
 
   const handleTilePointerDown = (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => {
-    if (selectionMode || event.button !== 0) return
+    if (event.button !== 0) return
+    const targetItem = itemById.get(itemId)
+    const canDragSelectionItem =
+      selectionMode &&
+      targetItem &&
+      targetItem.kind === 'icon' &&
+      selectedIconKeySet.has(targetItem.key)
+    if (selectionMode && !canDragSelectionItem) return
+
     const rect = event.currentTarget.getBoundingClientRect()
     pendingRef.current = {
       context: 'outer',
@@ -1264,6 +1338,7 @@ export function useIconGridDragWorkflow({
     dragState,
     dragRef,
     folderDropFlight,
+    multiDropFlight,
     folderPreviewFreezeTargetId,
     folderCreateTransitionTargetId,
     hiddenOuterItemIds,

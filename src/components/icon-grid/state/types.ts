@@ -5,8 +5,10 @@ export interface DragState {
   context: DragContext
   sourceFolderId: string | null
   pointerId: number
+  dragStartedAt: number
   draggingId: string
   draggingItem: GridItem
+  draggingIds: string[]
   pointerX: number
   pointerY: number
   offsetX: number
@@ -65,4 +67,19 @@ export interface FolderDropFlight {
   endY: number
   endSize: number
   animate: boolean
+}
+
+export interface MultiDropFlightItem {
+  id: string
+  icon: DesktopIcon
+  startLeft: number
+  startTop: number
+  endLeft: number
+  endTop: number
+  startScale: number
+  endScale: number
+  startOpacity: number
+  endOpacity: number
+  animate: boolean
+  zIndex: number
 }

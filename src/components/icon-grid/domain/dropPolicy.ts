@@ -161,3 +161,78 @@ export const applyOuterDropFromSession = ({
   const nextItems = hadDraggedInBase ? base : [...base, session.draggingItem]
   return { items: nextItems, slots: nextSlots }
 }
+
+const ensureSlotCapacity = (slots: Array<string | null>, index: number) => {
+  while (slots.length < index) {
+    slots.push(null)
+  }
+}
+
+const insertWithForwardShift = (slots: Array<string | null>, index: number, id: string) => {
+  if (index < 0) return
+  ensureSlotCapacity(slots, index)
+  if (index >= slots.length) {
+    slots.push(id)
+    return
+  }
+  if (slots[index] === null) {
+    slots[index] = id
+    return
+  }
+
+  slots.push(null)
+  for (let currentIndex = slots.length - 1; currentIndex > index; currentIndex -= 1) {
+    slots[currentIndex] = slots[currentIndex - 1]
+  }
+  slots[index] = id
+}
+
+export const applyMultiOuterDropFromSession = ({
+  base,
+  session,
+  pageSize,
+  resolveNearestSlotIndexByContext,
+}: ApplyOuterDropFromSessionParams): { items: GridItem[]; slots: Array<string | null> } => {
+  const safePageSize = Math.max(1, pageSize)
+  const dragIds = session.draggingIds
+  if (dragIds.length <= 1) {
+    return applyOuterDropFromSession({
+      base,
+      session,
+      pageSize,
+      resolveNearestSlotIndexByContext,
+      mode: 'paged',
+    })
+  }
+
+  const dragIdSet = new Set(dragIds)
+  const nextSlots = session.workingOrder.map(slot => {
+    if (slot === DRAG_HOLE_ID) return null
+    return slot && dragIdSet.has(slot) ? null : slot
+  })
+
+  const nearestDropIndex = resolveNearestSlotIndexByContext(session)
+  const sourceFallbackIndex = session.sourceSlotIndex
+  const emptyFallbackIndex = nextSlots.indexOf(null)
+  const candidateDropIndex =
+    session.previewSlotIndex ?? nearestDropIndex ?? sourceFallbackIndex ?? emptyFallbackIndex
+
+  if (candidateDropIndex === null || candidateDropIndex < 0) {
+    return { items: base, slots: nextSlots }
+  }
+
+  const dropIndex = clampNumber(candidateDropIndex, 0, Number.MAX_SAFE_INTEGER)
+  dragIds.forEach((id, offset) => {
+    insertWithForwardShift(nextSlots, dropIndex + offset, id)
+  })
+
+  if (nextSlots.length === 0) {
+    nextSlots.push(...Array.from({ length: safePageSize }, () => null))
+  }
+  const remainder = nextSlots.length % safePageSize
+  if (remainder > 0) {
+    nextSlots.push(...Array.from({ length: safePageSize - remainder }, () => null))
+  }
+
+  return { items: base, slots: nextSlots }
+}

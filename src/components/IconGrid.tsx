@@ -89,8 +89,15 @@ const getLayoutNormalizationMetrics = (
 }
 
 export function IconGrid({ icons }: IconGridProps) {
-  const { iconSize, dockEnabled, selectionMode, selectedIconKeys, toggleSelectIcon, launchApp } =
-    useIconStore()
+  const {
+    iconSize,
+    dockEnabled,
+    selectionMode,
+    selectedIconKeys,
+    toggleSelectIcon,
+    unselectIcons,
+    launchApp,
+  } = useIconStore()
   const containerRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const folderPanelRef = useRef<HTMLDivElement>(null)
@@ -261,6 +268,7 @@ export function IconGrid({ icons }: IconGridProps) {
     dragState,
     dragRef,
     folderDropFlight,
+    multiDropFlight,
     folderPreviewFreezeTargetId,
     folderCreateTransitionTargetId,
     hiddenOuterItemIds,
@@ -283,6 +291,8 @@ export function IconGrid({ icons }: IconGridProps) {
       reorderAnimationMs: REORDER_ANIMATION_MS,
     },
     selectionMode,
+    selectedIconKeys,
+    unselectIcons,
     iconConfig,
     columns,
     rows,
@@ -810,6 +820,28 @@ export function IconGrid({ icons }: IconGridProps) {
   const gridWidth = columns * itemWidth + Math.max(0, columns - 1) * GRID_GAP
   const gridHeight = rows * itemHeight + Math.max(0, rows - 1) * GRID_GAP
   const ghostItem = dragState ? dragState.draggingItem : null
+  const activeHiddenDragIds = useMemo(
+    () => (dragState?.context === 'outer' ? dragState.draggingIds : []),
+    [dragState]
+  )
+  const mergedHiddenOuterItemIds = useMemo(
+    () => Array.from(new Set([...hiddenOuterItemIds, ...activeHiddenDragIds])),
+    [activeHiddenDragIds, hiddenOuterItemIds]
+  )
+  const multiDragStackItems = useMemo(() => {
+    if (!dragState || dragState.context !== 'outer' || dragState.draggingIds.length <= 1) {
+      return []
+    }
+
+    return dragState.draggingIds.slice(1).flatMap(id => {
+      const item = itemById.get(id)
+      const sourceCenter = dragState.initialCenters[id]
+      if (!item || item.kind !== 'icon' || !sourceCenter) {
+        return []
+      }
+      return [{ id, icon: item.icon, sourceCenter }]
+    })
+  }, [dragState, itemById])
   const canGoLeft = currentPage > 0
   const canGoRight = currentPage < pageCount - 1
 
@@ -840,7 +872,7 @@ export function IconGrid({ icons }: IconGridProps) {
           dragFolderPreviewTargetId={dragState?.folderPreviewTargetId ?? null}
           folderPreviewFreezeTargetId={folderPreviewFreezeTargetId}
           folderCreateTransitionTargetId={folderCreateTransitionTargetId}
-          hiddenOuterItemIds={hiddenOuterItemIds}
+          hiddenOuterItemIds={mergedHiddenOuterItemIds}
           previewFootprint={previewFootprint}
           iconConfig={iconConfig}
           selectionMode={selectionMode}
@@ -968,7 +1000,10 @@ export function IconGrid({ icons }: IconGridProps) {
         slotWidth={itemWidth}
         slotHeight={itemHeight}
         gridGap={GRID_GAP}
+        dragSessionId={dragState?.dragStartedAt ?? null}
+        stackedIcons={multiDragStackItems}
         folderDropFlight={folderDropFlight}
+        multiDropFlight={multiDropFlight}
         reorderAnimationMs={REORDER_ANIMATION_MS}
         folderPreviewEasing={FOLDER_PREVIEW_EASING}
       />

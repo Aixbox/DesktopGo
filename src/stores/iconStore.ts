@@ -31,6 +31,7 @@ interface IconStore {
   setDockEnabled: (enabled: boolean) => void
   enterSelectionMode: (initialKey?: string) => void
   toggleSelectIcon: (key: string) => void
+  unselectIcons: (keys: string[]) => void
   clearSelection: () => void
   hideSelectedIcons: () => Promise<void>
   deleteSelectedIcons: () => Promise<void>
@@ -137,6 +138,17 @@ export const useIconStore = create<IconStore>((set, get) => ({
         ? state.selectedIconKeys.filter(currentKey => currentKey !== key)
         : [...state.selectedIconKeys, key]
 
+      return {
+        selectedIconKeys: nextSelectedKeys,
+      }
+    })
+  },
+
+  unselectIcons: (keys: string[]) => {
+    if (keys.length === 0) return
+    const keySet = new Set(keys)
+    set(state => {
+      const nextSelectedKeys = state.selectedIconKeys.filter(currentKey => !keySet.has(currentKey))
       return {
         selectedIconKeys: nextSelectedKeys,
       }

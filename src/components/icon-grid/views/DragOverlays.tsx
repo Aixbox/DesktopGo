@@ -1,4 +1,6 @@
 import { AppWindow } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import type { DesktopIcon } from '../../../types'
 import {
   ICON_GRID_TILE_PADDING_Y,
   ICON_GRID_TITLE_GAP,
@@ -6,7 +8,7 @@ import {
 } from '../../../types'
 import type { FolderItem, GridItem } from '../model'
 import { getGridItemSpan } from '../model'
-import type { FolderDropFlight } from '../state/types'
+import type { FolderDropFlight, MultiDropFlightItem } from '../state/types'
 import { FolderIconVisual } from './FolderVisuals'
 
 interface DragGhostPointer {
@@ -21,7 +23,14 @@ interface DragOverlaysProps {
   slotWidth: number
   slotHeight: number
   gridGap: number
+  dragSessionId: number | null
+  stackedIcons: Array<{
+    id: string
+    icon: DesktopIcon
+    sourceCenter: { x: number; y: number }
+  }>
   folderDropFlight: FolderDropFlight | null
+  multiDropFlight: MultiDropFlightItem[] | null
   reorderAnimationMs: number
   folderPreviewEasing: string
 }
@@ -211,10 +220,30 @@ export function DragOverlays({
   slotWidth,
   slotHeight,
   gridGap,
+  dragSessionId,
+  stackedIcons,
   folderDropFlight,
+  multiDropFlight,
   reorderAnimationMs,
   folderPreviewEasing,
 }: DragOverlaysProps) {
+  const [stackEntered, setStackEntered] = useState(false)
+
+  useEffect(() => {
+    if (!dragSessionId || stackedIcons.length === 0) {
+      setStackEntered(false)
+      return
+    }
+
+    setStackEntered(false)
+    const raf = requestAnimationFrame(() => {
+      setStackEntered(true)
+    })
+    return () => {
+      cancelAnimationFrame(raf)
+    }
+  }, [dragSessionId, stackedIcons.length])
+
   const folderSpan = ghostItem?.kind === 'folder' ? getGridItemSpan(ghostItem) : null
   const folderFootprintWidth =
     folderSpan ? folderSpan.cols * slotWidth + Math.max(0, folderSpan.cols - 1) * gridGap : 0
@@ -226,29 +255,73 @@ export function DragOverlays({
   return (
     <>
       {dragPointer && ghostItem ? (
-        <div
-          className="pointer-events-none fixed z-50"
-          style={{
-            width: ghostWidth,
-            height: ghostHeight,
-            left: dragPointer.pointerX - ghostWidth / 2,
-            top: dragPointer.pointerY - ghostHeight / 2,
-          }}
-        >
+        <>
+          {ghostItem.kind === 'icon' && stackedIcons.length > 0
+            ? stackedIcons.map((entry, index) => {
+                const stackOffsetX = Math.min(14, (index + 1) * 3)
+                const stackOffsetY = 10 + index * 10
+                const targetLeft = dragPointer.pointerX - iconImageSize / 2 + stackOffsetX
+                const targetTop = dragPointer.pointerY - iconImageSize / 2 + stackOffsetY
+                const baseLeft = entry.sourceCenter.x - iconImageSize / 2
+                const baseTop = entry.sourceCenter.y - iconImageSize / 2
+                const scale = Math.max(0.72, 0.94 - index * 0.06)
+                const opacity = Math.max(0.38, 0.8 - index * 0.12)
+
+                return (
+                  <div
+                    key={entry.id}
+                    className="pointer-events-none fixed"
+                    style={{
+                      zIndex: 48 - index,
+                      width: iconImageSize,
+                      height: iconImageSize,
+                      left: stackEntered ? targetLeft : baseLeft,
+                      top: stackEntered ? targetTop : baseTop,
+                      opacity,
+                      transform: `scale(${scale})`,
+                      transition:
+                        'left 220ms cubic-bezier(0.22, 1, 0.36, 1), top 220ms cubic-bezier(0.22, 1, 0.36, 1), transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease-out',
+                    }}
+                  >
+                    {entry.icon.icon_base64 ? (
+                      <img
+                        src={entry.icon.icon_base64}
+                        alt={entry.icon.name}
+                        className="object-contain"
+                        style={{ width: iconImageSize, height: iconImageSize }}
+                        draggable={false}
+                      />
+                    ) : (
+                      <AppWindow className="h-8 w-8 text-foreground/70" />
+                    )}
+                  </div>
+                )
+              })
+            : null}
+
           <div
-            className="flex items-center justify-center"
-            style={{ width: ghostWidth, height: ghostHeight }}
+            className="pointer-events-none fixed z-50"
+            style={{
+              width: ghostWidth,
+              height: ghostHeight,
+              left: dragPointer.pointerX - ghostWidth / 2,
+              top: dragPointer.pointerY - ghostHeight / 2,
+            }}
           >
-            {ghostItem.kind === 'icon' ? (
-              ghostItem.icon.icon_base64 ? (
-                <img
-                  src={ghostItem.icon.icon_base64}
-                  alt={ghostItem.icon.name}
-                  className="object-contain"
-                  style={{ width: iconImageSize, height: iconImageSize }}
-                  draggable={false}
-                />
-              ) : (
+            <div
+              className="flex items-center justify-center"
+              style={{ width: ghostWidth, height: ghostHeight }}
+            >
+              {ghostItem.kind === 'icon' ? (
+                ghostItem.icon.icon_base64 ? (
+                  <img
+                    src={ghostItem.icon.icon_base64}
+                    alt={ghostItem.icon.name}
+                    className="object-contain"
+                    style={{ width: iconImageSize, height: iconImageSize }}
+                    draggable={false}
+                  />
+                ) : (
                   <AppWindow className="h-8 w-8 text-foreground/70" />
                 )
               ) : (
@@ -259,9 +332,41 @@ export function DragOverlays({
                   gridGap={gridGap}
                 />
               )}
+            </div>
           </div>
-        </div>
+        </>
       ) : null}
+
+      {multiDropFlight
+        ? multiDropFlight.map(item => (
+            <div
+              key={item.id}
+              className="pointer-events-none fixed"
+              style={{
+                zIndex: item.zIndex,
+                width: iconImageSize,
+                height: iconImageSize,
+                left: item.animate ? item.endLeft : item.startLeft,
+                top: item.animate ? item.endTop : item.startTop,
+                opacity: item.animate ? item.endOpacity : item.startOpacity,
+                transform: `scale(${item.animate ? item.endScale : item.startScale})`,
+                transition: `left ${reorderAnimationMs}ms ${folderPreviewEasing}, top ${reorderAnimationMs}ms ${folderPreviewEasing}, transform ${reorderAnimationMs}ms ${folderPreviewEasing}, opacity ${reorderAnimationMs}ms ease-out`,
+              }}
+            >
+              {item.icon.icon_base64 ? (
+                <img
+                  src={item.icon.icon_base64}
+                  alt={item.icon.name}
+                  className="object-contain"
+                  style={{ width: iconImageSize, height: iconImageSize }}
+                  draggable={false}
+                />
+              ) : (
+                <AppWindow className="h-8 w-8 text-foreground/70" />
+              )}
+            </div>
+          ))
+        : null}
 
       {folderDropFlight ? (
         <div

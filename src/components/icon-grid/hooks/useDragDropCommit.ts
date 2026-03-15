@@ -16,12 +16,13 @@ import {
   replaceFolderChildren,
 } from '../domain/folderPolicy'
 import {
+  applyMultiOuterDropFromSession,
   applyAddToFolderFromSession,
   applyFolderCreateFromSession,
   applyOuterDropFromSession,
 } from '../domain/dropPolicy'
 import { normalizeDockKeys, resolveOuterItemIds } from '../domain/dock'
-import type { DragState, FolderDropFlight } from '../state/types'
+import type { DragState, FolderDropFlight, MultiDropFlightItem } from '../state/types'
 import { OUTER_DRAG_RULES } from '../constants'
 import {
   FOLDER_PREVIEW_GAP,
@@ -58,6 +59,7 @@ interface UseDragDropCommitParams {
 
 interface UseDragDropCommitResult {
   folderDropFlight: FolderDropFlight | null
+  multiDropFlight: MultiDropFlightItem[] | null
   folderPreviewFreezeTargetId: string | null
   folderCreateTransitionTargetId: string | null
   hiddenOuterItemIds: string[]
@@ -85,9 +87,12 @@ export function useDragDropCommit({
   resolveNearestSlotIndexByContext,
 }: UseDragDropCommitParams): UseDragDropCommitResult {
   const folderDropFlightTimerRef = useRef<number | null>(null)
+  const multiDropFlightTimerRef = useRef<number | null>(null)
+  const multiDropFlightRafRef = useRef<number | null>(null)
   const folderCreateTransitionTimerRef = useRef<number | null>(null)
   const folderDropFlightIdRef = useRef(0)
   const [folderDropFlight, setFolderDropFlight] = useState<FolderDropFlight | null>(null)
+  const [multiDropFlight, setMultiDropFlight] = useState<MultiDropFlightItem[] | null>(null)
   const [folderPreviewFreezeTargetId, setFolderPreviewFreezeTargetId] = useState<string | null>(
     null
   )
@@ -247,16 +252,135 @@ export function useDragDropCommit({
     return createdFolder ? candidateId : null
   }
 
+  const getMultiDragStackOffset = (index: number) => {
+    if (index <= 0) {
+      return { x: 0, y: 0 }
+    }
+
+    return {
+      x: Math.min(14, index * 3),
+      y: 10 + (index - 1) * 10,
+    }
+  }
+
+  const getMultiDragStackScale = (index: number) => {
+    if (index <= 0) return 1
+    return Math.max(0.72, 0.94 - (index - 1) * 0.06)
+  }
+
+  const getMultiDragStackOpacity = (index: number) => {
+    if (index <= 0) return 1
+    return Math.max(0.38, 0.8 - (index - 1) * 0.12)
+  }
+
+  const resolveElementTranslate = (node: HTMLElement): { x: number; y: number } => {
+    const transform = window.getComputedStyle(node).transform
+    if (!transform || transform === 'none') {
+      return { x: 0, y: 0 }
+    }
+
+    try {
+      const matrix = new DOMMatrixReadOnly(transform)
+      return { x: matrix.m41, y: matrix.m42 }
+    } catch {
+      return { x: 0, y: 0 }
+    }
+  }
+
+  const resolveIconFlightTarget = (id: string): { left: number; top: number } | null => {
+    const tileNode = tileRefs.current.get(id)
+    if (!tileNode) return null
+
+    const imageNode = tileNode.querySelector<HTMLElement>('.icon-image')
+    const rect = (imageNode ?? tileNode).getBoundingClientRect()
+    const translate = resolveElementTranslate(tileNode)
+    return {
+      left: rect.left - translate.x + (rect.width - iconConfig.imgSize) / 2,
+      top: rect.top - translate.y + (rect.height - iconConfig.imgSize) / 2,
+    }
+  }
+
+  const scheduleMultiDropFlight = (session: DragState) => {
+    if (multiDropFlightTimerRef.current !== null) {
+      window.clearTimeout(multiDropFlightTimerRef.current)
+      multiDropFlightTimerRef.current = null
+    }
+    if (multiDropFlightRafRef.current !== null) {
+      cancelAnimationFrame(multiDropFlightRafRef.current)
+      multiDropFlightRafRef.current = null
+    }
+
+    multiDropFlightRafRef.current = requestAnimationFrame(() => {
+      const itemMap = new Map<string, GridItem>()
+      itemsRef.current.forEach(item => itemMap.set(getId(item), item))
+
+      const flights = session.draggingIds.flatMap((id, index) => {
+        const item =
+          id === session.draggingId ? session.draggingItem : itemMap.get(id)
+        if (!item || item.kind !== 'icon') {
+          return []
+        }
+
+        const target = resolveIconFlightTarget(id)
+        if (!target) {
+          return []
+        }
+
+        const offset = getMultiDragStackOffset(index)
+        return [
+          {
+            id,
+            icon: item.icon,
+            startLeft: session.pointerX - iconConfig.imgSize / 2 + offset.x,
+            startTop: session.pointerY - iconConfig.imgSize / 2 + offset.y,
+            endLeft: target.left,
+            endTop: target.top,
+            startScale: getMultiDragStackScale(index),
+            endScale: 1,
+            startOpacity: getMultiDragStackOpacity(index),
+            endOpacity: 1,
+            animate: false,
+            zIndex: 50 - index,
+          },
+        ]
+      })
+
+      multiDropFlightRafRef.current = null
+      if (flights.length === 0) {
+        setHiddenOuterItemIds([])
+        return
+      }
+
+      setMultiDropFlight(flights)
+      multiDropFlightTimerRef.current = window.setTimeout(() => {
+        setMultiDropFlight(null)
+        setHiddenOuterItemIds(prev =>
+          prev.filter(id => !session.draggingIds.includes(id))
+        )
+        multiDropFlightTimerRef.current = null
+      }, reorderAnimationMs + 60)
+    })
+  }
+
   const resetDropVisuals = () => {
     if (folderDropFlightTimerRef.current !== null) {
       window.clearTimeout(folderDropFlightTimerRef.current)
       folderDropFlightTimerRef.current = null
+    }
+    if (multiDropFlightTimerRef.current !== null) {
+      window.clearTimeout(multiDropFlightTimerRef.current)
+      multiDropFlightTimerRef.current = null
+    }
+    if (multiDropFlightRafRef.current !== null) {
+      cancelAnimationFrame(multiDropFlightRafRef.current)
+      multiDropFlightRafRef.current = null
     }
     if (folderCreateTransitionTimerRef.current !== null) {
       window.clearTimeout(folderCreateTransitionTimerRef.current)
       folderCreateTransitionTimerRef.current = null
     }
     setFolderDropFlight(null)
+    setMultiDropFlight(null)
     setFolderPreviewFreezeTargetId(null)
     setFolderCreateTransitionTargetId(null)
     setHiddenOuterItemIds([])
@@ -304,7 +428,8 @@ export function useDragDropCommit({
         return replaceFolderChildren(base, current.sourceFolderId, nextChildren)
       })
     } else {
-      const targetContext: 'outer' | 'dock' = current.context
+      const isMultiOuterDrag = current.context === 'outer' && current.draggingIds.length > 1
+      const targetContext: 'outer' | 'dock' = isMultiOuterDrag ? 'outer' : current.context
       const topLevelMap = new Map<string, GridItem>()
       itemsRef.current.forEach(item => topLevelMap.set(getId(item), item))
       const source = current.draggingItem
@@ -342,7 +467,28 @@ export function useDragDropCommit({
       const originalDockKeys = dockKeysRef.current
       const baseForDrop = extractDraggedIconFromSourceFolder(originalItems, current)
 
-      if (canAddToExistingFolder) {
+      if (isMultiOuterDrag) {
+        setFolderPreviewFreezeTargetId(null)
+        scheduleFolderCreateTransition(null)
+        setHiddenOuterItemIds(current.draggingIds)
+        setFrozenOuterOrder(null)
+        const result = applyMultiOuterDropFromSession({
+          base: baseForDrop,
+          session: current,
+          pageSize: pageSizeRef.current,
+          resolveNearestSlotIndexByContext,
+          mode: 'paged',
+        })
+        commitTopLevelSessionResult(
+          current,
+          originalItems,
+          originalOuterSlots,
+          originalDockKeys,
+          'outer',
+          result
+        )
+        scheduleMultiDropFlight(current)
+      } else if (canAddToExistingFolder) {
         setFolderPreviewFreezeTargetId(null)
         scheduleFolderCreateTransition(null)
         setHiddenOuterItemIds([])
@@ -471,11 +617,31 @@ export function useDragDropCommit({
     }
   }, [folderDropFlight])
 
+  useEffect(() => {
+    if (!multiDropFlight || multiDropFlight.every(item => item.animate)) return
+    const raf = requestAnimationFrame(() => {
+      setMultiDropFlight(prev =>
+        prev ? prev.map(item => ({ ...item, animate: true })) : prev
+      )
+    })
+    return () => {
+      cancelAnimationFrame(raf)
+    }
+  }, [multiDropFlight])
+
   useEffect(
     () => () => {
       if (folderDropFlightTimerRef.current !== null) {
         window.clearTimeout(folderDropFlightTimerRef.current)
         folderDropFlightTimerRef.current = null
+      }
+      if (multiDropFlightTimerRef.current !== null) {
+        window.clearTimeout(multiDropFlightTimerRef.current)
+        multiDropFlightTimerRef.current = null
+      }
+      if (multiDropFlightRafRef.current !== null) {
+        cancelAnimationFrame(multiDropFlightRafRef.current)
+        multiDropFlightRafRef.current = null
       }
       if (folderCreateTransitionTimerRef.current !== null) {
         window.clearTimeout(folderCreateTransitionTimerRef.current)
@@ -487,6 +653,7 @@ export function useDragDropCommit({
 
   return {
     folderDropFlight,
+    multiDropFlight,
     folderPreviewFreezeTargetId,
     folderCreateTransitionTargetId,
     hiddenOuterItemIds,
