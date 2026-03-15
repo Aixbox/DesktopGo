@@ -51,8 +51,10 @@ const SURFACE_CLASS =
 const TITLE_HEIGHT = ICON_GRID_TITLE_HEIGHT
 const TILE_PADDING = ICON_GRID_TILE_PADDING_Y
 const BODY_TITLE_GAP = ICON_GRID_TITLE_GAP
-const INNER_PADDING = 10
-const INNER_GAP = 8
+const INNER_PADDING = 8
+const INNER_GAP = 6
+const PREVIEW_ICON_SCALE = 0.84
+const PREVIEW_ICON_FALLBACK_SCALE = 0.68
 
 const clampNumber = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value))
@@ -80,10 +82,10 @@ function PreviewIconButton({
   return (
     <button
       type="button"
-      className={`group flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] transition ${
+      className={`group flex items-center justify-center rounded-2xl transition ${
         selectionMode
           ? 'cursor-default opacity-60'
-          : 'cursor-pointer hover:bg-white/[0.12] active:scale-[0.97]'
+          : 'cursor-pointer active:scale-[0.97]'
       }`}
       style={{ width: `${size}px`, height: `${size}px` }}
       title={name}
@@ -101,13 +103,19 @@ function PreviewIconButton({
           src={iconBase64}
           alt={name}
           className="object-contain transition-transform group-hover:scale-[1.04]"
-          style={{ width: `${Math.max(18, Math.floor(size * 0.68))}px`, height: `${Math.max(18, Math.floor(size * 0.68))}px` }}
+          style={{
+            width: `${Math.max(20, Math.floor(size * PREVIEW_ICON_SCALE))}px`,
+            height: `${Math.max(20, Math.floor(size * PREVIEW_ICON_SCALE))}px`,
+          }}
           draggable={false}
         />
       ) : (
         <AppWindow
           className="text-white/70"
-          style={{ width: `${Math.max(16, Math.floor(size * 0.55))}px`, height: `${Math.max(16, Math.floor(size * 0.55))}px` }}
+          style={{
+            width: `${Math.max(16, Math.floor(size * PREVIEW_ICON_FALLBACK_SCALE))}px`,
+            height: `${Math.max(16, Math.floor(size * PREVIEW_ICON_FALLBACK_SCALE))}px`,
+          }}
         />
       )}
     </button>

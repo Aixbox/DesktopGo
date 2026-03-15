@@ -28,8 +28,10 @@ interface DragOverlaysProps {
 
 const GHOST_FOLDER_SURFACE_CLASS =
   'relative overflow-hidden border border-white/14 bg-[linear-gradient(145deg,rgba(20,31,52,0.94),rgba(8,12,22,0.9))] shadow-[0_16px_36px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-md'
-const GHOST_FOLDER_INNER_PADDING = 10
-const GHOST_FOLDER_INNER_GAP = 8
+const GHOST_FOLDER_INNER_PADDING = 8
+const GHOST_FOLDER_INNER_GAP = 6
+const GHOST_PREVIEW_ICON_SCALE = 0.84
+const GHOST_PREVIEW_ICON_FALLBACK_SCALE = 0.68
 
 const clampNumber = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value))
@@ -46,7 +48,7 @@ interface GhostPreviewIconProps {
 function GhostPreviewIcon({ iconBase64, name, size }: GhostPreviewIconProps) {
   return (
     <div
-      className="flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06]"
+      className="flex items-center justify-center rounded-2xl"
       style={{ width: `${size}px`, height: `${size}px` }}
     >
       {iconBase64 ? (
@@ -55,8 +57,8 @@ function GhostPreviewIcon({ iconBase64, name, size }: GhostPreviewIconProps) {
           alt={name}
           className="object-contain"
           style={{
-            width: `${Math.max(18, Math.floor(size * 0.68))}px`,
-            height: `${Math.max(18, Math.floor(size * 0.68))}px`,
+            width: `${Math.max(20, Math.floor(size * GHOST_PREVIEW_ICON_SCALE))}px`,
+            height: `${Math.max(20, Math.floor(size * GHOST_PREVIEW_ICON_SCALE))}px`,
           }}
           draggable={false}
         />
@@ -64,8 +66,8 @@ function GhostPreviewIcon({ iconBase64, name, size }: GhostPreviewIconProps) {
         <AppWindow
           className="text-white/70"
           style={{
-            width: `${Math.max(16, Math.floor(size * 0.55))}px`,
-            height: `${Math.max(16, Math.floor(size * 0.55))}px`,
+            width: `${Math.max(16, Math.floor(size * GHOST_PREVIEW_ICON_FALLBACK_SCALE))}px`,
+            height: `${Math.max(16, Math.floor(size * GHOST_PREVIEW_ICON_FALLBACK_SCALE))}px`,
           }}
         />
       )}
