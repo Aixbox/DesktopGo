@@ -47,7 +47,7 @@ interface DragWorkflowConfig {
   dragEdgeSwitchZone: number
   dragEdgeSwitchMs: number
   dragLongPressMs: number
-  dragMoveThreshold: number
+  dragPendingMoveTolerance: number
   evasionRearmDistance: number
   evasionCooldownMs: number
   reorderAnimationMs: number
@@ -154,6 +154,7 @@ export function useIconGridDragWorkflow({
   const onDragMoveFnRef = useRef<(pointerId: number, x: number, y: number) => void>(() => undefined)
   const finishDragFnRef = useRef<(pointerId: number) => void>(() => undefined)
   const clearPendingFnRef = useRef<() => void>(() => undefined)
+  const abortPendingFnRef = useRef<(pointerId: number) => void>(() => undefined)
   const cancelDragFnRef = useRef<(pointerId: number) => void>(() => undefined)
   const timerRef = useRef<number | null>(null)
   const outerDwellTimerRef = useRef<number | null>(null)
@@ -1138,6 +1139,14 @@ export function useIconGridDragWorkflow({
   }, [clearPending])
 
   useEffect(() => {
+    abortPendingFnRef.current = (pointerId: number) => {
+      if (pendingRef.current?.pointerId !== pointerId) return
+      clearPending()
+      suppressClickUntilRef.current = performance.now() + 300
+    }
+  }, [clearPending])
+
+  useEffect(() => {
     cancelDragFnRef.current = (pointerId: number) => {
       if (dragRef.current?.pointerId !== pointerId) return
       clearOuterDwellTimer()
@@ -1154,8 +1163,9 @@ export function useIconGridDragWorkflow({
     onDragMoveFnRef,
     finishDragFnRef,
     clearPendingFnRef,
+    abortPendingFnRef,
     cancelDragFnRef,
-    dragMoveThreshold: config.dragMoveThreshold,
+    pendingMoveTolerance: config.dragPendingMoveTolerance,
   })
 
   const handleTilePointerDown = (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => {

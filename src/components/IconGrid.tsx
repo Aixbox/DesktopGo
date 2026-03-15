@@ -56,8 +56,8 @@ const DRAG_EDGE_SWITCH_ZONE = 72
 const DRAG_EDGE_SWITCH_MS = 600
 const WHEEL_PAGE_DELTA_THRESHOLD = 54
 const WHEEL_PAGE_COOLDOWN_MS = 180
-const DRAG_LONG_PRESS_MS = 150
-const DRAG_MOVE_THRESHOLD = 7
+const DRAG_LONG_PRESS_MS = 300
+const DRAG_PENDING_MOVE_TOLERANCE = 7
 const EVASION_REARM_DISTANCE = 14
 const EVASION_COOLDOWN_MS = 80
 const REORDER_ANIMATION_MS = 220
@@ -277,7 +277,7 @@ export function IconGrid({ icons }: IconGridProps) {
       dragEdgeSwitchZone: DRAG_EDGE_SWITCH_ZONE,
       dragEdgeSwitchMs: DRAG_EDGE_SWITCH_MS,
       dragLongPressMs: DRAG_LONG_PRESS_MS,
-      dragMoveThreshold: DRAG_MOVE_THRESHOLD,
+      dragPendingMoveTolerance: DRAG_PENDING_MOVE_TOLERANCE,
       evasionRearmDistance: EVASION_REARM_DISTANCE,
       evasionCooldownMs: EVASION_COOLDOWN_MS,
       reorderAnimationMs: REORDER_ANIMATION_MS,

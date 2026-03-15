@@ -20,8 +20,9 @@ interface UsePointerDragControllerParams<
   onDragMoveFnRef: MutableRefObject<(pointerId: number, x: number, y: number) => void>
   finishDragFnRef: MutableRefObject<(pointerId: number) => void>
   clearPendingFnRef: MutableRefObject<() => void>
+  abortPendingFnRef: MutableRefObject<(pointerId: number) => void>
   cancelDragFnRef: MutableRefObject<(pointerId: number) => void>
-  dragMoveThreshold: number
+  pendingMoveTolerance: number
 }
 
 export function usePointerDragController<
@@ -34,8 +35,9 @@ export function usePointerDragController<
   onDragMoveFnRef,
   finishDragFnRef,
   clearPendingFnRef,
+  abortPendingFnRef,
   cancelDragFnRef,
-  dragMoveThreshold,
+  pendingMoveTolerance,
 }: UsePointerDragControllerParams<TPending, TActive>) {
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -49,8 +51,8 @@ export function usePointerDragController<
       const pending = pendingRef.current
       if (!pending || pending.pointerId !== event.pointerId) return
       const distance = Math.hypot(event.clientX - pending.startX, event.clientY - pending.startY)
-      if (distance > dragMoveThreshold) {
-        beginDragFnRef.current(pending, event.clientX, event.clientY)
+      if (distance > pendingMoveTolerance) {
+        abortPendingFnRef.current(event.pointerId)
       }
     }
 
@@ -85,7 +87,8 @@ export function usePointerDragController<
   }, [
     beginDragFnRef,
     clearPendingFnRef,
-    dragMoveThreshold,
+    abortPendingFnRef,
+    pendingMoveTolerance,
     dragRef,
     finishDragFnRef,
     onDragMoveFnRef,

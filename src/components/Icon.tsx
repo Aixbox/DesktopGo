@@ -39,9 +39,7 @@ export function Icon({
   }
 
   const buttonStateClass = selectionMode
-    ? selected
-      ? 'bg-blue-500/20 ring-1 ring-blue-500/70'
-      : 'bg-black/10 dark:bg-white/5'
+    ? 'bg-transparent'
     : 'bg-transparent hover:bg-black/10 active:bg-black/20 dark:hover:bg-white/10 dark:active:bg-white/20'
   const layerClass = selectionMode
     ? selected
@@ -95,9 +93,7 @@ export function Icon({
         )}
       </div>
       <span
-        className={`icon-label text-[11px] text-center leading-[1.05] drop-shadow-md ${
-          selectionMode && selected ? 'text-blue-200' : 'text-foreground'
-        }`}
+        className="icon-label text-[11px] text-center leading-[1.05] text-foreground drop-shadow-md"
         style={{
           maxWidth: config.containerWidth - 10,
           minHeight: ICON_GRID_TITLE_HEIGHT,
