@@ -604,6 +604,7 @@ export function IconGrid({ icons }: IconGridProps) {
     if (dragState?.context !== 'outer') return null
     if (dragState.previewSlotIndex === null || dragState.folderPreviewTargetId) return null
     const span = getGridItemSpan(dragState.draggingItem)
+    if (span.cols > 1 || span.rows > 1) return null
     if (
       !canPlaceItemAtAnchorIndex(
         renderOrder,
