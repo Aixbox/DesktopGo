@@ -89,9 +89,15 @@ interface FolderIconVisualProps {
   icons: DesktopIcon[]
   imgSize: number
   expanded?: boolean
+  withSurface?: boolean
 }
 
-export function FolderIconVisual({ icons, imgSize, expanded = false }: FolderIconVisualProps) {
+export function FolderIconVisual({
+  icons,
+  imgSize,
+  expanded = false,
+  withSurface = true,
+}: FolderIconVisualProps) {
   const visualSize = expanded ? getFolderPreviewFrameSize(imgSize) : imgSize
   const slotSize = getFolderPreviewSlotSize(imgSize)
   const outerExpand = expanded ? FOLDER_PREVIEW_OUTER_EXPAND : 0
@@ -123,7 +129,7 @@ export function FolderIconVisual({ icons, imgSize, expanded = false }: FolderIco
     >
       <div className="pointer-events-none absolute" style={hitboxStyle} data-folder-icon-hitbox />
       <div
-        className={`${FOLDER_SURFACE_CLASS} absolute transition-[left,top,width,height] duration-200 ease-out`}
+        className={`${withSurface ? FOLDER_SURFACE_CLASS : ''} absolute transition-[left,top,width,height] duration-200 ease-out`}
         style={surfaceStyle}
       >
         {icons.slice(0, 4).map((icon, idx) => {

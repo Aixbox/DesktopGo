@@ -69,13 +69,11 @@ function GhostPreviewIcon({ iconBase64, name, size }: GhostPreviewIconProps) {
 
 function FolderGhost({
   folder,
-  iconImageSize,
   slotWidth,
   slotHeight,
   gridGap,
 }: {
   folder: FolderItem
-  iconImageSize: number
   slotWidth: number
   slotHeight: number
   gridGap: number
@@ -102,7 +100,6 @@ function FolderGhost({
   const innerGap = Math.min(GHOST_FOLDER_INNER_GAP, Math.max(4, Math.floor(panelBase / 16)))
 
   if (folder.size === '1x1') {
-    const previewSize = Math.max(24, Math.min(iconImageSize, shapeWidth - innerPadding * 2))
     return (
       <div
         className="flex items-center justify-center"
@@ -114,7 +111,8 @@ function FolderGhost({
         >
           <FolderIconVisual
             icons={folder.children.map(child => child.icon)}
-            imgSize={previewSize}
+            imgSize={shapeWidth}
+            withSurface={false}
           />
         </div>
       </div>
@@ -217,7 +215,6 @@ export function DragOverlays({
               ) : (
                 <FolderGhost
                   folder={ghostItem}
-                  iconImageSize={iconImageSize}
                   slotWidth={slotWidth}
                   slotHeight={slotHeight}
                   gridGap={gridGap}

@@ -192,7 +192,6 @@ export function OuterGridView({
                   slotWidth={itemWidth}
                   slotHeight={itemHeight}
                   gridGap={gridGap}
-                  iconConfig={iconConfig}
                   folderPreview={folderPreview}
                   selectionMode={selectionMode}
                   onPointerDown={event => onTilePointerDown(event, entry.id)}

@@ -21,18 +21,12 @@ import {
 import type { FolderItem, FolderSize, GridSpan } from '../model'
 import { FolderIconVisual } from './FolderVisuals'
 
-interface IconConfigLike {
-  imgSize: number
-  containerWidth: number
-}
-
 interface OuterFolderTileProps {
   folder: FolderItem
   span: GridSpan
   slotWidth: number
   slotHeight: number
   gridGap: number
-  iconConfig: IconConfigLike
   folderPreview: boolean
   selectionMode: boolean
   onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void
@@ -120,7 +114,6 @@ interface FolderBodyProps {
   bodyHeight: number
   folderPreview: boolean
   selectionMode: boolean
-  iconConfig: IconConfigLike
   onOpenFolder: (folderId: string) => void
   onLaunchIcon: (path: string) => void
 }
@@ -131,7 +124,6 @@ function FolderBody({
   bodyHeight,
   folderPreview,
   selectionMode,
-  iconConfig,
   onOpenFolder,
   onLaunchIcon,
 }: FolderBodyProps) {
@@ -143,7 +135,6 @@ function FolderBody({
   const innerGap = Math.min(INNER_GAP, Math.max(4, Math.floor(panelBase / 16)))
 
   if (folder.size === '1x1') {
-    const previewSize = Math.max(24, Math.min(iconConfig.imgSize, shapeWidth - innerPadding * 2))
     return (
       <div
         role="button"
@@ -174,8 +165,8 @@ function FolderBody({
         >
           <FolderIconVisual
             icons={folder.children.map(child => child.icon)}
-            imgSize={previewSize}
-            expanded={folderPreview}
+            imgSize={shapeWidth}
+            withSurface={false}
           />
         </div>
       </div>
@@ -261,7 +252,6 @@ export function OuterFolderTile({
   slotWidth,
   slotHeight,
   gridGap,
-  iconConfig,
   folderPreview,
   selectionMode,
   onPointerDown,
@@ -294,7 +284,6 @@ export function OuterFolderTile({
               bodyHeight={bodyHeight}
               folderPreview={folderPreview}
               selectionMode={selectionMode}
-              iconConfig={iconConfig}
               onOpenFolder={onOpenFolder}
               onLaunchIcon={onLaunchIcon}
             />
