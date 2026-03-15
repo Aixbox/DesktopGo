@@ -71,6 +71,7 @@ interface PreviewIconButtonProps {
   iconBase64: string
   size: number
   selectionMode: boolean
+  onOpenFolder: () => void
   onLaunchIcon: (path: string) => void
 }
 
@@ -80,15 +81,14 @@ function PreviewIconButton({
   iconBase64,
   size,
   selectionMode,
+  onOpenFolder,
   onLaunchIcon,
 }: PreviewIconButtonProps) {
   return (
     <button
       type="button"
       className={`group flex items-center justify-center rounded-2xl transition ${
-        selectionMode
-          ? 'cursor-default opacity-60'
-          : 'cursor-pointer active:scale-[0.97]'
+        selectionMode ? 'cursor-pointer' : 'cursor-pointer active:scale-[0.97]'
       }`}
       style={{ width: `${size}px`, height: `${size}px` }}
       title={name}
@@ -97,7 +97,10 @@ function PreviewIconButton({
       }}
       onClick={event => {
         event.stopPropagation()
-        if (selectionMode) return
+        if (selectionMode) {
+          onOpenFolder()
+          return
+        }
         onLaunchIcon(path)
       }}
     >
@@ -170,10 +173,8 @@ function FolderBody({
     return (
       <div
         role="button"
-        tabIndex={selectionMode ? -1 : 0}
-        className={`relative flex items-center justify-center transition ${
-          selectionMode ? 'cursor-default' : 'cursor-pointer'
-        }`}
+        tabIndex={0}
+        className="relative flex cursor-pointer items-center justify-center transition"
         style={{
           width: `${bodyWidth}px`,
           height: `${bodyHeight}px`,
@@ -182,11 +183,9 @@ function FolderBody({
         title={folder.name}
         onClick={event => {
           event.stopPropagation()
-          if (selectionMode) return
           onOpenFolder(folder.id)
         }}
         onKeyDown={event => {
-          if (selectionMode) return
           if (event.key !== 'Enter' && event.key !== ' ') return
           event.preventDefault()
           event.stopPropagation()
@@ -235,10 +234,8 @@ function FolderBody({
   return (
     <div
       role="button"
-      tabIndex={selectionMode ? -1 : 0}
-      className={`relative flex items-center justify-center transition ${
-        selectionMode ? 'cursor-default' : 'cursor-pointer'
-      }`}
+      tabIndex={0}
+      className="relative flex cursor-pointer items-center justify-center transition"
       style={{
         width: `${bodyWidth}px`,
         height: `${bodyHeight}px`,
@@ -247,11 +244,9 @@ function FolderBody({
       title={folder.name}
       onClick={event => {
         event.stopPropagation()
-        if (selectionMode) return
         onOpenFolder(folder.id)
       }}
       onKeyDown={event => {
-        if (selectionMode) return
         if (event.key !== 'Enter' && event.key !== ' ') return
         event.preventDefault()
         event.stopPropagation()
@@ -285,6 +280,7 @@ function FolderBody({
               iconBase64={icon.icon.icon_base64}
               size={iconSize}
               selectionMode={selectionMode}
+              onOpenFolder={() => onOpenFolder(folder.id)}
               onLaunchIcon={onLaunchIcon}
             />
           ))}
@@ -350,7 +346,6 @@ export function OuterFolderTile({
               title={folder.name}
               onClick={event => {
                 event.stopPropagation()
-                if (selectionMode) return
                 onOpenFolder(folder.id)
               }}
             >

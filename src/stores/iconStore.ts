@@ -66,7 +66,7 @@ export const useIconStore = create<IconStore>((set, get) => ({
         icons,
         loading: false,
         selectedIconKeys: nextSelectedKeys,
-        selectionMode: selectionMode && nextSelectedKeys.length > 0,
+        selectionMode,
       })
     } catch (e) {
       set({ error: String(e), loading: false })
@@ -139,7 +139,6 @@ export const useIconStore = create<IconStore>((set, get) => ({
 
       return {
         selectedIconKeys: nextSelectedKeys,
-        selectionMode: nextSelectedKeys.length > 0,
       }
     })
   },
