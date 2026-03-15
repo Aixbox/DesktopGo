@@ -504,10 +504,6 @@ export function IconGrid({ icons }: IconGridProps) {
   useEffect(() => {
     if (hoverPage !== null && hoverPage >= pageCount) setHoverPage(null)
   }, [hoverPage, pageCount])
-  useEffect(() => {
-    currentPageRef.current = 0
-    setCurrentPage(0)
-  }, [items.length, iconSize, pageSize])
 
   const handleWheelPageSwitch = (event: ReactWheelEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null
