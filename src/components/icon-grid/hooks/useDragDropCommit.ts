@@ -476,6 +476,7 @@ export function useDragDropCommit({
           base: baseForDrop,
           session: current,
           pageSize: pageSizeRef.current,
+          columns,
           resolveNearestSlotIndexByContext,
           mode: 'paged',
         })
