@@ -126,6 +126,7 @@ interface FolderBodyProps {
   folder: FolderItem
   bodyWidth: number
   bodyHeight: number
+  singleSlotBodyExtent: number
   folderPreview: boolean
   selectionMode: boolean
   onOpenFolder: (folderId: string) => void
@@ -136,14 +137,24 @@ function FolderBody({
   folder,
   bodyWidth,
   bodyHeight,
+  singleSlotBodyExtent,
   folderPreview,
   selectionMode,
   onOpenFolder,
   onLaunchIcon,
 }: FolderBodyProps) {
-  const isSquare = folder.size === '2x2' || folder.size === '1x1'
-  const shapeWidth = isSquare ? Math.min(bodyWidth, bodyHeight) : bodyWidth
-  const shapeHeight = isSquare ? shapeWidth : bodyHeight
+  const shapeWidth =
+    folder.size === '1x2'
+      ? Math.min(bodyWidth, singleSlotBodyExtent)
+      : folder.size === '2x2' || folder.size === '1x1'
+        ? Math.min(bodyWidth, bodyHeight)
+        : bodyWidth
+  const shapeHeight =
+    folder.size === '2x1'
+      ? Math.min(bodyHeight, singleSlotBodyExtent)
+      : folder.size === '2x2' || folder.size === '1x1'
+        ? shapeWidth
+        : bodyHeight
   const panelBase = Math.max(32, Math.min(shapeWidth, shapeHeight))
   const surfaceRadius = getFolderSurfaceRadius(panelBase)
   const innerPadding = Math.min(INNER_PADDING, Math.max(4, Math.floor(panelBase / 8)))
@@ -295,6 +306,10 @@ export function OuterFolderTile({
   const footprintHeight = span.rows * slotHeight + Math.max(0, span.rows - 1) * gridGap
   const bodyWidth = Math.max(40, footprintWidth - TILE_PADDING * 2)
   const bodyHeight = Math.max(32, footprintHeight - TILE_PADDING * 2 - TITLE_HEIGHT - BODY_TITLE_GAP)
+  const singleSlotBodyExtent = Math.max(
+    32,
+    slotHeight - TILE_PADDING * 2 - TITLE_HEIGHT - BODY_TITLE_GAP
+  )
 
   return (
     <ContextMenu>
@@ -313,6 +328,7 @@ export function OuterFolderTile({
               folder={folder}
               bodyWidth={bodyWidth}
               bodyHeight={bodyHeight}
+              singleSlotBodyExtent={singleSlotBodyExtent}
               folderPreview={folderPreview}
               selectionMode={selectionMode}
               onOpenFolder={onOpenFolder}

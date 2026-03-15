@@ -97,9 +97,25 @@ function FolderGhost({
       ICON_GRID_TITLE_HEIGHT -
       ICON_GRID_TITLE_GAP
   )
-  const isSquare = folder.size === '2x2' || folder.size === '1x1'
-  const shapeWidth = isSquare ? Math.min(bodyWidth, bodyHeight) : bodyWidth
-  const shapeHeight = isSquare ? shapeWidth : bodyHeight
+  const singleSlotBodyExtent = Math.max(
+    32,
+    slotHeight -
+      ICON_GRID_TILE_PADDING_Y * 2 -
+      ICON_GRID_TITLE_HEIGHT -
+      ICON_GRID_TITLE_GAP
+  )
+  const shapeWidth =
+    folder.size === '1x2'
+      ? Math.min(bodyWidth, singleSlotBodyExtent)
+      : folder.size === '2x2' || folder.size === '1x1'
+        ? Math.min(bodyWidth, bodyHeight)
+        : bodyWidth
+  const shapeHeight =
+    folder.size === '2x1'
+      ? Math.min(bodyHeight, singleSlotBodyExtent)
+      : folder.size === '2x2' || folder.size === '1x1'
+        ? shapeWidth
+        : bodyHeight
   const panelBase = Math.max(32, Math.min(shapeWidth, shapeHeight))
   const surfaceRadius = getGhostFolderSurfaceRadius(panelBase)
   const innerPadding = Math.min(
