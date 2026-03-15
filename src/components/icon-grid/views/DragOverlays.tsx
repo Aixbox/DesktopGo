@@ -39,6 +39,9 @@ const clampNumber = (value: number, min: number, max: number) =>
 const getGhostFolderSurfaceRadius = (panelBase: number) =>
   Math.round(clampNumber(panelBase * 0.2, 16, 24))
 
+const getSingleSlotGhostPreviewInset = (panelBase: number) =>
+  Math.round(clampNumber(panelBase * 0.06, 3, 5))
+
 interface GhostPreviewIconProps {
   iconBase64: string
   name: string
@@ -125,6 +128,9 @@ function FolderGhost({
   const innerGap = Math.min(GHOST_FOLDER_INNER_GAP, Math.max(4, Math.floor(panelBase / 16)))
 
   if (folder.size === '1x1') {
+    const previewInset = getSingleSlotGhostPreviewInset(panelBase)
+    const previewSize = Math.max(24, shapeWidth - previewInset * 2)
+
     return (
       <div
         className="flex items-center justify-center"
@@ -140,7 +146,7 @@ function FolderGhost({
         >
           <FolderIconVisual
             icons={folder.children.map(child => child.icon)}
-            imgSize={shapeWidth}
+            imgSize={previewSize}
             withSurface={false}
           />
         </div>

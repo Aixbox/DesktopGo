@@ -62,6 +62,9 @@ const clampNumber = (value: number, min: number, max: number) =>
 const getFolderSurfaceRadius = (panelBase: number) =>
   Math.round(clampNumber(panelBase * 0.2, 16, 24))
 
+const getSingleSlotPreviewInset = (panelBase: number) =>
+  Math.round(clampNumber(panelBase * 0.06, 3, 5))
+
 interface PreviewIconButtonProps {
   path: string
   name: string
@@ -161,6 +164,9 @@ function FolderBody({
   const innerGap = Math.min(INNER_GAP, Math.max(4, Math.floor(panelBase / 16)))
 
   if (folder.size === '1x1') {
+    const previewInset = getSingleSlotPreviewInset(panelBase)
+    const previewSize = Math.max(24, shapeWidth - previewInset * 2)
+
     return (
       <div
         role="button"
@@ -199,7 +205,7 @@ function FolderBody({
         >
           <FolderIconVisual
             icons={folder.children.map(child => child.icon)}
-            imgSize={shapeWidth}
+            imgSize={previewSize}
             withSurface={false}
           />
         </div>
