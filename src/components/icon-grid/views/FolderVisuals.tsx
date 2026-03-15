@@ -1,4 +1,9 @@
 import { AppWindow } from 'lucide-react'
+import {
+  ICON_GRID_TILE_PADDING_Y,
+  ICON_GRID_TITLE_GAP,
+  ICON_GRID_TITLE_HEIGHT,
+} from '../../../types'
 import type { DesktopIcon } from '../../../types'
 
 export const FOLDER_PREVIEW_PADDING = 4
@@ -10,6 +15,17 @@ export const FOLDER_MODAL_MAX_WIDTH = 620
 export const FOLDER_MODAL_MAX_HEIGHT = 480
 const FOLDER_SURFACE_CLASS =
   'relative h-full w-full overflow-hidden rounded-xl bg-[linear-gradient(145deg,rgba(20,31,52,0.92),rgba(8,12,22,0.9))] shadow-[0_12px_28px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.14)] backdrop-blur-md'
+const DESKTOP_FOLDER_SURFACE_CLASS =
+  'relative h-full w-full overflow-hidden border border-white/14 bg-[linear-gradient(145deg,rgba(20,31,52,0.94),rgba(8,12,22,0.9))] shadow-[0_16px_36px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-md'
+
+const clampNumber = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, value))
+
+const getDesktopFolderSurfaceRadius = (panelBase: number) =>
+  Math.round(clampNumber(panelBase * 0.2, 16, 24))
+
+const getDesktopSingleSlotPreviewInset = (panelBase: number) =>
+  Math.round(clampNumber(panelBase * 0.06, 3, 5))
 
 export const getFolderPreviewSlotSize = (imgSize: number): number =>
   Math.max(8, Math.floor((imgSize - FOLDER_PREVIEW_PADDING * 2 - FOLDER_PREVIEW_GAP) / 2))
@@ -21,6 +37,8 @@ interface FolderCreatePreviewProps {
   icon: DesktopIcon
   imgSize: number
   reorderAnimationMs: number
+  tileWidth?: number
+  tileHeight?: number
 }
 
 export function FolderCreatePreview({
@@ -28,7 +46,52 @@ export function FolderCreatePreview({
   icon,
   imgSize,
   reorderAnimationMs,
+  tileWidth,
+  tileHeight,
 }: FolderCreatePreviewProps) {
+  if (tileWidth !== undefined && tileHeight !== undefined) {
+    const bodyWidth = Math.max(40, tileWidth - ICON_GRID_TILE_PADDING_Y * 2)
+    const bodyHeight = Math.max(
+      32,
+      tileHeight -
+        ICON_GRID_TILE_PADDING_Y * 2 -
+        ICON_GRID_TITLE_HEIGHT -
+        ICON_GRID_TITLE_GAP
+    )
+    const surfaceSize = Math.min(bodyWidth, bodyHeight)
+    const panelBase = Math.max(32, surfaceSize)
+    const surfaceRadius = getDesktopFolderSurfaceRadius(panelBase)
+    const previewInset = getDesktopSingleSlotPreviewInset(panelBase)
+    const previewSize = Math.max(24, surfaceSize - previewInset * 2)
+    const surfaceLeft = (tileWidth - surfaceSize) / 2
+    const surfaceTop = ICON_GRID_TILE_PADDING_Y + Math.max(0, (bodyHeight - surfaceSize) / 2)
+
+    return (
+      <div
+        className="pointer-events-none absolute inset-0 z-30"
+        aria-hidden="true"
+      >
+        <div
+          className={`${DESKTOP_FOLDER_SURFACE_CLASS} absolute transition-all duration-200 ${
+            active ? 'scale-100 opacity-100' : 'scale-[0.94] opacity-0'
+          }`}
+          style={{
+            left: `${surfaceLeft}px`,
+            top: `${surfaceTop}px`,
+            width: `${surfaceSize}px`,
+            height: `${surfaceSize}px`,
+            borderRadius: `${surfaceRadius}px`,
+            transitionDuration: `${reorderAnimationMs}ms`,
+          }}
+        >
+          <div className="absolute inset-0 flex items-center justify-center">
+            <FolderIconVisual icons={[icon]} imgSize={previewSize} withSurface={false} />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const frameSize = getFolderPreviewFrameSize(imgSize)
   const slotSize = getFolderPreviewSlotSize(imgSize)
   const startSize = Math.max(slotSize, Math.floor(imgSize * 0.84))

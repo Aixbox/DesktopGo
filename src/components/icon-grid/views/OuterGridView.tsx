@@ -183,6 +183,8 @@ export function OuterGridView({
                     icon={entry.item.icon}
                     imgSize={iconConfig.imgSize}
                     reorderAnimationMs={reorderAnimationMs}
+                    tileWidth={itemWidth}
+                    tileHeight={itemHeight}
                   />
                 </div>
               ) : (
