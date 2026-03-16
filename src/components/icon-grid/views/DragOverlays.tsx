@@ -1,5 +1,5 @@
 import { AppWindow } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, type MutableRefObject } from 'react'
 import type { DesktopIcon } from '../../../types'
 import {
   ICON_GRID_TILE_PADDING_Y,
@@ -17,7 +17,7 @@ interface DragGhostPointer {
 }
 
 interface DragOverlaysProps {
-  dragPointer: DragGhostPointer | null
+  dragPointerRef: MutableRefObject<DragGhostPointer | null>
   ghostItem: GridItem | null
   iconImageSize: number
   slotWidth: number
@@ -280,8 +280,13 @@ function FolderGhost({
   )
 }
 
+function applyGhostTransform(node: HTMLDivElement | null, left: number, top: number) {
+  if (!node) return
+  node.style.transform = `translate3d(${left}px, ${top}px, 0)`
+}
+
 export function DragOverlays({
-  dragPointer,
+  dragPointerRef,
   ghostItem,
   iconImageSize,
   slotWidth,
@@ -294,20 +299,69 @@ export function DragOverlays({
   reorderAnimationMs,
   folderPreviewEasing,
 }: DragOverlaysProps) {
-  const [stackPositions, setStackPositions] = useState<StackGhostPosition[]>([])
-  const pointerRef = useRef<DragGhostPointer | null>(dragPointer)
+  const pointerAnimationFrameRef = useRef<number | null>(null)
   const animationFrameRef = useRef<number | null>(null)
+  const leaderNodeRef = useRef<HTMLDivElement | null>(null)
+  const stackNodeRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const trailSamplesRef = useRef<PointerTrailSample[]>([])
   const stackPositionsRef = useRef<StackGhostPosition[]>([])
   const stackedIconsRef = useRef(stackedIcons)
   const lastMoveAtRef = useRef(0)
   const stackedIconSignature = stackedIcons.map(entry => entry.id).join('|')
 
-  pointerRef.current = dragPointer
   stackedIconsRef.current = stackedIcons
 
+  const folderSpan = ghostItem?.kind === 'folder' ? getGridItemSpan(ghostItem) : null
+  const folderFootprintWidth =
+    folderSpan ? folderSpan.cols * slotWidth + Math.max(0, folderSpan.cols - 1) * gridGap : 0
+  const folderFootprintHeight =
+    folderSpan ? folderSpan.rows * slotHeight + Math.max(0, folderSpan.rows - 1) * gridGap : 0
+  const ghostWidth = ghostItem?.kind === 'folder' ? folderFootprintWidth : iconImageSize
+  const ghostHeight = ghostItem?.kind === 'folder' ? folderFootprintHeight : iconImageSize
+  const initialDragPointer = dragPointerRef.current
+
+  const setStackNodeRef = (id: string, node: HTMLDivElement | null) => {
+    if (node) {
+      stackNodeRefs.current.set(id, node)
+      return
+    }
+
+    stackNodeRefs.current.delete(id)
+  }
+
   useEffect(() => {
-    if (!dragSessionId || ghostItem?.kind !== 'icon' || stackedIcons.length === 0 || !dragPointer) {
+    if (!dragSessionId || !ghostItem) {
+      if (pointerAnimationFrameRef.current !== null) {
+        cancelAnimationFrame(pointerAnimationFrameRef.current)
+        pointerAnimationFrameRef.current = null
+      }
+      return
+    }
+
+    const tick = () => {
+      const latestPointer = dragPointerRef.current
+      if (latestPointer) {
+        applyGhostTransform(
+          leaderNodeRef.current,
+          latestPointer.pointerX - ghostWidth / 2,
+          latestPointer.pointerY - ghostHeight / 2
+        )
+      }
+      pointerAnimationFrameRef.current = requestAnimationFrame(tick)
+    }
+
+    tick()
+    return () => {
+      if (pointerAnimationFrameRef.current !== null) {
+        cancelAnimationFrame(pointerAnimationFrameRef.current)
+        pointerAnimationFrameRef.current = null
+      }
+    }
+  }, [dragPointerRef, dragSessionId, ghostHeight, ghostItem, ghostWidth])
+
+  useEffect(() => {
+    const initialPointer = dragPointerRef.current
+    if (!dragSessionId || ghostItem?.kind !== 'icon' || stackedIcons.length === 0 || !initialPointer) {
       if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current)
         animationFrameRef.current = null
@@ -315,7 +369,6 @@ export function DragOverlays({
       trailSamplesRef.current = []
       stackPositionsRef.current = []
       lastMoveAtRef.current = 0
-      setStackPositions([])
       return
     }
 
@@ -323,17 +376,21 @@ export function DragOverlays({
       left: entry.sourceCenter.x - iconImageSize / 2,
       top: entry.sourceCenter.y - iconImageSize / 2,
     }))
-    const leaderLeft = dragPointer.pointerX - iconImageSize / 2
-    const leaderTop = dragPointer.pointerY - iconImageSize / 2
+    const leaderLeft = initialPointer.pointerX - iconImageSize / 2
+    const leaderTop = initialPointer.pointerY - iconImageSize / 2
     const startedAt = performance.now()
 
+    stackedIcons.forEach((entry, index) => {
+      const position = initialPositions[index]
+      if (!position) return
+      applyGhostTransform(stackNodeRefs.current.get(entry.id) ?? null, position.left, position.top)
+    })
     trailSamplesRef.current = [{ left: leaderLeft, top: leaderTop, timestamp: startedAt }]
     stackPositionsRef.current = initialPositions
     lastMoveAtRef.current = Number.NEGATIVE_INFINITY
-    setStackPositions(initialPositions)
 
     const tick = (now: number) => {
-      const latestPointer = pointerRef.current
+      const latestPointer = dragPointerRef.current
       const latestIcons = stackedIconsRef.current
       if (!latestPointer || latestIcons.length === 0) {
         animationFrameRef.current = null
@@ -402,7 +459,15 @@ export function DragOverlays({
 
       stackPositionsRef.current = nextPositions
       if (hasStackPositionChanged(previousPositions, nextPositions)) {
-        setStackPositions(nextPositions)
+        latestIcons.forEach((entry, index) => {
+          const position = nextPositions[index]
+          if (!position) return
+          applyGhostTransform(
+            stackNodeRefs.current.get(entry.id) ?? null,
+            position.left,
+            position.top
+          )
+        })
       }
 
       animationFrameRef.current = requestAnimationFrame(tick)
@@ -415,22 +480,15 @@ export function DragOverlays({
         animationFrameRef.current = null
       }
     }
-  }, [dragSessionId, ghostItem?.kind, iconImageSize, stackedIconSignature, stackedIcons.length])
-  const folderSpan = ghostItem?.kind === 'folder' ? getGridItemSpan(ghostItem) : null
-  const folderFootprintWidth =
-    folderSpan ? folderSpan.cols * slotWidth + Math.max(0, folderSpan.cols - 1) * gridGap : 0
-  const folderFootprintHeight =
-    folderSpan ? folderSpan.rows * slotHeight + Math.max(0, folderSpan.rows - 1) * gridGap : 0
-  const ghostWidth = ghostItem?.kind === 'folder' ? folderFootprintWidth : iconImageSize
-  const ghostHeight = ghostItem?.kind === 'folder' ? folderFootprintHeight : iconImageSize
+  }, [dragPointerRef, dragSessionId, ghostItem?.kind, iconImageSize, stackedIconSignature, stackedIcons])
 
   return (
     <>
-      {dragPointer && ghostItem ? (
+      {initialDragPointer && ghostItem ? (
         <>
           {ghostItem.kind === 'icon' && stackedIcons.length > 0
             ? stackedIcons.map((entry, index) => {
-                const position = stackPositions[index] ?? {
+                const initialPosition = {
                   left: entry.sourceCenter.x - iconImageSize / 2,
                   top: entry.sourceCenter.y - iconImageSize / 2,
                 }
@@ -439,6 +497,7 @@ export function DragOverlays({
                 return (
                   <div
                     key={entry.id}
+                    ref={node => setStackNodeRef(entry.id, node)}
                     className="pointer-events-none fixed"
                     style={{
                       zIndex: 48 - index,
@@ -446,7 +505,7 @@ export function DragOverlays({
                       height: iconImageSize,
                       left: 0,
                       top: 0,
-                      transform: `translate3d(${position.left}px, ${position.top}px, 0)`,
+                      transform: `translate3d(${initialPosition.left}px, ${initialPosition.top}px, 0)`,
                       willChange: 'transform',
                     }}
                   >
@@ -472,12 +531,15 @@ export function DragOverlays({
             : null}
 
           <div
+            ref={leaderNodeRef}
             className="pointer-events-none fixed z-50"
             style={{
               width: ghostWidth,
               height: ghostHeight,
-              left: dragPointer.pointerX - ghostWidth / 2,
-              top: dragPointer.pointerY - ghostHeight / 2,
+              left: 0,
+              top: 0,
+              transform: `translate3d(${initialDragPointer.pointerX - ghostWidth / 2}px, ${initialDragPointer.pointerY - ghostHeight / 2}px, 0)`,
+              willChange: 'transform',
             }}
           >
             <div

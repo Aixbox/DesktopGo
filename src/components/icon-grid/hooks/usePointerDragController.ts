@@ -18,6 +18,7 @@ interface UsePointerDragControllerParams<
   dragRef: MutableRefObject<TActive | null>
   beginDragFnRef: MutableRefObject<(pending: TPending, x: number, y: number) => void>
   onDragMoveFnRef: MutableRefObject<(pointerId: number, x: number, y: number) => void>
+  flushDragMoveFnRef: MutableRefObject<(pointerId: number, x: number, y: number) => void>
   finishDragFnRef: MutableRefObject<(pointerId: number) => void>
   clearPendingFnRef: MutableRefObject<() => void>
   abortPendingFnRef: MutableRefObject<(pointerId: number) => void>
@@ -33,6 +34,7 @@ export function usePointerDragController<
   dragRef,
   beginDragFnRef,
   onDragMoveFnRef,
+  flushDragMoveFnRef,
   finishDragFnRef,
   clearPendingFnRef,
   abortPendingFnRef,
@@ -58,7 +60,7 @@ export function usePointerDragController<
 
     const handlePointerUp = (event: PointerEvent) => {
       if (dragRef.current?.pointerId === event.pointerId) {
-        onDragMoveFnRef.current(event.pointerId, event.clientX, event.clientY)
+        flushDragMoveFnRef.current(event.pointerId, event.clientX, event.clientY)
         finishDragFnRef.current(event.pointerId)
         return
       }
@@ -91,6 +93,7 @@ export function usePointerDragController<
     pendingMoveTolerance,
     dragRef,
     finishDragFnRef,
+    flushDragMoveFnRef,
     onDragMoveFnRef,
     pendingRef,
     cancelDragFnRef,

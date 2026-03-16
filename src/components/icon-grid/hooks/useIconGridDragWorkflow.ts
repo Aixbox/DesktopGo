@@ -98,6 +98,7 @@ interface UseIconGridDragWorkflowParams {
 interface UseIconGridDragWorkflowResult {
   dragState: DragState | null
   dragRef: MutableRefObject<DragState | null>
+  dragPointerRef: MutableRefObject<{ pointerX: number; pointerY: number } | null>
   folderDropFlight: FolderDropFlight | null
   multiDropFlight: MultiDropFlightItem[] | null
   folderPreviewFreezeTargetId: string | null
@@ -159,6 +160,9 @@ export function useIconGridDragWorkflow({
     () => undefined
   )
   const onDragMoveFnRef = useRef<(pointerId: number, x: number, y: number) => void>(() => undefined)
+  const flushDragMoveFnRef = useRef<(pointerId: number, x: number, y: number) => void>(
+    () => undefined
+  )
   const finishDragFnRef = useRef<(pointerId: number) => void>(() => undefined)
   const clearPendingFnRef = useRef<() => void>(() => undefined)
   const abortPendingFnRef = useRef<(pointerId: number) => void>(() => undefined)
@@ -167,11 +171,15 @@ export function useIconGridDragWorkflow({
   const outerDwellTimerRef = useRef<number | null>(null)
   const outerDwellTargetIdRef = useRef<string | null>(null)
   const suppressClickUntilRef = useRef(0)
+  const dragMoveRafRef = useRef<number | null>(null)
+  const queuedDragMoveRef = useRef<{ pointerId: number; x: number; y: number } | null>(null)
+  const dragPointerRef = useRef<{ pointerX: number; pointerY: number } | null>(null)
+  const renderedDragStateRef = useRef<DragState | null>(null)
 
   const [dragState, setDragState] = useState<DragState | null>(null)
 
   useEffect(() => {
-    dragRef.current = dragState
+    renderedDragStateRef.current = dragState
   }, [dragState])
 
   const { clearEdgeSwitchTimer, maybeHandleOuterEdgeSwitch } = useEdgeAutoPaging({
@@ -205,6 +213,68 @@ export function useIconGridDragWorkflow({
       outerDwellTimerRef.current = null
     }
     outerDwellTargetIdRef.current = null
+  }
+
+  const cancelQueuedDragMove = () => {
+    queuedDragMoveRef.current = null
+    if (dragMoveRafRef.current !== null) {
+      cancelAnimationFrame(dragMoveRafRef.current)
+      dragMoveRafRef.current = null
+    }
+  }
+
+  const syncDragRuntime = (next: DragState | null) => {
+    dragRef.current = next
+    if (!next) {
+      dragPointerRef.current = null
+      return
+    }
+
+    if (dragPointerRef.current) {
+      dragPointerRef.current.pointerX = next.pointerX
+      dragPointerRef.current.pointerY = next.pointerY
+      return
+    }
+
+    dragPointerRef.current = { pointerX: next.pointerX, pointerY: next.pointerY }
+  }
+
+  const areDraggingIdsEqual = (left: string[], right: string[]) =>
+    left.length === right.length && left.every((id, index) => id === right[index])
+
+  const hasRenderableDragStateChanged = (previous: DragState | null, next: DragState | null) => {
+    if (previous === next) return false
+    if (!previous || !next) return previous !== next
+    if (previous.context !== next.context) return true
+    if (previous.sourceFolderId !== next.sourceFolderId) return true
+    if (previous.pointerId !== next.pointerId) return true
+    if (previous.dragStartedAt !== next.dragStartedAt) return true
+    if (previous.draggingId !== next.draggingId) return true
+    if (previous.draggingItem !== next.draggingItem) return true
+    if (!areDraggingIdsEqual(previous.draggingIds, next.draggingIds)) return true
+    if (!areSlotsEqual(previous.workingOrder, next.workingOrder)) return true
+    if (previous.sourceSlotIndex !== next.sourceSlotIndex) return true
+    if (previous.previewSlotIndex !== next.previewSlotIndex) return true
+    if (previous.dockPreviewIndex !== next.dockPreviewIndex) return true
+    if (previous.hoverTargetId !== next.hoverTargetId) return true
+    if (previous.hoverZone !== next.hoverZone) return true
+    if (previous.folderPreviewTargetId !== next.folderPreviewTargetId) return true
+    return previous.initialCenters !== next.initialCenters
+  }
+
+  const commitDragState: Dispatch<SetStateAction<DragState | null>> = update => {
+    const previous = dragRef.current
+    const next = typeof update === 'function' ? update(previous) : update
+    syncDragRuntime(next)
+    renderedDragStateRef.current = next
+    setDragState(next)
+  }
+
+  const publishMoveDragState = (next: DragState | null) => {
+    syncDragRuntime(next)
+    if (!hasRenderableDragStateChanged(renderedDragStateRef.current, next)) return
+    renderedDragStateRef.current = next
+    setDragState(next)
   }
 
   const collectCenters = (refs: Map<string, HTMLDivElement>) => {
@@ -668,8 +738,7 @@ export function useIconGridDragWorkflow({
         dwellStartedAt: null,
         lastEvasionSignature: null,
       }
-      dragRef.current = nextState
-      setDragState(nextState)
+      publishMoveDragState(nextState)
       return
     }
 
@@ -687,8 +756,7 @@ export function useIconGridDragWorkflow({
         dwellStartedAt: null,
         lastEvasionSignature: null,
       }
-      dragRef.current = previewState
-      setDragState(previewState)
+      publishMoveDragState(previewState)
       return
     }
 
@@ -702,8 +770,7 @@ export function useIconGridDragWorkflow({
       folderPreviewTargetId: null,
     }
     const next = tryApplyTopLevelEvasion(base, overlapHit, now)
-    dragRef.current = next
-    setDragState(next)
+    publishMoveDragState(next)
   }
 
   const {
@@ -728,7 +795,7 @@ export function useIconGridDragWorkflow({
     setOuterSlots,
     setDockKeys,
     dragRef,
-    setDragState,
+    setDragState: commitDragState,
     clearEdgeSwitchTimer,
     resolveNearestDropOrderByContext,
     resolveNearestSlotIndexByContext,
@@ -859,12 +926,11 @@ export function useIconGridDragWorkflow({
             ? collectCenters(dockItemRefs.current)
             : collectCenters(tileRefs.current),
     }
-    dragRef.current = nextState
-    setDragState(nextState)
+    commitDragState(nextState)
     clearPending()
   }
 
-  const onDragMove = (pointerId: number, x: number, y: number) => {
+  const processDragMove = (pointerId: number, x: number, y: number) => {
     const current = dragRef.current
     if (!current || current.pointerId !== pointerId) return
 
@@ -917,8 +983,7 @@ export function useIconGridDragWorkflow({
           ...resetOuterInteraction(baseState, nearestSlotIndex),
           dockPreviewIndex: baseState.context === 'dock' ? nearestSlotIndex : null,
         }
-        dragRef.current = resetState
-        setDragState(resetState)
+        publishMoveDragState(resetState)
         return
       }
 
@@ -931,8 +996,7 @@ export function useIconGridDragWorkflow({
           ...resetOuterInteraction(baseState, nearestSlotIndex),
           dockPreviewIndex: baseState.context === 'dock' ? nearestSlotIndex : null,
         }
-        dragRef.current = resetState
-        setDragState(resetState)
+        publishMoveDragState(resetState)
         return
       }
 
@@ -963,8 +1027,7 @@ export function useIconGridDragWorkflow({
             folderPreviewTargetId: overlapHit.targetId,
             lastEvasionSignature: null,
           }
-          dragRef.current = previewState
-          setDragState(previewState)
+          publishMoveDragState(previewState)
           return
         }
 
@@ -975,8 +1038,7 @@ export function useIconGridDragWorkflow({
           hoverZone: overlapHit.zone,
           hoverIou: overlapHit.iou,
         }
-        dragRef.current = insertState
-        setDragState(insertState)
+        publishMoveDragState(insertState)
         return
       }
 
@@ -1005,8 +1067,7 @@ export function useIconGridDragWorkflow({
         next.folderPreviewTargetId = overlapHit.targetId
         next.dwellStartedAt = null
         next.lastEvasionSignature = null
-        dragRef.current = next
-        setDragState(next)
+        publishMoveDragState(next)
         return
       }
 
@@ -1020,8 +1081,7 @@ export function useIconGridDragWorkflow({
         next.folderPreviewTargetId = overlapHit.targetId
         next.dwellStartedAt = null
         next.lastEvasionSignature = null
-        dragRef.current = next
-        setDragState(next)
+        publishMoveDragState(next)
         return
       }
 
@@ -1049,8 +1109,7 @@ export function useIconGridDragWorkflow({
         }, remainingMs)
       }
 
-      dragRef.current = next
-      setDragState(next)
+      publishMoveDragState(next)
       return
     }
 
@@ -1068,8 +1127,7 @@ export function useIconGridDragWorkflow({
         folderPreviewTargetId: null,
         lastEvasionSignature: null,
       }
-      dragRef.current = resetState
-      setDragState(resetState)
+      publishMoveDragState(resetState)
       return
     }
 
@@ -1085,8 +1143,7 @@ export function useIconGridDragWorkflow({
         lastEvasionSignature: null,
         workingOrder: moveDragHoleToIndex(baseState.workingOrder, hit.globalSlotIndex),
       }
-      dragRef.current = next
-      setDragState(next)
+      publishMoveDragState(next)
       return
     }
 
@@ -1094,8 +1151,7 @@ export function useIconGridDragWorkflow({
     const source = baseState.draggingItem
     const target = itemMap.get(hit.targetId)
     if (!target) {
-      dragRef.current = baseState
-      setDragState(baseState)
+      publishMoveDragState(baseState)
       return
     }
 
@@ -1126,8 +1182,7 @@ export function useIconGridDragWorkflow({
     const shouldEvasion = canFolder && sideZone && horizontal === hit.zone
     const targetIndex = baseState.workingOrder.indexOf(hit.targetId)
     if (targetIndex < 0) {
-      dragRef.current = next
-      setDragState(next)
+      publishMoveDragState(next)
       return
     }
 
@@ -1153,8 +1208,7 @@ export function useIconGridDragWorkflow({
       if (!shouldTriggerThisFrame) {
         next.lastEvasionSignature = baseState.lastEvasionSignature
         next.lastEvasionAt = baseState.lastEvasionAt
-        dragRef.current = next
-        setDragState(next)
+        publishMoveDragState(next)
         return
       }
 
@@ -1170,17 +1224,41 @@ export function useIconGridDragWorkflow({
     }
 
     next.workingOrder = moveDragHoleToIndex(baseState.workingOrder, desiredHoleIndex)
-    dragRef.current = next
-    setDragState(next)
+    publishMoveDragState(next)
   }
 
   useEffect(() => {
     beginDragFnRef.current = beginDrag
   }, [beginDrag])
 
+  const scheduleDragMove = (pointerId: number, x: number, y: number) => {
+    queuedDragMoveRef.current = { pointerId, x, y }
+    if (dragMoveRafRef.current !== null) return
+    dragMoveRafRef.current = window.requestAnimationFrame(() => {
+      dragMoveRafRef.current = null
+      const queued = queuedDragMoveRef.current
+      queuedDragMoveRef.current = null
+      if (!queued) return
+      processDragMove(queued.pointerId, queued.x, queued.y)
+    })
+  }
+
+  const flushDragMove = (pointerId: number, x: number, y: number) => {
+    queuedDragMoveRef.current = { pointerId, x, y }
+    if (dragMoveRafRef.current !== null) {
+      cancelAnimationFrame(dragMoveRafRef.current)
+      dragMoveRafRef.current = null
+    }
+    const queued = queuedDragMoveRef.current
+    queuedDragMoveRef.current = null
+    if (!queued) return
+    processDragMove(queued.pointerId, queued.x, queued.y)
+  }
+
   useEffect(() => {
-    onDragMoveFnRef.current = onDragMove
-  }, [onDragMove])
+    onDragMoveFnRef.current = scheduleDragMove
+    flushDragMoveFnRef.current = flushDragMove
+  }, [flushDragMove, scheduleDragMove])
 
   useEffect(() => {
     finishDragFnRef.current = (pointerId: number) => {
@@ -1211,8 +1289,8 @@ export function useIconGridDragWorkflow({
       if (dragRef.current?.pointerId !== pointerId) return
       clearOuterDwellTimer()
       clearEdgeSwitchTimer()
-      dragRef.current = null
-      setDragState(null)
+      cancelQueuedDragMove()
+      commitDragState(null)
     }
   }, [clearEdgeSwitchTimer])
 
@@ -1221,6 +1299,7 @@ export function useIconGridDragWorkflow({
     dragRef,
     beginDragFnRef,
     onDragMoveFnRef,
+    flushDragMoveFnRef,
     finishDragFnRef,
     clearPendingFnRef,
     abortPendingFnRef,
@@ -1307,8 +1386,7 @@ export function useIconGridDragWorkflow({
     if (!current || current.context !== 'outer') return
     clearOuterDwellTimer()
     const next = { ...resetOuterInteraction(current, null), dockPreviewIndex: null }
-    dragRef.current = next
-    setDragState(next)
+    commitDragState(next)
   }
 
   useEffect(
@@ -1316,6 +1394,7 @@ export function useIconGridDragWorkflow({
       clearTimer()
       clearOuterDwellTimer()
       clearEdgeSwitchTimer()
+      cancelQueuedDragMove()
     },
     []
   )
@@ -1323,6 +1402,7 @@ export function useIconGridDragWorkflow({
   return {
     dragState,
     dragRef,
+    dragPointerRef,
     folderDropFlight,
     multiDropFlight,
     folderPreviewFreezeTargetId,
@@ -1337,3 +1417,4 @@ export function useIconGridDragWorkflow({
     clearOuterDragInteractionForPageSwitch,
   }
 }
+

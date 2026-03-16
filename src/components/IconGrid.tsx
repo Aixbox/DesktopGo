@@ -267,6 +267,7 @@ export function IconGrid({ icons }: IconGridProps) {
   const {
     dragState,
     dragRef,
+    dragPointerRef,
     folderDropFlight,
     multiDropFlight,
     folderPreviewFreezeTargetId,
@@ -992,9 +993,7 @@ export function IconGrid({ icons }: IconGridProps) {
       />
 
       <DragOverlays
-        dragPointer={
-          dragState ? { pointerX: dragState.pointerX, pointerY: dragState.pointerY } : null
-        }
+        dragPointerRef={dragPointerRef}
         ghostItem={ghostItem}
         iconImageSize={iconConfig.imgSize}
         slotWidth={itemWidth}
