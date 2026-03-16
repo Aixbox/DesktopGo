@@ -1246,6 +1246,34 @@ const attemptFootprintEvasion = ({
     columns,
   })
 }
+
+const applyForwardSpillEvasion = (
+  order: Array<string | null>,
+  targetIndex: number
+): Array<string | null> => {
+  if (targetIndex < 0 || targetIndex >= order.length) return order
+
+  const next = [...order]
+  let spillIndex = -1
+  for (let index = targetIndex + 1; index < next.length; index += 1) {
+    if (next[index] === null) {
+      spillIndex = index
+      break
+    }
+  }
+
+  if (spillIndex < 0) {
+    spillIndex = next.length
+    next.push(null)
+  }
+
+  for (let index = spillIndex; index > targetIndex; index -= 1) {
+    next[index] = next[index - 1]
+  }
+  next[targetIndex] = null
+  return next
+}
+
 export const applyOuterEvasionPolicy = (
   order: Array<string | null>,
   hit: OuterOverlapHit,
@@ -1335,7 +1363,15 @@ export const applyOuterEvasionPolicy = (
     safeColumns,
     hit.targetIndex
   )
-  if (fallbackIndex === null) return { order, direction: null }
+  if (fallbackIndex === null) {
+    if (options?.items) {
+      return {
+        order: applyForwardSpillEvasion(order, hit.targetIndex),
+        direction: null,
+      }
+    }
+    return { order, direction: null }
+  }
   const next = [...order]
   next[fallbackIndex] = next[hit.targetIndex]
   next[hit.targetIndex] = null
