@@ -188,63 +188,6 @@ const insertWithForwardShift = (slots: Array<string | null>, index: number, id: 
   slots[index] = id
 }
 
-const rankPageIndicesByDistance = ({
-  pageStart,
-  pageSize,
-  columns,
-  originIndex,
-}: {
-  pageStart: number
-  pageSize: number
-  columns: number
-  originIndex: number
-}) => {
-  const safeColumns = Math.max(1, columns)
-  const originLocalIndex = Math.max(0, originIndex - pageStart)
-  const originRow = Math.floor(originLocalIndex / safeColumns)
-  const originCol = originLocalIndex % safeColumns
-
-  return Array.from({ length: pageSize }, (_, localIndex) => {
-    const globalIndex = pageStart + localIndex
-    const row = Math.floor(localIndex / safeColumns)
-    const col = localIndex % safeColumns
-    return {
-      localIndex,
-      globalIndex,
-      distance: getManhattanDistanceBySlotIndex(globalIndex, originIndex, pageStart, safeColumns),
-      rowDistance: Math.abs(row - originRow),
-      colDistance: Math.abs(col - originCol),
-    }
-  }).sort((a, b) => {
-    if (a.distance !== b.distance) return a.distance - b.distance
-    if (a.rowDistance !== b.rowDistance) return a.rowDistance - b.rowDistance
-    if (a.colDistance !== b.colDistance) return a.colDistance - b.colDistance
-    return a.localIndex - b.localIndex
-  })
-}
-
-const resolveTargetLocalIndices = ({
-  pageStart,
-  pageSize,
-  columns,
-  dropIndex,
-  insertCount,
-}: {
-  pageStart: number
-  pageSize: number
-  columns: number
-  dropIndex: number
-  insertCount: number
-}) =>
-  rankPageIndicesByDistance({
-    pageStart,
-    pageSize,
-    columns,
-    originIndex: dropIndex,
-  })
-    .slice(0, insertCount)
-    .map(entry => entry.localIndex)
-
 const getNeighborLocalIndices = ({
   localIndex,
   pageSize,
@@ -268,19 +211,138 @@ const getNeighborLocalIndices = ({
   return neighbors
 }
 
-const findGapPropagationPath = ({
-  entries,
+const compareLocalIndicesByPreference = ({
+  pageStart,
+  columns,
+  targetLocalIndex,
+  anchorLocalIndex,
+  a,
+  b,
+}: {
+  pageStart: number
+  columns: number
+  targetLocalIndex: number
+  anchorLocalIndex: number
+  a: number
+  b: number
+}) => {
+  const safeColumns = Math.max(1, columns)
+  const aAfterAnchor = a > anchorLocalIndex ? 0 : 1
+  const bAfterAnchor = b > anchorLocalIndex ? 0 : 1
+  if (aAfterAnchor !== bAfterAnchor) return aAfterAnchor - bAfterAnchor
+
+  const distanceToTargetA = getManhattanDistanceBySlotIndex(
+    pageStart + a,
+    pageStart + targetLocalIndex,
+    pageStart,
+    safeColumns
+  )
+  const distanceToTargetB = getManhattanDistanceBySlotIndex(
+    pageStart + b,
+    pageStart + targetLocalIndex,
+    pageStart,
+    safeColumns
+  )
+  if (distanceToTargetA !== distanceToTargetB) return distanceToTargetA - distanceToTargetB
+
+  const distanceToAnchorA = getManhattanDistanceBySlotIndex(
+    pageStart + a,
+    pageStart + anchorLocalIndex,
+    pageStart,
+    safeColumns
+  )
+  const distanceToAnchorB = getManhattanDistanceBySlotIndex(
+    pageStart + b,
+    pageStart + anchorLocalIndex,
+    pageStart,
+    safeColumns
+  )
+  if (distanceToAnchorA !== distanceToAnchorB) return distanceToAnchorA - distanceToAnchorB
+
+  return aAfterAnchor === 0 ? a - b : b - a
+}
+
+const resolveTargetLocalIndices = ({
+  pageStart,
+  pageSize,
+  columns,
+  dropIndex,
+  insertCount,
+}: {
+  pageStart: number
+  pageSize: number
+  columns: number
+  dropIndex: number
+  insertCount: number
+}) => {
+  const dropLocalIndex = clampNumber(dropIndex - pageStart, 0, pageSize - 1)
+  const targets: number[] = [dropLocalIndex]
+  if (insertCount <= 1) {
+    return targets
+  }
+
+  for (let localIndex = dropLocalIndex + 1; localIndex < pageSize; localIndex += 1) {
+    if (targets.length >= insertCount) break
+    targets.push(localIndex)
+  }
+  if (targets.length >= insertCount) {
+    return targets.slice(0, insertCount)
+  }
+
+  const selected = new Set<number>(targets)
+  const visited = new Set<number>([dropLocalIndex])
+  const frontier: number[] = []
+  const sortByPreference = (a: number, b: number) =>
+    compareLocalIndicesByPreference({
+      pageStart,
+      columns,
+      targetLocalIndex: dropLocalIndex,
+      anchorLocalIndex: dropLocalIndex,
+      a,
+      b,
+    })
+
+  const enqueueNeighbors = (localIndex: number) => {
+    getNeighborLocalIndices({
+      localIndex,
+      pageSize,
+      columns,
+    })
+      .sort(sortByPreference)
+      .forEach(neighborLocalIndex => {
+        if (visited.has(neighborLocalIndex)) return
+        visited.add(neighborLocalIndex)
+        frontier.push(neighborLocalIndex)
+      })
+    frontier.sort(sortByPreference)
+  }
+
+  enqueueNeighbors(dropLocalIndex)
+
+  while (frontier.length > 0 && targets.length < insertCount) {
+    const nextLocalIndex = frontier.shift()
+    if (nextLocalIndex === undefined) break
+    enqueueNeighbors(nextLocalIndex)
+    if (selected.has(nextLocalIndex)) continue
+    selected.add(nextLocalIndex)
+    targets.push(nextLocalIndex)
+  }
+
+  return targets.slice(0, insertCount)
+}
+const findGapPropagationPathToEmpty = ({
   pageStart,
   pageSize,
   columns,
   targetLocalIndex,
+  emptyLocalIndex,
   blockedLocalIndexSet,
 }: {
-  entries: Array<string | null>
   pageStart: number
   pageSize: number
   columns: number
   targetLocalIndex: number
+  emptyLocalIndex: number
   blockedLocalIndexSet: Set<number>
 }) => {
   const queue: number[] = [targetLocalIndex]
@@ -291,11 +353,7 @@ const findGapPropagationPath = ({
     const currentLocalIndex = queue.shift()
     if (currentLocalIndex === undefined) break
 
-    if (
-      currentLocalIndex !== targetLocalIndex &&
-      !blockedLocalIndexSet.has(currentLocalIndex) &&
-      entries[currentLocalIndex] === null
-    ) {
+    if (currentLocalIndex === emptyLocalIndex) {
       const path: number[] = [currentLocalIndex]
       let cursor = currentLocalIndex
       while (parentByLocalIndex.has(cursor)) {
@@ -312,13 +370,13 @@ const findGapPropagationPath = ({
     }).sort((a, b) => {
       const distanceA = getManhattanDistanceBySlotIndex(
         pageStart + a,
-        pageStart + targetLocalIndex,
+        pageStart + emptyLocalIndex,
         pageStart,
         Math.max(1, columns)
       )
       const distanceB = getManhattanDistanceBySlotIndex(
         pageStart + b,
-        pageStart + targetLocalIndex,
+        pageStart + emptyLocalIndex,
         pageStart,
         Math.max(1, columns)
       )
@@ -328,13 +386,64 @@ const findGapPropagationPath = ({
 
     orderedNeighbors.forEach(neighborLocalIndex => {
       if (visited.has(neighborLocalIndex)) return
-      if (blockedLocalIndexSet.has(neighborLocalIndex) && neighborLocalIndex !== targetLocalIndex) {
+      if (blockedLocalIndexSet.has(neighborLocalIndex) && neighborLocalIndex !== emptyLocalIndex) {
         return
       }
       visited.add(neighborLocalIndex)
       parentByLocalIndex.set(neighborLocalIndex, currentLocalIndex)
       queue.push(neighborLocalIndex)
     })
+  }
+
+  return null
+}
+
+const findPreferredGapPropagationPath = ({
+  entries,
+  pageStart,
+  pageSize,
+  columns,
+  targetLocalIndex,
+  anchorLocalIndex,
+  blockedLocalIndexSet,
+}: {
+  entries: Array<string | null>
+  pageStart: number
+  pageSize: number
+  columns: number
+  targetLocalIndex: number
+  anchorLocalIndex: number
+  blockedLocalIndexSet: Set<number>
+}) => {
+  const emptyCandidateLocalIndices = Array.from({ length: pageSize }, (_, localIndex) => localIndex)
+    .filter(localIndex => {
+      if (localIndex === targetLocalIndex) return false
+      if (blockedLocalIndexSet.has(localIndex)) return false
+      return entries[localIndex] === null
+    })
+    .sort((a, b) =>
+      compareLocalIndicesByPreference({
+        pageStart,
+        columns,
+        targetLocalIndex,
+        anchorLocalIndex,
+        a,
+        b,
+      })
+    )
+
+  for (const emptyLocalIndex of emptyCandidateLocalIndices) {
+    const path = findGapPropagationPathToEmpty({
+      pageStart,
+      pageSize,
+      columns,
+      targetLocalIndex,
+      emptyLocalIndex,
+      blockedLocalIndexSet,
+    })
+    if (path) {
+      return path
+    }
   }
 
   return null
@@ -365,7 +474,7 @@ const evictTrailingPageItem = ({
   return null
 }
 
-const insertIntoPageWithLocalEvasion = ({
+const insertIntoPageFromAnchor = ({
   slots,
   pageStart,
   pageSize,
@@ -386,6 +495,7 @@ const insertIntoPageWithLocalEvasion = ({
   }
 
   const pageEntries = slots.slice(pageStart, pageEnd)
+  const dropLocalIndex = clampNumber(dropIndex - pageStart, 0, pageSize - 1)
   const localInsertCount = Math.min(dragIds.length, pageSize)
 
   if (localInsertCount <= 0) {
@@ -405,55 +515,74 @@ const insertIntoPageWithLocalEvasion = ({
   const targetLocalIndexSet = new Set(targetLocalIndices)
   const overflowItems: Array<{ id: string; localIndex: number }> = []
 
-  targetLocalIndices.forEach(targetLocalIndex => {
-    if (pageEntries[targetLocalIndex] === null) return
-
-    const blockedLocalIndexSet = new Set(
-      targetLocalIndices.filter(localIndex => localIndex !== targetLocalIndex)
-    )
-    let path = findGapPropagationPath({
-      entries: pageEntries,
-      pageStart,
-      pageSize,
-      columns,
-      targetLocalIndex,
-      blockedLocalIndexSet,
+  if (localInsertCount === pageSize) {
+    pageEntries.forEach((id, localIndex) => {
+      if (!id) return
+      overflowItems.push({ id, localIndex })
+      pageEntries[localIndex] = null
     })
+  } else {
+    targetLocalIndices.forEach(targetLocalIndex => {
+      if (pageEntries[targetLocalIndex] === null) return
 
-    if (!path) {
-      const evicted = evictTrailingPageItem({
+      const blockedLocalIndexSet = new Set(
+        targetLocalIndices.filter(localIndex => localIndex !== targetLocalIndex)
+      )
+      let path = findPreferredGapPropagationPath({
         entries: pageEntries,
-        targetLocalIndexSet,
+        pageStart,
+        pageSize,
+        columns,
+        targetLocalIndex,
+        anchorLocalIndex: dropLocalIndex,
+        blockedLocalIndexSet,
       })
-      if (evicted) {
-        overflowItems.push(evicted)
-        path = findGapPropagationPath({
-          entries: pageEntries,
-          pageStart,
-          pageSize,
-          columns,
-          targetLocalIndex,
-          blockedLocalIndexSet,
-        })
-      }
-    }
 
-    if (!path) return
-    applyGapPropagationPath(pageEntries, path)
-  })
+      if (!path) {
+        const evicted = evictTrailingPageItem({
+          entries: pageEntries,
+          targetLocalIndexSet,
+        })
+        if (evicted) {
+          overflowItems.push(evicted)
+          path = findPreferredGapPropagationPath({
+            entries: pageEntries,
+            pageStart,
+            pageSize,
+            columns,
+            targetLocalIndex,
+            anchorLocalIndex: dropLocalIndex,
+            blockedLocalIndexSet,
+          })
+        }
+      }
+
+      if (!path) {
+        const displacedId = pageEntries[targetLocalIndex]
+        if (displacedId) {
+          overflowItems.push({ id: displacedId, localIndex: targetLocalIndex })
+          pageEntries[targetLocalIndex] = null
+        }
+        return
+      }
+
+      applyGapPropagationPath(pageEntries, path)
+    })
+  }
 
   targetLocalIndices.forEach((localIndex, offset) => {
     pageEntries[localIndex] = dragIds[offset]
   })
 
-  for (let index = 0; index < pageSize; index += 1) {
-    slots[pageStart + index] = pageEntries[index] ?? null
+  for (let localIndex = 0; localIndex < pageSize; localIndex += 1) {
+    slots[pageStart + localIndex] = pageEntries[localIndex] ?? null
   }
 
   const remainingDragIds = dragIds.slice(localInsertCount)
   const overflowIds = overflowItems
     .sort((a, b) => a.localIndex - b.localIndex)
     .map(item => item.id)
+
   remainingDragIds.forEach((id, offset) => {
     insertWithForwardShift(slots, pageEnd + offset, id)
   })
@@ -499,29 +628,14 @@ export const applyMultiOuterDropFromSession = ({
 
   const dropIndex = clampNumber(candidateDropIndex, 0, Number.MAX_SAFE_INTEGER)
   const pageStart = Math.floor(dropIndex / safePageSize) * safePageSize
-  const pageEnd = pageStart + safePageSize
-  while (nextSlots.length < pageEnd) {
-    nextSlots.push(null)
-  }
-
-  const currentPageHasEmptySlot = nextSlots
-    .slice(pageStart, pageEnd)
-    .some(slot => slot === null)
-
-  if (currentPageHasEmptySlot) {
-    insertIntoPageWithLocalEvasion({
-      slots: nextSlots,
-      pageStart,
-      pageSize: safePageSize,
-      dropIndex,
-      columns,
-      dragIds,
-    })
-  } else {
-    dragIds.forEach((id, offset) => {
-      insertWithForwardShift(nextSlots, dropIndex + offset, id)
-    })
-  }
+  insertIntoPageFromAnchor({
+    slots: nextSlots,
+    pageStart,
+    pageSize: safePageSize,
+    dropIndex,
+    columns,
+    dragIds,
+  })
 
   if (nextSlots.length === 0) {
     nextSlots.push(...Array.from({ length: safePageSize }, () => null))
