@@ -68,31 +68,40 @@ export const applyAddToFolderFromSession = (
   const baseSlots = session.workingOrder.map(slot => (slot === DRAG_HOLE_ID ? null : slot))
   const map = new Map<string, GridItem>()
   base.forEach(item => map.set(getId(item), item))
-  const sourceExistsInBase = map.has(session.draggingId)
-  const sourceItem = map.get(session.draggingId) ?? session.draggingItem
   const targetFolder = map.get(targetFolderId)
-  if (!targetFolder || targetFolder.kind !== 'folder' || sourceItem.kind !== 'icon') {
+  if (!targetFolder || targetFolder.kind !== 'folder') {
     return { items: base, slots: baseSlots }
   }
 
-  const nextFolderChildren = targetFolder.children.some(child => child.key === sourceItem.key)
-    ? targetFolder.children
-    : [...targetFolder.children, sourceItem]
-  const nextTargetFolder = { ...targetFolder, children: nextFolderChildren }
-  map.set(targetFolderId, nextTargetFolder)
-  if (sourceExistsInBase) {
-    map.delete(session.draggingId)
+  const draggingIds = session.draggingIds.length > 0 ? session.draggingIds : [session.draggingId]
+  const draggingIdSet = new Set(draggingIds)
+  const draggedIcons = draggingIds.flatMap(id => {
+    const item = id === session.draggingId ? session.draggingItem : map.get(id)
+    return item?.kind === 'icon' ? [item] : []
+  })
+  if (draggedIcons.length === 0) {
+    return { items: base, slots: baseSlots }
   }
 
-  const nextSlots = baseSlots.map(slot => (slot === session.draggingId ? null : slot))
+  const nextFolderChildren = [...targetFolder.children]
+  const existingChildKeys = new Set(targetFolder.children.map(child => child.key))
+  draggedIcons.forEach(icon => {
+    if (existingChildKeys.has(icon.key)) return
+    existingChildKeys.add(icon.key)
+    nextFolderChildren.push(icon)
+  })
+  const nextTargetFolder = { ...targetFolder, children: nextFolderChildren }
+  map.set(targetFolderId, nextTargetFolder)
+
+  const nextSlots = baseSlots.map(slot => (slot && draggingIdSet.has(slot) ? null : slot))
   const nextItems: GridItem[] = []
   base.forEach(item => {
     const id = getId(item)
-    if (id === session.draggingId && sourceExistsInBase) {
-      return
-    }
     if (id === targetFolderId) {
       nextItems.push(nextTargetFolder)
+      return
+    }
+    if (draggingIdSet.has(id)) {
       return
     }
     nextItems.push(item)
@@ -147,9 +156,7 @@ export const applyOuterDropFromSession = ({
   }
 
   if (candidateDropIndex >= nextSlots.length) {
-    nextSlots.push(
-      ...Array.from({ length: candidateDropIndex - nextSlots.length + 1 }, () => null)
-    )
+    nextSlots.push(...Array.from({ length: candidateDropIndex - nextSlots.length + 1 }, () => null))
   }
   const remainder = nextSlots.length % safePageSize
   if (remainder > 0) {
@@ -206,7 +213,8 @@ const getNeighborLocalIndices = ({
   if (col > 0) neighbors.push(localIndex - 1)
   if (col + 1 < safeColumns && localIndex + 1 < pageSize) neighbors.push(localIndex + 1)
   if (row > 0) neighbors.push(localIndex - safeColumns)
-  if (row + 1 < maxRows && localIndex + safeColumns < pageSize) neighbors.push(localIndex + safeColumns)
+  if (row + 1 < maxRows && localIndex + safeColumns < pageSize)
+    neighbors.push(localIndex + safeColumns)
 
   return neighbors
 }
@@ -579,9 +587,7 @@ const insertIntoPageFromAnchor = ({
   }
 
   const remainingDragIds = dragIds.slice(localInsertCount)
-  const overflowIds = overflowItems
-    .sort((a, b) => a.localIndex - b.localIndex)
-    .map(item => item.id)
+  const overflowIds = overflowItems.sort((a, b) => a.localIndex - b.localIndex).map(item => item.id)
 
   remainingDragIds.forEach((id, offset) => {
     insertWithForwardShift(slots, pageEnd + offset, id)

@@ -25,10 +25,7 @@ import {
   findNearestValidAnchorIndex,
   normalizeOuterSlots,
 } from '../domain/topLevelLayout'
-import {
-  getDockItemKeys,
-  resolveOuterItemIds,
-} from '../domain/dock'
+import { getDockItemKeys, resolveOuterItemIds } from '../domain/dock'
 import { OUTER_DRAG_RULES } from '../constants'
 import { usePointerDragController } from './usePointerDragController'
 import { useEdgeAutoPaging } from './useEdgeAutoPaging'
@@ -316,7 +313,9 @@ export function useIconGridDragWorkflow({
     const orderedSelectedIds = sourceOrder.filter((slot): slot is string => {
       if (!slot || slot === DRAG_HOLE_ID || slot === leadId) return false
       const candidate = itemById.get(slot)
-      return Boolean(candidate && candidate.kind === 'icon' && selectedIconKeySet.has(candidate.key))
+      return Boolean(
+        candidate && candidate.kind === 'icon' && selectedIconKeySet.has(candidate.key)
+      )
     })
 
     return [leadId, ...orderedSelectedIds]
@@ -397,7 +396,8 @@ export function useIconGridDragWorkflow({
         const rect = node.getBoundingClientRect()
         if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) continue
         const rawTargetId =
-          node.querySelector<HTMLElement>('[data-dock-key]')?.dataset.dockKey ?? state.workingOrder[index]
+          node.querySelector<HTMLElement>('[data-dock-key]')?.dataset.dockKey ??
+          state.workingOrder[index]
         const targetId =
           !rawTargetId || rawTargetId === DRAG_HOLE_ID || rawTargetId === state.draggingId
             ? null
@@ -495,9 +495,7 @@ export function useIconGridDragWorkflow({
           index,
           rect: dockItemRefs.current.get(id)?.getBoundingClientRect() ?? null,
         }))
-        .filter(
-          (entry): entry is { index: number; rect: DOMRect } => entry.rect !== null
-        )
+        .filter((entry): entry is { index: number; rect: DOMRect } => entry.rect !== null)
 
       if (itemRects.length === 0) {
         return slotEntries.length > 0 ? 0 : null
@@ -546,13 +544,7 @@ export function useIconGridDragWorkflow({
       return resolveNearestSlotIndexByContext(state, options)
     }
 
-    return resolveNearestAnchorIndexByMetrics(
-      state,
-      metrics,
-      config.gridGap,
-      draggingSpan,
-      options
-    )
+    return resolveNearestAnchorIndexByMetrics(state, metrics, config.gridGap, draggingSpan, options)
   }
 
   const findTopLevelMaxOverlapHit = (state: DragState): OuterOverlapHit | null => {
@@ -581,11 +573,13 @@ export function useIconGridDragWorkflow({
     const draggingSpan = getGridItemSpan(state.draggingItem)
     const dragWidth =
       state.draggingItem.kind === 'folder'
-        ? draggingSpan.cols * metrics.itemWidth + Math.max(0, draggingSpan.cols - 1) * config.gridGap
+        ? draggingSpan.cols * metrics.itemWidth +
+          Math.max(0, draggingSpan.cols - 1) * config.gridGap
         : iconConfig.imgSize
     const dragHeight =
       state.draggingItem.kind === 'folder'
-        ? draggingSpan.rows * metrics.itemHeight + Math.max(0, draggingSpan.rows - 1) * config.gridGap
+        ? draggingSpan.rows * metrics.itemHeight +
+          Math.max(0, draggingSpan.rows - 1) * config.gridGap
         : iconConfig.imgSize
     return findOuterMaxOverlapHitByMetrics({
       state,
@@ -629,7 +623,7 @@ export function useIconGridDragWorkflow({
     const draggingSpan = getGridItemSpan(state.draggingItem)
     const targetItem =
       state.context === 'outer'
-        ? outerItems?.find(item => getId(item) === hit.targetId) ?? null
+        ? (outerItems?.find(item => getId(item) === hit.targetId) ?? null)
         : null
     const targetSpan = targetItem ? getGridItemSpan(targetItem) : null
     const shouldUsePreviewAnchor =
@@ -723,7 +717,6 @@ export function useIconGridDragWorkflow({
       candidateAnchorIndex
     )
     const canAddToExistingFolder =
-      !isMultiOuterDrag &&
       source.kind === 'icon' &&
       target.kind === 'folder' &&
       overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
@@ -743,8 +736,7 @@ export function useIconGridDragWorkflow({
       return
     }
 
-    const canFolderPreview =
-      !isMultiOuterDrag && source.kind === 'icon' && target.kind === 'icon'
+    const canFolderPreview = !isMultiOuterDrag && source.kind === 'icon' && target.kind === 'icon'
     if (canFolderPreview && overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold) {
       const previewState: DragState = {
         ...latest,
@@ -821,7 +813,9 @@ export function useIconGridDragWorkflow({
     if (sourceIndex >= 0) {
       workingOrder[sourceIndex] = null
     }
-    const initialCenters = collectCenters(context === 'dock' ? dockItemRefs.current : tileRefs.current)
+    const initialCenters = collectCenters(
+      context === 'dock' ? dockItemRefs.current : tileRefs.current
+    )
     initialCenters[state.draggingId] = { x, y }
 
     const nextState: DragState = {
@@ -887,7 +881,9 @@ export function useIconGridDragWorkflow({
     }
 
     const draggingIds =
-      pending.context === 'outer' ? resolveOuterDragIds(sourceOrder, pending.itemId) : [pending.itemId]
+      pending.context === 'outer'
+        ? resolveOuterDragIds(sourceOrder, pending.itemId)
+        : [pending.itemId]
 
     const workingOrder: Array<string | null> = [...sourceOrder]
     if (pending.context === 'folder') {
@@ -1061,8 +1057,7 @@ export function useIconGridDragWorkflow({
         centerStartedAt: null,
       }
 
-      const canFolderPreview =
-        !isMultiOuterDrag && source.kind === 'icon' && target.kind === 'icon'
+      const canFolderPreview = !isMultiOuterDrag && source.kind === 'icon' && target.kind === 'icon'
       if (canFolderPreview && overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold) {
         clearOuterDwellTimer()
         next.folderPreviewTargetId = overlapHit.targetId
@@ -1073,7 +1068,6 @@ export function useIconGridDragWorkflow({
       }
 
       const canAddToExistingFolder =
-        !isMultiOuterDrag &&
         source.kind === 'icon' &&
         target.kind === 'folder' &&
         overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
@@ -1418,6 +1412,3 @@ export function useIconGridDragWorkflow({
     clearOuterDragInteractionForPageSwitch,
   }
 }
-
-
-

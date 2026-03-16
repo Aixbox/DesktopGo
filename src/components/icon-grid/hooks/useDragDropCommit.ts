@@ -181,8 +181,7 @@ export function useDragDropCommit({
 
     const sourceTopLevelContext = resolveSourceTopLevelContext(session)
     let nextOuterSlots = targetContext === 'outer' ? result.slots : originalOuterSlots
-    let nextDockKeys =
-      targetContext === 'dock' ? [...result.slots] : [...originalDockKeys]
+    let nextDockKeys = targetContext === 'dock' ? [...result.slots] : [...originalDockKeys]
     if (sourceTopLevelContext === 'dock' && targetContext !== 'dock') {
       nextDockKeys = nextDockKeys.map(key => (key === session.draggingId ? null : key))
     }
@@ -315,8 +314,7 @@ export function useDragDropCommit({
       itemsRef.current.forEach(item => itemMap.set(getId(item), item))
 
       const flights = session.draggingIds.flatMap((id, index) => {
-        const item =
-          id === session.draggingId ? session.draggingItem : itemMap.get(id)
+        const item = id === session.draggingId ? session.draggingItem : itemMap.get(id)
         if (!item || item.kind !== 'icon') {
           return []
         }
@@ -354,9 +352,7 @@ export function useDragDropCommit({
       setMultiDropFlight(flights)
       multiDropFlightTimerRef.current = window.setTimeout(() => {
         setMultiDropFlight(null)
-        setHiddenOuterItemIds(prev =>
-          prev.filter(id => !session.draggingIds.includes(id))
-        )
+        setHiddenOuterItemIds(prev => prev.filter(id => !session.draggingIds.includes(id)))
         multiDropFlightTimerRef.current = null
       }, reorderAnimationMs + 60)
     })
@@ -447,13 +443,16 @@ export function useDragDropCommit({
         return true
       }
 
-      const existingFolderTarget = current.hoverTargetId
-        ? topLevelMap.get(current.hoverTargetId)
-        : null
+      const addToFolderTargetId =
+        current.folderPreviewTargetId ??
+        (current.hoverTargetId && current.hoverIou >= OUTER_DRAG_RULES.folderOverlapThreshold
+          ? current.hoverTargetId
+          : null)
+      const existingFolderTarget = addToFolderTargetId ? topLevelMap.get(addToFolderTargetId) : null
       const canAddToExistingFolder =
         source.kind === 'icon' &&
         existingFolderTarget?.kind === 'folder' &&
-        current.hoverIou >= OUTER_DRAG_RULES.folderOverlapThreshold
+        addToFolderTargetId !== null
       const folderTarget =
         current.folderPreviewTargetId !== null
           ? topLevelMap.get(current.folderPreviewTargetId)
@@ -467,7 +466,25 @@ export function useDragDropCommit({
       const originalDockKeys = dockKeysRef.current
       const baseForDrop = extractDraggedIconFromSourceFolder(originalItems, current)
 
-      if (isMultiOuterDrag) {
+      if (canAddToExistingFolder) {
+        setFolderPreviewFreezeTargetId(null)
+        scheduleFolderCreateTransition(null)
+        setHiddenOuterItemIds([])
+        setFrozenOuterOrder(null)
+        const result = applyAddToFolderFromSession(
+          baseForDrop,
+          current,
+          addToFolderTargetId as string
+        )
+        commitTopLevelSessionResult(
+          current,
+          originalItems,
+          originalOuterSlots,
+          originalDockKeys,
+          targetContext,
+          result
+        )
+      } else if (isMultiOuterDrag) {
         setFolderPreviewFreezeTargetId(null)
         scheduleFolderCreateTransition(null)
         setHiddenOuterItemIds(current.draggingIds)
@@ -489,24 +506,6 @@ export function useDragDropCommit({
           result
         )
         scheduleMultiDropFlight(current)
-      } else if (canAddToExistingFolder) {
-        setFolderPreviewFreezeTargetId(null)
-        scheduleFolderCreateTransition(null)
-        setHiddenOuterItemIds([])
-        setFrozenOuterOrder(null)
-        const result = applyAddToFolderFromSession(
-          baseForDrop,
-          current,
-          current.hoverTargetId as string
-        )
-        commitTopLevelSessionResult(
-          current,
-          originalItems,
-          originalOuterSlots,
-          originalDockKeys,
-          targetContext,
-          result
-        )
       } else if (canCreateFolder) {
         const targetId = current.folderPreviewTargetId as string
         const sourceItem = source.kind === 'icon' ? source : null
@@ -621,9 +620,7 @@ export function useDragDropCommit({
   useEffect(() => {
     if (!multiDropFlight || multiDropFlight.every(item => item.animate)) return
     const raf = requestAnimationFrame(() => {
-      setMultiDropFlight(prev =>
-        prev ? prev.map(item => ({ ...item, animate: true })) : prev
-      )
+      setMultiDropFlight(prev => (prev ? prev.map(item => ({ ...item, animate: true })) : prev))
     })
     return () => {
       cancelAnimationFrame(raf)
