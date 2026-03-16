@@ -496,6 +496,9 @@ export function useIconGridDragWorkflow({
         gridElement: metrics.gridElement,
         columns: metrics.columns,
         rows: metrics.rows,
+        itemWidth: metrics.itemWidth,
+        itemHeight: metrics.itemHeight,
+        gridGap: config.gridGap,
         dragWidth: iconConfig.imgSize,
         dragHeight: iconConfig.imgSize,
         pageSize: dockPageSize,
@@ -519,11 +522,15 @@ export function useIconGridDragWorkflow({
       gridElement: metrics.gridElement,
       columns: metrics.columns,
       rows: metrics.rows,
+      itemWidth: metrics.itemWidth,
+      itemHeight: metrics.itemHeight,
+      gridGap: config.gridGap,
       dragWidth,
       dragHeight,
       pageSize: pageSizeRef.current,
       currentPage: currentPageRef.current,
       tileRefs: tileRefs.current,
+      items: resolveOuterItemsForLayout(),
     })
   }
 
@@ -548,11 +555,22 @@ export function useIconGridDragWorkflow({
     state: DragState,
     hit: OuterOverlapHit
   ): { order: Array<string | null>; direction: EvasionDirection | null } => {
+    const outerItems = state.context === 'outer' ? resolveOuterItemsForLayout() : null
     const draggingSpan = getGridItemSpan(state.draggingItem)
-    const targetAnchorIndex =
-      state.context === 'outer' && (draggingSpan.cols > 1 || draggingSpan.rows > 1)
-        ? (state.previewSlotIndex ?? hit.targetIndex)
-        : undefined
+    const targetItem =
+      state.context === 'outer'
+        ? outerItems?.find(item => getId(item) === hit.targetId) ?? null
+        : null
+    const targetSpan = targetItem ? getGridItemSpan(targetItem) : null
+    const shouldUsePreviewAnchor =
+      state.context === 'outer' &&
+      (state.draggingIds.length > 1 ||
+        draggingSpan.cols > 1 ||
+        draggingSpan.rows > 1 ||
+        Boolean(targetSpan && (targetSpan.cols > 1 || targetSpan.rows > 1)))
+    const targetAnchorIndex = shouldUsePreviewAnchor
+      ? (state.previewSlotIndex ?? hit.targetIndex)
+      : undefined
 
     return applyOuterEvasionPolicy(
       state.workingOrder,
@@ -562,7 +580,7 @@ export function useIconGridDragWorkflow({
       OUTER_DRAG_RULES.directionTieBreakByOverlap,
       state.context === 'outer'
         ? {
-            items: resolveOuterItemsForLayout(),
+            items: outerItems ?? [],
             draggingItem: state.draggingItem,
             targetAnchorIndex,
           }
@@ -586,6 +604,8 @@ export function useIconGridDragWorkflow({
     if (!movedSinceLastEvasion || !cooledDownSinceLastEvasion) return state
 
     const evasionResult = applyTopLevelEvasion(state, overlapHit)
+    const nextEvasionSignature = `${overlapHit.targetId}:${state.previewSlotIndex ?? overlapHit.targetIndex}:${evasionResult.direction ?? 'fallback'}`
+    if (nextEvasionSignature === state.lastEvasionSignature) return state
     if (areSlotsEqual(evasionResult.order, state.workingOrder)) return state
 
     return {
@@ -597,7 +617,7 @@ export function useIconGridDragWorkflow({
       hoverZone: overlapHit.zone,
       hoverIou: overlapHit.iou,
       folderPreviewTargetId: null,
-      lastEvasionSignature: `${state.previewSlotIndex ?? overlapHit.targetIndex}:${evasionResult.direction ?? 'fallback'}`,
+      lastEvasionSignature: nextEvasionSignature,
       lastEvasionTriggerPointer: { x: state.pointerX, y: state.pointerY },
       lastEvasionAt: now,
       dwellStartedAt: now,

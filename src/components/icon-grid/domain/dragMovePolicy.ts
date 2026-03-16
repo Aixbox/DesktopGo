@@ -173,11 +173,15 @@ interface FindOuterMaxOverlapHitParams {
   gridElement: HTMLElement | null
   columns: number
   rows: number
+  itemWidth: number
+  itemHeight: number
+  gridGap: number
   dragWidth: number
   dragHeight: number
   pageSize: number
   currentPage: number
   tileRefs: Map<string, HTMLDivElement>
+  items?: GridItem[]
 }
 
 const resolveOverlapTargetRect = (node: HTMLDivElement): DOMRect => {
@@ -190,19 +194,74 @@ const resolveOverlapTargetRect = (node: HTMLDivElement): DOMRect => {
   return node.getBoundingClientRect()
 }
 
+const resolveStableOverlapTargetRect = ({
+  node,
+  item,
+  anchorIndex,
+  pageStart,
+  columns,
+  itemWidth,
+  itemHeight,
+  gridGap,
+  gridRect,
+}: {
+  node: HTMLDivElement | undefined
+  item: GridItem
+  anchorIndex: number
+  pageStart: number
+  columns: number
+  itemWidth: number
+  itemHeight: number
+  gridGap: number
+  gridRect: DOMRect
+}): DOMRect => {
+  const safeColumns = Math.max(1, columns)
+  const localIndex = Math.max(0, anchorIndex - pageStart)
+  const row = Math.floor(localIndex / safeColumns)
+  const col = localIndex % safeColumns
+  const span = getGridItemSpan(item)
+  const stableNodeRect = new DOMRect(
+    gridRect.left + col * (itemWidth + gridGap),
+    gridRect.top + row * (itemHeight + gridGap),
+    span.cols * itemWidth + Math.max(0, span.cols - 1) * gridGap,
+    span.rows * itemHeight + Math.max(0, span.rows - 1) * gridGap
+  )
+
+  if (item.kind === 'folder' && (span.cols > 1 || span.rows > 1)) {
+    return stableNodeRect
+  }
+
+  if (!node) {
+    return stableNodeRect
+  }
+  const nodeRect = node.getBoundingClientRect()
+  const visualRect = resolveOverlapTargetRect(node)
+  return new DOMRect(
+    stableNodeRect.left + (visualRect.left - nodeRect.left),
+    stableNodeRect.top + (visualRect.top - nodeRect.top),
+    visualRect.width,
+    visualRect.height
+  )
+}
+
 export const findOuterMaxOverlapHitByMetrics = ({
   state,
   gridElement,
   columns,
   rows,
+  itemWidth,
+  itemHeight,
+  gridGap,
   dragWidth,
   dragHeight,
   pageSize,
   currentPage,
   tileRefs,
+  items,
 }: FindOuterMaxOverlapHitParams): OuterOverlapHit | null => {
   if (state.context === 'folder') return null
   if (!gridElement || columns <= 0 || rows <= 0) return null
+  const rect = gridElement.getBoundingClientRect()
 
   const dragRect = new DOMRect(
     state.pointerX - dragWidth / 2,
@@ -218,16 +277,35 @@ export const findOuterMaxOverlapHitByMetrics = ({
   const activePage = clampNumber(currentPage, 0, Math.max(0, pageCount - 1))
   const pageStart = activePage * safePageSize
   const pageEnd = pageStart + safePageSize
+  const itemById = items ? new Map(items.map(item => [getId(item), item] as const)) : null
 
   let best: OuterOverlapHit | null = null
+  let preferred: OuterOverlapHit | null = null
   for (let index = pageStart; index < pageEnd; index += 1) {
     if (index < 0 || index >= state.workingOrder.length) continue
     const rawTargetId = state.workingOrder[index]
     if (!rawTargetId || rawTargetId === DRAG_HOLE_ID || rawTargetId === state.draggingId) continue
     const targetId = rawTargetId
     const node = tileRefs.get(targetId)
-    if (!node) continue
-    const targetRect = resolveOverlapTargetRect(node)
+    const item = itemById?.get(targetId)
+    if (!node && !item) continue
+    const targetRect =
+      item && state.context === 'outer'
+        ? resolveStableOverlapTargetRect({
+            node,
+            item,
+            anchorIndex: index,
+            pageStart,
+            columns,
+            itemWidth,
+            itemHeight,
+            gridGap,
+            gridRect: rect,
+          })
+        : node
+          ? resolveOverlapTargetRect(node)
+          : null
+    if (!targetRect) continue
     const overlapRect = getRectIntersection(dragRect, targetRect)
     if (!overlapRect) continue
     const intersectionArea = getRectArea(overlapRect)
@@ -249,6 +327,11 @@ export const findOuterMaxOverlapHitByMetrics = ({
       centerManhattanDistance,
       zone: classifyZone(targetRect, state.pointerX, state.pointerY),
     }
+
+    if (candidate.targetId === state.hoverTargetId) {
+      preferred = candidate
+    }
+
     if (!best) {
       best = candidate
       continue
@@ -269,6 +352,17 @@ export const findOuterMaxOverlapHitByMetrics = ({
     }
     if (candidate.centerManhattanDistance > best.centerManhattanDistance) continue
     if (candidate.targetIndex < best.targetIndex) best = candidate
+  }
+
+  if (best && preferred && preferred.targetId !== best.targetId) {
+    const iouCloseEnough = preferred.iou >= best.iou - 0.08
+    const areaCloseEnough = preferred.intersectionArea >= best.intersectionArea * 0.78
+    const distanceCloseEnough =
+      preferred.centerManhattanDistance <=
+      best.centerManhattanDistance + Math.max(itemWidth, itemHeight)
+    if (iouCloseEnough && areaCloseEnough && distanceCloseEnough) {
+      return preferred
+    }
   }
 
   return best
