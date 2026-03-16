@@ -120,6 +120,7 @@ export function Launchpad() {
 
   const longPressTimerRef = useRef<number | null>(null)
   const longPressTriggeredRef = useRef(false)
+  const backgroundPointerStartedRef = useRef(false)
   const filterMenuRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const [isSearchPanelOpen, setIsSearchPanelOpen] = useState(false)
@@ -295,9 +296,11 @@ export function Launchpad() {
     !target.closest('[data-selection-toolbar]')
 
   const handleBackgroundPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (selectionMode || e.button !== 0 || hasSearchKeyword) return
     const target = e.target as HTMLElement
-    if (!isBackgroundInteraction(target)) return
+    const startedOnBackground = isBackgroundInteraction(target)
+    backgroundPointerStartedRef.current = e.button === 0 && startedOnBackground
+    if (selectionMode || e.button !== 0 || hasSearchKeyword) return
+    if (!startedOnBackground) return
 
     longPressTriggeredRef.current = false
     clearBackgroundLongPressTimer()
@@ -313,6 +316,7 @@ export function Launchpad() {
 
   const handleBackgroundPointerCancel = () => {
     clearBackgroundLongPressTimer()
+    backgroundPointerStartedRef.current = false
   }
 
   const handleBackgroundPointerLeave = () => {
@@ -486,29 +490,33 @@ export function Launchpad() {
   const handleBackgroundClick = (e: React.MouseEvent) => {
     if (longPressTriggeredRef.current) {
       longPressTriggeredRef.current = false
+      backgroundPointerStartedRef.current = false
       return
     }
 
     const target = e.target as HTMLElement
+    const isTrueBackgroundClick =
+      backgroundPointerStartedRef.current && isBackgroundInteraction(target)
+    backgroundPointerStartedRef.current = false
     const clickedOutsideSearch =
       !target.closest('[data-search-placeholder]') &&
       !target.closest('[data-search-floating-menu="true"]') &&
       !target.closest('[data-dock-menu="true"]')
 
-    if (isSearchPanelOpen && clickedOutsideSearch) {
+    if (isSearchPanelOpen && clickedOutsideSearch && isTrueBackgroundClick) {
       setIsSearchPanelOpen(false)
       return
     }
 
     if (selectionMode) {
-      if (isBackgroundInteraction(target)) {
+      if (isTrueBackgroundClick) {
         clearSelection()
       }
       return
     }
 
     if (windowMode === 'fullscreen' && !hasSearchKeyword) {
-      if (isBackgroundInteraction(target)) {
+      if (isTrueBackgroundClick) {
         void invoke('toggle_window')
       }
     }
