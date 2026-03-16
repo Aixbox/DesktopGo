@@ -12,7 +12,7 @@ import { getGridItemSpan, getId } from '../model'
 import { DRAG_HOLE_ID, areSlotsEqual } from '../domain/slots'
 import { moveDragHoleToIndex } from '../domain/evasionPolicy'
 import { getFolderChildrenById } from '../domain/folderPolicy'
-import { classifyZone } from '../domain/geometry'
+import { clampNumber, classifyZone } from '../domain/geometry'
 import {
   applyOuterEvasionPolicy,
   findHitByMetrics,
@@ -315,6 +315,75 @@ export function useIconGridDragWorkflow({
         candidate && candidate.kind === 'icon' && selectedIconKeySet.has(candidate.key)
       )
     })
+
+  const seedMissingOuterDragCenters = ({
+    initialCenters,
+    draggingIds,
+    sourceOrder,
+    leadId,
+    fallbackX,
+    fallbackY,
+  }: {
+    initialCenters: Record<string, { x: number; y: number }>
+    draggingIds: string[]
+    sourceOrder: Array<string | null>
+    leadId: string
+    fallbackX: number
+    fallbackY: number
+  }) => {
+    const missingIds = draggingIds.filter(id => !initialCenters[id])
+    if (missingIds.length === 0) return
+
+    const safePageSize = Math.max(1, pageSizeRef.current)
+    const safeColumns = Math.max(1, columns)
+    const stepX = itemWidth + config.gridGap
+    const stepY = itemHeight + config.gridGap
+    const leadIndex = sourceOrder.indexOf(leadId)
+    const leadPage = leadIndex >= 0 ? Math.floor(leadIndex / safePageSize) : currentPageRef.current
+    const gridRect = gridRef.current?.getBoundingClientRect() ?? null
+    const sideOffset = Math.min(28, Math.max(12, Math.round(iconConfig.imgSize * 0.24)))
+    const stackOffset = Math.min(14, Math.max(6, Math.round(iconConfig.imgSize * 0.12)))
+    const sideCounts = { left: 0, right: 0 }
+
+    missingIds.forEach((id, missingIndex) => {
+      const sourceIndex = sourceOrder.indexOf(id)
+      if (!gridRect || sourceIndex < 0) {
+        initialCenters[id] = {
+          x: fallbackX + ((missingIndex % 2) - 0.5) * stackOffset * 2,
+          y: fallbackY + Math.floor(missingIndex / 2) * stackOffset,
+        }
+        return
+      }
+
+      const sourcePage = Math.floor(sourceIndex / safePageSize)
+      const localIndex = sourceIndex - sourcePage * safePageSize
+      const row = Math.floor(localIndex / safeColumns)
+      const col = localIndex % safeColumns
+
+      if (sourcePage === leadPage) {
+        initialCenters[id] = {
+          x: gridRect.left + col * stepX + itemWidth / 2,
+          y: gridRect.top + row * stepY + itemHeight / 2,
+        }
+        return
+      }
+
+      const side = sourcePage < leadPage ? 'left' : 'right'
+      const sideIndex = sideCounts[side]
+      sideCounts[side] += 1
+      const pageDistance = Math.max(1, Math.abs(sourcePage - leadPage))
+      const verticalJitter = (sideIndex % 3) - 1
+      const baseY = gridRect.top + row * stepY + itemHeight / 2 + verticalJitter * stackOffset
+
+      initialCenters[id] = {
+        x:
+          side === 'left'
+            ? gridRect.left - sideOffset - (pageDistance - 1) * stackOffset
+            : gridRect.right + sideOffset + (pageDistance - 1) * stackOffset,
+        y: clampNumber(baseY, gridRect.top + itemHeight / 2, gridRect.bottom - itemHeight / 2),
+      }
+    })
+  }
 
   const resolveOuterDragIds = (sourceOrder: Array<string | null>, leadId: string): string[] => {
     const leadItem = itemById.get(leadId)
@@ -923,6 +992,16 @@ export function useIconGridDragWorkflow({
       }
     })
     initialCenters[state.draggingId] = { x, y }
+    if (context === 'outer' && state.draggingIds.length > 1) {
+      seedMissingOuterDragCenters({
+        initialCenters,
+        draggingIds: state.draggingIds,
+        sourceOrder: nextOrder,
+        leadId: state.draggingId,
+        fallbackX: x,
+        fallbackY: y,
+      })
+    }
 
     const nextState: DragState = {
       ...state,
@@ -1071,6 +1150,16 @@ export function useIconGridDragWorkflow({
         }
       })
       setOpenFolderId(null)
+    }
+    if (pending.context === 'outer' && draggingIds.length > 1) {
+      seedMissingOuterDragCenters({
+        initialCenters: nextState.initialCenters,
+        draggingIds,
+        sourceOrder,
+        leadId: pending.itemId,
+        fallbackX: x,
+        fallbackY: y,
+      })
     }
 
     if (pending.context === 'folder' && draggingIds.length > 1 && draggingItem.kind === 'icon') {
