@@ -608,7 +608,7 @@ export function useIconGridDragWorkflow({
     state: DragState,
     target: GridItem,
     overlapHit: OuterOverlapHit,
-    nearestSlotIndex: number | null,
+    _nearestSlotIndex: number | null,
     candidateAnchorIndex: number | null
   ) => {
     if (state.context !== 'outer') return overlapHit.targetIndex
@@ -618,7 +618,7 @@ export function useIconGridDragWorkflow({
     }
     const targetSpan = getGridItemSpan(target)
     if (targetSpan.cols === 1 && targetSpan.rows === 1) return overlapHit.targetIndex
-    return nearestSlotIndex
+    return overlapHit.targetIndex
   }
 
   const applyTopLevelEvasion = (
@@ -652,6 +652,7 @@ export function useIconGridDragWorkflow({
         ? {
             items: outerItems ?? [],
             draggingItem: state.draggingItem,
+            draggingIds: state.draggingIds,
             targetAnchorIndex,
           }
         : undefined
@@ -1417,4 +1418,6 @@ export function useIconGridDragWorkflow({
     clearOuterDragInteractionForPageSwitch,
   }
 }
+
+
 
