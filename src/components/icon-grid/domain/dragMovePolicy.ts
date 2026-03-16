@@ -64,7 +64,9 @@ export const findHitByMetrics = (
   if (globalSlotIndex < 0 || globalSlotIndex >= state.workingOrder.length) return null
   const rawTargetId = state.workingOrder[globalSlotIndex]
   const targetId =
-    !rawTargetId || rawTargetId === DRAG_HOLE_ID || rawTargetId === state.draggingId ? null : rawTargetId
+    !rawTargetId || rawTargetId === DRAG_HOLE_ID || rawTargetId === state.draggingId
+      ? null
+      : rawTargetId
 
   const targetRect = new DOMRect(rect.left + col * stepX, rect.top + row * stepY, tileW, tileH)
   return { targetId, zone: classifyZone(targetRect, x, y), globalSlotIndex }
@@ -103,10 +105,22 @@ export const resolveNearestSlotIndexByMetrics = (
 
   const clampedX = clampNumber(state.pointerX, rect.left, rect.right)
   const clampedY = clampNumber(state.pointerY, rect.top, rect.bottom)
-  const col = clampNumber(Math.round((clampedX - rect.left - tileW / 2) / stepX), 0, Math.max(0, colCount - 1))
-  const row = clampNumber(Math.round((clampedY - rect.top - tileH / 2) / stepY), 0, Math.max(0, rowCount - 1))
+  const col = clampNumber(
+    Math.round((clampedX - rect.left - tileW / 2) / stepX),
+    0,
+    Math.max(0, colCount - 1)
+  )
+  const row = clampNumber(
+    Math.round((clampedY - rect.top - tileH / 2) / stepY),
+    0,
+    Math.max(0, rowCount - 1)
+  )
   const slotIndex = row * colCount + col
-  const globalSlotIndex = clampNumber(pageOffset + slotIndex, 0, Math.max(0, state.workingOrder.length - 1))
+  const globalSlotIndex = clampNumber(
+    pageOffset + slotIndex,
+    0,
+    Math.max(0, state.workingOrder.length - 1)
+  )
   return globalSlotIndex
 }
 
@@ -149,16 +163,8 @@ export const resolveNearestAnchorIndexByMetrics = (
   const height = span.rows * tileH + Math.max(0, span.rows - 1) * gridGap
   const clampedX = clampNumber(state.pointerX, rect.left, rect.right)
   const clampedY = clampNumber(state.pointerY, rect.top, rect.bottom)
-  const col = clampNumber(
-    Math.round((clampedX - rect.left - width / 2) / stepX),
-    0,
-    maxCol
-  )
-  const row = clampNumber(
-    Math.round((clampedY - rect.top - height / 2) / stepY),
-    0,
-    maxRow
-  )
+  const col = clampNumber(Math.round((clampedX - rect.left - width / 2) / stepX), 0, maxCol)
+  const row = clampNumber(Math.round((clampedY - rect.top - height / 2) / stepY), 0, maxRow)
   const slotIndex = row * colCount + col
   const globalSlotIndex = clampNumber(
     pageOffset + slotIndex,
@@ -415,6 +421,12 @@ interface FootprintEvasionResult {
   totalScore: number
 }
 
+interface CurrentPageFootprintResultMetrics {
+  movedEntryCount: number
+  movedNonOverlapCount: number
+  totalAnchorShift: number
+}
+
 interface OuterEvasionOptions {
   items?: GridItem[]
   draggingItem?: GridItem
@@ -521,7 +533,6 @@ const collectPagePlacementEntries = (
   return entries
 }
 
-
 const buildPlacementSpecs = ({
   entries,
   pageStart,
@@ -532,6 +543,7 @@ const buildPlacementSpecs = ({
   reservedSet,
   baseOccupied,
   candidatePredicate,
+  preserveRelativeOrder = true,
 }: {
   entries: PagePlacementEntry[]
   pageStart: number
@@ -545,6 +557,7 @@ const buildPlacementSpecs = ({
     entry: PagePlacementEntry,
     context: PlacementCandidateFilterContext
   ) => boolean
+  preserveRelativeOrder?: boolean
 }): PlacementSpec[] | null => {
   const safeRangeStart = Math.max(0, rangeStart)
   const safeRangeEnd = Math.max(safeRangeStart, rangeEndExclusive)
@@ -581,7 +594,27 @@ const buildPlacementSpecs = ({
     return null
   }
 
-  specs.sort((a, b) => a.entry.anchorIndex - b.entry.anchorIndex)
+  if (preserveRelativeOrder) {
+    specs.sort((a, b) => a.entry.anchorIndex - b.entry.anchorIndex)
+  } else {
+    specs.sort((a, b) => {
+      if (a.candidates.length !== b.candidates.length) {
+        return a.candidates.length - b.candidates.length
+      }
+
+      const aArea = a.entry.span.cols * a.entry.span.rows
+      const bArea = b.entry.span.cols * b.entry.span.rows
+      if (aArea !== bArea) {
+        return bArea - aArea
+      }
+
+      if (a.entry.overlapsReserved !== b.entry.overlapsReserved) {
+        return a.entry.overlapsReserved ? -1 : 1
+      }
+
+      return a.entry.anchorIndex - b.entry.anchorIndex
+    })
+  }
 
   return specs
 }
@@ -632,15 +665,34 @@ const isCandidateWithinOrderBounds = (
   constraint: PlacementOrderConstraint | undefined,
   minAnchorExclusive: number
 ) => {
-  const lowerBound = Math.max(minAnchorExclusive, constraint?.minAnchorExclusive ?? Number.NEGATIVE_INFINITY)
+  const lowerBound = Math.max(
+    minAnchorExclusive,
+    constraint?.minAnchorExclusive ?? Number.NEGATIVE_INFINITY
+  )
   const upperBound = constraint?.maxAnchorExclusive ?? Number.POSITIVE_INFINITY
   return candidate.anchorIndex > lowerBound && candidate.anchorIndex < upperBound
 }
 
+const isPlacementCandidateAllowed = ({
+  candidate,
+  constraint,
+  lastAssignedAnchor,
+  preserveRelativeOrder,
+}: {
+  candidate: PlacementCandidate
+  constraint: PlacementOrderConstraint | undefined
+  lastAssignedAnchor: number
+  preserveRelativeOrder: boolean
+}) =>
+  preserveRelativeOrder
+    ? isCandidateWithinOrderBounds(candidate, constraint, lastAssignedAnchor)
+    : true
+
 const assignGreedyPlacements = (
   specs: PlacementSpec[],
   baseOccupied: Set<number>,
-  constraints: Map<string, PlacementOrderConstraint>
+  constraints: Map<string, PlacementOrderConstraint>,
+  preserveRelativeOrder: boolean
 ): PlacementSolution | null => {
   const occupied = new Set(baseOccupied)
   const assignments = new Map<string, number>()
@@ -651,8 +703,12 @@ const assignGreedyPlacements = (
     const constraint = constraints.get(spec.entry.id)
     const chosen = spec.candidates.find(
       candidate =>
-        isCandidateWithinOrderBounds(candidate, constraint, lastAssignedAnchor) &&
-        canOccupyFootprint(occupied, candidate.footprint)
+        isPlacementCandidateAllowed({
+          candidate,
+          constraint,
+          lastAssignedAnchor,
+          preserveRelativeOrder,
+        }) && canOccupyFootprint(occupied, candidate.footprint)
     )
     if (!chosen) return null
 
@@ -668,9 +724,10 @@ const assignGreedyPlacements = (
 const assignWithBacktracking = (
   specs: PlacementSpec[],
   baseOccupied: Set<number>,
-  constraints: Map<string, PlacementOrderConstraint>
+  constraints: Map<string, PlacementOrderConstraint>,
+  preserveRelativeOrder: boolean
 ): PlacementSolution | null => {
-  const greedy = assignGreedyPlacements(specs, baseOccupied, constraints)
+  const greedy = assignGreedyPlacements(specs, baseOccupied, constraints, preserveRelativeOrder)
   if (specs.length > MAX_BACKTRACK_PLACEMENTS) {
     return greedy
   }
@@ -702,7 +759,16 @@ const assignWithBacktracking = (
     for (const candidate of spec.candidates) {
       const nextScore = totalScore + candidate.score
       if (nextScore >= bestScore) continue
-      if (!isCandidateWithinOrderBounds(candidate, constraint, lastAssignedAnchor)) continue
+      if (
+        !isPlacementCandidateAllowed({
+          candidate,
+          constraint,
+          lastAssignedAnchor,
+          preserveRelativeOrder,
+        })
+      ) {
+        continue
+      }
       if (!canOccupyFootprint(occupied, candidate.footprint)) continue
 
       candidate.footprint.forEach(index => occupied.add(index))
@@ -766,6 +832,7 @@ const solveFootprintPlacements = ({
   columns,
   movablePredicate,
   candidatePredicate,
+  preserveRelativeOrder = true,
 }: {
   order: Array<string | null>
   entries: PagePlacementEntry[]
@@ -780,6 +847,7 @@ const solveFootprintPlacements = ({
     entry: PagePlacementEntry,
     context: PlacementCandidateFilterContext
   ) => boolean
+  preserveRelativeOrder?: boolean
 }): FootprintEvasionResult | null => {
   if (entries.length === 0) return null
 
@@ -807,16 +875,14 @@ const solveFootprintPlacements = ({
     reservedSet,
     baseOccupied,
     candidatePredicate,
+    preserveRelativeOrder,
   })
   if (!specs) return null
 
-  const constraints = buildPlacementOrderConstraints(
-    entries,
-    fixedAssignments,
-    rangeStart,
-    rangeEndExclusive
-  )
-  const solution = assignWithBacktracking(specs, baseOccupied, constraints)
+  const constraints = preserveRelativeOrder
+    ? buildPlacementOrderConstraints(entries, fixedAssignments, rangeStart, rangeEndExclusive)
+    : new Map<string, PlacementOrderConstraint>()
+  const solution = assignWithBacktracking(specs, baseOccupied, constraints, preserveRelativeOrder)
   if (!solution) return null
 
   return {
@@ -833,6 +899,90 @@ const solveFootprintPlacements = ({
   }
 }
 
+const measureCurrentPageFootprintResult = ({
+  entries,
+  result,
+  pageStart,
+  pageSize,
+}: {
+  entries: PagePlacementEntry[]
+  result: FootprintEvasionResult
+  pageStart: number
+  pageSize: number
+}): CurrentPageFootprintResultMetrics => {
+  const anchorById = new Map<string, number>()
+  const rangeEndExclusive = pageStart + Math.max(1, pageSize)
+
+  for (let index = pageStart; index < rangeEndExclusive; index += 1) {
+    const id = result.order[index]
+    if (!id || id === DRAG_HOLE_ID) continue
+    anchorById.set(id, index)
+  }
+
+  let movedEntryCount = 0
+  let movedNonOverlapCount = 0
+  let totalAnchorShift = 0
+  for (const entry of entries) {
+    const nextAnchor = anchorById.get(entry.id)
+    if (nextAnchor === undefined || nextAnchor === entry.anchorIndex) continue
+    movedEntryCount += 1
+    if (!entry.overlapsReserved) {
+      movedNonOverlapCount += 1
+    }
+    totalAnchorShift += Math.abs(nextAnchor - entry.anchorIndex)
+  }
+
+  return {
+    movedEntryCount,
+    movedNonOverlapCount,
+    totalAnchorShift,
+  }
+}
+
+const pickBetterCurrentPageFootprintResult = (
+  entries: PagePlacementEntry[],
+  pageStart: number,
+  pageSize: number,
+  current: FootprintEvasionResult | null,
+  candidate: FootprintEvasionResult | null
+): FootprintEvasionResult | null => {
+  if (!candidate) return current
+  if (!current) return candidate
+
+  const currentMetrics = measureCurrentPageFootprintResult({
+    entries,
+    result: current,
+    pageStart,
+    pageSize,
+  })
+  const candidateMetrics = measureCurrentPageFootprintResult({
+    entries,
+    result: candidate,
+    pageStart,
+    pageSize,
+  })
+
+  if (candidateMetrics.movedEntryCount !== currentMetrics.movedEntryCount) {
+    return candidateMetrics.movedEntryCount < currentMetrics.movedEntryCount ? candidate : current
+  }
+
+  if (candidateMetrics.movedNonOverlapCount !== currentMetrics.movedNonOverlapCount) {
+    return candidateMetrics.movedNonOverlapCount < currentMetrics.movedNonOverlapCount
+      ? candidate
+      : current
+  }
+
+  if (candidate.totalScore !== current.totalScore) {
+    return candidate.totalScore < current.totalScore ? candidate : current
+  }
+
+  if (candidateMetrics.totalAnchorShift !== currentMetrics.totalAnchorShift) {
+    return candidateMetrics.totalAnchorShift < currentMetrics.totalAnchorShift ? candidate : current
+  }
+
+  return current
+}
+
 const attemptCurrentPageFootprintEvasion = ({
   order,
   entries,
@@ -847,8 +997,8 @@ const attemptCurrentPageFootprintEvasion = ({
   pageStart: number
   pageSize: number
   columns: number
-}): FootprintEvasionResult | null =>
-  solveFootprintPlacements({
+}): FootprintEvasionResult | null => {
+  const baseOptions = {
     order,
     entries,
     reservedFootprint,
@@ -857,8 +1007,39 @@ const attemptCurrentPageFootprintEvasion = ({
     pageStart,
     pageSize,
     columns,
-    movablePredicate: () => true,
-  })
+  }
+  const strategies: Array<{
+    movablePredicate: (entry: PagePlacementEntry) => boolean
+    preserveRelativeOrder?: boolean
+  }> = [
+    {
+      movablePredicate: entry => entry.overlapsReserved,
+    },
+    {
+      movablePredicate: entry => entry.overlapsReserved,
+      preserveRelativeOrder: false,
+    },
+    {
+      movablePredicate: () => true,
+    },
+    {
+      movablePredicate: () => true,
+      preserveRelativeOrder: false,
+    },
+  ]
+
+  let best: FootprintEvasionResult | null = null
+  for (const strategy of strategies) {
+    const candidate = solveFootprintPlacements({
+      ...baseOptions,
+      movablePredicate: strategy.movablePredicate,
+      preserveRelativeOrder: strategy.preserveRelativeOrder,
+    })
+    best = pickBetterCurrentPageFootprintResult(entries, pageStart, pageSize, best, candidate)
+  }
+
+  return best
+}
 
 const findFirstLegalAnchor = ({
   span,
@@ -877,7 +1058,11 @@ const findFirstLegalAnchor = ({
   reservedSet: Set<number>
   occupied: Set<number>
 }): PlacementCandidate | null => {
-  for (let anchorIndex = Math.max(0, startIndex); anchorIndex < searchEndExclusive; anchorIndex += 1) {
+  for (
+    let anchorIndex = Math.max(0, startIndex);
+    anchorIndex < searchEndExclusive;
+    anchorIndex += 1
+  ) {
     const footprint = getFootprintIndices(anchorIndex, span, columns, pageSize)
     if (!footprint) continue
     if (footprint.some(index => reservedSet.has(index))) continue
@@ -910,7 +1095,8 @@ const attemptStableSuffixReflow = ({
   const overlapAnchors = entries
     .filter(entry => entry.overlapsReserved)
     .map(entry => entry.anchorIndex)
-  const suffixStart = overlapAnchors.length > 0 ? Math.min(targetIndex, ...overlapAnchors) : targetIndex
+  const suffixStart =
+    overlapAnchors.length > 0 ? Math.min(targetIndex, ...overlapAnchors) : targetIndex
   const fixedAssignments = new Map<string, number>()
   const reservedSet = new Set(reservedFootprint)
   const occupied = new Set<number>(reservedFootprint)
@@ -957,7 +1143,13 @@ const attemptStableSuffixReflow = ({
 
     placement.footprint.forEach(index => occupied.add(index))
     assignments.set(entry.id, placement.anchorIndex)
-    totalScore += scorePlacementCandidate(entry, placement.anchorIndex, pageStart, pageSize, columns)
+    totalScore += scorePlacementCandidate(
+      entry,
+      placement.anchorIndex,
+      pageStart,
+      pageSize,
+      columns
+    )
     nextAnchorStart = placement.anchorIndex + 1
   }
 
@@ -1067,8 +1259,7 @@ export const applyOuterEvasionPolicy = (
   const targetAnchorIndex = options?.targetAnchorIndex ?? hit.targetIndex
   const pageStart = getPageStartBySlotIndex(targetAnchorIndex, safePageSize)
   const directions = resolveEvasionDirectionCandidates(hit.overlapRect, hit.targetRect)
-  const targetItem =
-    options?.items?.find(item => getId(item) === hit.targetId) ?? null
+  const targetItem = options?.items?.find(item => getId(item) === hit.targetId) ?? null
   const draggingSpan = options?.draggingItem ? getGridItemSpan(options.draggingItem) : null
   const targetSpan = targetItem ? getGridItemSpan(targetItem) : null
   const pageHasFootprintItem =
@@ -1102,7 +1293,14 @@ export const applyOuterEvasionPolicy = (
   }
 
   const evaluated = directions.candidates.map(direction =>
-    evaluateDirectionalEvasion(order, hit.targetIndex, direction, pageStart, safePageSize, safeColumns)
+    evaluateDirectionalEvasion(
+      order,
+      hit.targetIndex,
+      direction,
+      pageStart,
+      safePageSize,
+      safeColumns
+    )
   )
   const feasible = evaluated.filter(item => item.emptyIndex !== null)
   if (feasible.length > 0) {
@@ -1118,7 +1316,13 @@ export const applyOuterEvasionPolicy = (
     const chosen = feasible[0]
     if (chosen && chosen.emptyIndex !== null) {
       return {
-        order: applyDirectionalShift(order, hit.targetIndex, chosen.emptyIndex, chosen.direction, safeColumns),
+        order: applyDirectionalShift(
+          order,
+          hit.targetIndex,
+          chosen.emptyIndex,
+          chosen.direction,
+          safeColumns
+        ),
         direction: chosen.direction,
       }
     }
@@ -1137,13 +1341,3 @@ export const applyOuterEvasionPolicy = (
   next[hit.targetIndex] = null
   return { order: next, direction: null }
 }
-
-
-
-
-
-
-
-
-
-
