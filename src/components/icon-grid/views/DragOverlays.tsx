@@ -1,5 +1,5 @@
 import { AppWindow } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { DesktopIcon } from '../../../types'
 import {
   ICON_GRID_TILE_PADDING_Y,
@@ -50,6 +50,73 @@ const getGhostFolderSurfaceRadius = (panelBase: number) =>
 
 const getSingleSlotGhostPreviewInset = (panelBase: number) =>
   Math.round(clampNumber(panelBase * 0.06, 3, 5))
+
+interface StackGhostPosition {
+  left: number
+  top: number
+}
+
+interface PointerTrailSample extends StackGhostPosition {
+  timestamp: number
+}
+
+const STACK_TRAIL_HISTORY_MS = 280
+const STACK_TRAIL_DELAY_MS = 34
+const STACK_IDLE_RETURN_MS = 28
+const STACK_REST_OFFSET_Y = 0
+const STACK_REST_STEP_Y = 0
+const STACK_FOLLOW_EPSILON = 0.1
+const STACK_RETURN_BLEND_BASE = 0.16
+const STACK_RETURN_BLEND_STEP = 0.03
+const STACK_RETURN_SETTLE_DISTANCE = 0.18
+
+function sampleTrailPosition(
+  samples: PointerTrailSample[],
+  targetTimestamp: number
+): StackGhostPosition | null {
+  if (samples.length === 0) return null
+  if (targetTimestamp <= samples[0].timestamp) {
+    return { left: samples[0].left, top: samples[0].top }
+  }
+
+  for (let index = samples.length - 1; index > 0; index -= 1) {
+    const current = samples[index]
+    const previous = samples[index - 1]
+    if (targetTimestamp < previous.timestamp) continue
+    if (current.timestamp <= previous.timestamp) {
+      return { left: current.left, top: current.top }
+    }
+
+    const progress = clampNumber(
+      (targetTimestamp - previous.timestamp) / (current.timestamp - previous.timestamp),
+      0,
+      1
+    )
+    return {
+      left: previous.left + (current.left - previous.left) * progress,
+      top: previous.top + (current.top - previous.top) * progress,
+    }
+  }
+
+  const latest = samples[samples.length - 1]
+  return { left: latest.left, top: latest.top }
+}
+
+function hasStackPositionChanged(
+  previous: StackGhostPosition[],
+  next: StackGhostPosition[]
+): boolean {
+  if (previous.length !== next.length) return true
+
+  return next.some((position, index) => {
+    const before = previous[index]
+    if (!before) return true
+    return (
+      Math.abs(before.left - position.left) > STACK_FOLLOW_EPSILON ||
+      Math.abs(before.top - position.top) > STACK_FOLLOW_EPSILON
+    )
+  })
+}
 
 interface GhostPreviewIconProps {
   iconBase64: string
@@ -227,23 +294,128 @@ export function DragOverlays({
   reorderAnimationMs,
   folderPreviewEasing,
 }: DragOverlaysProps) {
-  const [stackEntered, setStackEntered] = useState(false)
+  const [stackPositions, setStackPositions] = useState<StackGhostPosition[]>([])
+  const pointerRef = useRef<DragGhostPointer | null>(dragPointer)
+  const animationFrameRef = useRef<number | null>(null)
+  const trailSamplesRef = useRef<PointerTrailSample[]>([])
+  const stackPositionsRef = useRef<StackGhostPosition[]>([])
+  const stackedIconsRef = useRef(stackedIcons)
+  const lastMoveAtRef = useRef(0)
+  const stackedIconSignature = stackedIcons.map(entry => entry.id).join('|')
+
+  pointerRef.current = dragPointer
+  stackedIconsRef.current = stackedIcons
 
   useEffect(() => {
-    if (!dragSessionId || stackedIcons.length === 0) {
-      setStackEntered(false)
+    if (!dragSessionId || ghostItem?.kind !== 'icon' || stackedIcons.length === 0 || !dragPointer) {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
+      }
+      trailSamplesRef.current = []
+      stackPositionsRef.current = []
+      lastMoveAtRef.current = 0
+      setStackPositions([])
       return
     }
 
-    setStackEntered(false)
-    const raf = requestAnimationFrame(() => {
-      setStackEntered(true)
-    })
-    return () => {
-      cancelAnimationFrame(raf)
-    }
-  }, [dragSessionId, stackedIcons.length])
+    const initialPositions = stackedIcons.map(entry => ({
+      left: entry.sourceCenter.x - iconImageSize / 2,
+      top: entry.sourceCenter.y - iconImageSize / 2,
+    }))
+    const leaderLeft = dragPointer.pointerX - iconImageSize / 2
+    const leaderTop = dragPointer.pointerY - iconImageSize / 2
+    const startedAt = performance.now()
 
+    trailSamplesRef.current = [{ left: leaderLeft, top: leaderTop, timestamp: startedAt }]
+    stackPositionsRef.current = initialPositions
+    lastMoveAtRef.current = Number.NEGATIVE_INFINITY
+    setStackPositions(initialPositions)
+
+    const tick = (now: number) => {
+      const latestPointer = pointerRef.current
+      const latestIcons = stackedIconsRef.current
+      if (!latestPointer || latestIcons.length === 0) {
+        animationFrameRef.current = null
+        return
+      }
+
+      const currentLeaderLeft = latestPointer.pointerX - iconImageSize / 2
+      const currentLeaderTop = latestPointer.pointerY - iconImageSize / 2
+      const trailSamples = trailSamplesRef.current
+      const latestSample = trailSamples[trailSamples.length - 1] ?? null
+      const deltaDistance = latestSample
+        ? Math.hypot(currentLeaderLeft - latestSample.left, currentLeaderTop - latestSample.top)
+        : Number.POSITIVE_INFINITY
+
+      if (!latestSample || deltaDistance > 0.75 || now - latestSample.timestamp > 16) {
+        trailSamples.push({
+          left: currentLeaderLeft,
+          top: currentLeaderTop,
+          timestamp: now,
+        })
+        if (deltaDistance > 0.75) {
+          lastMoveAtRef.current = now
+        }
+      }
+
+      while (trailSamples.length > 2 && now - trailSamples[0].timestamp > STACK_TRAIL_HISTORY_MS) {
+        trailSamples.shift()
+      }
+
+      const isMoving = now - lastMoveAtRef.current < STACK_IDLE_RETURN_MS
+      const previousPositions = stackPositionsRef.current
+      const nextPositions = latestIcons.map((_, index) => {
+        const restTarget = {
+          left: currentLeaderLeft,
+          top: currentLeaderTop + STACK_REST_OFFSET_Y + index * STACK_REST_STEP_Y,
+        }
+        const target =
+          isMoving
+            ? (sampleTrailPosition(trailSamples, now - STACK_TRAIL_DELAY_MS * (index + 1)) ??
+              restTarget)
+            : restTarget
+        const current = previousPositions[index] ?? initialPositions[index] ?? restTarget
+        if (!isMoving) {
+          const settleBlend = Math.max(
+            0.1,
+            STACK_RETURN_BLEND_BASE - index * STACK_RETURN_BLEND_STEP
+          )
+          const nextPosition = {
+            left: current.left + (restTarget.left - current.left) * settleBlend,
+            top: current.top + (restTarget.top - current.top) * settleBlend,
+          }
+          const settled =
+            Math.abs(restTarget.left - nextPosition.left) <= STACK_RETURN_SETTLE_DISTANCE &&
+            Math.abs(restTarget.top - nextPosition.top) <= STACK_RETURN_SETTLE_DISTANCE
+
+          return settled ? restTarget : nextPosition
+        }
+
+        const blend = Math.max(0.18, 0.36 - index * 0.04)
+
+        return {
+          left: current.left + (target.left - current.left) * blend,
+          top: current.top + (target.top - current.top) * blend,
+        }
+      })
+
+      stackPositionsRef.current = nextPositions
+      if (hasStackPositionChanged(previousPositions, nextPositions)) {
+        setStackPositions(nextPositions)
+      }
+
+      animationFrameRef.current = requestAnimationFrame(tick)
+    }
+
+    animationFrameRef.current = requestAnimationFrame(tick)
+    return () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
+      }
+    }
+  }, [dragSessionId, ghostItem?.kind, iconImageSize, stackedIconSignature, stackedIcons.length])
   const folderSpan = ghostItem?.kind === 'folder' ? getGridItemSpan(ghostItem) : null
   const folderFootprintWidth =
     folderSpan ? folderSpan.cols * slotWidth + Math.max(0, folderSpan.cols - 1) * gridGap : 0
@@ -258,14 +430,11 @@ export function DragOverlays({
         <>
           {ghostItem.kind === 'icon' && stackedIcons.length > 0
             ? stackedIcons.map((entry, index) => {
-                const stackOffsetX = Math.min(14, (index + 1) * 3)
-                const stackOffsetY = 10 + index * 10
-                const targetLeft = dragPointer.pointerX - iconImageSize / 2 + stackOffsetX
-                const targetTop = dragPointer.pointerY - iconImageSize / 2 + stackOffsetY
-                const baseLeft = entry.sourceCenter.x - iconImageSize / 2
-                const baseTop = entry.sourceCenter.y - iconImageSize / 2
-                const scale = Math.max(0.72, 0.94 - index * 0.06)
-                const opacity = Math.max(0.38, 0.8 - index * 0.12)
+                const position = stackPositions[index] ?? {
+                  left: entry.sourceCenter.x - iconImageSize / 2,
+                  top: entry.sourceCenter.y - iconImageSize / 2,
+                }
+                const scale = Math.max(0.82, 0.96 - index * 0.04)
 
                 return (
                   <div
@@ -275,25 +444,28 @@ export function DragOverlays({
                       zIndex: 48 - index,
                       width: iconImageSize,
                       height: iconImageSize,
-                      left: stackEntered ? targetLeft : baseLeft,
-                      top: stackEntered ? targetTop : baseTop,
-                      opacity,
-                      transform: `scale(${scale})`,
-                      transition:
-                        'left 220ms cubic-bezier(0.22, 1, 0.36, 1), top 220ms cubic-bezier(0.22, 1, 0.36, 1), transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease-out',
+                      left: 0,
+                      top: 0,
+                      transform: `translate3d(${position.left}px, ${position.top}px, 0)`,
+                      willChange: 'transform',
                     }}
                   >
-                    {entry.icon.icon_base64 ? (
-                      <img
-                        src={entry.icon.icon_base64}
-                        alt={entry.icon.name}
-                        className="object-contain"
-                        style={{ width: iconImageSize, height: iconImageSize }}
-                        draggable={false}
-                      />
-                    ) : (
-                      <AppWindow className="h-8 w-8 text-foreground/70" />
-                    )}
+                    <div
+                      className="flex h-full w-full items-center justify-center"
+                      style={{ transform: `scale(${scale})` }}
+                    >
+                      {entry.icon.icon_base64 ? (
+                        <img
+                          src={entry.icon.icon_base64}
+                          alt={entry.icon.name}
+                          className="object-contain"
+                          style={{ width: iconImageSize, height: iconImageSize }}
+                          draggable={false}
+                        />
+                      ) : (
+                        <AppWindow className="h-8 w-8 text-foreground/70" />
+                      )}
+                    </div>
                   </div>
                 )
               })
