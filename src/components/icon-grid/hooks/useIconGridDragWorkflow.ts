@@ -243,10 +243,6 @@ export function useIconGridDragWorkflow({
     if (!selectionMode || !leadItem || leadItem.kind !== 'icon') {
       return [leadId]
     }
-    if (!selectedIconKeySet.has(leadItem.key)) {
-      return [leadId]
-    }
-
     const orderedSelectedIds = sourceOrder.filter((slot): slot is string => {
       if (!slot || slot === DRAG_HOLE_ID || slot === leadId) return false
       const candidate = itemById.get(slot)
@@ -1236,14 +1232,6 @@ export function useIconGridDragWorkflow({
 
   const handleTilePointerDown = (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => {
     if (event.button !== 0) return
-    const targetItem = itemById.get(itemId)
-    const canDragSelectionItem =
-      selectionMode &&
-      targetItem &&
-      targetItem.kind === 'icon' &&
-      selectedIconKeySet.has(targetItem.key)
-    if (selectionMode && !canDragSelectionItem) return
-
     const rect = event.currentTarget.getBoundingClientRect()
     pendingRef.current = {
       context: 'outer',
