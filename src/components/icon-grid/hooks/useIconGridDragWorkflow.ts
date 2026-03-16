@@ -89,6 +89,7 @@ interface UseIconGridDragWorkflowParams {
   currentPageRef: MutableRefObject<number>
   setCurrentPage: Dispatch<SetStateAction<number>>
   pageSizeRef: MutableRefObject<number>
+  openFolderId: string | null
   setOpenFolderId: Dispatch<SetStateAction<string | null>>
 }
 
@@ -148,6 +149,7 @@ export function useIconGridDragWorkflow({
   currentPageRef,
   setCurrentPage,
   pageSizeRef,
+  openFolderId,
   setOpenFolderId,
 }: UseIconGridDragWorkflowParams): UseIconGridDragWorkflowResult {
   const selectedIconKeySet = new Set(selectedIconKeys)
@@ -305,12 +307,8 @@ export function useIconGridDragWorkflow({
   const isDraggingFromDock = (draggingId: string): boolean =>
     dockKeysRef.current.includes(draggingId)
 
-  const resolveOuterDragIds = (sourceOrder: Array<string | null>, leadId: string): string[] => {
-    const leadItem = itemById.get(leadId)
-    if (!selectionMode || !leadItem || leadItem.kind !== 'icon') {
-      return [leadId]
-    }
-    const orderedSelectedIds = sourceOrder.filter((slot): slot is string => {
+  const resolveSelectedOuterDragIds = (sourceOrder: Array<string | null>, leadId: string) =>
+    sourceOrder.filter((slot): slot is string => {
       if (!slot || slot === DRAG_HOLE_ID || slot === leadId) return false
       const candidate = itemById.get(slot)
       return Boolean(
@@ -318,7 +316,110 @@ export function useIconGridDragWorkflow({
       )
     })
 
+  const resolveOuterDragIds = (sourceOrder: Array<string | null>, leadId: string): string[] => {
+    const leadItem = itemById.get(leadId)
+    if (!selectionMode || !leadItem || leadItem.kind !== 'icon') {
+      return [leadId]
+    }
+    const orderedSelectedIds = resolveSelectedOuterDragIds(sourceOrder, leadId)
+
     return [leadId, ...orderedSelectedIds]
+  }
+
+  const resolveSelectedFolderDragIds = ({
+    preferredFolderId,
+    leadId,
+  }: {
+    preferredFolderId: string | null
+    leadId: string
+  }): { folderId: string | null; ids: string[] } => {
+    const folderIds: string[] = []
+    if (preferredFolderId) {
+      folderIds.push(preferredFolderId)
+    }
+    itemsRef.current.forEach(item => {
+      if (item.kind !== 'folder') return
+      if (item.id === preferredFolderId) return
+      folderIds.push(item.id)
+    })
+
+    for (const folderId of folderIds) {
+      const ids = getFolderChildrenById(itemsRef.current, folderId)
+        .map(child => child.key)
+        .filter(key => key !== leadId && selectedIconKeySet.has(key))
+      if (ids.length > 0) {
+        return { folderId, ids }
+      }
+    }
+
+    return { folderId: null, ids: [] }
+  }
+
+  const resolveMixedSelectionDragIds = ({
+    context,
+    leadId,
+    leadItem,
+    sourceOrder,
+    sourceFolderId,
+  }: {
+    context: 'outer' | 'folder' | 'dock'
+    leadId: string
+    leadItem: GridItem
+    sourceOrder: Array<string | null>
+    sourceFolderId: string | null
+  }) => {
+    if (!selectionMode || leadItem.kind !== 'icon') {
+      return [leadId]
+    }
+
+    if (context === 'dock') {
+      return [leadId]
+    }
+
+    const ordered: string[] = [leadId]
+    const seen = new Set<string>(ordered)
+    const pushIds = (ids: string[]) => {
+      ids.forEach(id => {
+        if (seen.has(id)) return
+        seen.add(id)
+        ordered.push(id)
+      })
+    }
+
+    const outerSelectedIds =
+      context === 'outer'
+        ? resolveOuterDragIds(sourceOrder, leadId).slice(1)
+        : resolveSelectedOuterDragIds(resolveTopLevelOrder('outer'), leadId)
+    const folderSelection = resolveSelectedFolderDragIds({
+      preferredFolderId: sourceFolderId ?? openFolderId,
+      leadId,
+    })
+    const folderSelectedIds = folderSelection.ids
+
+    if (context === 'folder') {
+      pushIds(folderSelectedIds)
+      pushIds(outerSelectedIds)
+      return ordered
+    }
+
+    pushIds(outerSelectedIds)
+    pushIds(folderSelectedIds)
+    return ordered
+  }
+
+  const resolveSelectionSourceFolderId = (
+    draggingIds: string[],
+    fallbackFolderId: string | null
+  ) => {
+    if (fallbackFolderId) return fallbackFolderId
+    for (const item of itemsRef.current) {
+      if (item.kind !== 'folder') continue
+      const childIds = new Set(item.children.map(child => child.key))
+      if (draggingIds.some(id => childIds.has(id))) {
+        return item.id
+      }
+    }
+    return null
   }
 
   const resolveTopLevelOrder = (context: 'outer' | 'dock'): Array<string | null> =>
@@ -816,6 +917,11 @@ export function useIconGridDragWorkflow({
     const initialCenters = collectCenters(
       context === 'dock' ? dockItemRefs.current : tileRefs.current
     )
+    state.draggingIds.forEach(id => {
+      if (!initialCenters[id] && state.initialCenters[id]) {
+        initialCenters[id] = state.initialCenters[id]
+      }
+    })
     initialCenters[state.draggingId] = { x, y }
 
     const nextState: DragState = {
@@ -880,10 +986,22 @@ export function useIconGridDragWorkflow({
       return
     }
 
-    const draggingIds =
-      pending.context === 'outer'
-        ? resolveOuterDragIds(sourceOrder, pending.itemId)
-        : [pending.itemId]
+    const draggingIds = resolveMixedSelectionDragIds({
+      context: pending.context,
+      leadId: pending.itemId,
+      leadItem: draggingItem,
+      sourceOrder,
+      sourceFolderId: pending.sourceFolderId,
+    })
+    const effectiveSourceFolderId = resolveSelectionSourceFolderId(
+      draggingIds,
+      pending.sourceFolderId
+    )
+    const selectedFolderDragIds = effectiveSourceFolderId
+      ? getFolderChildrenById(itemsRef.current, effectiveSourceFolderId)
+          .map(child => child.key)
+          .filter(id => draggingIds.includes(id))
+      : []
 
     const workingOrder: Array<string | null> = [...sourceOrder]
     if (pending.context === 'folder') {
@@ -893,7 +1011,7 @@ export function useIconGridDragWorkflow({
     }
     const nextState: DragState = {
       context: pending.context,
-      sourceFolderId: pending.sourceFolderId,
+      sourceFolderId: effectiveSourceFolderId,
       pointerId: pending.pointerId,
       dragStartedAt: performance.now(),
       draggingId: pending.itemId,
@@ -923,6 +1041,44 @@ export function useIconGridDragWorkflow({
             ? collectCenters(dockItemRefs.current)
             : collectCenters(tileRefs.current),
     }
+    if (pending.context !== 'folder' && selectedFolderDragIds.length > 0) {
+      const folderCenters = collectCenters(folderTileRefs.current)
+      const folderTileNode =
+        effectiveSourceFolderId !== null
+          ? tileRefs.current.get(`folder:${effectiveSourceFolderId}`)
+          : null
+      const folderTileRect = folderTileNode?.getBoundingClientRect() ?? null
+      const collapsedFolderCenter = folderTileRect
+        ? {
+            x: folderTileRect.left + folderTileRect.width / 2,
+            y: folderTileRect.top + folderTileRect.height / 2,
+          }
+        : null
+      selectedFolderDragIds.forEach(id => {
+        if (folderCenters[id]) {
+          nextState.initialCenters[id] = folderCenters[id]
+          return
+        }
+        if (!collapsedFolderCenter) return
+
+        const stackOffset = Math.min(10, Math.max(4, Math.round(iconConfig.imgSize * 0.14)))
+        const index = selectedFolderDragIds.indexOf(id)
+        const columnOffset = (index % 2) - 0.5
+        const rowOffset = Math.floor(index / 2)
+        nextState.initialCenters[id] = {
+          x: collapsedFolderCenter.x + columnOffset * stackOffset * 2,
+          y: collapsedFolderCenter.y + rowOffset * stackOffset - stackOffset / 2,
+        }
+      })
+      setOpenFolderId(null)
+    }
+
+    if (pending.context === 'folder' && draggingIds.length > 1 && draggingItem.kind === 'icon') {
+      commitDragState(moveDragToTopLevelContext(nextState, 'outer', x, y))
+      clearPending()
+      return
+    }
+
     commitDragState(nextState)
     clearPending()
   }
@@ -1328,7 +1484,7 @@ export function useIconGridDragWorkflow({
     folderId: string,
     itemId: string
   ) => {
-    if (selectionMode || event.button !== 0) return
+    if (event.button !== 0) return
     const rect = event.currentTarget.getBoundingClientRect()
     pendingRef.current = {
       context: 'folder',

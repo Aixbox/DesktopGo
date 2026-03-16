@@ -130,14 +130,27 @@ export function useDragDropCommit({
   }
 
   const extractDraggedIconFromSourceFolder = (base: GridItem[], session: DragState): GridItem[] => {
-    if (!session.sourceFolderId || session.draggingItem.kind !== 'icon') return base
-    const iconKey = session.draggingItem.key
+    if (!session.sourceFolderId) return base
     const children = getFolderChildrenById(base, session.sourceFolderId)
-    if (children.length === 0 || !children.some(child => child.key === iconKey)) return base
-    const nextChildren = children.filter(child => child.key !== iconKey)
-    return replaceFolderChildren(base, session.sourceFolderId, nextChildren, {
+    if (children.length === 0) return base
+
+    const draggedIdSet = new Set(
+      session.draggingIds.length > 0 ? session.draggingIds : [session.draggingId]
+    )
+    const extractedChildren = children.filter(child => draggedIdSet.has(child.key))
+    if (extractedChildren.length === 0) return base
+
+    const nextChildren = children.filter(child => !draggedIdSet.has(child.key))
+    const nextBase = replaceFolderChildren(base, session.sourceFolderId, nextChildren, {
       collapseSingleChild: false,
     })
+    const existingIds = new Set(nextBase.map(getId))
+    const extractedItems = extractedChildren.filter(child => !existingIds.has(child.key))
+    if (extractedItems.length === 0) {
+      return nextBase
+    }
+
+    return [...nextBase, ...extractedItems]
   }
 
   const commitLayouts = (

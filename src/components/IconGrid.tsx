@@ -7,11 +7,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from 'react'
 import type { DesktopIcon } from '../types'
-import {
-  getIconGridLayoutRowHeight,
-  getIconGridRowHeight,
-  ICON_SIZE_CONFIG,
-} from '../types'
+import { getIconGridLayoutRowHeight, getIconGridRowHeight, ICON_SIZE_CONFIG } from '../types'
 import { useIconStore } from '../stores/iconStore'
 import type { FolderSize, GridItem, IconItem, PersistedLayout } from './icon-grid/model'
 import { getGridItemSpan, getId } from './icon-grid/model'
@@ -41,6 +37,7 @@ import { DragOverlays } from './icon-grid/views/DragOverlays'
 import { OuterGridView } from './icon-grid/views/OuterGridView'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
 import { DockBar } from './icon-grid/views/DockBar'
+import { getFolderChildrenById } from './icon-grid/domain/folderPolicy'
 
 interface IconGridProps {
   icons: DesktopIcon[]
@@ -323,6 +320,7 @@ export function IconGrid({ icons }: IconGridProps) {
     currentPageRef,
     setCurrentPage,
     pageSizeRef,
+    openFolderId,
     setOpenFolderId,
   })
   const folderRenderOrder =
@@ -357,16 +355,19 @@ export function IconGrid({ icons }: IconGridProps) {
     if (!dragState || dragState.context !== 'outer' || !dragState.sourceFolderId) {
       return itemById
     }
-    const draggingIconKey =
-      dragState.draggingItem.kind === 'icon' ? dragState.draggingItem.key : null
-    if (!draggingIconKey) return itemById
+    const draggingIconIdSet = new Set(dragState.draggingIds)
+    if (draggingIconIdSet.size === 0) return itemById
 
     const sourceFolderEntryId = `folder:${dragState.sourceFolderId}`
     const sourceFolder = itemById.get(sourceFolderEntryId)
     if (!sourceFolder || sourceFolder.kind !== 'folder') return itemById
 
-    const nextChildren = sourceFolder.children.filter(child => child.key !== draggingIconKey)
+    const nextChildren = sourceFolder.children.filter(child => !draggingIconIdSet.has(child.key))
     const next = new Map(itemById)
+    if (nextChildren.length === 0) {
+      next.delete(sourceFolderEntryId)
+      return next
+    }
     next.set(sourceFolderEntryId, { ...sourceFolder, children: nextChildren })
     return next
   }, [itemById, dragState])
@@ -483,7 +484,9 @@ export function IconGrid({ icons }: IconGridProps) {
 
   useEffect(() => {
     if (!hydratedRef.current || dockEnabled) return
-    const hasDockItems = dockKeysRef.current.some((entry): entry is string => typeof entry === 'string')
+    const hasDockItems = dockKeysRef.current.some(
+      (entry): entry is string => typeof entry === 'string'
+    )
     if (!hasDockItems) return
 
     const layoutMetrics = getLayoutNormalizationMetrics(
@@ -834,15 +837,22 @@ export function IconGrid({ icons }: IconGridProps) {
       return []
     }
 
+    const dragItemById = new Map(itemById)
+    if (dragState.sourceFolderId) {
+      getFolderChildrenById(items, dragState.sourceFolderId).forEach(child => {
+        dragItemById.set(child.key, child)
+      })
+    }
+
     return dragState.draggingIds.slice(1).flatMap(id => {
-      const item = itemById.get(id)
+      const item = dragItemById.get(id)
       const sourceCenter = dragState.initialCenters[id]
       if (!item || item.kind !== 'icon' || !sourceCenter) {
         return []
       }
       return [{ id, icon: item.icon, sourceCenter }]
     })
-  }, [dragState, itemById])
+  }, [dragState, itemById, items])
   const canGoLeft = currentPage > 0
   const canGoRight = currentPage < pageCount - 1
 
