@@ -3,6 +3,7 @@ import { getId, makeFolderId } from '../model'
 import { clampNumber } from './geometry'
 import { DRAG_HOLE_ID, getManhattanDistanceBySlotIndex } from './slots'
 import type { DragState } from '../state/types'
+import { normalizeOuterSlots } from './topLevelLayout'
 
 export const applyFolderCreateFromSession = (
   base: GridItem[],
@@ -193,6 +194,24 @@ const insertWithForwardShift = (slots: Array<string | null>, index: number, id: 
     slots[currentIndex] = slots[currentIndex - 1]
   }
   slots[index] = id
+}
+
+const prioritizeDraggedItems = (items: GridItem[], dragIds: string[]) => {
+  if (dragIds.length <= 1) return items
+
+  const dragIdSet = new Set(dragIds)
+  const draggedItems: GridItem[] = []
+  const remainingItems: GridItem[] = []
+
+  items.forEach(item => {
+    if (dragIdSet.has(getId(item))) {
+      draggedItems.push(item)
+      return
+    }
+    remainingItems.push(item)
+  })
+
+  return [...draggedItems, ...remainingItems]
 }
 
 const getNeighborLocalIndices = ({
@@ -597,6 +616,58 @@ const insertIntoPageFromAnchor = ({
   })
 }
 
+const stabilizeMultiDropPage = ({
+  sourceSlots,
+  insertedSlots,
+  pageStart,
+  pageSize,
+  dragIds,
+}: {
+  sourceSlots: Array<string | null>
+  insertedSlots: Array<string | null>
+  pageStart: number
+  pageSize: number
+  dragIds: string[]
+}) => {
+  const pageEnd = pageStart + pageSize
+  const dragIdSet = new Set(dragIds)
+  const insertedPageEntries = insertedSlots.slice(pageStart, pageEnd)
+  const stabilizedPageEntries = insertedPageEntries.map(id => id ?? null)
+  const pageIdSet = new Set(
+    stabilizedPageEntries.filter((id): id is string => typeof id === 'string')
+  )
+  const pageDragIdSet = new Set(
+    stabilizedPageEntries.filter((id): id is string => typeof id === 'string' && dragIdSet.has(id))
+  )
+  const remainingDragIds = dragIds.filter(id => !pageDragIdSet.has(id))
+  const displacedCurrentPageIds = sourceSlots
+    .slice(pageStart, pageEnd)
+    .filter(
+      (id): id is string => typeof id === 'string' && !dragIdSet.has(id) && !pageIdSet.has(id)
+    )
+  const trailingIds = sourceSlots
+    .slice(pageEnd)
+    .filter((id): id is string => typeof id === 'string' && !dragIdSet.has(id))
+
+  const nextSlots = [...sourceSlots.slice(0, pageStart)]
+  while (nextSlots.length < pageStart) {
+    nextSlots.push(null)
+  }
+  nextSlots.push(...stabilizedPageEntries)
+  const insertedPageQueue = [...remainingDragIds, ...displacedCurrentPageIds]
+  if (insertedPageQueue.length > 0) {
+    nextSlots.push(
+      ...Array.from({ length: pageSize }, (_, index) => insertedPageQueue[index] ?? null)
+    )
+    nextSlots.push(...insertedPageQueue.slice(pageSize), ...trailingIds)
+    return nextSlots
+  }
+
+  nextSlots.push(...trailingIds)
+
+  return nextSlots
+}
+
 export const applyMultiOuterDropFromSession = ({
   base,
   session,
@@ -634,22 +705,38 @@ export const applyMultiOuterDropFromSession = ({
 
   const dropIndex = clampNumber(candidateDropIndex, 0, Number.MAX_SAFE_INTEGER)
   const pageStart = Math.floor(dropIndex / safePageSize) * safePageSize
+  const insertedSlots = [...nextSlots]
   insertIntoPageFromAnchor({
-    slots: nextSlots,
+    slots: insertedSlots,
     pageStart,
     pageSize: safePageSize,
     dropIndex,
     columns,
     dragIds,
   })
+  const stabilizedSlots = stabilizeMultiDropPage({
+    sourceSlots: nextSlots,
+    insertedSlots,
+    pageStart,
+    pageSize: safePageSize,
+    dragIds,
+  })
 
-  if (nextSlots.length === 0) {
-    nextSlots.push(...Array.from({ length: safePageSize }, () => null))
+  if (stabilizedSlots.length === 0) {
+    stabilizedSlots.push(...Array.from({ length: safePageSize }, () => null))
   }
-  const remainder = nextSlots.length % safePageSize
+  const remainder = stabilizedSlots.length % safePageSize
   if (remainder > 0) {
-    nextSlots.push(...Array.from({ length: safePageSize - remainder }, () => null))
+    stabilizedSlots.push(...Array.from({ length: safePageSize - remainder }, () => null))
   }
 
-  return { items: base, slots: nextSlots }
+  const prioritizedItems = prioritizeDraggedItems(base, dragIds)
+  const normalizedSlots = normalizeOuterSlots(
+    stabilizedSlots,
+    prioritizedItems,
+    safePageSize,
+    columns
+  )
+
+  return { items: prioritizedItems, slots: normalizedSlots }
 }
