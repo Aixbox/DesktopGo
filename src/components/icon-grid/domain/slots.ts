@@ -65,6 +65,33 @@ export const areSlotsEqual = (a: Array<string | null>, b: Array<string | null>):
 export const getPageCountBySlots = (slots: Array<string | null>, pageSize: number): number =>
   Math.max(1, Math.ceil(Math.max(pageSize, slots.length) / Math.max(1, pageSize)))
 
+export const compactEmptyPages = (
+  slots: Array<string | null>,
+  pageSize: number
+): Array<string | null> => {
+  const safePageSize = Math.max(1, pageSize)
+  const pageCount = getPageCountBySlots(slots, safePageSize)
+  const pages: Array<Array<string | null>> = []
+
+  for (let page = 0; page < pageCount; page += 1) {
+    const start = page * safePageSize
+    const pageEntries = slots.slice(start, start + safePageSize)
+    if (pageEntries.length < safePageSize) {
+      pageEntries.push(...Array.from({ length: safePageSize - pageEntries.length }, () => null))
+    }
+    pages.push(pageEntries)
+  }
+
+  const compacted = pages.filter(pageEntries =>
+    pageEntries.some(slot => slot !== null && slot !== DRAG_HOLE_ID)
+  )
+  if (compacted.length === 0) {
+    return Array.from({ length: safePageSize }, () => null)
+  }
+
+  return compacted.flat()
+}
+
 export const isPageFullyEmpty = (
   slots: Array<string | null>,
   page: number,

@@ -11,7 +11,7 @@ import { getIconGridLayoutRowHeight, getIconGridRowHeight, ICON_SIZE_CONFIG } fr
 import { useIconStore } from '../stores/iconStore'
 import type { FolderSize, GridItem, IconItem, PersistedLayout } from './icon-grid/model'
 import { getGridItemSpan, getId } from './icon-grid/model'
-import { DRAG_HOLE_ID, areSlotsEqual } from './icon-grid/domain/slots'
+import { compactEmptyPages, DRAG_HOLE_ID, areSlotsEqual } from './icon-grid/domain/slots'
 import { clampNumber } from './icon-grid/domain/geometry'
 import {
   hydrateDockKeys,
@@ -185,11 +185,12 @@ export function IconGrid({ icons }: IconGridProps) {
         layoutMetrics.pageSize,
         layoutMetrics.columns
       )
+      const compactedNextSlots = compactEmptyPages(normalizedNextSlots, layoutMetrics.pageSize)
       itemsRef.current = nextItems
-      outerSlotsRef.current = normalizedNextSlots
+      outerSlotsRef.current = compactedNextSlots
       dockKeysRef.current = nextDockKeys
       setItems(nextItems)
-      setOuterSlots(normalizedNextSlots)
+      setOuterSlots(compactedNextSlots)
       setDockKeys(nextDockKeys)
       hydratedRef.current = true
     }
@@ -477,9 +478,10 @@ export function IconGrid({ icons }: IconGridProps) {
       layoutMetrics.pageSize,
       layoutMetrics.columns
     )
-    if (areSlotsEqual(normalized, outerSlotsRef.current)) return
-    outerSlotsRef.current = normalized
-    setOuterSlots(normalized)
+    const compacted = compactEmptyPages(normalized, layoutMetrics.pageSize)
+    if (areSlotsEqual(compacted, outerSlotsRef.current)) return
+    outerSlotsRef.current = compacted
+    setOuterSlots(compacted)
   }, [columns, outerItemIds, pageSize])
 
   useEffect(() => {
@@ -500,9 +502,10 @@ export function IconGrid({ icons }: IconGridProps) {
       layoutMetrics.pageSize,
       layoutMetrics.columns
     )
-    outerSlotsRef.current = nextOuterSlots
+    const compactedOuterSlots = compactEmptyPages(nextOuterSlots, layoutMetrics.pageSize)
+    outerSlotsRef.current = compactedOuterSlots
     dockKeysRef.current = []
-    setOuterSlots(nextOuterSlots)
+    setOuterSlots(compactedOuterSlots)
     setDockKeys([])
   }, [columns, dockEnabled])
 
@@ -582,11 +585,12 @@ export function IconGrid({ icons }: IconGridProps) {
       layoutMetrics.pageSize,
       layoutMetrics.columns
     )
+    const compactedOuterSlots = compactEmptyPages(nextOuterSlots, layoutMetrics.pageSize)
 
     itemsRef.current = nextItems
-    outerSlotsRef.current = nextOuterSlots
+    outerSlotsRef.current = compactedOuterSlots
     setItems(nextItems)
-    setOuterSlots(nextOuterSlots)
+    setOuterSlots(compactedOuterSlots)
   }
 
   const pageItems = useMemo(() => {

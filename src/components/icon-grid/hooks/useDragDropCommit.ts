@@ -8,7 +8,7 @@ import {
 } from 'react'
 import type { GridItem, IconItem } from '../model'
 import { getId } from '../model'
-import { DRAG_HOLE_ID } from '../domain/slots'
+import { compactEmptyPages, DRAG_HOLE_ID } from '../domain/slots'
 import { moveDragHoleToIndex } from '../domain/evasionPolicy'
 import {
   finalizeFolderExtractionInTopLevelLayout,
@@ -167,11 +167,12 @@ export function useDragDropCommit({
       pageSizeRef.current,
       Math.max(1, columns)
     )
+    const compactedOuterSlots = compactEmptyPages(normalizedOuterSlots, pageSizeRef.current)
     itemsRef.current = nextItems
-    outerSlotsRef.current = normalizedOuterSlots
+    outerSlotsRef.current = compactedOuterSlots
     dockKeysRef.current = normalizedDockKeys
     setItems(nextItems)
-    setOuterSlots(normalizedOuterSlots)
+    setOuterSlots(compactedOuterSlots)
     setDockKeys(normalizedDockKeys)
   }
 
