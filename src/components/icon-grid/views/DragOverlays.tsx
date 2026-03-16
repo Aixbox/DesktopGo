@@ -1,5 +1,5 @@
 import { AppWindow } from 'lucide-react'
-import { useEffect, useRef, type MutableRefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from 'react'
 import type { DesktopIcon } from '../../../types'
 import {
   ICON_GRID_TILE_PADDING_Y,
@@ -329,6 +329,34 @@ export function DragOverlays({
     stackNodeRefs.current.delete(id)
   }
 
+  useLayoutEffect(() => {
+    const currentPointer = dragPointerRef.current
+    if (!currentPointer || !ghostItem) return
+    applyGhostTransform(
+      leaderNodeRef.current,
+      currentPointer.pointerX - ghostWidth / 2,
+      currentPointer.pointerY - ghostHeight / 2
+    )
+  }, [dragSessionId, ghostHeight, ghostItem?.kind, ghostWidth])
+
+  useLayoutEffect(() => {
+    if (ghostItem?.kind !== 'icon' || stackedIcons.length === 0) return
+
+    stackedIcons.forEach((entry, index) => {
+      const position = stackPositionsRef.current[index]
+      if (position) {
+        applyGhostTransform(stackNodeRefs.current.get(entry.id) ?? null, position.left, position.top)
+        return
+      }
+
+      applyGhostTransform(
+        stackNodeRefs.current.get(entry.id) ?? null,
+        entry.sourceCenter.x - iconImageSize / 2,
+        entry.sourceCenter.y - iconImageSize / 2
+      )
+    })
+  }, [dragSessionId, ghostItem?.kind, iconImageSize, stackedIconSignature])
+
   useEffect(() => {
     if (!dragSessionId || !ghostItem) {
       if (pointerAnimationFrameRef.current !== null) {
@@ -357,7 +385,7 @@ export function DragOverlays({
         pointerAnimationFrameRef.current = null
       }
     }
-  }, [dragPointerRef, dragSessionId, ghostHeight, ghostItem, ghostWidth])
+  }, [dragPointerRef, dragSessionId, ghostHeight, ghostItem?.kind, ghostWidth])
 
   useEffect(() => {
     const initialPointer = dragPointerRef.current
@@ -480,7 +508,7 @@ export function DragOverlays({
         animationFrameRef.current = null
       }
     }
-  }, [dragPointerRef, dragSessionId, ghostItem?.kind, iconImageSize, stackedIconSignature, stackedIcons])
+  }, [dragPointerRef, dragSessionId, ghostItem?.kind, iconImageSize, stackedIconSignature])
 
   return (
     <>
@@ -488,10 +516,6 @@ export function DragOverlays({
         <>
           {ghostItem.kind === 'icon' && stackedIcons.length > 0
             ? stackedIcons.map((entry, index) => {
-                const initialPosition = {
-                  left: entry.sourceCenter.x - iconImageSize / 2,
-                  top: entry.sourceCenter.y - iconImageSize / 2,
-                }
                 const scale = Math.max(0.82, 0.96 - index * 0.04)
 
                 return (
@@ -505,7 +529,6 @@ export function DragOverlays({
                       height: iconImageSize,
                       left: 0,
                       top: 0,
-                      transform: `translate3d(${initialPosition.left}px, ${initialPosition.top}px, 0)`,
                       willChange: 'transform',
                     }}
                   >
@@ -538,7 +561,6 @@ export function DragOverlays({
               height: ghostHeight,
               left: 0,
               top: 0,
-              transform: `translate3d(${initialDragPointer.pointerX - ghostWidth / 2}px, ${initialDragPointer.pointerY - ghostHeight / 2}px, 0)`,
               willChange: 'transform',
             }}
           >
@@ -633,3 +655,4 @@ export function DragOverlays({
     </>
   )
 }
+
