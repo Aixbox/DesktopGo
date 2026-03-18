@@ -971,7 +971,9 @@ const pickBetterCurrentPageFootprintResult = (
   pageStart: number,
   pageSize: number,
   current: FootprintEvasionResult | null,
-  candidate: FootprintEvasionResult | null
+  candidate: FootprintEvasionResult | null,
+  columns: number,
+  preferredDirections?: EvasionDirection[]
 ): FootprintEvasionResult | null => {
   if (!candidate) return current
   if (!current) return candidate
@@ -1005,6 +1007,41 @@ const pickBetterCurrentPageFootprintResult = (
 
   if (candidateMetrics.totalAnchorShift !== currentMetrics.totalAnchorShift) {
     return candidateMetrics.totalAnchorShift < currentMetrics.totalAnchorShift ? candidate : current
+  }
+
+  if (preferredDirections && preferredDirections.length > 0) {
+    const scoreDirectionAlignment = (result: FootprintEvasionResult) => {
+      const anchorById = new Map<string, number>()
+      const rangeEndExclusive = pageStart + Math.max(1, pageSize)
+
+      for (let index = pageStart; index < rangeEndExclusive; index += 1) {
+        const id = result.order[index]
+        if (!id || id === DRAG_HOLE_ID) continue
+        anchorById.set(id, index)
+      }
+
+      let score = 0
+      for (const entry of entries) {
+        if (!entry.overlapsReserved) continue
+        const nextAnchor = anchorById.get(entry.id)
+        if (nextAnchor === undefined || nextAnchor === entry.anchorIndex) continue
+
+        for (let index = 0; index < preferredDirections.length; index += 1) {
+          const direction = preferredDirections[index]
+          if (!movesEntryAlongDirection(entry, nextAnchor, pageStart, columns, direction)) continue
+          score += preferredDirections.length - index
+          break
+        }
+      }
+
+      return score
+    }
+
+    const currentDirectionScore = scoreDirectionAlignment(current)
+    const candidateDirectionScore = scoreDirectionAlignment(candidate)
+    if (candidateDirectionScore !== currentDirectionScore) {
+      return candidateDirectionScore > currentDirectionScore ? candidate : current
+    }
   }
 
   return current
@@ -1069,7 +1106,14 @@ const solveCurrentPageFootprintStrategies = ({
       preserveRelativeOrder: strategy.preserveRelativeOrder,
       candidatePredicate,
     })
-    best = pickBetterCurrentPageFootprintResult(entries, pageStart, pageSize, best, candidate)
+    best = pickBetterCurrentPageFootprintResult(
+      entries,
+      pageStart,
+      pageSize,
+      best,
+      candidate,
+      columns
+    )
   }
 
   return best
@@ -1092,6 +1136,15 @@ const attemptCurrentPageFootprintEvasion = ({
   columns: number
   preferredDirections?: EvasionDirection[]
 }): FootprintEvasionResult | null => {
+  let best = solveCurrentPageFootprintStrategies({
+    order,
+    entries,
+    reservedFootprint,
+    pageStart,
+    pageSize,
+    columns,
+  })
+
   for (const direction of preferredDirections ?? []) {
     const directionalResult = solveCurrentPageFootprintStrategies({
       order,
@@ -1102,19 +1155,18 @@ const attemptCurrentPageFootprintEvasion = ({
       columns,
       candidatePredicate: buildDirectionalOverlapCandidatePredicate(pageStart, columns, direction),
     })
-    if (directionalResult) {
-      return directionalResult
-    }
+    best = pickBetterCurrentPageFootprintResult(
+      entries,
+      pageStart,
+      pageSize,
+      best,
+      directionalResult,
+      columns,
+      [direction]
+    )
   }
 
-  return solveCurrentPageFootprintStrategies({
-    order,
-    entries,
-    reservedFootprint,
-    pageStart,
-    pageSize,
-    columns,
-  })
+  return best
 }
 
 const findFirstLegalAnchor = ({
