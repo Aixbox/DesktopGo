@@ -491,6 +491,33 @@ const scorePlacementCandidate = (
   return score
 }
 
+const movesEntryAlongDirection = (
+  entry: PagePlacementEntry,
+  anchorIndex: number,
+  pageStart: number,
+  columns: number,
+  direction: EvasionDirection
+) => {
+  const fromPos = getSlotRowColWithinPage(entry.anchorIndex, pageStart, columns)
+  const toPos = getSlotRowColWithinPage(anchorIndex, pageStart, columns)
+
+  if (direction === 'left') return toPos.col < fromPos.col
+  if (direction === 'right') return toPos.col > fromPos.col
+  if (direction === 'up') return toPos.row < fromPos.row
+  return toPos.row > fromPos.row
+}
+
+const buildDirectionalOverlapCandidatePredicate = (
+  pageStart: number,
+  columns: number,
+  direction: EvasionDirection
+) => {
+  return (entry: PagePlacementEntry, context: PlacementCandidateFilterContext) => {
+    if (!entry.overlapsReserved) return true
+    return movesEntryAlongDirection(entry, context.anchorIndex, pageStart, columns, direction)
+  }
+}
+
 const canOccupyFootprint = (occupied: Set<number>, footprint: number[]) =>
   footprint.every(index => !occupied.has(index))
 
@@ -983,13 +1010,34 @@ const pickBetterCurrentPageFootprintResult = (
   return current
 }
 
-const attemptCurrentPageFootprintEvasion = ({
+const CURRENT_PAGE_FOOTPRINT_STRATEGIES: Array<{
+  movablePredicate: (entry: PagePlacementEntry) => boolean
+  preserveRelativeOrder?: boolean
+}> = [
+  {
+    movablePredicate: entry => entry.overlapsReserved,
+  },
+  {
+    movablePredicate: entry => entry.overlapsReserved,
+    preserveRelativeOrder: false,
+  },
+  {
+    movablePredicate: () => true,
+  },
+  {
+    movablePredicate: () => true,
+    preserveRelativeOrder: false,
+  },
+]
+
+const solveCurrentPageFootprintStrategies = ({
   order,
   entries,
   reservedFootprint,
   pageStart,
   pageSize,
   columns,
+  candidatePredicate,
 }: {
   order: Array<string | null>
   entries: PagePlacementEntry[]
@@ -997,6 +1045,10 @@ const attemptCurrentPageFootprintEvasion = ({
   pageStart: number
   pageSize: number
   columns: number
+  candidatePredicate?: (
+    entry: PagePlacementEntry,
+    context: PlacementCandidateFilterContext
+  ) => boolean
 }): FootprintEvasionResult | null => {
   const baseOptions = {
     order,
@@ -1008,37 +1060,61 @@ const attemptCurrentPageFootprintEvasion = ({
     pageSize,
     columns,
   }
-  const strategies: Array<{
-    movablePredicate: (entry: PagePlacementEntry) => boolean
-    preserveRelativeOrder?: boolean
-  }> = [
-    {
-      movablePredicate: entry => entry.overlapsReserved,
-    },
-    {
-      movablePredicate: entry => entry.overlapsReserved,
-      preserveRelativeOrder: false,
-    },
-    {
-      movablePredicate: () => true,
-    },
-    {
-      movablePredicate: () => true,
-      preserveRelativeOrder: false,
-    },
-  ]
 
   let best: FootprintEvasionResult | null = null
-  for (const strategy of strategies) {
+  for (const strategy of CURRENT_PAGE_FOOTPRINT_STRATEGIES) {
     const candidate = solveFootprintPlacements({
       ...baseOptions,
       movablePredicate: strategy.movablePredicate,
       preserveRelativeOrder: strategy.preserveRelativeOrder,
+      candidatePredicate,
     })
     best = pickBetterCurrentPageFootprintResult(entries, pageStart, pageSize, best, candidate)
   }
 
   return best
+}
+
+const attemptCurrentPageFootprintEvasion = ({
+  order,
+  entries,
+  reservedFootprint,
+  pageStart,
+  pageSize,
+  columns,
+  preferredDirections,
+}: {
+  order: Array<string | null>
+  entries: PagePlacementEntry[]
+  reservedFootprint: number[]
+  pageStart: number
+  pageSize: number
+  columns: number
+  preferredDirections?: EvasionDirection[]
+}): FootprintEvasionResult | null => {
+  for (const direction of preferredDirections ?? []) {
+    const directionalResult = solveCurrentPageFootprintStrategies({
+      order,
+      entries,
+      reservedFootprint,
+      pageStart,
+      pageSize,
+      columns,
+      candidatePredicate: buildDirectionalOverlapCandidatePredicate(pageStart, columns, direction),
+    })
+    if (directionalResult) {
+      return directionalResult
+    }
+  }
+
+  return solveCurrentPageFootprintStrategies({
+    order,
+    entries,
+    reservedFootprint,
+    pageStart,
+    pageSize,
+    columns,
+  })
 }
 
 const findFirstLegalAnchor = ({
@@ -1176,6 +1252,7 @@ const attemptFootprintEvasion = ({
   draggingIds,
   items,
   targetIndex,
+  preferredDirections,
 }: {
   order: Array<string | null>
   pageStart: number
@@ -1185,6 +1262,7 @@ const attemptFootprintEvasion = ({
   draggingIds: string[]
   items: GridItem[]
   targetIndex: number
+  preferredDirections?: EvasionDirection[]
 }): FootprintEvasionResult | null => {
   const reservedFootprint = getFootprintIndices(
     targetIndex,
@@ -1220,6 +1298,7 @@ const attemptFootprintEvasion = ({
     pageStart,
     pageSize,
     columns,
+    preferredDirections,
   })
   if (localResult) return localResult
 
@@ -1312,6 +1391,7 @@ export const applyOuterEvasionPolicy = (
       draggingIds: options.draggingIds ?? [getId(options.draggingItem)],
       items: options.items,
       targetIndex: targetAnchorIndex,
+      preferredDirections: directions.candidates,
     })
     if (footprintResult) {
       return { order: footprintResult.order, direction: null }
