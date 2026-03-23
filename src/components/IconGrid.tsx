@@ -32,7 +32,7 @@ import {
   getFootprintIndices,
   getPageAnchorEntries,
   normalizeOuterSlots,
-  type PageAnchorEntry,
+  resizeSlotPages,
 } from './icon-grid/domain/topLevelLayout'
 import { DragOverlays } from './icon-grid/views/DragOverlays'
 import { OuterGridView } from './icon-grid/views/OuterGridView'
@@ -84,102 +84,6 @@ const getLayoutNormalizationMetrics = (
   }
 }
 
-const getDockEnableOverflowEntries = ({
-  slots,
-  items,
-  currentPage,
-  previousPageSize,
-  nextPageSize,
-  columns,
-}: {
-  slots: Array<string | null>
-  items: GridItem[]
-  currentPage: number
-  previousPageSize: number
-  nextPageSize: number
-  columns: number
-}): PageAnchorEntry[] => {
-  const safeColumns = Math.max(1, columns)
-  const previousRows = Math.ceil(Math.max(1, previousPageSize) / safeColumns)
-  const nextRows = Math.ceil(Math.max(1, nextPageSize) / safeColumns)
-  if (nextRows >= previousRows) return []
-
-  return getPageAnchorEntries(slots, items, currentPage, previousPageSize, safeColumns).filter(
-    entry => entry.row >= nextRows || entry.row + entry.span.rows > nextRows
-  )
-}
-
-const moveEntriesToInsertedPage = ({
-  slots,
-  items,
-  entries,
-  currentPage,
-  pageSize,
-  columns,
-}: {
-  slots: Array<string | null>
-  items: GridItem[]
-  entries: PageAnchorEntry[]
-  currentPage: number
-  pageSize: number
-  columns: number
-}): Array<string | null> => {
-  if (entries.length === 0) return slots
-
-  const safePageSize = Math.max(1, pageSize)
-  const safeColumns = Math.max(1, columns)
-  const targetRows = Math.ceil(safePageSize / safeColumns)
-  const movedIds = new Set(entries.map(entry => entry.id))
-  const next = slots.map(slot => (slot && movedIds.has(slot) ? null : slot))
-  const remainder = next.length % safePageSize
-
-  if (next.length === 0) {
-    next.push(...Array.from({ length: safePageSize }, () => null))
-  } else if (remainder > 0) {
-    next.push(...Array.from({ length: safePageSize - remainder }, () => null))
-  }
-
-  const pageCount = Math.max(1, Math.ceil(next.length / safePageSize))
-  const insertPageIndex = clampNumber(currentPage + 1, 0, pageCount)
-  const insertPageStart = insertPageIndex * safePageSize
-  next.splice(insertPageStart, 0, ...Array.from({ length: safePageSize }, () => null))
-
-  entries
-    .slice()
-    .sort((a, b) => a.globalIndex - b.globalIndex)
-    .forEach(entry => {
-      const preferredRow = Math.max(0, entry.row - targetRows)
-      const preferredLocalIndex = preferredRow * safeColumns + entry.col
-      const preferredAnchorIndex = insertPageStart + preferredLocalIndex
-
-      if (
-        preferredLocalIndex < safePageSize &&
-        canPlaceItemAtAnchorIndex(
-          next,
-          items,
-          preferredAnchorIndex,
-          entry.span,
-          safeColumns,
-          safePageSize
-        )
-      ) {
-        next[preferredAnchorIndex] = entry.id
-        return
-      }
-
-      for (let localIndex = 0; localIndex < safePageSize; localIndex += 1) {
-        const anchorIndex = insertPageStart + localIndex
-        if (!canPlaceItemAtAnchorIndex(next, items, anchorIndex, entry.span, safeColumns, safePageSize)) {
-          continue
-        }
-        next[anchorIndex] = entry.id
-        return
-      }
-    })
-
-  return normalizeOuterSlots(next, items, safePageSize, safeColumns)
-}
-
 export function IconGrid({ icons }: IconGridProps) {
   const {
     iconSize,
@@ -209,6 +113,8 @@ export function IconGrid({ icons }: IconGridProps) {
   const folderTileAnimationTimerRef = useRef<Map<string, number>>(new Map())
   const dockTileAnimationTimerRef = useRef<Map<string, number>>(new Map())
   const hydratedRef = useRef(false)
+  const layoutBaselineRef = useRef(false)
+  const persistedDimsRef = useRef<{ pageSize: number; columns: number } | null>(null)
   const persistedLayoutRef = useRef<PersistedLayout | null>(null)
   const persistedLayoutLoadedRef = useRef(false)
   const persistedLayoutLoadPromiseRef = useRef<Promise<PersistedLayout | null> | null>(null)
@@ -216,8 +122,10 @@ export function IconGrid({ icons }: IconGridProps) {
   const itemsRef = useRef<GridItem[]>([])
   const outerSlotsRef = useRef<Array<string | null>>([])
   const dockKeysRef = useRef<Array<string | null>>([])
+  const dockEnabledRef = useRef(dockEnabled)
   const currentPageRef = useRef(0)
   const pageSizeRef = useRef(1)
+  const layoutReadyRef = useRef(false)
   const wheelDeltaRef = useRef(0)
   const wheelCooldownUntilRef = useRef(0)
 
@@ -239,6 +147,8 @@ export function IconGrid({ icons }: IconGridProps) {
   const [folderItemHeight, setFolderItemHeight] = useState<number>(rowHeight)
   const [folderColumns, setFolderColumns] = useState<number>(1)
 
+  dockEnabledRef.current = dockEnabled
+
   useEffect(() => {
     let cancelled = false
 
@@ -251,6 +161,8 @@ export function IconGrid({ icons }: IconGridProps) {
           items: serializeItems(itemsRef.current),
           slots: outerSlotsRef.current,
           dockKeys: dockKeysRef.current,
+          pageSize: prevPageSizeRef.current,
+          columns: prevColumnsRef.current,
         }
       } else {
         if (!persistedLayoutLoadedRef.current) {
@@ -266,26 +178,22 @@ export function IconGrid({ icons }: IconGridProps) {
 
       const nextItems = hydrateItems(icons, persisted?.items ?? null)
       const nextItemIds = nextItems.map(getId)
-      const nextDockKeys = dockEnabled ? hydrateDockKeys(nextItemIds, persisted?.dockKeys) : []
-      const nextOuterItemIds = resolveOuterItemIds(nextItemIds, nextDockKeys)
-      const outerItems = filterItemsByIds(nextItems, nextOuterItemIds)
-      const layoutMetrics = getLayoutNormalizationMetrics(
-        outerItems,
-        Math.max(1, columns),
-        pageSizeRef.current
-      )
-      const normalizedNextSlots = normalizeOuterSlots(
-        persisted?.slots,
-        outerItems,
-        layoutMetrics.pageSize,
-        layoutMetrics.columns
-      )
-      const compactedNextSlots = compactEmptyPages(normalizedNextSlots, layoutMetrics.pageSize)
+      const nextDockKeys = dockEnabledRef.current ? hydrateDockKeys(nextItemIds, persisted?.dockKeys) : []
+
+      const rawSlots = persisted?.slots ?? []
+      const hasDims =
+        persisted?.pageSize && persisted?.columns &&
+        persisted.pageSize > 1 && persisted.columns > 1
+      persistedDimsRef.current = hasDims
+        ? { pageSize: persisted!.pageSize!, columns: persisted!.columns! }
+        : null
+      layoutBaselineRef.current = false
+
       itemsRef.current = nextItems
-      outerSlotsRef.current = compactedNextSlots
+      outerSlotsRef.current = rawSlots
       dockKeysRef.current = nextDockKeys
       setItems(nextItems)
-      setOuterSlots(compactedNextSlots)
+      setOuterSlots(rawSlots)
       setDockKeys(nextDockKeys)
       hydratedRef.current = true
     }
@@ -294,19 +202,21 @@ export function IconGrid({ icons }: IconGridProps) {
     return () => {
       cancelled = true
     }
-  }, [dockEnabled, icons])
+  }, [icons])
 
   useEffect(() => {
     itemsRef.current = items
     outerSlotsRef.current = outerSlots
     dockKeysRef.current = dockKeys
-    if (!hydratedRef.current) return
+    if (!hydratedRef.current || !layoutBaselineRef.current) return
 
     const nextItems = items
     const nextSlots = outerSlots
     const nextDockKeys = dockKeys
+    const nextPageSize = prevPageSizeRef.current
+    const nextColumns = prevColumnsRef.current
     layoutWriteQueueRef.current = layoutWriteQueueRef.current
-      .then(() => writeLayout(nextItems, nextSlots, nextDockKeys))
+      .then(() => writeLayout(nextItems, nextSlots, nextDockKeys, nextPageSize, nextColumns))
       .catch(e => {
         console.error('Failed to persist launchpad layout:', e)
       })
@@ -516,6 +426,7 @@ export function IconGrid({ icons }: IconGridProps) {
       setItemHeight(tileHeight)
       setColumns(Math.max(hasWideItems ? 2 : 1, fitCount(width, tileWidth)))
       setRows(resolvedRows)
+      layoutReadyRef.current = true
     }
     const schedule = () => {
       cancelAnimationFrame(raf)
@@ -570,70 +481,91 @@ export function IconGrid({ icons }: IconGridProps) {
   }, [pageSize])
 
   useEffect(() => {
+    if (!hydratedRef.current || !layoutReadyRef.current) return
     const outerItems = filterItemsByIds(itemsRef.current, outerItemIds)
     const layoutMetrics = getLayoutNormalizationMetrics(outerItems, Math.max(1, columns), pageSize)
-    const shouldInsertCurrentOverflowPage =
-      !prevDockEnabledRef.current &&
-      dockEnabled &&
-      columns === prevColumnsRef.current &&
-      layoutMetrics.pageSize < prevPageSizeRef.current
-    const overflowEntries = shouldInsertCurrentOverflowPage
-      ? getDockEnableOverflowEntries({
-          slots: outerSlotsRef.current,
-          items: outerItems,
-          currentPage: currentPageRef.current,
-          previousPageSize: prevPageSizeRef.current,
-          nextPageSize: layoutMetrics.pageSize,
-          columns: layoutMetrics.columns,
-        })
-      : []
-    const normalized = normalizeOuterSlots(
-      outerSlotsRef.current,
-      outerItems,
-      layoutMetrics.pageSize,
-      layoutMetrics.columns
-    )
-    let compacted = compactEmptyPages(normalized, layoutMetrics.pageSize)
-    if (overflowEntries.length > 0) {
-      compacted = compactEmptyPages(
-        moveEntriesToInsertedPage({
-          slots: compacted,
-          items: outerItems,
-          entries: overflowEntries,
-          currentPage: currentPageRef.current,
-          pageSize: layoutMetrics.pageSize,
-          columns: layoutMetrics.columns,
-        }),
-        layoutMetrics.pageSize
+
+    let result: Array<string | null>
+    if (!layoutBaselineRef.current) {
+      const dims = persistedDimsRef.current
+      if (dims) {
+        result = resizeSlotPages(
+          outerSlotsRef.current,
+          outerItems,
+          dims.pageSize,
+          layoutMetrics.pageSize,
+          dims.columns,
+          layoutMetrics.columns
+        )
+      } else {
+        result = normalizeOuterSlots(
+          outerSlotsRef.current,
+          outerItems,
+          layoutMetrics.pageSize,
+          layoutMetrics.columns
+        )
+      }
+      layoutBaselineRef.current = true
+    } else {
+      result = resizeSlotPages(
+        outerSlotsRef.current,
+        outerItems,
+        prevPageSizeRef.current,
+        layoutMetrics.pageSize,
+        prevColumnsRef.current,
+        layoutMetrics.columns
       )
     }
+    const compacted = compactEmptyPages(result, layoutMetrics.pageSize)
+
     prevDockEnabledRef.current = dockEnabled
     prevPageSizeRef.current = layoutMetrics.pageSize
-    prevColumnsRef.current = columns
+    prevColumnsRef.current = layoutMetrics.columns
     if (areSlotsEqual(compacted, outerSlotsRef.current)) return
     outerSlotsRef.current = compacted
     setOuterSlots(compacted)
   }, [columns, dockEnabled, outerItemIds, pageSize])
 
   useEffect(() => {
-    if (!hydratedRef.current || dockEnabled) return
-    const hasDockItems = dockKeysRef.current.some(
+    if (!hydratedRef.current || !layoutBaselineRef.current || dockEnabled) return
+    const dockItemIds = dockKeysRef.current.filter(
       (entry): entry is string => typeof entry === 'string'
     )
-    if (!hasDockItems) return
+    if (dockItemIds.length === 0) return
 
     const layoutMetrics = getLayoutNormalizationMetrics(
       itemsRef.current,
       Math.max(1, columns),
       pageSizeRef.current
     )
-    const nextOuterSlots = normalizeOuterSlots(
-      outerSlotsRef.current,
-      itemsRef.current,
-      layoutMetrics.pageSize,
-      layoutMetrics.columns
-    )
-    const compactedOuterSlots = compactEmptyPages(nextOuterSlots, layoutMetrics.pageSize)
+    const safePageSize = Math.max(1, layoutMetrics.pageSize)
+    const safeColumns = Math.max(1, layoutMetrics.columns)
+    const currentSlots = outerSlotsRef.current
+
+    const remainder = currentSlots.length % safePageSize
+    const padded = remainder > 0
+      ? [...currentSlots, ...Array.from({ length: safePageSize - remainder }, () => null)]
+      : [...currentSlots]
+
+    const newPage: Array<string | null> = Array.from({ length: safePageSize }, () => null)
+    const itemById = new Map(itemsRef.current.map(item => [getId(item), item]))
+    let nextSlot = 0
+    for (const id of dockItemIds) {
+      const item = itemById.get(id)
+      if (!item) continue
+      const span = getGridItemSpan(item)
+      for (let i = nextSlot; i < safePageSize; i += 1) {
+        const indices = getFootprintIndices(i, span, safeColumns, safePageSize)
+        if (indices && indices.every(idx => !newPage[idx])) {
+          newPage[i] = id
+          nextSlot = i + 1
+          break
+        }
+      }
+    }
+
+    const nextOuterSlots = [...padded, ...newPage]
+    const compactedOuterSlots = compactEmptyPages(nextOuterSlots, safePageSize)
     outerSlotsRef.current = compactedOuterSlots
     dockKeysRef.current = []
     setOuterSlots(compactedOuterSlots)
@@ -710,13 +642,41 @@ export function IconGrid({ icons }: IconGridProps) {
       Math.max(1, columns),
       pageSizeRef.current
     )
-    const nextOuterSlots = normalizeOuterSlots(
+    const safePS = Math.max(1, layoutMetrics.pageSize)
+    const safeCols = Math.max(1, layoutMetrics.columns)
+
+    let nextOuterSlots = resizeSlotPages(
       outerSlotsRef.current,
       outerItems,
-      layoutMetrics.pageSize,
-      layoutMetrics.columns
+      prevPageSizeRef.current,
+      safePS,
+      prevColumnsRef.current,
+      safeCols
     )
-    const compactedOuterSlots = compactEmptyPages(nextOuterSlots, layoutMetrics.pageSize)
+
+    const folderIndex = nextOuterSlots.indexOf(folderId)
+    if (folderIndex >= 0) {
+      const newSpan = getGridItemSpan(nextItems.find(
+        item => item.kind === 'folder' && item.id === folderId
+      )!)
+      const indices = getFootprintIndices(folderIndex, newSpan, safeCols, safePS)
+      const valid = indices !== null && indices.every(
+        idx => idx < nextOuterSlots.length && (!nextOuterSlots[idx] || nextOuterSlots[idx] === folderId)
+      )
+      if (!valid) {
+        nextOuterSlots = [...nextOuterSlots]
+        nextOuterSlots[folderIndex] = null
+        const remainder = nextOuterSlots.length % safePS
+        if (remainder > 0) {
+          nextOuterSlots.push(...Array.from({ length: safePS - remainder }, () => null))
+        }
+        const newPage: Array<string | null> = Array.from({ length: safePS }, () => null)
+        newPage[0] = folderId
+        nextOuterSlots.push(...newPage)
+      }
+    }
+
+    const compactedOuterSlots = compactEmptyPages(nextOuterSlots, safePS)
 
     itemsRef.current = nextItems
     outerSlotsRef.current = compactedOuterSlots

@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find /d/Project/self/DesktopGo -type f -name \"*launchpad*\" -o -name \"*search*\" 2>/dev/null | grep -E \"\\\\.\\(tsx?|jsx?|css|scss|less\\)$\" | head -50)"
+      "Bash(find /d/Project/self/DesktopGo -type f -name \"*launchpad*\" -o -name \"*search*\" 2>/dev/null | grep -E \"\\\\.\\(tsx?|jsx?|css|scss|less\\)$\" | head -50)",
+      "Bash(find ./src -type f \\\\\\(-name *.ts -o -name *.tsx -o -name *.vue -o -name *.js \\\\\\))",
+      "Bash(npx tsc:*)"
     ]
   }
 }

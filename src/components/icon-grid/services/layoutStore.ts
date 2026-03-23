@@ -30,6 +30,7 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
       | { version: 2; items: PersistedItem[]; slots: unknown[] }
       | { version: 3; items: PersistedItem[]; slots: unknown[]; dockKeys: unknown[] }
       | { version: 4; items: PersistedItem[]; slots: unknown[]; dockKeys: unknown[] }
+      | { version: 5; items: PersistedItem[]; slots: unknown[]; dockKeys: unknown[]; pageSize?: number; columns?: number }
     if (!Array.isArray(parsed.items)) return null
     if (parsed.version === 1) return { items: parsed.items, slots: null, dockKeys: [] }
     if (parsed.version === 2 && Array.isArray(parsed.slots)) {
@@ -40,17 +41,22 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
       }
     }
     if (
-      (parsed.version !== 3 && parsed.version !== 4) ||
+      (parsed.version !== 3 && parsed.version !== 4 && parsed.version !== 5) ||
       !Array.isArray(parsed.slots) ||
       !Array.isArray(parsed.dockKeys)
     ) {
       return null
     }
-    return {
+    const result: PersistedLayout = {
       items: parsed.items,
       slots: parsed.slots.map(slot => (typeof slot === 'string' ? slot : null)),
       dockKeys: parsed.dockKeys.map(key => (typeof key === 'string' ? key : null)),
     }
+    if (parsed.version === 5) {
+      if (typeof parsed.pageSize === 'number' && parsed.pageSize > 0) result.pageSize = parsed.pageSize
+      if (typeof parsed.columns === 'number' && parsed.columns > 0) result.columns = parsed.columns
+    }
+    return result
   } catch {
     return null
   }
@@ -60,13 +66,17 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
 export const writeLayout = async (
   items: GridItem[],
   slots: Array<string | null>,
-  dockKeys: Array<string | null>
+  dockKeys: Array<string | null>,
+  pageSize?: number,
+  columns?: number
 ) => {
   const payload = {
-    version: 4,
+    version: 5,
     items: serializeItems(items),
     slots,
     dockKeys,
+    pageSize,
+    columns,
   }
   await invoke('set_layout_payload', { key: LAYOUT_KEY, payload: JSON.stringify(payload) })
 }

@@ -195,6 +195,97 @@ export const normalizeOuterSlots = (
   return anchors
 }
 
+export const resizeSlotPages = (
+  slots: Array<string | null>,
+  items: GridItem[],
+  prevPageSize: number,
+  nextPageSize: number,
+  prevColumns: number,
+  nextColumns: number
+): Array<string | null> => {
+  const safePrevPS = Math.max(1, prevPageSize)
+  const safeNextPS = Math.max(1, nextPageSize)
+  const safePrevCols = Math.max(1, prevColumns)
+  const safeNextCols = Math.max(1, nextColumns)
+
+  if (safePrevPS === safeNextPS && safePrevCols === safeNextCols) return slots
+
+  if (safeNextPS >= safePrevPS) {
+    const oldPageCount = Math.max(1, Math.ceil(Math.max(slots.length, safePrevPS) / safePrevPS))
+    const result: Array<string | null> = []
+    for (let page = 0; page < oldPageCount; page += 1) {
+      const pageStart = page * safePrevPS
+      const pageSlots = slots.slice(pageStart, pageStart + safePrevPS)
+      result.push(...pageSlots)
+      for (let i = pageSlots.length; i < safeNextPS; i += 1) result.push(null)
+    }
+    return result.length > 0 ? result : Array.from({ length: safeNextPS }, () => null)
+  }
+
+  const itemById = buildItemMap(items)
+  const oldPageCount = Math.max(1, Math.ceil(Math.max(slots.length, safePrevPS) / safePrevPS))
+  const result: Array<string | null> = []
+
+  for (let page = 0; page < oldPageCount; page += 1) {
+    const pageStart = page * safePrevPS
+    const pageSlots = slots.slice(pageStart, pageStart + safePrevPS)
+
+    const kept = pageSlots.slice(0, safeNextPS)
+    while (kept.length < safeNextPS) kept.push(null)
+    result.push(...kept)
+
+    const overflowIds: string[] = []
+    for (let i = safeNextPS; i < pageSlots.length; i += 1) {
+      const slot = pageSlots[i]
+      if (slot && slot !== DRAG_HOLE_ID) overflowIds.push(slot)
+    }
+
+    if (overflowIds.length > 0) {
+      let ovAnchors: Array<string | null> = Array.from({ length: safeNextPS }, () => null)
+      let ovOccupied: Array<string | null> = Array.from({ length: safeNextPS }, () => null)
+
+      for (const id of overflowIds) {
+        const item = itemById.get(id)
+        if (!item) continue
+        const span = getGridItemSpan(item)
+        let placed = false
+
+        for (let i = 0; i < safeNextPS; i += 1) {
+          if (canPlaceAtIndex(ovOccupied, i, span, safeNextCols, safeNextPS)) {
+            ovAnchors[i] = id
+            paintFootprint(ovOccupied, i, id, span, safeNextCols, safeNextPS)
+            placed = true
+            break
+          }
+        }
+
+        if (!placed) {
+          result.push(...ovAnchors)
+          ovAnchors = Array.from({ length: safeNextPS }, () => null)
+          ovOccupied = Array.from({ length: safeNextPS }, () => null)
+          for (let i = 0; i < safeNextPS; i += 1) {
+            if (canPlaceAtIndex(ovOccupied, i, span, safeNextCols, safeNextPS)) {
+              ovAnchors[i] = id
+              paintFootprint(ovOccupied, i, id, span, safeNextCols, safeNextPS)
+              break
+            }
+          }
+        }
+      }
+
+      if (ovAnchors.some(s => s !== null)) {
+        result.push(...ovAnchors)
+      }
+    }
+  }
+
+  if (result.length === 0) {
+    result.push(...Array.from({ length: safeNextPS }, () => null))
+  }
+
+  return result
+}
+
 export const getPageAnchorEntries = (
   slots: Array<string | null>,
   items: GridItem[],
