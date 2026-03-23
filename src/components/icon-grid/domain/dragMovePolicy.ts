@@ -1,4 +1,4 @@
-import type { EvasionDirection, GridItem, GridSpan } from '../model'
+﻿import type { EvasionDirection, GridItem, GridSpan } from '../model'
 import type { DragHit, DragState, OuterOverlapHit } from '../state/types'
 import { getGridItemSpan, getId } from '../model'
 import { classifyZone, clampNumber, getRectArea, getRectIntersection } from './geometry'
@@ -190,6 +190,11 @@ interface FindOuterMaxOverlapHitParams {
   items?: GridItem[]
 }
 
+const resolveFolderBodyRect = (node: HTMLDivElement): DOMRect | null => {
+  const folderBody = node.querySelector<HTMLElement>('[data-folder-body-hitbox]')
+  return folderBody ? folderBody.getBoundingClientRect() : null
+}
+
 const resolveOverlapTargetRect = (node: HTMLDivElement): DOMRect => {
   const iconImage = node.querySelector<HTMLElement>('.icon-image')
   if (iconImage) return iconImage.getBoundingClientRect()
@@ -234,7 +239,20 @@ const resolveStableOverlapTargetRect = ({
   )
 
   if (item.kind === 'folder' && (span.cols > 1 || span.rows > 1)) {
-    return stableNodeRect
+    if (!node) {
+      return stableNodeRect
+    }
+    const nodeRect = node.getBoundingClientRect()
+    const folderBodyRect = resolveFolderBodyRect(node)
+    if (!folderBodyRect) {
+      return stableNodeRect
+    }
+    return new DOMRect(
+      stableNodeRect.left + (folderBodyRect.left - nodeRect.left),
+      stableNodeRect.top + (folderBodyRect.top - nodeRect.top),
+      folderBodyRect.width,
+      folderBodyRect.height
+    )
   }
 
   if (!node) {
@@ -516,6 +534,80 @@ const buildDirectionalOverlapCandidatePredicate = (
     if (!entry.overlapsReserved) return true
     return movesEntryAlongDirection(entry, context.anchorIndex, pageStart, columns, direction)
   }
+}
+
+const movesEntrySingleStepInDirection = (
+  entry: PagePlacementEntry,
+  anchorIndex: number,
+  pageStart: number,
+  columns: number,
+  direction: EvasionDirection
+) => {
+  const fromPos = getSlotRowColWithinPage(entry.anchorIndex, pageStart, columns)
+  const toPos = getSlotRowColWithinPage(anchorIndex, pageStart, columns)
+
+  if (direction === 'left') return toPos.row === fromPos.row && toPos.col === fromPos.col - 1
+  if (direction === 'right') return toPos.row === fromPos.row && toPos.col === fromPos.col + 1
+  if (direction === 'up') return toPos.col === fromPos.col && toPos.row === fromPos.row - 1
+  return toPos.col === fromPos.col && toPos.row === fromPos.row + 1
+}
+
+const buildSingleStepDirectionalOverlapCandidatePredicate = (
+  pageStart: number,
+  columns: number,
+  direction: EvasionDirection
+) => {
+  return (entry: PagePlacementEntry, context: PlacementCandidateFilterContext) => {
+    if (!entry.overlapsReserved) return true
+    return movesEntrySingleStepInDirection(entry, context.anchorIndex, pageStart, columns, direction)
+  }
+}
+
+const attemptSingleStepDirectionalFootprintEvasion = ({
+  order,
+  entries,
+  reservedFootprint,
+  pageStart,
+  pageSize,
+  columns,
+  preferredDirections,
+}: {
+  order: Array<string | null>
+  entries: PagePlacementEntry[]
+  reservedFootprint: number[]
+  pageStart: number
+  pageSize: number
+  columns: number
+  preferredDirections?: EvasionDirection[]
+}): FootprintEvasionResult | null => {
+  if (!entries.some(entry => entry.overlapsReserved)) {
+    return null
+  }
+
+  const rangeEndExclusive = pageStart + Math.max(1, pageSize)
+  for (const direction of preferredDirections ?? []) {
+    const result = solveFootprintPlacements({
+      order,
+      entries,
+      reservedFootprint,
+      rangeStart: pageStart,
+      rangeEndExclusive,
+      pageStart,
+      pageSize,
+      columns,
+      movablePredicate: entry => entry.overlapsReserved,
+      candidatePredicate: buildSingleStepDirectionalOverlapCandidatePredicate(
+        pageStart,
+        columns,
+        direction
+      ),
+    })
+    if (result) {
+      return result
+    }
+  }
+
+  return null
 }
 
 const canOccupyFootprint = (occupied: Set<number>, footprint: number[]) =>
@@ -1136,6 +1228,19 @@ const attemptCurrentPageFootprintEvasion = ({
   columns: number
   preferredDirections?: EvasionDirection[]
 }): FootprintEvasionResult | null => {
+  const singleStepResult = attemptSingleStepDirectionalFootprintEvasion({
+    order,
+    entries,
+    reservedFootprint,
+    pageStart,
+    pageSize,
+    columns,
+    preferredDirections,
+  })
+  if (singleStepResult) {
+    return singleStepResult
+  }
+
   let best = solveCurrentPageFootprintStrategies({
     order,
     entries,

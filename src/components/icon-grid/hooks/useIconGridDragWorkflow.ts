@@ -1,4 +1,4 @@
-import {
+﻿import {
   useEffect,
   useRef,
   useState,
@@ -768,6 +768,37 @@ export function useIconGridDragWorkflow({
     })
   }
 
+  const resolvePreviewIndexWithinTargetSpan = (
+    state: DragState,
+    overlapHit: OuterOverlapHit,
+    targetSpan: { cols: number; rows: number }
+  ) => {
+    const safeColumns = Math.max(1, columns)
+    const safePageSize = Math.max(1, pageSizeRef.current)
+    const pageStart = Math.floor(overlapHit.targetIndex / safePageSize) * safePageSize
+    const localIndex = Math.max(0, overlapHit.targetIndex - pageStart)
+    const anchorRow = Math.floor(localIndex / safeColumns)
+    const anchorCol = localIndex % safeColumns
+    const rect = overlapHit.targetRect
+    const relativeX =
+      rect.width > 0 ? clampNumber((state.pointerX - rect.left) / rect.width, 0, 0.999999) : 0
+    const relativeY =
+      rect.height > 0 ? clampNumber((state.pointerY - rect.top) / rect.height, 0, 0.999999) : 0
+
+    let colOffset = targetSpan.cols > 1 ? Math.floor(relativeX * targetSpan.cols) : 0
+    let rowOffset = targetSpan.rows > 1 ? Math.floor(relativeY * targetSpan.rows) : 0
+
+    if (overlapHit.zone === 'left') colOffset = 0
+    if (overlapHit.zone === 'right') colOffset = Math.max(0, targetSpan.cols - 1)
+    if (overlapHit.zone === 'up') rowOffset = 0
+    if (overlapHit.zone === 'down') rowOffset = Math.max(0, targetSpan.rows - 1)
+
+    colOffset = clampNumber(colOffset, 0, Math.max(0, targetSpan.cols - 1))
+    rowOffset = clampNumber(rowOffset, 0, Math.max(0, targetSpan.rows - 1))
+
+    return pageStart + (anchorRow + rowOffset) * safeColumns + (anchorCol + colOffset)
+  }
+
   const resolveTopLevelOverlapPreviewIndex = (
     state: DragState,
     target: GridItem,
@@ -782,7 +813,7 @@ export function useIconGridDragWorkflow({
     }
     const targetSpan = getGridItemSpan(target)
     if (targetSpan.cols === 1 && targetSpan.rows === 1) return overlapHit.targetIndex
-    return overlapHit.targetIndex
+    return resolvePreviewIndexWithinTargetSpan(state, overlapHit, targetSpan)
   }
 
   const applyTopLevelEvasion = (

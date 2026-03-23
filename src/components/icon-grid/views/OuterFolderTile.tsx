@@ -196,6 +196,7 @@ function FolderBody({
           className={`${SURFACE_CLASS} flex items-center justify-center transition-all duration-200 ${
             folderPreview ? 'ring-1 ring-white/35 shadow-[0_18px_42px_rgba(0,0,0,0.42)]' : ''
           }`}
+          data-folder-body-hitbox
           style={{
             width: `${shapeWidth}px`,
             height: `${shapeHeight}px`,
@@ -257,6 +258,7 @@ function FolderBody({
         className={`${SURFACE_CLASS} transition-all duration-200 ${
           folderPreview ? 'ring-1 ring-white/35 shadow-[0_18px_42px_rgba(0,0,0,0.42)]' : ''
         }`}
+        data-folder-body-hitbox
         style={{
           width: `${shapeWidth}px`,
           height: `${shapeHeight}px`,
