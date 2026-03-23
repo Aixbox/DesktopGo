@@ -59,8 +59,6 @@ const EVASION_REARM_DISTANCE = 14
 const EVASION_COOLDOWN_MS = 80
 const REORDER_ANIMATION_MS = 220
 const REORDER_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
-const DOCK_HIDDEN_LAYOUT_RESERVE_PX = 80
-
 const fitCount = (container: number, item: number) => {
   if (item <= 0 || container <= item) return 1
   return Math.floor((container - item) / (item + GRID_GAP)) + 1
@@ -405,17 +403,19 @@ export function IconGrid({ icons }: IconGridProps) {
     const recalc = () => {
       const width = el.clientWidth
       const height = el.clientHeight
-      const effectiveHeight = dockEnabled
-        ? height
-        : Math.max(1, height - DOCK_HIDDEN_LAYOUT_RESERVE_PX)
       const tileWidth = columnWidth
       const tileHeight = rowHeight
       const hasWideItems = itemsRef.current.some(item => getGridItemSpan(item).cols > 1)
       const hasTallItems = itemsRef.current.some(item => getGridItemSpan(item).rows > 1)
+      const minRows = hasTallItems ? 2 : 1
+      const baseRows = Math.max(minRows, fitCount(height, layoutRowHeight))
+      const nextRowGridHeight = (baseRows + 1) * tileHeight + baseRows * GRID_GAP
+      const resolvedRows =
+        !dockEnabled && nextRowGridHeight <= height ? baseRows + 1 : baseRows
       setItemWidth(tileWidth)
       setItemHeight(tileHeight)
       setColumns(Math.max(hasWideItems ? 2 : 1, fitCount(width, tileWidth)))
-      setRows(Math.max(hasTallItems ? 2 : 1, fitCount(effectiveHeight, layoutRowHeight)))
+      setRows(resolvedRows)
     }
     const schedule = () => {
       cancelAnimationFrame(raf)
