@@ -32,6 +32,7 @@ import {
   getFootprintIndices,
   getPageAnchorEntries,
   normalizeOuterSlots,
+  type PageAnchorEntry,
 } from './icon-grid/domain/topLevelLayout'
 import { DragOverlays } from './icon-grid/views/DragOverlays'
 import { OuterGridView } from './icon-grid/views/OuterGridView'
@@ -81,6 +82,102 @@ const getLayoutNormalizationMetrics = (
     columns: safeColumns,
     pageSize: Math.max(pageSize, safeColumns * minRows),
   }
+}
+
+const getDockEnableOverflowEntries = ({
+  slots,
+  items,
+  currentPage,
+  previousPageSize,
+  nextPageSize,
+  columns,
+}: {
+  slots: Array<string | null>
+  items: GridItem[]
+  currentPage: number
+  previousPageSize: number
+  nextPageSize: number
+  columns: number
+}): PageAnchorEntry[] => {
+  const safeColumns = Math.max(1, columns)
+  const previousRows = Math.ceil(Math.max(1, previousPageSize) / safeColumns)
+  const nextRows = Math.ceil(Math.max(1, nextPageSize) / safeColumns)
+  if (nextRows >= previousRows) return []
+
+  return getPageAnchorEntries(slots, items, currentPage, previousPageSize, safeColumns).filter(
+    entry => entry.row >= nextRows || entry.row + entry.span.rows > nextRows
+  )
+}
+
+const moveEntriesToInsertedPage = ({
+  slots,
+  items,
+  entries,
+  currentPage,
+  pageSize,
+  columns,
+}: {
+  slots: Array<string | null>
+  items: GridItem[]
+  entries: PageAnchorEntry[]
+  currentPage: number
+  pageSize: number
+  columns: number
+}): Array<string | null> => {
+  if (entries.length === 0) return slots
+
+  const safePageSize = Math.max(1, pageSize)
+  const safeColumns = Math.max(1, columns)
+  const targetRows = Math.ceil(safePageSize / safeColumns)
+  const movedIds = new Set(entries.map(entry => entry.id))
+  const next = slots.map(slot => (slot && movedIds.has(slot) ? null : slot))
+  const remainder = next.length % safePageSize
+
+  if (next.length === 0) {
+    next.push(...Array.from({ length: safePageSize }, () => null))
+  } else if (remainder > 0) {
+    next.push(...Array.from({ length: safePageSize - remainder }, () => null))
+  }
+
+  const pageCount = Math.max(1, Math.ceil(next.length / safePageSize))
+  const insertPageIndex = clampNumber(currentPage + 1, 0, pageCount)
+  const insertPageStart = insertPageIndex * safePageSize
+  next.splice(insertPageStart, 0, ...Array.from({ length: safePageSize }, () => null))
+
+  entries
+    .slice()
+    .sort((a, b) => a.globalIndex - b.globalIndex)
+    .forEach(entry => {
+      const preferredRow = Math.max(0, entry.row - targetRows)
+      const preferredLocalIndex = preferredRow * safeColumns + entry.col
+      const preferredAnchorIndex = insertPageStart + preferredLocalIndex
+
+      if (
+        preferredLocalIndex < safePageSize &&
+        canPlaceItemAtAnchorIndex(
+          next,
+          items,
+          preferredAnchorIndex,
+          entry.span,
+          safeColumns,
+          safePageSize
+        )
+      ) {
+        next[preferredAnchorIndex] = entry.id
+        return
+      }
+
+      for (let localIndex = 0; localIndex < safePageSize; localIndex += 1) {
+        const anchorIndex = insertPageStart + localIndex
+        if (!canPlaceItemAtAnchorIndex(next, items, anchorIndex, entry.span, safeColumns, safePageSize)) {
+          continue
+        }
+        next[anchorIndex] = entry.id
+        return
+      }
+    })
+
+  return normalizeOuterSlots(next, items, safePageSize, safeColumns)
 }
 
 export function IconGrid({ icons }: IconGridProps) {
@@ -259,6 +356,9 @@ export function IconGrid({ icons }: IconGridProps) {
     [activeDockKeys, itemIds]
   )
   const pageSize = Math.max(1, columns * rows)
+  const prevDockEnabledRef = useRef(dockEnabled)
+  const prevPageSizeRef = useRef(pageSize)
+  const prevColumnsRef = useRef(columns)
 
   const {
     dragState,
@@ -472,17 +572,48 @@ export function IconGrid({ icons }: IconGridProps) {
   useEffect(() => {
     const outerItems = filterItemsByIds(itemsRef.current, outerItemIds)
     const layoutMetrics = getLayoutNormalizationMetrics(outerItems, Math.max(1, columns), pageSize)
+    const shouldInsertCurrentOverflowPage =
+      !prevDockEnabledRef.current &&
+      dockEnabled &&
+      columns === prevColumnsRef.current &&
+      layoutMetrics.pageSize < prevPageSizeRef.current
+    const overflowEntries = shouldInsertCurrentOverflowPage
+      ? getDockEnableOverflowEntries({
+          slots: outerSlotsRef.current,
+          items: outerItems,
+          currentPage: currentPageRef.current,
+          previousPageSize: prevPageSizeRef.current,
+          nextPageSize: layoutMetrics.pageSize,
+          columns: layoutMetrics.columns,
+        })
+      : []
     const normalized = normalizeOuterSlots(
       outerSlotsRef.current,
       outerItems,
       layoutMetrics.pageSize,
       layoutMetrics.columns
     )
-    const compacted = compactEmptyPages(normalized, layoutMetrics.pageSize)
+    let compacted = compactEmptyPages(normalized, layoutMetrics.pageSize)
+    if (overflowEntries.length > 0) {
+      compacted = compactEmptyPages(
+        moveEntriesToInsertedPage({
+          slots: compacted,
+          items: outerItems,
+          entries: overflowEntries,
+          currentPage: currentPageRef.current,
+          pageSize: layoutMetrics.pageSize,
+          columns: layoutMetrics.columns,
+        }),
+        layoutMetrics.pageSize
+      )
+    }
+    prevDockEnabledRef.current = dockEnabled
+    prevPageSizeRef.current = layoutMetrics.pageSize
+    prevColumnsRef.current = columns
     if (areSlotsEqual(compacted, outerSlotsRef.current)) return
     outerSlotsRef.current = compacted
     setOuterSlots(compacted)
-  }, [columns, outerItemIds, pageSize])
+  }, [columns, dockEnabled, outerItemIds, pageSize])
 
   useEffect(() => {
     if (!hydratedRef.current || dockEnabled) return
