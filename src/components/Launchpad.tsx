@@ -16,6 +16,7 @@ import { getSearchPreview, recordSearchResultRun } from '@/lib/search/api'
 import { SEARCH_FILTERS } from '@/lib/search/filters'
 import { useSearch } from '@/lib/search/useSearch'
 import { SearchPanel } from '@/components/search/SearchPanel'
+import { LAUNCHPAD_LAYOUT_RESET_EVENT } from '@/components/icon-grid/services/layoutStore'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -162,26 +163,51 @@ export function Launchpad() {
     })()
   }, [fetchIcons, hydrateSettings])
 
+  const syncExternalState = useCallback(async () => {
+    try {
+      const state = useIconStore.getState()
+      state.clearSelection()
+      await state.hydrateSettings()
+      await state.fetchIcons()
+      await reloadSearchSettings()
+      applyTheme(await getSavedTheme())
+    } catch (e) {
+      console.error('Failed to sync launchpad state:', e)
+    }
+  }, [reloadSearchSettings])
+
   useEffect(() => {
     const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
       if (focused) {
-        void (async () => {
-          try {
-            const state = useIconStore.getState()
-            await state.hydrateSettings()
-            await useIconStore.getState().fetchIcons()
-            await reloadSearchSettings()
-            applyTheme(await getSavedTheme())
-          } catch (e) {
-            console.error('Failed to sync settings on focus:', e)
-          }
-        })()
+        void syncExternalState()
       }
     })
     return () => {
       unlisten.then(fn => fn())
     }
-  }, [reloadSearchSettings])
+  }, [syncExternalState])
+
+  useEffect(() => {
+    let disposed = false
+    let unlisten: (() => void) | null = null
+
+    void getCurrentWindow()
+      .listen(LAUNCHPAD_LAYOUT_RESET_EVENT, () => {
+        void syncExternalState()
+      })
+      .then(fn => {
+        if (disposed) {
+          fn()
+          return
+        }
+        unlisten = fn
+      })
+
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [syncExternalState])
 
   useEffect(() => {
     return () => {

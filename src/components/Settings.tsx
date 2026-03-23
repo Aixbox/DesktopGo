@@ -5,6 +5,10 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useIconStore } from "@/stores/iconStore";
 import { applyTheme, saveTheme } from "@/lib/theme";
 import { getSetting, setSetting } from "@/lib/settingsStore";
+import {
+  LAUNCHPAD_LAYOUT_RESET_EVENT,
+  resetLaunchpadLayout,
+} from "@/components/icon-grid/services/layoutStore";
 import { SearchSettingsPanel } from "@/components/search/SearchSettingsPanel";
 import type {
   IconManagerItem,
@@ -222,6 +226,8 @@ function SettingsPanel() {
   const [customAppDirInput, setCustomAppDirInput] = useState("");
   const [effectiveCustomAppDir, setEffectiveCustomAppDir] = useState("");
   const [customAppDirText, setCustomAppDirText] = useState("");
+  const [layoutResetting, setLayoutResetting] = useState(false);
+  const [layoutResetText, setLayoutResetText] = useState("");
 
   useEffect(() => {
     void (async () => {
@@ -357,6 +363,32 @@ function SettingsPanel() {
     }
   };
 
+  const handleResetLaunchpadIcons = async () => {
+    if (layoutResetting) return;
+    const confirmed = window.confirm(
+      "确定要重置图标布局吗？这会清空当前宫格排序、文件夹和 Dock 排布，但不会删除图标记录。",
+    );
+    if (!confirmed) return;
+
+    setLayoutResetting(true);
+    setLayoutResetText("正在重置图标布局...");
+
+    try {
+      await resetLaunchpadLayout();
+      const mainWindow = await WebviewWindow.getByLabel("main");
+      if (mainWindow) {
+        await mainWindow.emit(LAUNCHPAD_LAYOUT_RESET_EVENT);
+        setLayoutResetText("图标布局已重置，主窗口已刷新。");
+      } else {
+        setLayoutResetText("图标布局已重置，主窗口下次同步时会应用。");
+      }
+    } catch (e) {
+      setLayoutResetText(`重置图标失败：${String(e)}`);
+    } finally {
+      setLayoutResetting(false);
+    }
+  };
+
   return (
     <>
       <SettingGroup title="主题模式">
@@ -413,6 +445,27 @@ function SettingsPanel() {
         checked={dockEnabled}
         onChange={handleDockEnabled}
       />
+
+      <div className="mb-6">
+        <h2 className="mb-3 text-sm font-medium text-muted-foreground">图标重置</h2>
+        <div className="space-y-3 rounded-lg border border-border bg-secondary/30 p-4">
+          <p className="text-xs text-muted-foreground">
+            重置后会恢复默认图标布局，并清空当前创建的文件夹和 Dock 排布，不会删除图标快照记录。
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleResetLaunchpadIcons}
+              disabled={layoutResetting}
+              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {layoutResetting ? "重置中..." : "重置图标"}
+            </button>
+          </div>
+          {layoutResetText ? (
+            <p className="text-xs text-muted-foreground">{layoutResetText}</p>
+          ) : null}
+        </div>
+      </div>
 
       <div className="mb-6">
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">自定义图标文件夹</h2>

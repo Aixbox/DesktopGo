@@ -5,7 +5,8 @@ import { makeFolderId } from '../model'
 import type { DesktopIcon } from '../../../types'
 import { buildIconSelectionKey } from '../../../stores/iconStore'
 
-const LAYOUT_KEY = 'desktopgo.launchpad.layout.v1'
+export const LAYOUT_KEY = 'desktopgo.launchpad.layout.v1'
+export const LAUNCHPAD_LAYOUT_RESET_EVENT = 'launchpad:layout-reset'
 
 export const serializeItems = (items: GridItem[]): PersistedItem[] =>
   items.map<PersistedItem>(item =>
@@ -55,6 +56,7 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
   }
 }
 
+
 export const writeLayout = async (
   items: GridItem[],
   slots: Array<string | null>,
@@ -67,6 +69,10 @@ export const writeLayout = async (
     dockKeys,
   }
   await invoke('set_layout_payload', { key: LAYOUT_KEY, payload: JSON.stringify(payload) })
+}
+
+export const resetLaunchpadLayout = async () => {
+  await writeLayout([], [], [])
 }
 
 export const hydrateDockKeys = (
