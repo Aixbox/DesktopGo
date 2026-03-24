@@ -1,5 +1,9 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, RefObject } from 'react'
+import type {
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+  RefObject,
+} from 'react'
 import { Icon } from '../../Icon'
 import type { FolderSize, GridSpan } from '../model'
 import type { PageAnchorEntry } from '../domain/topLevelLayout'
@@ -33,6 +37,8 @@ interface OuterGridViewProps {
   iconConfig: IconConfigLike
   selectionMode: boolean
   selectedSet: Set<string>
+  openFolderId: string | null
+  activeFolderSharedLayoutId: string | null
   onToggleSelectIcon: (key: string) => void
   onTilePointerDown: (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => void
   onTileClickCapture: (event: ReactMouseEvent<HTMLDivElement>) => void
@@ -78,6 +84,8 @@ export function OuterGridView({
   iconConfig,
   selectionMode,
   selectedSet,
+  openFolderId,
+  activeFolderSharedLayoutId,
   onToggleSelectIcon,
   onTilePointerDown,
   onTileClickCapture,
@@ -101,7 +109,15 @@ export function OuterGridView({
   onSwitchPage,
 }: OuterGridViewProps) {
   return (
-    <div className="relative" style={{ width: `${gridWidth}px`, height: `${gridHeight}px`, maxWidth: '100%', maxHeight: '100%' }}>
+    <div
+      className="relative"
+      style={{
+        width: `${gridWidth}px`,
+        height: `${gridHeight}px`,
+        maxWidth: '100%',
+        maxHeight: '100%',
+      }}
+    >
       <div
         ref={gridRef}
         className="grid h-full w-full content-start"
@@ -123,9 +139,7 @@ export function OuterGridView({
           )
         })}
 
-        {dragContext === 'outer' &&
-        dragPreviewSlotIndex !== null &&
-        previewFootprint !== null ? (
+        {dragContext === 'outer' && dragPreviewSlotIndex !== null && previewFootprint !== null ? (
           <div
             className="pointer-events-none rounded-2xl border border-white/22 bg-white/8"
             style={{
@@ -195,6 +209,8 @@ export function OuterGridView({
                   slotHeight={itemHeight}
                   gridGap={gridGap}
                   folderPreview={folderPreview}
+                  folderOpen={openFolderId === entry.item.id}
+                  sharedLayoutActive={activeFolderSharedLayoutId === entry.item.id}
                   selectionMode={selectionMode}
                   onPointerDown={event => onTilePointerDown(event, entry.id)}
                   onClickCapture={onTileClickCapture}

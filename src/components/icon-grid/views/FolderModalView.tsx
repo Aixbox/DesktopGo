@@ -1,10 +1,21 @@
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, RefObject } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import type {
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+  RefObject,
+} from 'react'
 import { Icon } from '../../Icon'
-import type { FolderItem, IconItem } from '../model'
 import { DRAG_HOLE_ID } from '../domain/slots'
+import type { FolderItem, IconItem } from '../model'
+import {
+  FOLDER_MODAL_TRANSITION_EASING,
+  FOLDER_SHARED_LAYOUT_TRANSITION,
+  getFolderSharedLayoutId,
+} from './FolderVisuals'
 
 interface FolderModalViewProps {
   openFolder: FolderItem | null
+  activeFolderSharedLayoutId: string | null
   dragContext: 'outer' | 'folder' | null
   selectionMode: boolean
   selectedSet: Set<string>
@@ -34,6 +45,7 @@ interface FolderModalViewProps {
 
 export function FolderModalView({
   openFolder,
+  activeFolderSharedLayoutId,
   dragContext,
   selectionMode,
   selectedSet,
@@ -56,98 +68,129 @@ export function FolderModalView({
   maxModalWidth,
   maxModalHeight,
 }: FolderModalViewProps) {
-  if (!openFolder) return null
+  const prefersReducedMotion = useReducedMotion()
+  const backdropTransition = prefersReducedMotion
+    ? { duration: 0 }
+    : { duration: 0.2, ease: FOLDER_MODAL_TRANSITION_EASING }
+  const contentTransition = prefersReducedMotion
+    ? { duration: 0 }
+    : { duration: 0.24, ease: FOLDER_MODAL_TRANSITION_EASING, delay: 0.06 }
+  const sharedLayoutId =
+    openFolder && activeFolderSharedLayoutId === openFolder.id
+      ? getFolderSharedLayoutId(openFolder.id)
+      : undefined
 
   return (
-    <div
-      data-folder-modal="true"
-      className="absolute inset-0 z-40 flex items-center justify-center bg-black/45 backdrop-blur-[2px]"
-      onPointerDown={onBackdropClose}
-      onClick={event => {
-        event.stopPropagation()
-      }}
-    >
-      <div
-        data-icon
-        ref={folderPanelRef}
-        className="relative overflow-hidden rounded-3xl border border-white/15 bg-black/55 p-5 shadow-[0_24px_56px_rgba(0,0,0,0.5)] backdrop-blur-xl"
-        style={{
-          width: `min(92vw, ${maxModalWidth}px)`,
-          maxHeight: `min(80vh, ${maxModalHeight}px)`,
-        }}
-        onPointerDown={onPanelPointerDown}
-        onClick={onPanelClick}
-      >
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h3 className="truncate text-sm font-medium text-white/90" title={openFolder.name}>
-            {openFolder.name}
-          </h3>
-          <button
-            type="button"
-            className="rounded-full border border-white/25 px-3 py-1 text-xs text-white/85 transition-colors hover:bg-white/15"
-            onClick={onClose}
-          >
-            Close
-          </button>
-        </div>
-
-        <div
-          ref={folderGridContainerRef}
-          className="overflow-auto"
-          style={{ maxHeight: `calc(min(80vh, ${maxModalHeight}px) - 88px)` }}
+    <AnimatePresence initial={false}>
+      {openFolder ? (
+        <motion.div
+          key={openFolder.id}
+          data-folder-modal="true"
+          className="absolute inset-0 z-40 flex items-center justify-center bg-black/45 backdrop-blur-[2px]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={backdropTransition}
+          onPointerDown={onBackdropClose}
+          onClick={event => {
+            event.stopPropagation()
+          }}
         >
-          <div
-            ref={folderGridRef}
-            className="grid content-start justify-items-center gap-2"
+          <motion.div
+            layoutId={sharedLayoutId}
+            transition={prefersReducedMotion ? { duration: 0 } : FOLDER_SHARED_LAYOUT_TRANSITION}
+            data-icon
+            ref={folderPanelRef}
+            className="relative overflow-hidden rounded-3xl border border-white/15 bg-black/55 p-5 shadow-[0_24px_56px_rgba(0,0,0,0.5)] backdrop-blur-xl will-change-[transform,border-radius]"
             style={{
-              gridTemplateColumns: `repeat(${Math.max(1, folderColumns)}, ${folderItemWidth}px)`,
+              width: `min(92vw, ${maxModalWidth}px)`,
+              maxHeight: `min(80vh, ${maxModalHeight}px)`,
             }}
+            onPointerDown={onPanelPointerDown}
+            onClick={onPanelClick}
           >
-            {folderRenderOrder.map((entry, index) => {
-              if (entry === null || entry === DRAG_HOLE_ID) {
-                const showDropSlot = entry === DRAG_HOLE_ID && dragContext === 'folder'
-                return (
-                  <div
-                    key={`folder-${showDropSlot ? 'drop' : 'empty'}-${index}`}
-                    data-folder-grid-item
-                    className={`h-full w-full rounded-2xl ${
-                      showDropSlot
-                        ? 'border border-white/20 bg-white/8'
-                        : 'border border-transparent bg-transparent'
-                    }`}
-                    style={{ minHeight: `${folderItemHeight}px` }}
-                    aria-hidden="true"
-                  />
-                )
-              }
-
-              const item = folderItemById.get(entry)
-              if (!item) return null
-
-              return (
-                <div
-                  key={entry}
-                  ref={node => {
-                    bindFolderTileRef(entry, node)
-                  }}
-                  data-folder-grid-item
-                  className="relative touch-none"
-                  onPointerDown={event => onFolderTilePointerDown(event, openFolder.id, entry)}
-                  onClickCapture={onTileClickCapture}
+            <motion.div
+              initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 14, scale: 0.985 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.99 }}
+              transition={contentTransition}
+              className="flex max-h-full flex-col"
+            >
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h3 className="truncate text-sm font-medium text-white/90" title={openFolder.name}>
+                  {openFolder.name}
+                </h3>
+                <button
+                  type="button"
+                  className="rounded-full border border-white/25 px-3 py-1 text-xs text-white/85 transition-colors hover:bg-white/15"
+                  onClick={onClose}
                 >
-                  <Icon
-                    icon={item.icon}
-                    selectionKey={item.key}
-                    selectionMode={selectionMode}
-                    selected={selectedSet.has(item.key)}
-                    onToggleSelect={onToggleSelectIcon}
-                  />
+                  Close
+                </button>
+              </div>
+
+              <div
+                ref={folderGridContainerRef}
+                className="overflow-auto"
+                style={{ maxHeight: `calc(min(80vh, ${maxModalHeight}px) - 88px)` }}
+              >
+                <div
+                  ref={folderGridRef}
+                  className="grid content-start justify-items-center gap-2"
+                  style={{
+                    gridTemplateColumns: `repeat(${Math.max(1, folderColumns)}, ${folderItemWidth}px)`,
+                  }}
+                >
+                  {folderRenderOrder.map((entry, index) => {
+                    if (entry === null || entry === DRAG_HOLE_ID) {
+                      const showDropSlot = entry === DRAG_HOLE_ID && dragContext === 'folder'
+                      return (
+                        <div
+                          key={`folder-${showDropSlot ? 'drop' : 'empty'}-${index}`}
+                          data-folder-grid-item
+                          className={`h-full w-full rounded-2xl ${
+                            showDropSlot
+                              ? 'border border-white/20 bg-white/8'
+                              : 'border border-transparent bg-transparent'
+                          }`}
+                          style={{ minHeight: `${folderItemHeight}px` }}
+                          aria-hidden="true"
+                        />
+                      )
+                    }
+
+                    const item = folderItemById.get(entry)
+                    if (!item) return null
+
+                    return (
+                      <div
+                        key={entry}
+                        ref={node => {
+                          bindFolderTileRef(entry, node)
+                        }}
+                        data-folder-grid-item
+                        className="relative touch-none"
+                        onPointerDown={event =>
+                          onFolderTilePointerDown(event, openFolder.id, entry)
+                        }
+                        onClickCapture={onTileClickCapture}
+                      >
+                        <Icon
+                          icon={item.icon}
+                          selectionKey={item.key}
+                          selectionMode={selectionMode}
+                          selected={selectedSet.has(item.key)}
+                          onToggleSelect={onToggleSelectIcon}
+                        />
+                      </div>
+                    )
+                  })}
                 </div>
-              )
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   )
 }

@@ -1,8 +1,6 @@
 ﻿import { AppWindow } from 'lucide-react'
-import type {
-  MouseEvent as ReactMouseEvent,
-  PointerEvent as ReactPointerEvent,
-} from 'react'
+import { motion } from 'framer-motion'
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import {
   ICON_GRID_TILE_PADDING_Y,
   ICON_GRID_TITLE_GAP,
@@ -19,7 +17,11 @@ import {
   ContextMenuTrigger,
 } from '../../ui/context-menu'
 import type { FolderItem, FolderSize, GridSpan } from '../model'
-import { FolderIconVisual } from './FolderVisuals'
+import {
+  FOLDER_SHARED_LAYOUT_TRANSITION,
+  FolderIconVisual,
+  getFolderSharedLayoutId,
+} from './FolderVisuals'
 
 interface OuterFolderTileProps {
   folder: FolderItem
@@ -28,6 +30,8 @@ interface OuterFolderTileProps {
   slotHeight: number
   gridGap: number
   folderPreview: boolean
+  folderOpen: boolean
+  sharedLayoutActive: boolean
   selectionMode: boolean
   onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void
   onClickCapture: (event: ReactMouseEvent<HTMLDivElement>) => void
@@ -56,8 +60,7 @@ const INNER_GAP = 6
 const PREVIEW_ICON_SCALE = 0.84
 const PREVIEW_ICON_FALLBACK_SCALE = 0.68
 
-const clampNumber = (value: number, min: number, max: number) =>
-  Math.max(min, Math.min(max, value))
+const clampNumber = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
 const getFolderSurfaceRadius = (panelBase: number) =>
   Math.round(clampNumber(panelBase * 0.2, 16, 24))
@@ -80,10 +83,7 @@ function FolderSizePreview({ span, active }: FolderSizePreviewProps) {
   const slotRadius = Math.max(2, Math.floor(unitSize * 0.22))
 
   return (
-    <span
-      className="flex h-8 w-12 shrink-0 items-center justify-center"
-      aria-hidden="true"
-    >
+    <span className="flex h-8 w-12 shrink-0 items-center justify-center" aria-hidden="true">
       <span
         className={`relative overflow-hidden border shadow-[0_6px_14px_rgba(0,0,0,0.14),inset_0_1px_0_rgba(255,255,255,0.32)] transition ${
           active
@@ -191,6 +191,8 @@ interface FolderBodyProps {
   bodyHeight: number
   singleSlotBodyExtent: number
   folderPreview: boolean
+  folderOpen: boolean
+  sharedLayoutActive: boolean
   selectionMode: boolean
   onOpenFolder: (folderId: string) => void
   onLaunchIcon: (path: string) => void
@@ -202,6 +204,8 @@ function FolderBody({
   bodyHeight,
   singleSlotBodyExtent,
   folderPreview,
+  folderOpen,
+  sharedLayoutActive,
   selectionMode,
   onOpenFolder,
   onLaunchIcon,
@@ -222,6 +226,7 @@ function FolderBody({
   const surfaceRadius = getFolderSurfaceRadius(panelBase)
   const innerPadding = Math.min(INNER_PADDING, Math.max(4, Math.floor(panelBase / 8)))
   const innerGap = Math.min(INNER_GAP, Math.max(4, Math.floor(panelBase / 16)))
+  const highlightSurface = folderPreview || folderOpen
 
   if (folder.size === '1x1') {
     const previewInset = getSingleSlotPreviewInset(panelBase)
@@ -241,9 +246,11 @@ function FolderBody({
           onOpenFolder(folder.id)
         }}
       >
-        <div
+        <motion.div
+          layoutId={sharedLayoutActive ? getFolderSharedLayoutId(folder.id) : undefined}
+          transition={FOLDER_SHARED_LAYOUT_TRANSITION}
           className={`${SURFACE_CLASS} flex items-center justify-center transition-all duration-200 ${
-            folderPreview ? 'ring-1 ring-white/35 shadow-[0_18px_42px_rgba(0,0,0,0.42)]' : ''
+            highlightSurface ? 'ring-1 ring-white/35 shadow-[0_18px_42px_rgba(0,0,0,0.42)]' : ''
           }`}
           data-folder-body-hitbox
           style={{
@@ -257,15 +264,13 @@ function FolderBody({
             imgSize={previewSize}
             withSurface={false}
           />
-        </div>
+        </motion.div>
       </div>
     )
   }
 
   const previewIcons =
-    folder.size === '2x2'
-      ? folder.children.slice(0, 9)
-      : folder.children.slice(0, 3)
+    folder.size === '2x2' ? folder.children.slice(0, 9) : folder.children.slice(0, 3)
 
   const renderVertical = folder.size === '1x2'
   const renderHorizontal = folder.size === '2x1'
@@ -295,9 +300,11 @@ function FolderBody({
         onOpenFolder(folder.id)
       }}
     >
-      <div
+      <motion.div
+        layoutId={sharedLayoutActive ? getFolderSharedLayoutId(folder.id) : undefined}
+        transition={FOLDER_SHARED_LAYOUT_TRANSITION}
         className={`${SURFACE_CLASS} transition-all duration-200 ${
-          folderPreview ? 'ring-1 ring-white/35 shadow-[0_18px_42px_rgba(0,0,0,0.42)]' : ''
+          highlightSurface ? 'ring-1 ring-white/35 shadow-[0_18px_42px_rgba(0,0,0,0.42)]' : ''
         }`}
         data-folder-body-hitbox
         style={{
@@ -328,7 +335,7 @@ function FolderBody({
             />
           ))}
         </div>
-      </div>
+      </motion.div>
     </div>
   )
 }
@@ -340,6 +347,8 @@ export function OuterFolderTile({
   slotHeight,
   gridGap,
   folderPreview,
+  folderOpen,
+  sharedLayoutActive,
   selectionMode,
   onPointerDown,
   onClickCapture,
@@ -350,7 +359,10 @@ export function OuterFolderTile({
   const footprintWidth = span.cols * slotWidth + Math.max(0, span.cols - 1) * gridGap
   const footprintHeight = span.rows * slotHeight + Math.max(0, span.rows - 1) * gridGap
   const bodyWidth = Math.max(40, footprintWidth - TILE_PADDING * 2)
-  const bodyHeight = Math.max(32, footprintHeight - TILE_PADDING * 2 - TITLE_HEIGHT - BODY_TITLE_GAP)
+  const bodyHeight = Math.max(
+    32,
+    footprintHeight - TILE_PADDING * 2 - TITLE_HEIGHT - BODY_TITLE_GAP
+  )
   const singleSlotBodyExtent = Math.max(
     32,
     slotHeight - TILE_PADDING * 2 - TITLE_HEIGHT - BODY_TITLE_GAP
@@ -375,6 +387,8 @@ export function OuterFolderTile({
               bodyHeight={bodyHeight}
               singleSlotBodyExtent={singleSlotBodyExtent}
               folderPreview={folderPreview}
+              folderOpen={folderOpen}
+              sharedLayoutActive={sharedLayoutActive}
               selectionMode={selectionMode}
               onOpenFolder={onOpenFolder}
               onLaunchIcon={onLaunchIcon}

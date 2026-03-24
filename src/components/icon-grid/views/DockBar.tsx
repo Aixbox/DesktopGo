@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion'
 import {
   useLayoutEffect,
   useEffect,
@@ -16,7 +17,12 @@ import {
   ContextMenuTrigger,
 } from '../../ui/context-menu'
 import { DOCK_GAP } from '../domain/dock'
-import { FolderCreatePreview, FolderIconVisual } from './FolderVisuals'
+import {
+  FolderCreatePreview,
+  FolderIconVisual,
+  FOLDER_SHARED_LAYOUT_TRANSITION,
+  getFolderSharedLayoutId,
+} from './FolderVisuals'
 
 interface DockBarProps {
   displaySlots: Array<string | null>
@@ -29,6 +35,8 @@ interface DockBarProps {
   dragPointerRef: MutableRefObject<{ pointerX: number; pointerY: number } | null>
   iconImageSize: number
   selectionMode: boolean
+  openFolderId: string | null
+  activeFolderSharedLayoutId: string | null
   bindDockContainerRef: (node: HTMLDivElement | null) => void
   bindDockGridRef: (node: HTMLDivElement | null) => void
   bindDockSlotRef: (index: number, node: HTMLDivElement | null) => void
@@ -109,6 +117,8 @@ export function DockBar({
   dragPointerRef,
   iconImageSize,
   selectionMode,
+  openFolderId,
+  activeFolderSharedLayoutId,
   bindDockContainerRef,
   bindDockGridRef,
   bindDockSlotRef,
@@ -537,6 +547,9 @@ export function DockBar({
                 ((dragContext === 'dock' && dragFolderPreviewTargetId === id) ||
                   folderPreviewFreezeTargetId === id ||
                   folderCreateTransitionTargetId === id)
+              const folderOpen = item?.kind === 'folder' && openFolderId === item.id
+              const sharedLayoutActive =
+                item?.kind === 'folder' && activeFolderSharedLayoutId === item.id
 
               return (
                 <div
@@ -617,16 +630,20 @@ export function DockBar({
                                 />
                               </>
                             ) : (
-                              <div
+                              <motion.div
+                                layoutId={
+                                  sharedLayoutActive ? getFolderSharedLayoutId(item.id) : undefined
+                                }
+                                transition={FOLDER_SHARED_LAYOUT_TRANSITION}
                                 className="flex items-center justify-center transition-opacity duration-150"
                                 style={{ width: dockButtonSize, height: dockButtonSize }}
                               >
                                 <FolderIconVisual
                                   icons={item.children.map(child => child.icon)}
                                   imgSize={iconImageSize}
-                                  expanded={folderPreview}
+                                  expanded={folderPreview || folderOpen}
                                 />
-                              </div>
+                              </motion.div>
                             )}
                           </button>
                         </div>

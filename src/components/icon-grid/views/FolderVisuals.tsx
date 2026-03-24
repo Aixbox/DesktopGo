@@ -13,19 +13,27 @@ export const FOLDER_PREVIEW_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
 export const FOLDER_PREVIEW_TOP_OFFSET = 12
 export const FOLDER_MODAL_MAX_WIDTH = 620
 export const FOLDER_MODAL_MAX_HEIGHT = 480
+export const FOLDER_MODAL_TRANSITION_EASING = [0.22, 1, 0.36, 1] as const
+export const FOLDER_SHARED_LAYOUT_TRANSITION = {
+  type: 'spring',
+  stiffness: 320,
+  damping: 30,
+  mass: 0.9,
+} as const
 const FOLDER_SURFACE_CLASS =
   'relative h-full w-full overflow-hidden rounded-xl bg-[linear-gradient(145deg,rgba(20,31,52,0.92),rgba(8,12,22,0.9))] shadow-[0_12px_28px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.14)] backdrop-blur-md'
 const DESKTOP_FOLDER_SURFACE_CLASS =
   'relative h-full w-full overflow-hidden border border-white/14 bg-[linear-gradient(145deg,rgba(20,31,52,0.94),rgba(8,12,22,0.9))] shadow-[0_16px_36px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-md'
 
-const clampNumber = (value: number, min: number, max: number) =>
-  Math.max(min, Math.min(max, value))
+const clampNumber = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
 const getDesktopFolderSurfaceRadius = (panelBase: number) =>
   Math.round(clampNumber(panelBase * 0.2, 16, 24))
 
 const getDesktopSingleSlotPreviewInset = (panelBase: number) =>
   Math.round(clampNumber(panelBase * 0.06, 3, 5))
+
+export const getFolderSharedLayoutId = (folderId: string) => `folder-shell-${folderId}`
 
 export const getFolderPreviewSlotSize = (imgSize: number): number =>
   Math.max(8, Math.floor((imgSize - FOLDER_PREVIEW_PADDING * 2 - FOLDER_PREVIEW_GAP) / 2))
@@ -53,10 +61,7 @@ export function FolderCreatePreview({
     const bodyWidth = Math.max(40, tileWidth - ICON_GRID_TILE_PADDING_Y * 2)
     const bodyHeight = Math.max(
       32,
-      tileHeight -
-        ICON_GRID_TILE_PADDING_Y * 2 -
-        ICON_GRID_TITLE_HEIGHT -
-        ICON_GRID_TITLE_GAP
+      tileHeight - ICON_GRID_TILE_PADDING_Y * 2 - ICON_GRID_TITLE_HEIGHT - ICON_GRID_TITLE_GAP
     )
     const surfaceSize = Math.min(bodyWidth, bodyHeight)
     const panelBase = Math.max(32, surfaceSize)
@@ -67,10 +72,7 @@ export function FolderCreatePreview({
     const surfaceTop = ICON_GRID_TILE_PADDING_Y + Math.max(0, (bodyHeight - surfaceSize) / 2)
 
     return (
-      <div
-        className="pointer-events-none absolute inset-0 z-30"
-        aria-hidden="true"
-      >
+      <div className="pointer-events-none absolute inset-0 z-30" aria-hidden="true">
         <div
           className={`${DESKTOP_FOLDER_SURFACE_CLASS} absolute transition-all duration-200 ${
             active ? 'scale-100 opacity-100' : 'scale-[0.94] opacity-0'
@@ -184,12 +186,7 @@ export function FolderIconVisual({
   } as const
 
   return (
-    <div
-      className="relative"
-      style={frameStyle}
-      aria-hidden="true"
-      data-folder-icon-visual
-    >
+    <div className="relative" style={frameStyle} aria-hidden="true" data-folder-icon-visual>
       <div className="pointer-events-none absolute" style={hitboxStyle} data-folder-icon-hitbox />
       <div
         className={`${withSurface ? FOLDER_SURFACE_CLASS : ''} absolute transition-[left,top,width,height] duration-200 ease-out`}

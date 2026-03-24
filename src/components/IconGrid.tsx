@@ -1,3 +1,4 @@
+import { LayoutGroup } from 'framer-motion'
 import {
   useEffect,
   useLayoutEffect,
@@ -59,6 +60,7 @@ const DRAG_PENDING_MOVE_TOLERANCE = 7
 const EVASION_REARM_DISTANCE = 14
 const EVASION_COOLDOWN_MS = 80
 const REORDER_ANIMATION_MS = 220
+const FOLDER_SHARED_LAYOUT_WINDOW_MS = 320
 const REORDER_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
 const fitCount = (container: number, item: number) => {
   if (item <= 0 || container <= item) return 1
@@ -128,6 +130,8 @@ export function IconGrid({ icons }: IconGridProps) {
   const layoutReadyRef = useRef(false)
   const wheelDeltaRef = useRef(0)
   const wheelCooldownUntilRef = useRef(0)
+  const folderSharedLayoutTimerRef = useRef<number | null>(null)
+  const folderCloseRafRef = useRef<number | null>(null)
 
   const columnWidth = ICON_SIZE_CONFIG[iconSize].columnWidth
   const layoutRowHeight = getIconGridLayoutRowHeight(iconSize)
@@ -143,11 +147,53 @@ export function IconGrid({ icons }: IconGridProps) {
   const [outerSlots, setOuterSlots] = useState<Array<string | null>>([])
   const [dockKeys, setDockKeys] = useState<Array<string | null>>([])
   const [openFolderId, setOpenFolderId] = useState<string | null>(null)
+  const [activeFolderSharedLayoutId, setActiveFolderSharedLayoutId] = useState<string | null>(null)
   const [folderItemWidth, setFolderItemWidth] = useState<number>(columnWidth)
   const [folderItemHeight, setFolderItemHeight] = useState<number>(rowHeight)
   const [folderColumns, setFolderColumns] = useState<number>(1)
 
   dockEnabledRef.current = dockEnabled
+
+  const clearFolderSharedLayoutTimer = () => {
+    if (folderSharedLayoutTimerRef.current === null) return
+    window.clearTimeout(folderSharedLayoutTimerRef.current)
+    folderSharedLayoutTimerRef.current = null
+  }
+
+  const cancelPendingFolderClose = () => {
+    if (folderCloseRafRef.current === null) return
+    window.cancelAnimationFrame(folderCloseRafRef.current)
+    folderCloseRafRef.current = null
+  }
+
+  const scheduleFolderSharedLayoutRelease = (folderId: string) => {
+    clearFolderSharedLayoutTimer()
+    folderSharedLayoutTimerRef.current = window.setTimeout(() => {
+      setActiveFolderSharedLayoutId(current => (current === folderId ? null : current))
+      folderSharedLayoutTimerRef.current = null
+    }, FOLDER_SHARED_LAYOUT_WINDOW_MS)
+  }
+
+  const openFolderWithAnimation = (folderId: string) => {
+    cancelPendingFolderClose()
+    setActiveFolderSharedLayoutId(folderId)
+    setOpenFolderId(folderId)
+    scheduleFolderSharedLayoutRelease(folderId)
+  }
+
+  const closeFolderWithAnimation = () => {
+    if (!openFolderId) return
+
+    cancelPendingFolderClose()
+    clearFolderSharedLayoutTimer()
+    const folderId = openFolderId
+    setActiveFolderSharedLayoutId(folderId)
+    folderCloseRafRef.current = window.requestAnimationFrame(() => {
+      folderCloseRafRef.current = null
+      setOpenFolderId(current => (current === folderId ? null : current))
+      scheduleFolderSharedLayoutRelease(folderId)
+    })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -231,6 +277,9 @@ export function IconGrid({ icons }: IconGridProps) {
     if (!openFolderId) return
     const exists = items.some(item => item.kind === 'folder' && item.id === openFolderId)
     if (!exists) {
+      cancelPendingFolderClose()
+      clearFolderSharedLayoutTimer()
+      setActiveFolderSharedLayoutId(null)
       setOpenFolderId(null)
     }
   }, [openFolderId, items])
@@ -406,7 +455,7 @@ export function IconGrid({ icons }: IconGridProps) {
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur()
       }
-      setOpenFolderId(null)
+      closeFolderWithAnimation()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => {
@@ -925,6 +974,8 @@ export function IconGrid({ icons }: IconGridProps) {
         window.clearTimeout(timer)
       })
       dockTileAnimationTimerRef.current.clear()
+      clearFolderSharedLayoutTimer()
+      cancelPendingFolderClose()
       clearEdgeSwitchTimer()
     }
   }, [])
@@ -965,167 +1016,174 @@ export function IconGrid({ icons }: IconGridProps) {
   const canGoRight = currentPage < pageCount - 1
 
   return (
-    <div
-      className={`relative h-full w-full px-16 pt-24 ${dockEnabled ? 'pb-32' : 'pb-12'}`}
-      onWheel={handleWheelPageSwitch}
-    >
-      <div ref={containerRef} className="flex h-full w-full items-center justify-center">
-        <OuterGridView
-          gridRef={gridRef}
-          gridWidth={gridWidth}
-          gridHeight={gridHeight}
-          columns={columns}
-          rows={rows}
-          itemWidth={itemWidth}
-          itemHeight={itemHeight}
-          gridGap={GRID_GAP}
-          pageCellCount={pageSize}
-          currentPage={currentPage}
-          pageAnchorEntries={pageAnchorEntries}
+    <LayoutGroup id="folder-shell-layout">
+      <div
+        className={`relative h-full w-full px-16 pt-24 ${dockEnabled ? 'pb-32' : 'pb-12'}`}
+        onWheel={handleWheelPageSwitch}
+      >
+        <div ref={containerRef} className="flex h-full w-full items-center justify-center">
+          <OuterGridView
+            gridRef={gridRef}
+            gridWidth={gridWidth}
+            gridHeight={gridHeight}
+            columns={columns}
+            rows={rows}
+            itemWidth={itemWidth}
+            itemHeight={itemHeight}
+            gridGap={GRID_GAP}
+            pageCellCount={pageSize}
+            currentPage={currentPage}
+            pageAnchorEntries={pageAnchorEntries}
+            dragContext={dragState?.context === 'dock' ? null : (dragState?.context ?? null)}
+            dragPreviewSlotIndex={
+              dragState?.context === 'outer'
+                ? (dragState.previewSlotIndex ?? null)
+                : (dragState?.previewSlotIndex ?? null)
+            }
+            dragFolderPreviewTargetId={dragState?.folderPreviewTargetId ?? null}
+            folderPreviewFreezeTargetId={folderPreviewFreezeTargetId}
+            folderCreateTransitionTargetId={folderCreateTransitionTargetId}
+            hiddenOuterItemIds={mergedHiddenOuterItemIds}
+            previewFootprint={previewFootprint}
+            iconConfig={iconConfig}
+            selectionMode={selectionMode}
+            selectedSet={selectedSet}
+            openFolderId={openFolderId}
+            activeFolderSharedLayoutId={activeFolderSharedLayoutId}
+            onToggleSelectIcon={toggleSelectIcon}
+            onTilePointerDown={handleTilePointerDown}
+            onTileClickCapture={handleTileClickCapture}
+            onOpenFolder={openFolderWithAnimation}
+            onLaunchIcon={path => {
+              void launchApp(path)
+            }}
+            onResizeFolder={handleResizeFolder}
+            bindTileRef={(id, node) => {
+              if (node) tileRefs.current.set(id, node)
+              else tileRefs.current.delete(id)
+            }}
+            reorderAnimationMs={REORDER_ANIMATION_MS}
+            canGoLeft={canGoLeft}
+            canGoRight={canGoRight}
+            sideArrowOffset={SIDE_ARROW_OFFSET}
+            onGoLeft={() => {
+              const nextPage = Math.max(0, currentPage - 1)
+              currentPageRef.current = nextPage
+              setCurrentPage(nextPage)
+            }}
+            onGoRight={() => {
+              const nextPage = Math.min(pageCount - 1, currentPage + 1)
+              currentPageRef.current = nextPage
+              setCurrentPage(nextPage)
+            }}
+            paginationOffset={PAGINATION_OFFSET}
+            paginationDotGap={PAGINATION_DOT_GAP}
+            paginationDotSize={PAGINATION_DOT_SIZE}
+            paginationActiveWidth={PAGINATION_ACTIVE_WIDTH}
+            pageCount={pageCount}
+            hoverPage={hoverPage}
+            onHoverPage={setHoverPage}
+            onSwitchPage={index => {
+              currentPageRef.current = index
+              setCurrentPage(index)
+            }}
+          />
+        </div>
+
+        {dockEnabled ? (
+          <DockBar
+            displaySlots={dockRenderSlots}
+            itemById={itemById}
+            dockPreviewIndex={dragState?.dockPreviewIndex ?? null}
+            dragContext={dragState?.context ?? null}
+            dragFolderPreviewTargetId={dragState?.folderPreviewTargetId ?? null}
+            folderPreviewFreezeTargetId={folderPreviewFreezeTargetId}
+            folderCreateTransitionTargetId={folderCreateTransitionTargetId}
+            dragPointerRef={dragPointerRef}
+            iconImageSize={iconConfig.imgSize}
+            selectionMode={selectionMode}
+            openFolderId={openFolderId}
+            activeFolderSharedLayoutId={activeFolderSharedLayoutId}
+            bindDockContainerRef={node => {
+              dockContainerRef.current = node
+            }}
+            bindDockGridRef={node => {
+              dockGridRef.current = node
+            }}
+            bindDockSlotRef={(index, node) => {
+              if (node) dockSlotRefs.current.set(index, node)
+              else dockSlotRefs.current.delete(index)
+            }}
+            bindDockItemRef={(id, node) => {
+              if (node) dockItemRefs.current.set(id, node)
+              else dockItemRefs.current.delete(id)
+            }}
+            onDockItemPointerDown={handleDockItemPointerDown}
+            onDockItemClickCapture={handleTileClickCapture}
+            onDockAutoScroll={syncDockDragPreview}
+            onLaunchIcon={path => {
+              void launchApp(path)
+            }}
+            onOpenFolder={openFolderWithAnimation}
+            onRemoveItem={key => {
+              setDockKeys(current => current.filter(entry => entry !== key))
+            }}
+          />
+        ) : null}
+
+        <FolderModalView
+          openFolder={openFolder}
+          activeFolderSharedLayoutId={activeFolderSharedLayoutId}
           dragContext={dragState?.context === 'dock' ? null : (dragState?.context ?? null)}
-          dragPreviewSlotIndex={
-            dragState?.context === 'outer'
-              ? (dragState.previewSlotIndex ?? null)
-              : (dragState?.previewSlotIndex ?? null)
-          }
-          dragFolderPreviewTargetId={dragState?.folderPreviewTargetId ?? null}
-          folderPreviewFreezeTargetId={folderPreviewFreezeTargetId}
-          folderCreateTransitionTargetId={folderCreateTransitionTargetId}
-          hiddenOuterItemIds={mergedHiddenOuterItemIds}
-          previewFootprint={previewFootprint}
-          iconConfig={iconConfig}
           selectionMode={selectionMode}
           selectedSet={selectedSet}
           onToggleSelectIcon={toggleSelectIcon}
-          onTilePointerDown={handleTilePointerDown}
+          folderPanelRef={folderPanelRef}
+          folderGridContainerRef={folderGridContainerRef}
+          folderGridRef={folderGridRef}
+          folderColumns={folderColumns}
+          folderItemWidth={folderItemWidth}
+          folderItemHeight={folderItemHeight}
+          folderRenderOrder={folderRenderOrder}
+          folderItemById={folderItemById}
+          bindFolderTileRef={(id, node) => {
+            if (node) folderTileRefs.current.set(id, node)
+            else folderTileRefs.current.delete(id)
+          }}
+          onBackdropClose={event => {
+            event.stopPropagation()
+            if (event.target !== event.currentTarget) return
+            if (dragState?.context === 'folder') return
+            closeFolderWithAnimation()
+          }}
+          onPanelPointerDown={event => {
+            event.stopPropagation()
+          }}
+          onPanelClick={event => {
+            event.stopPropagation()
+          }}
+          onClose={closeFolderWithAnimation}
+          onFolderTilePointerDown={handleFolderTilePointerDown}
           onTileClickCapture={handleTileClickCapture}
-          onOpenFolder={setOpenFolderId}
-          onLaunchIcon={path => {
-            void launchApp(path)
-          }}
-          onResizeFolder={handleResizeFolder}
-          bindTileRef={(id, node) => {
-            if (node) tileRefs.current.set(id, node)
-            else tileRefs.current.delete(id)
-          }}
+          maxModalWidth={FOLDER_MODAL_MAX_WIDTH}
+          maxModalHeight={FOLDER_MODAL_MAX_HEIGHT}
+        />
+
+        <DragOverlays
+          dragPointerRef={dragPointerRef}
+          ghostItem={ghostItem}
+          iconImageSize={iconConfig.imgSize}
+          slotWidth={itemWidth}
+          slotHeight={itemHeight}
+          gridGap={GRID_GAP}
+          dragSessionId={dragState?.dragStartedAt ?? null}
+          stackedIcons={multiDragStackItems}
+          folderDropFlight={folderDropFlight}
+          multiDropFlight={multiDropFlight}
           reorderAnimationMs={REORDER_ANIMATION_MS}
-          canGoLeft={canGoLeft}
-          canGoRight={canGoRight}
-          sideArrowOffset={SIDE_ARROW_OFFSET}
-          onGoLeft={() => {
-            const nextPage = Math.max(0, currentPage - 1)
-            currentPageRef.current = nextPage
-            setCurrentPage(nextPage)
-          }}
-          onGoRight={() => {
-            const nextPage = Math.min(pageCount - 1, currentPage + 1)
-            currentPageRef.current = nextPage
-            setCurrentPage(nextPage)
-          }}
-          paginationOffset={PAGINATION_OFFSET}
-          paginationDotGap={PAGINATION_DOT_GAP}
-          paginationDotSize={PAGINATION_DOT_SIZE}
-          paginationActiveWidth={PAGINATION_ACTIVE_WIDTH}
-          pageCount={pageCount}
-          hoverPage={hoverPage}
-          onHoverPage={setHoverPage}
-          onSwitchPage={index => {
-            currentPageRef.current = index
-            setCurrentPage(index)
-          }}
+          folderPreviewEasing={FOLDER_PREVIEW_EASING}
         />
       </div>
-
-      {dockEnabled ? (
-        <DockBar
-          displaySlots={dockRenderSlots}
-          itemById={itemById}
-          dockPreviewIndex={dragState?.dockPreviewIndex ?? null}
-          dragContext={dragState?.context ?? null}
-          dragFolderPreviewTargetId={dragState?.folderPreviewTargetId ?? null}
-          folderPreviewFreezeTargetId={folderPreviewFreezeTargetId}
-          folderCreateTransitionTargetId={folderCreateTransitionTargetId}
-          dragPointerRef={dragPointerRef}
-          iconImageSize={iconConfig.imgSize}
-          selectionMode={selectionMode}
-          bindDockContainerRef={node => {
-            dockContainerRef.current = node
-          }}
-          bindDockGridRef={node => {
-            dockGridRef.current = node
-          }}
-          bindDockSlotRef={(index, node) => {
-            if (node) dockSlotRefs.current.set(index, node)
-            else dockSlotRefs.current.delete(index)
-          }}
-          bindDockItemRef={(id, node) => {
-            if (node) dockItemRefs.current.set(id, node)
-            else dockItemRefs.current.delete(id)
-          }}
-          onDockItemPointerDown={handleDockItemPointerDown}
-          onDockItemClickCapture={handleTileClickCapture}
-          onDockAutoScroll={syncDockDragPreview}
-          onLaunchIcon={path => {
-            void launchApp(path)
-          }}
-          onOpenFolder={setOpenFolderId}
-          onRemoveItem={key => {
-            setDockKeys(current => current.filter(entry => entry !== key))
-          }}
-        />
-      ) : null}
-
-      <FolderModalView
-        openFolder={openFolder}
-        dragContext={dragState?.context === 'dock' ? null : (dragState?.context ?? null)}
-        selectionMode={selectionMode}
-        selectedSet={selectedSet}
-        onToggleSelectIcon={toggleSelectIcon}
-        folderPanelRef={folderPanelRef}
-        folderGridContainerRef={folderGridContainerRef}
-        folderGridRef={folderGridRef}
-        folderColumns={folderColumns}
-        folderItemWidth={folderItemWidth}
-        folderItemHeight={folderItemHeight}
-        folderRenderOrder={folderRenderOrder}
-        folderItemById={folderItemById}
-        bindFolderTileRef={(id, node) => {
-          if (node) folderTileRefs.current.set(id, node)
-          else folderTileRefs.current.delete(id)
-        }}
-        onBackdropClose={event => {
-          event.stopPropagation()
-          if (event.target !== event.currentTarget) return
-          if (dragState?.context === 'folder') return
-          setOpenFolderId(null)
-        }}
-        onPanelPointerDown={event => {
-          event.stopPropagation()
-        }}
-        onPanelClick={event => {
-          event.stopPropagation()
-        }}
-        onClose={() => setOpenFolderId(null)}
-        onFolderTilePointerDown={handleFolderTilePointerDown}
-        onTileClickCapture={handleTileClickCapture}
-        maxModalWidth={FOLDER_MODAL_MAX_WIDTH}
-        maxModalHeight={FOLDER_MODAL_MAX_HEIGHT}
-      />
-
-      <DragOverlays
-        dragPointerRef={dragPointerRef}
-        ghostItem={ghostItem}
-        iconImageSize={iconConfig.imgSize}
-        slotWidth={itemWidth}
-        slotHeight={itemHeight}
-        gridGap={GRID_GAP}
-        dragSessionId={dragState?.dragStartedAt ?? null}
-        stackedIcons={multiDragStackItems}
-        folderDropFlight={folderDropFlight}
-        multiDropFlight={multiDropFlight}
-        reorderAnimationMs={REORDER_ANIMATION_MS}
-        folderPreviewEasing={FOLDER_PREVIEW_EASING}
-      />
-    </div>
+    </LayoutGroup>
   )
 }
