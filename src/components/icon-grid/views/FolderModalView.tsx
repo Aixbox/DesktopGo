@@ -60,6 +60,7 @@ export function FolderModalView({
 
   return (
     <div
+      data-folder-modal="true"
       className="absolute inset-0 z-40 flex items-center justify-center bg-black/45 backdrop-blur-[2px]"
       onPointerDown={onBackdropClose}
       onClick={event => {

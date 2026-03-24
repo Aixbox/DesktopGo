@@ -305,6 +305,14 @@ export function Launchpad() {
     }
   }
 
+  const requestCloseLaunchpad = useCallback(() => {
+    void getCurrentWindow()
+      .hide()
+      .catch(error => {
+        console.error('Failed to hide launchpad window:', error)
+      })
+  }, [])
+
   const clearBackgroundLongPressTimer = () => {
     if (longPressTimerRef.current !== null) {
       window.clearTimeout(longPressTimerRef.current)
@@ -403,7 +411,11 @@ export function Launchpad() {
             clearSearch()
             return
           }
-          setIsSearchPanelOpen(false)
+          if (isSearchPanelVisible) {
+            setIsSearchPanelOpen(false)
+            return
+          }
+          requestCloseLaunchpad()
         }
         return
       }
@@ -456,7 +468,11 @@ export function Launchpad() {
           setIsSearchPanelOpen(false)
           return
         }
-        clearSearch()
+        if (hasSearchKeyword) {
+          clearSearch()
+          return
+        }
+        requestCloseLaunchpad()
       }
     },
     [
@@ -474,6 +490,7 @@ export function Launchpad() {
       selectedIconResultIndex,
       selectedIndex,
       submitSearch,
+      requestCloseLaunchpad,
     ]
   )
 
@@ -512,6 +529,32 @@ export function Launchpad() {
       document.removeEventListener('keydown', handleDocumentKeyDown)
     }
   }, [handleSearchNavigationKey, isSearchPanelOpen])
+
+  useEffect(() => {
+    const handlePageEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+
+      const target = event.target as HTMLElement | null
+      const isEditable =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target?.isContentEditable === true
+
+      if (isEditable) return
+      if (target?.closest('[data-search-placeholder]')) return
+      if (target?.closest('[data-search-floating-menu="true"]')) return
+      if (target?.closest('[data-dock-menu="true"]')) return
+      if (document.querySelector('[data-folder-modal="true"]')) return
+      if (isSearchPanelVisible || hasSearchKeyword) return
+
+      requestCloseLaunchpad()
+    }
+
+    window.addEventListener('keydown', handlePageEscape)
+    return () => {
+      window.removeEventListener('keydown', handlePageEscape)
+    }
+  }, [hasSearchKeyword, isSearchPanelVisible, requestCloseLaunchpad])
 
   const handleBackgroundClick = (e: React.MouseEvent) => {
     if (longPressTriggeredRef.current) {

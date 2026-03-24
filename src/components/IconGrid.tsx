@@ -398,7 +398,14 @@ export function IconGrid({ icons }: IconGridProps) {
     if (!openFolderId) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
-      if (dragRef.current?.context === 'folder') return
+      if (dragRef.current?.context === 'folder') {
+        event.preventDefault()
+        return
+      }
+      event.preventDefault()
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur()
+      }
       setOpenFolderId(null)
     }
     window.addEventListener('keydown', onKeyDown)

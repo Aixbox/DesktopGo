@@ -1,4 +1,4 @@
-import { AppWindow } from 'lucide-react'
+﻿import { AppWindow } from 'lucide-react'
 import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
@@ -229,8 +229,6 @@ function FolderBody({
 
     return (
       <div
-        role="button"
-        tabIndex={0}
         className="relative flex cursor-pointer items-center justify-center transition"
         style={{
           width: `${bodyWidth}px`,
@@ -239,12 +237,6 @@ function FolderBody({
         }}
         title={folder.name}
         onClick={event => {
-          event.stopPropagation()
-          onOpenFolder(folder.id)
-        }}
-        onKeyDown={event => {
-          if (event.key !== 'Enter' && event.key !== ' ') return
-          event.preventDefault()
           event.stopPropagation()
           onOpenFolder(folder.id)
         }}
@@ -291,8 +283,6 @@ function FolderBody({
 
   return (
     <div
-      role="button"
-      tabIndex={0}
       className="relative flex cursor-pointer items-center justify-center transition"
       style={{
         width: `${bodyWidth}px`,
@@ -301,12 +291,6 @@ function FolderBody({
       }}
       title={folder.name}
       onClick={event => {
-        event.stopPropagation()
-        onOpenFolder(folder.id)
-      }}
-      onKeyDown={event => {
-        if (event.key !== 'Enter' && event.key !== ' ') return
-        event.preventDefault()
         event.stopPropagation()
         onOpenFolder(folder.id)
       }}
