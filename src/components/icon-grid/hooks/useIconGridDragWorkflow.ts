@@ -512,6 +512,25 @@ export function useIconGridDragWorkflow({
           Math.max(1, columns)
         )
 
+
+  const buildDockLinearPreviewOrder = (
+    order: Array<string | null>,
+    targetId: string,
+    placeAfter: boolean
+  ): Array<string | null> => {
+    const holeIndex = order.indexOf(null)
+    if (holeIndex < 0) return order
+
+    const compact = order.filter((slot): slot is string => typeof slot === 'string')
+    const targetCompactIndex = compact.indexOf(targetId)
+    if (targetCompactIndex < 0) return order
+
+    const insertIndex = clampNumber(placeAfter ? targetCompactIndex + 1 : targetCompactIndex, 0, compact.length)
+    const next: Array<string | null> = [...compact]
+    next.splice(insertIndex, 0, null)
+    return next
+  }
+
   const resolveTopLevelContextAtPoint = (x: number, y: number): 'outer' | 'dock' => {
     const dockElement = dockContainerRef.current
     if (!dockElement) return 'outer'
@@ -1318,6 +1337,61 @@ export function useIconGridDragWorkflow({
         const insertState: DragState = {
           ...resetOuterInteraction(baseState, nearestSlotIndex),
           dockPreviewIndex: nearestSlotIndex,
+          hoverTargetId: overlapHit.targetId,
+          hoverZone: overlapHit.zone,
+          hoverIou: overlapHit.iou,
+        }
+        publishMoveDragState(insertState)
+        return
+      }
+
+      if (baseState.context === 'dock' && draggingFromDock) {
+        clearOuterDwellTimer()
+        const canFolderPreview =
+          source.kind === 'icon' &&
+          target.kind === 'icon' &&
+          overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
+        const canAddToExistingFolder =
+          source.kind === 'icon' &&
+          target.kind === 'folder' &&
+          overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
+
+        if (canFolderPreview || canAddToExistingFolder) {
+          const previewState: DragState = {
+            ...baseState,
+            previewSlotIndex: overlapHit.targetIndex,
+            dockPreviewIndex: overlapHit.targetIndex,
+            hoverTargetId: overlapHit.targetId,
+            hoverZone: overlapHit.zone,
+            hoverIou: overlapHit.iou,
+            centerStartedAt: null,
+            dwellStartedAt: null,
+            folderPreviewTargetId: overlapHit.targetId,
+            lastEvasionSignature: null,
+          }
+          publishMoveDragState(previewState)
+          return
+        }
+
+        const currentHoleIndex = baseState.workingOrder.indexOf(null)
+        const currentTargetIndex = baseState.workingOrder.indexOf(overlapHit.targetId)
+        const placeAfter =
+          overlapHit.zone === 'right'
+            ? true
+            : overlapHit.zone === 'left'
+              ? false
+              : currentHoleIndex > currentTargetIndex
+        const nextWorkingOrder = buildDockLinearPreviewOrder(
+          baseState.workingOrder,
+          overlapHit.targetId,
+          placeAfter
+        )
+        const nextPreviewIndex = nextWorkingOrder.indexOf(null)
+        const insertState: DragState = {
+          ...resetOuterInteraction(baseState, nextPreviewIndex),
+          workingOrder: nextWorkingOrder,
+          previewSlotIndex: nextPreviewIndex,
+          dockPreviewIndex: nextPreviewIndex,
           hoverTargetId: overlapHit.targetId,
           hoverZone: overlapHit.zone,
           hoverIou: overlapHit.iou,

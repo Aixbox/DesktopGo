@@ -1,4 +1,4 @@
-﻿import type { EvasionDirection, GridItem, GridSpan } from '../model'
+import type { EvasionDirection, GridItem, GridSpan } from '../model'
 import type { DragHit, DragState, OuterOverlapHit } from '../state/types'
 import { getGridItemSpan, getId } from '../model'
 import { classifyZone, clampNumber, getRectArea, getRectIntersection } from './geometry'
@@ -1510,6 +1510,30 @@ const applyForwardSpillEvasion = (
   return next
 }
 
+
+const resolveAlignedFallbackDirection = (
+  targetIndex: number,
+  emptyIndex: number,
+  pageStart: number,
+  columns: number
+): EvasionDirection | null => {
+  const targetPos = getSlotRowColWithinPage(targetIndex, pageStart, columns)
+  const emptyPos = getSlotRowColWithinPage(emptyIndex, pageStart, columns)
+
+  if (targetPos.row === emptyPos.row) {
+    if (emptyIndex < targetIndex) return 'left'
+    if (emptyIndex > targetIndex) return 'right'
+    return null
+  }
+
+  if (targetPos.col === emptyPos.col) {
+    if (emptyIndex < targetIndex) return 'up'
+    if (emptyIndex > targetIndex) return 'down'
+  }
+
+  return null
+}
+
 export const applyOuterEvasionPolicy = (
   order: Array<string | null>,
   hit: OuterOverlapHit,
@@ -1609,6 +1633,26 @@ export const applyOuterEvasionPolicy = (
     }
     return { order, direction: null }
   }
+
+  const fallbackDirection = resolveAlignedFallbackDirection(
+    hit.targetIndex,
+    fallbackIndex,
+    pageStart,
+    safeColumns
+  )
+  if (fallbackDirection) {
+    return {
+      order: applyDirectionalShift(
+        order,
+        hit.targetIndex,
+        fallbackIndex,
+        fallbackDirection,
+        safeColumns
+      ),
+      direction: fallbackDirection,
+    }
+  }
+
   const next = [...order]
   next[fallbackIndex] = next[hit.targetIndex]
   next[hit.targetIndex] = null
