@@ -50,7 +50,7 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            attach_blur_handler(app.handle());
+            create_main_window(app.handle(), false);
 
             let shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
             let handle = app.handle().clone();
@@ -94,29 +94,31 @@ fn show_or_create_main_window(app: &tauri::AppHandle) {
         let _ = w.show();
         let _ = w.set_focus();
     } else {
-        let builder = tauri::WebviewWindowBuilder::new(
-            app,
-            "main",
-            tauri::WebviewUrl::App("index.html".into()),
-        )
-        .title("DesktopGo")
-        .inner_size(1920.0, 1080.0)
-        .fullscreen(false)
-        .resizable(false)
-        .decorations(false)
-        .transparent(true)
-        .always_on_top(true)
-        .skip_taskbar(true)
-        .visible(true)
-        .center();
+        create_main_window(app, true);
+    }
+}
 
-        match builder.build() {
-            Ok(_) => {
-                attach_blur_handler(app);
-            }
-            Err(e) => {
-                eprintln!("Failed to create main window: {}", e);
-            }
+fn create_main_window(app: &tauri::AppHandle, visible: bool) {
+    let builder =
+        tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
+            .title("DesktopGo")
+            .inner_size(1920.0, 1080.0)
+            .fullscreen(false)
+            .resizable(false)
+            .decorations(false)
+            .transparent(true)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .visible(visible)
+            .devtools(cfg!(debug_assertions))
+            .center();
+
+    match builder.build() {
+        Ok(_) => {
+            attach_blur_handler(app);
+        }
+        Err(e) => {
+            eprintln!("Failed to create main window: {}", e);
         }
     }
 }
