@@ -3,6 +3,19 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* 强制保持动画：忽略 Windows "关闭动画效果" 系统设置 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: revert-layer !important;
+    animation-delay: revert-layer !important;
+    transition-duration: revert-layer !important;
+    transition-delay: revert-layer !important;
+    scroll-behavior: smooth !important;
+  }
+}
+
 html,
 body,
 #root {
