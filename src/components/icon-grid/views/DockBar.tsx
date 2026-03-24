@@ -18,9 +18,11 @@ import {
 } from '../../ui/context-menu'
 import { DOCK_GAP } from '../domain/dock'
 import {
+  DESKTOP_FOLDER_SURFACE_CLASS,
   FolderCreatePreview,
   FolderIconVisual,
   FOLDER_SHARED_LAYOUT_TRANSITION,
+  getDesktopSingleSlotFolderMetrics,
   getFolderSharedLayoutId,
 } from './FolderVisuals'
 
@@ -34,6 +36,8 @@ interface DockBarProps {
   folderCreateTransitionTargetId: string | null
   dragPointerRef: MutableRefObject<{ pointerX: number; pointerY: number } | null>
   iconImageSize: number
+  iconTileWidth: number
+  iconTileHeight: number
   selectionMode: boolean
   openFolderId: string | null
   activeFolderSharedLayoutId: string | null
@@ -116,6 +120,8 @@ export function DockBar({
   folderCreateTransitionTargetId,
   dragPointerRef,
   iconImageSize,
+  iconTileWidth,
+  iconTileHeight,
   selectionMode,
   openFolderId,
   activeFolderSharedLayoutId,
@@ -145,6 +151,7 @@ export function DockBar({
   const [hasHorizontalOverflow, setHasHorizontalOverflow] = useState(false)
   const [isIndicatorDragging, setIsIndicatorDragging] = useState(false)
   const dockButtonSize = Math.max(iconImageSize + 12, 52)
+  const singleSlotFolderMetrics = getDesktopSingleSlotFolderMetrics(iconTileWidth, iconTileHeight)
   const dockContentWidth = resolveDockContentWidth(displaySlots.length, dockButtonSize)
   const showInsertionPreview =
     dragContext === 'dock' &&
@@ -630,20 +637,35 @@ export function DockBar({
                                 />
                               </>
                             ) : (
-                              <motion.div
-                                layoutId={
-                                  sharedLayoutActive ? getFolderSharedLayoutId(item.id) : undefined
-                                }
-                                transition={FOLDER_SHARED_LAYOUT_TRANSITION}
+                              <div
                                 className="flex items-center justify-center transition-opacity duration-150"
                                 style={{ width: dockButtonSize, height: dockButtonSize }}
                               >
-                                <FolderIconVisual
-                                  icons={item.children.map(child => child.icon)}
-                                  imgSize={iconImageSize}
-                                  expanded={folderPreview || folderOpen}
-                                />
-                              </motion.div>
+                                <motion.div
+                                  layoutId={
+                                    sharedLayoutActive
+                                      ? getFolderSharedLayoutId(item.id)
+                                      : undefined
+                                  }
+                                  transition={FOLDER_SHARED_LAYOUT_TRANSITION}
+                                  className={`${DESKTOP_FOLDER_SURFACE_CLASS} flex items-center justify-center transition-all duration-150 ${
+                                    folderPreview || folderOpen
+                                      ? 'ring-1 ring-white/35 shadow-[0_18px_42px_rgba(0,0,0,0.42)]'
+                                      : ''
+                                  }`}
+                                  style={{
+                                    width: `${singleSlotFolderMetrics.surfaceSize}px`,
+                                    height: `${singleSlotFolderMetrics.surfaceSize}px`,
+                                    borderRadius: `${singleSlotFolderMetrics.surfaceRadius}px`,
+                                  }}
+                                >
+                                  <FolderIconVisual
+                                    icons={item.children.map(child => child.icon)}
+                                    imgSize={singleSlotFolderMetrics.previewSize}
+                                    withSurface={false}
+                                  />
+                                </motion.div>
+                              </div>
                             )}
                           </button>
                         </div>

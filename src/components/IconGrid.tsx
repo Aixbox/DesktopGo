@@ -1101,6 +1101,8 @@ export function IconGrid({ icons }: IconGridProps) {
             folderCreateTransitionTargetId={folderCreateTransitionTargetId}
             dragPointerRef={dragPointerRef}
             iconImageSize={iconConfig.imgSize}
+            iconTileWidth={itemWidth}
+            iconTileHeight={itemHeight}
             selectionMode={selectionMode}
             openFolderId={openFolderId}
             activeFolderSharedLayoutId={activeFolderSharedLayoutId}
