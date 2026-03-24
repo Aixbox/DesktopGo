@@ -39,6 +39,16 @@ body,
   background: rgba(0, 0, 0, 0.3);
 }
 
+.dock-scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+
+.dock-scrollbar-hidden::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

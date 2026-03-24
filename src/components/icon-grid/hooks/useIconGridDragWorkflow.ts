@@ -1,4 +1,4 @@
-﻿import {
+import {
   useEffect,
   useRef,
   useState,
@@ -113,6 +113,7 @@ interface UseIconGridDragWorkflowResult {
   handleTileClickCapture: (event: React.MouseEvent<HTMLDivElement>) => void
   clearEdgeSwitchTimer: () => void
   clearOuterDragInteractionForPageSwitch: () => void
+  syncDockDragPreview: () => void
 }
 
 export function useIconGridDragWorkflow({
@@ -220,6 +221,16 @@ export function useIconGridDragWorkflow({
       cancelAnimationFrame(dragMoveRafRef.current)
       dragMoveRafRef.current = null
     }
+  }
+
+  const syncRawDragPointer = (pointerId: number, x: number, y: number) => {
+    if (dragRef.current?.pointerId !== pointerId) return
+    if (dragPointerRef.current) {
+      dragPointerRef.current.pointerX = x
+      dragPointerRef.current.pointerY = y
+      return
+    }
+    dragPointerRef.current = { pointerX: x, pointerY: y }
   }
 
   const syncDragRuntime = (next: DragState | null) => {
@@ -1503,6 +1514,7 @@ export function useIconGridDragWorkflow({
   }, [beginDrag])
 
   const scheduleDragMove = (pointerId: number, x: number, y: number) => {
+    syncRawDragPointer(pointerId, x, y)
     queuedDragMoveRef.current = { pointerId, x, y }
     if (dragMoveRafRef.current !== null) return
     dragMoveRafRef.current = window.requestAnimationFrame(() => {
@@ -1515,6 +1527,7 @@ export function useIconGridDragWorkflow({
   }
 
   const flushDragMove = (pointerId: number, x: number, y: number) => {
+    syncRawDragPointer(pointerId, x, y)
     queuedDragMoveRef.current = { pointerId, x, y }
     if (dragMoveRafRef.current !== null) {
       cancelAnimationFrame(dragMoveRafRef.current)
@@ -1660,6 +1673,29 @@ export function useIconGridDragWorkflow({
     commitDragState(next)
   }
 
+  const syncDockDragPreview = () => {
+    const current = dragRef.current
+    if (!current || current.context !== 'dock') return
+
+    const queued = queuedDragMoveRef.current
+    if (queued && queued.pointerId === current.pointerId) {
+      queuedDragMoveRef.current = null
+      if (dragMoveRafRef.current !== null) {
+        cancelAnimationFrame(dragMoveRafRef.current)
+        dragMoveRafRef.current = null
+      }
+      processDragMove(queued.pointerId, queued.x, queued.y)
+      return
+    }
+
+    const pointer = dragPointerRef.current
+    processDragMove(
+      current.pointerId,
+      pointer?.pointerX ?? current.pointerX,
+      pointer?.pointerY ?? current.pointerY
+    )
+  }
+
   useEffect(
     () => () => {
       clearTimer()
@@ -1686,5 +1722,6 @@ export function useIconGridDragWorkflow({
     handleTileClickCapture,
     clearEdgeSwitchTimer,
     clearOuterDragInteractionForPageSwitch,
+    syncDockDragPreview,
   }
 }

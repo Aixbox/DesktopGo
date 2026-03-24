@@ -178,12 +178,13 @@ export function IconGrid({ icons }: IconGridProps) {
 
       const nextItems = hydrateItems(icons, persisted?.items ?? null)
       const nextItemIds = nextItems.map(getId)
-      const nextDockKeys = dockEnabledRef.current ? hydrateDockKeys(nextItemIds, persisted?.dockKeys) : []
+      const nextDockKeys = dockEnabledRef.current
+        ? hydrateDockKeys(nextItemIds, persisted?.dockKeys)
+        : []
 
       const rawSlots = persisted?.slots ?? []
       const hasDims =
-        persisted?.pageSize && persisted?.columns &&
-        persisted.pageSize > 1 && persisted.columns > 1
+        persisted?.pageSize && persisted?.columns && persisted.pageSize > 1 && persisted.columns > 1
       persistedDimsRef.current = hasDims
         ? { pageSize: persisted!.pageSize!, columns: persisted!.columns! }
         : null
@@ -286,6 +287,7 @@ export function IconGrid({ icons }: IconGridProps) {
     handleTileClickCapture,
     clearEdgeSwitchTimer,
     clearOuterDragInteractionForPageSwitch,
+    syncDockDragPreview,
   } = useIconGridDragWorkflow({
     config: {
       gridGap: GRID_GAP,
@@ -420,8 +422,7 @@ export function IconGrid({ icons }: IconGridProps) {
       const minRows = hasTallItems ? 2 : 1
       const baseRows = Math.max(minRows, fitCount(height, layoutRowHeight))
       const nextRowGridHeight = (baseRows + 1) * tileHeight + baseRows * GRID_GAP
-      const resolvedRows =
-        !dockEnabled && nextRowGridHeight <= height ? baseRows + 1 : baseRows
+      const resolvedRows = !dockEnabled && nextRowGridHeight <= height ? baseRows + 1 : baseRows
       setItemWidth(tileWidth)
       setItemHeight(tileHeight)
       setColumns(Math.max(hasWideItems ? 2 : 1, fitCount(width, tileWidth)))
@@ -543,9 +544,10 @@ export function IconGrid({ icons }: IconGridProps) {
     const currentSlots = outerSlotsRef.current
 
     const remainder = currentSlots.length % safePageSize
-    const padded = remainder > 0
-      ? [...currentSlots, ...Array.from({ length: safePageSize - remainder }, () => null)]
-      : [...currentSlots]
+    const padded =
+      remainder > 0
+        ? [...currentSlots, ...Array.from({ length: safePageSize - remainder }, () => null)]
+        : [...currentSlots]
 
     const newPage: Array<string | null> = Array.from({ length: safePageSize }, () => null)
     const itemById = new Map(itemsRef.current.map(item => [getId(item), item]))
@@ -656,13 +658,17 @@ export function IconGrid({ icons }: IconGridProps) {
 
     const folderIndex = nextOuterSlots.indexOf(folderId)
     if (folderIndex >= 0) {
-      const newSpan = getGridItemSpan(nextItems.find(
-        item => item.kind === 'folder' && item.id === folderId
-      )!)
-      const indices = getFootprintIndices(folderIndex, newSpan, safeCols, safePS)
-      const valid = indices !== null && indices.every(
-        idx => idx < nextOuterSlots.length && (!nextOuterSlots[idx] || nextOuterSlots[idx] === folderId)
+      const newSpan = getGridItemSpan(
+        nextItems.find(item => item.kind === 'folder' && item.id === folderId)!
       )
+      const indices = getFootprintIndices(folderIndex, newSpan, safeCols, safePS)
+      const valid =
+        indices !== null &&
+        indices.every(
+          idx =>
+            idx < nextOuterSlots.length &&
+            (!nextOuterSlots[idx] || nextOuterSlots[idx] === folderId)
+        )
       if (!valid) {
         nextOuterSlots = [...nextOuterSlots]
         nextOuterSlots[folderIndex] = null
@@ -1032,6 +1038,7 @@ export function IconGrid({ icons }: IconGridProps) {
           dragFolderPreviewTargetId={dragState?.folderPreviewTargetId ?? null}
           folderPreviewFreezeTargetId={folderPreviewFreezeTargetId}
           folderCreateTransitionTargetId={folderCreateTransitionTargetId}
+          dragPointerRef={dragPointerRef}
           iconImageSize={iconConfig.imgSize}
           selectionMode={selectionMode}
           bindDockContainerRef={node => {
@@ -1050,6 +1057,7 @@ export function IconGrid({ icons }: IconGridProps) {
           }}
           onDockItemPointerDown={handleDockItemPointerDown}
           onDockItemClickCapture={handleTileClickCapture}
+          onDockAutoScroll={syncDockDragPreview}
           onLaunchIcon={path => {
             void launchApp(path)
           }}
