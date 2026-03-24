@@ -1677,19 +1677,8 @@ export function useIconGridDragWorkflow({
     const current = dragRef.current
     if (!current || current.context !== 'dock') return
 
-    const queued = queuedDragMoveRef.current
-    if (queued && queued.pointerId === current.pointerId) {
-      queuedDragMoveRef.current = null
-      if (dragMoveRafRef.current !== null) {
-        cancelAnimationFrame(dragMoveRafRef.current)
-        dragMoveRafRef.current = null
-      }
-      processDragMove(queued.pointerId, queued.x, queued.y)
-      return
-    }
-
     const pointer = dragPointerRef.current
-    processDragMove(
+    scheduleDragMove(
       current.pointerId,
       pointer?.pointerX ?? current.pointerX,
       pointer?.pointerY ?? current.pointerY
