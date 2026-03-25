@@ -1090,8 +1090,7 @@ export function Settings() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <nav className="flex w-48 flex-col border-r border-border bg-secondary/50 p-4">
-          <h1 className="mb-6 px-2 text-lg font-semibold">DesktopGo</h1>
+        <nav className="flex w-48 flex-col border-r border-border bg-secondary/50 px-4 py-3">
           <ul className="flex flex-col gap-1">
             {NAV_ITEMS.map(item => (
               <li key={item.key}>
