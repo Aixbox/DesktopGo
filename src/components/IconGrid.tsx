@@ -10,7 +10,7 @@ import {
 import type { DesktopIcon } from '../types'
 import { getIconGridLayoutRowHeight, getIconGridRowHeight, ICON_SIZE_CONFIG } from '../types'
 import { useIconStore } from '../stores/iconStore'
-import type { FolderSize, GridItem, IconItem, PersistedLayout } from './icon-grid/model'
+import type { FolderItem, FolderSize, GridItem, IconItem, PersistedLayout } from './icon-grid/model'
 import { getGridItemSpan, getId } from './icon-grid/model'
 import { compactEmptyPages, DRAG_HOLE_ID, areSlotsEqual } from './icon-grid/domain/slots'
 import { clampNumber } from './icon-grid/domain/geometry'
@@ -30,6 +30,7 @@ import {
 import { DOCK_GAP, resolveDockDisplaySlots, resolveOuterItemIds } from './icon-grid/domain/dock'
 import {
   canPlaceItemAtAnchorIndex,
+  findBestResizeAnchorIndex,
   getFootprintIndices,
   getPageAnchorEntries,
   normalizeOuterSlots,
@@ -305,6 +306,11 @@ export function IconGrid({ icons }: IconGridProps) {
   }, [openFolder])
 
   const itemIds = useMemo(() => items.map(getId), [items])
+  const itemLayoutSignature = useMemo(
+    () =>
+      items.map(item => (item.kind === 'folder' ? `${item.id}:${item.size}` : item.key)).join('|'),
+    [items]
+  )
   const folderOrder = useMemo(
     () => openFolder?.children.map(child => child.key) ?? [],
     [openFolder]
@@ -407,7 +413,13 @@ export function IconGrid({ icons }: IconGridProps) {
         workingOrder: dockWorkingOrder,
         showPlaceholderWhenEmpty: true,
       }),
-    [activeDockKeys, hiddenDockDraggingIds, dragState?.context, dragState?.dockPreviewIndex, dockWorkingOrder]
+    [
+      activeDockKeys,
+      hiddenDockDraggingIds,
+      dragState?.context,
+      dragState?.dockPreviewIndex,
+      dockWorkingOrder,
+    ]
   )
 
   const draggedFolderChildSelections = useMemo(
@@ -510,7 +522,7 @@ export function IconGrid({ icons }: IconGridProps) {
       observer.disconnect()
       window.removeEventListener('resize', schedule)
     }
-  }, [columnWidth, dockEnabled, layoutRowHeight, rowHeight, items.length, currentPage])
+  }, [columnWidth, dockEnabled, layoutRowHeight, rowHeight, itemLayoutSignature, currentPage])
 
   useEffect(() => {
     const container = folderGridContainerRef.current
@@ -698,6 +710,18 @@ export function IconGrid({ icons }: IconGridProps) {
   }
 
   const handleResizeFolder = (folderId: string, size: FolderSize) => {
+    const resizedFolderEntryId = `folder:${folderId}`
+    const prevItems = itemsRef.current
+    const prevOuterItemIds = resolveOuterItemIds(
+      prevItems.map(getId),
+      dockEnabled ? dockKeysRef.current : []
+    )
+    const prevOuterItems = filterItemsByIds(prevItems, prevOuterItemIds)
+    const prevFolder = prevItems.find(
+      (item): item is FolderItem => item.kind === 'folder' && item.id === folderId
+    )
+    if (!prevFolder || prevFolder.size === size) return
+
     const nextItems = itemsRef.current.map(item =>
       item.kind === 'folder' && item.id === folderId ? { ...item, size } : item
     )
@@ -715,40 +739,40 @@ export function IconGrid({ icons }: IconGridProps) {
     const safePS = Math.max(1, layoutMetrics.pageSize)
     const safeCols = Math.max(1, layoutMetrics.columns)
 
-    let nextOuterSlots = resizeSlotPages(
-      outerSlotsRef.current,
-      outerItems,
-      prevPageSizeRef.current,
-      safePS,
-      prevColumnsRef.current,
-      safeCols
-    )
+    const baseOuterSlots =
+      prevPageSizeRef.current === safePS && prevColumnsRef.current === safeCols
+        ? [...outerSlotsRef.current]
+        : resizeSlotPages(
+            outerSlotsRef.current,
+            prevOuterItems,
+            prevPageSizeRef.current,
+            safePS,
+            prevColumnsRef.current,
+            safeCols
+          )
 
-    const folderIndex = nextOuterSlots.indexOf(folderId)
-    if (folderIndex >= 0) {
-      const newSpan = getGridItemSpan(
-        nextItems.find(item => item.kind === 'folder' && item.id === folderId)!
-      )
-      const indices = getFootprintIndices(folderIndex, newSpan, safeCols, safePS)
-      const valid =
-        indices !== null &&
-        indices.every(
-          idx =>
-            idx < nextOuterSlots.length &&
-            (!nextOuterSlots[idx] || nextOuterSlots[idx] === folderId)
-        )
-      if (!valid) {
-        nextOuterSlots = [...nextOuterSlots]
-        nextOuterSlots[folderIndex] = null
-        const remainder = nextOuterSlots.length % safePS
-        if (remainder > 0) {
-          nextOuterSlots.push(...Array.from({ length: safePS - remainder }, () => null))
-        }
-        const newPage: Array<string | null> = Array.from({ length: safePS }, () => null)
-        newPage[0] = folderId
-        nextOuterSlots.push(...newPage)
-      }
-    }
+    const originalAnchorIndex = baseOuterSlots.indexOf(resizedFolderEntryId)
+    const preferredAnchorIndex =
+      originalAnchorIndex >= 0
+        ? findBestResizeAnchorIndex({
+            slots: baseOuterSlots,
+            items: prevOuterItems,
+            itemId: resizedFolderEntryId,
+            currentAnchorIndex: originalAnchorIndex,
+            currentSpan: getGridItemSpan(prevFolder),
+            nextSpan: getGridItemSpan({ ...prevFolder, size }),
+            columns: safeCols,
+            pageSize: safePS,
+          })
+        : null
+    const preferredAnchorById =
+      preferredAnchorIndex !== null &&
+      preferredAnchorIndex < Math.max(safePS, baseOuterSlots.length)
+        ? new Map([[resizedFolderEntryId, preferredAnchorIndex]])
+        : undefined
+    const nextOuterSlots = normalizeOuterSlots(baseOuterSlots, outerItems, safePS, safeCols, {
+      preferredAnchorById,
+    })
 
     const compactedOuterSlots = compactEmptyPages(nextOuterSlots, safePS)
 

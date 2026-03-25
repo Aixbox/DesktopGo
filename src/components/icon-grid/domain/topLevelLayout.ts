@@ -18,6 +18,18 @@ export interface PageAnchorEntry {
   span: GridSpan
 }
 
+interface NormalizeOuterSlotsOptions {
+  preferredAnchorById?: Map<string, number>
+}
+
+interface ResizeAnchorCandidate {
+  anchorIndex: number
+  blockerCount: number
+  distance: number
+  rowShift: number
+  colShift: number
+}
+
 const ensurePageCapacity = (cells: Array<string | null>, pageSize: number, anchorIndex: number) => {
   const safePageSize = Math.max(1, pageSize)
   const requiredLength = getPageStartBySlotIndex(anchorIndex, safePageSize) + safePageSize
@@ -65,6 +77,41 @@ const canPlaceAtIndex = (
   const indices = getFootprintIndices(anchorIndex, span, columns, pageSize)
   if (!indices) return false
   return indices.every(index => !occupied[index])
+}
+
+const getAnchorDistanceScore = (
+  originIndex: number,
+  candidateIndex: number,
+  columns: number,
+  pageSize: number
+): [number, number, number] => {
+  const safeColumns = Math.max(1, columns)
+  const safePageSize = Math.max(1, pageSize)
+  const originPage = Math.floor(Math.max(0, originIndex) / safePageSize)
+  const candidatePage = Math.floor(Math.max(0, candidateIndex) / safePageSize)
+  const originLocalIndex = Math.max(0, originIndex) % safePageSize
+  const candidateLocalIndex = Math.max(0, candidateIndex) % safePageSize
+  const originRow = Math.floor(originLocalIndex / safeColumns)
+  const originCol = originLocalIndex % safeColumns
+  const candidateRow = Math.floor(candidateLocalIndex / safeColumns)
+  const candidateCol = candidateLocalIndex % safeColumns
+
+  return [
+    Math.abs(candidatePage - originPage),
+    Math.abs(candidateRow - originRow) + Math.abs(candidateCol - originCol),
+    Math.abs(candidateIndex - originIndex),
+  ]
+}
+
+const compareAnchorDistanceScore = (
+  left: [number, number, number],
+  right: [number, number, number]
+): number => {
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] === right[index]) continue
+    return left[index] - right[index]
+  }
+  return 0
 }
 
 export const canPlaceItemAtAnchorIndex = (
@@ -131,7 +178,8 @@ export const normalizeOuterSlots = (
   source: Array<string | null> | null | undefined,
   items: GridItem[],
   pageSize: number,
-  columns: number
+  columns: number,
+  options?: NormalizeOuterSlotsOptions
 ): Array<string | null> => {
   const safePageSize = Math.max(1, pageSize)
   const safeColumns = Math.max(1, columns)
@@ -141,25 +189,81 @@ export const normalizeOuterSlots = (
   const consumed = new Set<string>()
   const anchors: Array<string | null> = []
   const occupied: Array<string | null> = []
+  const sourceAnchorIndexById = new Map<string, number>()
 
   const ensureAnchorCapacity = (anchorIndex: number) => {
     ensurePageCapacity(anchors, safePageSize, anchorIndex)
     ensurePageCapacity(occupied, safePageSize, anchorIndex)
   }
 
+  const tryPlaceAtAnchor = (id: string, anchorIndex: number): boolean => {
+    if (!validIdSet.has(id) || consumed.has(id) || anchorIndex < 0) return false
+    ensureAnchorCapacity(anchorIndex)
+    if (anchors[anchorIndex]) return false
+
+    const item = itemById.get(id)
+    if (!item) return false
+    const span = getGridItemSpan(item)
+    if (!canPlaceAtIndex(occupied, anchorIndex, span, safeColumns, safePageSize)) return false
+
+    anchors[anchorIndex] = id
+    paintFootprint(occupied, anchorIndex, id, span, safeColumns, safePageSize)
+    consumed.add(id)
+    return true
+  }
+
+  const findNearestAvailableAnchorIndex = (span: GridSpan, originIndex: number): number | null => {
+    if (originIndex < 0) return null
+
+    let searchLimit = Math.max(anchors.length, safePageSize)
+    const minimumLimit = getPageStartBySlotIndex(originIndex, safePageSize) + safePageSize
+    if (searchLimit < minimumLimit) {
+      searchLimit = minimumLimit
+    }
+
+    for (let pageExpansion = 0; pageExpansion < 64; pageExpansion += 1) {
+      let bestAnchorIndex: number | null = null
+      let bestScore: [number, number, number] | null = null
+
+      for (let index = 0; index < searchLimit; index += 1) {
+        ensureAnchorCapacity(index)
+        if (anchors[index]) continue
+        if (!canPlaceAtIndex(occupied, index, span, safeColumns, safePageSize)) continue
+
+        const score = getAnchorDistanceScore(originIndex, index, safeColumns, safePageSize)
+        if (!bestScore || compareAnchorDistanceScore(score, bestScore) < 0) {
+          bestAnchorIndex = index
+          bestScore = score
+        }
+      }
+
+      if (bestAnchorIndex !== null) {
+        return bestAnchorIndex
+      }
+
+      searchLimit += safePageSize
+    }
+
+    for (let index = 0; ; index += 1) {
+      ensureAnchorCapacity(index)
+      if (anchors[index]) continue
+      if (!canPlaceAtIndex(occupied, index, span, safeColumns, safePageSize)) continue
+      return index
+    }
+  }
+
+  options?.preferredAnchorById?.forEach((anchorIndex, id) => {
+    tryPlaceAtAnchor(id, anchorIndex)
+  })
   ;(source ?? []).forEach((slot, index) => {
     ensureAnchorCapacity(index)
     if (!slot || slot === DRAG_HOLE_ID) return
     if (!validIdSet.has(slot) || consumed.has(slot)) return
+    if (!sourceAnchorIndexById.has(slot)) {
+      sourceAnchorIndexById.set(slot, index)
+    }
 
-    const item = itemById.get(slot)
-    if (!item) return
-    const span = getGridItemSpan(item)
-    if (!canPlaceAtIndex(occupied, index, span, safeColumns, safePageSize)) return
-
-    anchors[index] = slot
-    paintFootprint(occupied, index, slot, span, safeColumns, safePageSize)
-    consumed.add(slot)
+    tryPlaceAtAnchor(slot, index)
   })
 
   itemIds.forEach(id => {
@@ -167,13 +271,15 @@ export const normalizeOuterSlots = (
     const item = itemById.get(id)
     if (!item) return
     const span = getGridItemSpan(item)
-
-    let anchorIndex: number | null = null
-    for (let index = 0; anchorIndex === null; index += 1) {
-      ensureAnchorCapacity(index)
-      if (anchors[index]) continue
-      if (!canPlaceAtIndex(occupied, index, span, safeColumns, safePageSize)) continue
-      anchorIndex = index
+    const originIndex = sourceAnchorIndexById.get(id) ?? -1
+    let anchorIndex = findNearestAvailableAnchorIndex(span, originIndex)
+    if (anchorIndex === null) {
+      for (let index = 0; anchorIndex === null; index += 1) {
+        ensureAnchorCapacity(index)
+        if (anchors[index]) continue
+        if (!canPlaceAtIndex(occupied, index, span, safeColumns, safePageSize)) continue
+        anchorIndex = index
+      }
     }
 
     anchors[anchorIndex] = id
@@ -195,6 +301,83 @@ export const normalizeOuterSlots = (
   return anchors
 }
 
+export const findBestResizeAnchorIndex = ({
+  slots,
+  items,
+  itemId,
+  currentAnchorIndex,
+  currentSpan,
+  nextSpan,
+  columns,
+  pageSize,
+}: {
+  slots: Array<string | null>
+  items: GridItem[]
+  itemId: string
+  currentAnchorIndex: number
+  currentSpan: GridSpan
+  nextSpan: GridSpan
+  columns: number
+  pageSize: number
+}): number | null => {
+  if (currentAnchorIndex < 0) return null
+
+  const safeColumns = Math.max(1, columns)
+  const safePageSize = Math.max(1, pageSize)
+  const occupancy = buildTopLevelOccupancy(slots, items, safeColumns, safePageSize).cells
+  const currentFootprint = getFootprintIndices(
+    currentAnchorIndex,
+    currentSpan,
+    safeColumns,
+    safePageSize
+  ) ?? [currentAnchorIndex]
+  const currentFootprintSet = new Set(currentFootprint)
+  const maxRowShift = Math.max(0, nextSpan.rows - currentSpan.rows)
+  const maxColShift = Math.max(0, nextSpan.cols - currentSpan.cols)
+
+  let bestCandidate: ResizeAnchorCandidate | null = null
+
+  for (let rowShift = 0; rowShift <= maxRowShift; rowShift += 1) {
+    for (let colShift = 0; colShift <= maxColShift; colShift += 1) {
+      const anchorIndex = currentAnchorIndex - rowShift * safeColumns - colShift
+      const footprint = getFootprintIndices(anchorIndex, nextSpan, safeColumns, safePageSize)
+      if (!footprint) continue
+
+      let blockerCount = 0
+      for (const index of footprint) {
+        if (currentFootprintSet.has(index)) continue
+        const occupant = occupancy[index]
+        if (occupant && occupant !== itemId) {
+          blockerCount += 1
+        }
+      }
+
+      const candidate: ResizeAnchorCandidate = {
+        anchorIndex,
+        blockerCount,
+        distance: rowShift + colShift,
+        rowShift,
+        colShift,
+      }
+
+      if (
+        !bestCandidate ||
+        candidate.blockerCount < bestCandidate.blockerCount ||
+        (candidate.blockerCount === bestCandidate.blockerCount &&
+          (candidate.distance < bestCandidate.distance ||
+            (candidate.distance === bestCandidate.distance &&
+              (candidate.rowShift < bestCandidate.rowShift ||
+                (candidate.rowShift === bestCandidate.rowShift &&
+                  candidate.colShift < bestCandidate.colShift)))))
+      ) {
+        bestCandidate = candidate
+      }
+    }
+  }
+
+  return bestCandidate?.anchorIndex ?? null
+}
+
 export const resizeSlotPages = (
   slots: Array<string | null>,
   items: GridItem[],
@@ -208,7 +391,11 @@ export const resizeSlotPages = (
   const safePrevCols = Math.max(1, prevColumns)
   const safeNextCols = Math.max(1, nextColumns)
 
-  if (safePrevPS === safeNextPS && safePrevCols === safeNextCols) return slots
+  if (safePrevPS === safeNextPS && safePrevCols === safeNextCols) {
+    // Folder span changes can invalidate anchors without changing page geometry.
+    // Re-normalize so stale placements are repaired instead of preserved.
+    return normalizeOuterSlots(slots, items, safeNextPS, safeNextCols)
+  }
 
   const itemById = buildItemMap(items)
   const oldPageCount = Math.max(1, Math.ceil(Math.max(slots.length, safePrevPS) / safePrevPS))
