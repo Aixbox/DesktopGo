@@ -105,6 +105,12 @@ export function FolderModalView({
     setEditing(false)
   }
 
+  const GRID_GAP = 8 // gap-2
+  const PANEL_PADDING = 20 // p-5
+  const fittedGridWidth = folderColumns * folderItemWidth + (folderColumns - 1) * GRID_GAP
+  const fittedPanelWidth = fittedGridWidth + PANEL_PADDING * 2
+  const panelWidth = Math.min(fittedPanelWidth, maxModalWidth, window.innerWidth * 0.92)
+
   return (
     <AnimatePresence initial={false}>
       {openFolder ? (
@@ -130,7 +136,7 @@ export function FolderModalView({
               exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
               transition={contentTransition}
               className="mb-2 flex items-center"
-              style={{ width: `min(92vw, ${maxModalWidth}px)` }}
+              style={{ width: `${panelWidth}px` }}
               onPointerDown={e => e.stopPropagation()}
             >
               {/* Spacer to balance the X button */}
@@ -189,7 +195,7 @@ export function FolderModalView({
               ref={folderPanelRef}
               className="relative overflow-hidden rounded-3xl border border-white/15 bg-black/55 p-5 shadow-[0_24px_56px_rgba(0,0,0,0.5)] backdrop-blur-xl will-change-[transform,border-radius]"
               style={{
-                width: `min(92vw, ${maxModalWidth}px)`,
+                width: `${panelWidth}px`,
                 maxHeight: `min(80vh, ${maxModalHeight}px)`,
               }}
               onPointerDown={onPanelPointerDown}
@@ -205,8 +211,8 @@ export function FolderModalView({
 
               <div
                 ref={folderGridContainerRef}
-                className="overflow-auto"
-                style={{ maxHeight: `calc(min(80vh, ${maxModalHeight}px) - 88px)` }}
+                className="-mr-5 overflow-auto pr-5"
+                style={{ maxHeight: `calc(min(80vh, ${maxModalHeight}px) - 48px)` }}
               >
                 <div
                   ref={folderGridRef}

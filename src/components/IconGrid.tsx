@@ -508,13 +508,15 @@ export function IconGrid({ icons }: IconGridProps) {
 
     let raf = 0
     const recalc = () => {
-      const width = container.clientWidth
       const first = folderGridRef.current?.querySelector<HTMLElement>('[data-folder-grid-item]')
       const tileWidth = first?.offsetWidth ?? columnWidth
       const tileHeight = first?.offsetHeight ?? rowHeight
       setFolderItemWidth(tileWidth)
       setFolderItemHeight(tileHeight)
-      setFolderColumns(fitCount(width, tileWidth))
+      // Use max available width (panel max minus padding) to calculate columns,
+      // so panel can then shrink to fit the actual column count.
+      const maxAvailable = Math.min(FOLDER_MODAL_MAX_WIDTH, window.innerWidth * 0.92) - 40 // 40 = padding left+right
+      setFolderColumns(fitCount(maxAvailable, tileWidth))
     }
     const schedule = () => {
       cancelAnimationFrame(raf)
