@@ -94,6 +94,7 @@ export function IconGrid({ icons }: IconGridProps) {
     selectedIconKeys,
     toggleSelectIcon,
     unselectIcons,
+    clearSelection,
     launchApp,
   } = useIconStore()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -1165,6 +1166,9 @@ export function IconGrid({ icons }: IconGridProps) {
           }}
           onPanelClick={event => {
             event.stopPropagation()
+            if (selectionMode) {
+              clearSelection()
+            }
           }}
           onClose={closeFolderWithAnimation}
           onRenameFolder={(folderId, name) => {

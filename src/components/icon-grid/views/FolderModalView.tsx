@@ -254,6 +254,7 @@ export function FolderModalView({
                           onFolderTilePointerDown(event, openFolder.id, entry)
                         }
                         onClickCapture={onTileClickCapture}
+                        onClick={e => e.stopPropagation()}
                       >
                         <Icon
                           icon={item.icon}
