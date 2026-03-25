@@ -463,11 +463,11 @@ function SettingsPanel() {
       </SettingGroup>
 
       <ToggleSettingRow
-        title="\u663e\u793a Dock \u680f"
+        title="显示 Dock 栏"
         description={
           dockEnabled
-            ? '\u5f53\u524d\u5df2\u5f00\u542f\uff0cDock \u4f1a\u5728\u542f\u52a8\u53f0\u5e95\u90e8\u663e\u793a\u3002'
-            : '\u5f53\u524d\u5df2\u5173\u95ed\uff0cDock \u4e2d\u7684\u56fe\u6807\u4f1a\u56de\u5230\u56fe\u6807\u7f51\u683c\u3002'
+            ? '当前已开启，Dock 会在启动台底部显示。'
+            : '当前已关闭，Dock 中的图标会回到图标网格。'
         }
         checked={dockEnabled}
         onChange={handleDockEnabled}
