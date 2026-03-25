@@ -22,6 +22,7 @@ interface FolderModalViewProps {
   dragContext: 'outer' | 'folder' | null
   selectionMode: boolean
   selectedSet: Set<string>
+  hiddenItemIds: Set<string>
   onToggleSelectIcon: (key: string) => void
   folderPanelRef: RefObject<HTMLDivElement | null>
   folderGridContainerRef: RefObject<HTMLDivElement | null>
@@ -53,6 +54,7 @@ export function FolderModalView({
   dragContext,
   selectionMode,
   selectedSet,
+  hiddenItemIds,
   onToggleSelectIcon,
   folderPanelRef,
   folderGridContainerRef,
@@ -241,6 +243,7 @@ export function FolderModalView({
 
                     const item = folderItemById.get(entry)
                     if (!item) return null
+                    const hiddenItem = hiddenItemIds.has(entry)
 
                     return (
                       <div
@@ -249,7 +252,9 @@ export function FolderModalView({
                           bindFolderTileRef(entry, node)
                         }}
                         data-folder-grid-item
-                        className="relative touch-none"
+                        className={`relative touch-none transition-opacity duration-150 ${
+                          hiddenItem ? 'pointer-events-none opacity-0' : 'opacity-100'
+                        }`}
                         onPointerDown={event =>
                           onFolderTilePointerDown(event, openFolder.id, entry)
                         }

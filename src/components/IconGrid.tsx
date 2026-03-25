@@ -39,7 +39,7 @@ import { DragOverlays } from './icon-grid/views/DragOverlays'
 import { OuterGridView } from './icon-grid/views/OuterGridView'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
 import { DockBar } from './icon-grid/views/DockBar'
-import { getFolderChildrenById } from './icon-grid/domain/folderPolicy'
+import { getFolderChildSelectionsByIds } from './icon-grid/domain/folderPolicy'
 
 interface IconGridProps {
   icons: DesktopIcon[]
@@ -384,62 +384,71 @@ export function IconGrid({ icons }: IconGridProps) {
     openFolderId,
     setOpenFolderId,
   })
+  const activeDragIdSet = useMemo(() => new Set(dragState?.draggingIds ?? []), [dragState])
   const folderRenderOrder =
     dragState && dragState.context === 'folder' ? dragState.workingOrder : folderOrder
-  const hiddenDockDraggingId =
-    dragState?.draggingId && activeDockKeys.includes(dragState.draggingId)
-      ? dragState.draggingId
-      : null
+  const hiddenDockDraggingIds = useMemo(
+    () =>
+      activeDockKeys.filter(
+        (key): key is string => typeof key === 'string' && activeDragIdSet.has(key)
+      ),
+    [activeDockKeys, activeDragIdSet]
+  )
   const dockWorkingOrder =
-    dragState?.context === 'dock' && hiddenDockDraggingId
+    dragState?.context === 'dock' && hiddenDockDraggingIds.length > 0
       ? dragState.workingOrder.map(slot => (slot === DRAG_HOLE_ID ? null : slot))
       : null
   const dockRenderSlots = useMemo(
     () =>
       resolveDockDisplaySlots({
         dockKeys: activeDockKeys,
-        draggingKey: hiddenDockDraggingId,
+        draggingKeys: hiddenDockDraggingIds,
         previewIndex: dragState?.context === 'dock' ? (dragState.dockPreviewIndex ?? null) : null,
         workingOrder: dockWorkingOrder,
         showPlaceholderWhenEmpty: true,
       }),
-    [
-      activeDockKeys,
-      hiddenDockDraggingId,
-      dragState?.context,
-      dragState?.dockPreviewIndex,
-      dockWorkingOrder,
-    ]
+    [activeDockKeys, hiddenDockDraggingIds, dragState?.context, dragState?.dockPreviewIndex, dockWorkingOrder]
+  )
+
+  const draggedFolderChildSelections = useMemo(
+    () =>
+      dragState
+        ? getFolderChildSelectionsByIds(items, dragState.draggingIds)
+        : new Map<string, IconItem[]>(),
+    [dragState, items]
   )
 
   const outerViewItemById = useMemo(() => {
-    if (!dragState || dragState.context !== 'outer' || !dragState.sourceFolderId) {
+    if (!dragState || draggedFolderChildSelections.size === 0) {
       return itemById
     }
     const draggingIconIdSet = new Set(dragState.draggingIds)
     if (draggingIconIdSet.size === 0) return itemById
 
-    const sourceFolderEntryId = `folder:${dragState.sourceFolderId}`
-    const sourceFolder = itemById.get(sourceFolderEntryId)
-    if (!sourceFolder || sourceFolder.kind !== 'folder') return itemById
-
-    const nextChildren = sourceFolder.children.filter(child => !draggingIconIdSet.has(child.key))
     const next = new Map(itemById)
-    if (nextChildren.length === 0) {
-      next.delete(sourceFolderEntryId)
-      return next
-    }
-    next.set(sourceFolderEntryId, { ...sourceFolder, children: nextChildren })
+    draggedFolderChildSelections.forEach((_children, folderId) => {
+      const folderEntryId = `folder:${folderId}`
+      const folder = next.get(folderEntryId)
+      if (!folder || folder.kind !== 'folder') return
+
+      const nextChildren = folder.children.filter(child => !draggingIconIdSet.has(child.key))
+      if (nextChildren.length === 0) {
+        next.delete(folderEntryId)
+        return
+      }
+      next.set(folderEntryId, { ...folder, children: nextChildren })
+    })
     return next
-  }, [itemById, dragState])
+  }, [dragState, draggedFolderChildSelections, itemById])
 
   const renderOrder = useMemo(() => {
     if (dragState?.context === 'outer') {
       return dragState.workingOrder
     }
     const baseOrder = frozenOuterOrder ?? outerSlots
-    if (dragState?.context === 'dock' && dragState.draggingId) {
-      return baseOrder.map(slot => (slot === dragState.draggingId ? null : slot))
+    if (dragState?.context === 'dock' && dragState.draggingIds.length > 0) {
+      const dragIdSet = new Set(dragState.draggingIds)
+      return baseOrder.map(slot => (slot && dragIdSet.has(slot) ? null : slot))
     }
     return baseOrder
   }, [dragState, frozenOuterOrder, outerSlots])
@@ -986,25 +995,35 @@ export function IconGrid({ icons }: IconGridProps) {
   const gridWidth = columns * itemWidth + Math.max(0, columns - 1) * GRID_GAP
   const gridHeight = rows * itemHeight + Math.max(0, rows - 1) * GRID_GAP
   const ghostItem = dragState ? dragState.draggingItem : null
-  const activeHiddenDragIds = useMemo(
-    () => (dragState?.context === 'outer' ? dragState.draggingIds : []),
-    [dragState]
-  )
+  const activeHiddenDragIds = useMemo(() => {
+    if (!dragState) {
+      return []
+    }
+    const outerItemIdSet = new Set(outerItemIds)
+    return dragState.draggingIds.filter(id => outerItemIdSet.has(id))
+  }, [dragState, outerItemIds])
   const mergedHiddenOuterItemIds = useMemo(
     () => Array.from(new Set([...hiddenOuterItemIds, ...activeHiddenDragIds])),
     [activeHiddenDragIds, hiddenOuterItemIds]
   )
+  const hiddenFolderItemIds = useMemo(() => {
+    if (!openFolder || !dragState) {
+      return new Set<string>()
+    }
+    const openFolderChildIdSet = new Set(openFolder.children.map(child => child.key))
+    return new Set(dragState.draggingIds.filter(id => openFolderChildIdSet.has(id)))
+  }, [dragState, openFolder])
   const multiDragStackItems = useMemo(() => {
-    if (!dragState || dragState.context !== 'outer' || dragState.draggingIds.length <= 1) {
+    if (!dragState || dragState.draggingIds.length <= 1 || dragState.draggingItem.kind !== 'icon') {
       return []
     }
 
     const dragItemById = new Map(itemById)
-    if (dragState.sourceFolderId) {
-      getFolderChildrenById(items, dragState.sourceFolderId).forEach(child => {
+    draggedFolderChildSelections.forEach(children => {
+      children.forEach(child => {
         dragItemById.set(child.key, child)
       })
-    }
+    })
 
     return dragState.draggingIds.slice(1).flatMap(id => {
       const item = dragItemById.get(id)
@@ -1014,7 +1033,7 @@ export function IconGrid({ icons }: IconGridProps) {
       }
       return [{ id, icon: item.icon, sourceCenter }]
     })
-  }, [dragState, itemById, items])
+  }, [dragState, draggedFolderChildSelections, itemById])
   const canGoLeft = currentPage > 0
   const canGoRight = currentPage < pageCount - 1
 
@@ -1096,7 +1115,7 @@ export function IconGrid({ icons }: IconGridProps) {
         {dockEnabled ? (
           <DockBar
             displaySlots={dockRenderSlots}
-            itemById={itemById}
+            itemById={outerViewItemById}
             dockPreviewIndex={dragState?.dockPreviewIndex ?? null}
             dragContext={dragState?.context ?? null}
             dragFolderPreviewTargetId={dragState?.folderPreviewTargetId ?? null}
@@ -1107,6 +1126,8 @@ export function IconGrid({ icons }: IconGridProps) {
             iconTileWidth={itemWidth}
             iconTileHeight={itemHeight}
             selectionMode={selectionMode}
+            selectedSet={selectedSet}
+            onToggleSelectIcon={toggleSelectIcon}
             openFolderId={openFolderId}
             activeFolderSharedLayoutId={activeFolderSharedLayoutId}
             bindDockContainerRef={node => {
@@ -1142,6 +1163,7 @@ export function IconGrid({ icons }: IconGridProps) {
           dragContext={dragState?.context === 'dock' ? null : (dragState?.context ?? null)}
           selectionMode={selectionMode}
           selectedSet={selectedSet}
+          hiddenItemIds={hiddenFolderItemIds}
           onToggleSelectIcon={toggleSelectIcon}
           folderPanelRef={folderPanelRef}
           folderGridContainerRef={folderGridContainerRef}

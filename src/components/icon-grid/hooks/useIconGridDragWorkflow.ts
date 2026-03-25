@@ -11,7 +11,7 @@ import type { EvasionDirection, GridItem, IconItem } from '../model'
 import { getGridItemSpan, getId } from '../model'
 import { DRAG_HOLE_ID, areSlotsEqual } from '../domain/slots'
 import { moveDragHoleToIndex } from '../domain/evasionPolicy'
-import { getFolderChildrenById } from '../domain/folderPolicy'
+import { getFolderChildSelectionsByIds, getFolderChildrenById } from '../domain/folderPolicy'
 import { clampNumber, classifyZone } from '../domain/geometry'
 import {
   applyOuterEvasionPolicy,
@@ -296,6 +296,21 @@ export function useIconGridDragWorkflow({
     return centers
   }
 
+  const seedMissingInitialCentersFromTopLevelRefs = (
+    initialCenters: Record<string, { x: number; y: number }>,
+    draggingIds: string[]
+  ) => {
+    const topLevelCenters = {
+      ...collectCenters(tileRefs.current),
+      ...collectCenters(dockItemRefs.current),
+    }
+    draggingIds.forEach(id => {
+      if (!initialCenters[id] && topLevelCenters[id]) {
+        initialCenters[id] = topLevelCenters[id]
+      }
+    })
+  }
+
   const getFolderMapById = (folderId: string | null, baseItems: GridItem[]) => {
     const map = new Map<string, IconItem>()
     if (!folderId) return map
@@ -313,12 +328,21 @@ export function useIconGridDragWorkflow({
     return itemsRef.current.filter(item => outerItemIdSet.has(getId(item)))
   }
 
-  const resolveDockItemOrder = (draggingId: string | null = null): string[] =>
-    getDockItemKeys(dockKeysRef.current, draggingId)
+  const resolveDockItemOrder = (draggingIds: string[] = []): string[] =>
+    getDockItemKeys(dockKeysRef.current, draggingIds)
   const isDraggingFromDock = (draggingId: string): boolean =>
     dockKeysRef.current.includes(draggingId)
 
   const resolveSelectedOuterDragIds = (sourceOrder: Array<string | null>, leadId: string) =>
+    sourceOrder.filter((slot): slot is string => {
+      if (!slot || slot === DRAG_HOLE_ID || slot === leadId) return false
+      const candidate = itemById.get(slot)
+      return Boolean(
+        candidate && candidate.kind === 'icon' && selectedIconKeySet.has(candidate.key)
+      )
+    })
+
+  const resolveSelectedDockDragIds = (sourceOrder: Array<string | null>, leadId: string) =>
     sourceOrder.filter((slot): slot is string => {
       if (!slot || slot === DRAG_HOLE_ID || slot === leadId) return false
       const candidate = itemById.get(slot)
@@ -412,7 +436,7 @@ export function useIconGridDragWorkflow({
   }: {
     preferredFolderId: string | null
     leadId: string
-  }): { folderId: string | null; ids: string[] } => {
+  }): string[] => {
     const folderIds: string[] = []
     if (preferredFolderId) {
       folderIds.push(preferredFolderId)
@@ -423,16 +447,20 @@ export function useIconGridDragWorkflow({
       folderIds.push(item.id)
     })
 
-    for (const folderId of folderIds) {
-      const ids = getFolderChildrenById(itemsRef.current, folderId)
+    const ordered: string[] = []
+    const seen = new Set<string>()
+    folderIds.forEach(folderId => {
+      getFolderChildrenById(itemsRef.current, folderId)
         .map(child => child.key)
         .filter(key => key !== leadId && selectedIconKeySet.has(key))
-      if (ids.length > 0) {
-        return { folderId, ids }
-      }
-    }
+        .forEach(id => {
+          if (seen.has(id)) return
+          seen.add(id)
+          ordered.push(id)
+        })
+    })
 
-    return { folderId: null, ids: [] }
+    return ordered
   }
 
   const resolveMixedSelectionDragIds = ({
@@ -452,10 +480,6 @@ export function useIconGridDragWorkflow({
       return [leadId]
     }
 
-    if (context === 'dock') {
-      return [leadId]
-    }
-
     const ordered: string[] = [leadId]
     const seen = new Set<string>(ordered)
     const pushIds = (ids: string[]) => {
@@ -466,40 +490,37 @@ export function useIconGridDragWorkflow({
       })
     }
 
+    const dockSelectedIds =
+      context === 'dock'
+        ? resolveSelectedDockDragIds(sourceOrder, leadId)
+        : resolveSelectedDockDragIds(resolveTopLevelOrder('dock'), leadId)
     const outerSelectedIds =
       context === 'outer'
         ? resolveOuterDragIds(sourceOrder, leadId).slice(1)
         : resolveSelectedOuterDragIds(resolveTopLevelOrder('outer'), leadId)
-    const folderSelection = resolveSelectedFolderDragIds({
+    const folderSelectedIds = resolveSelectedFolderDragIds({
       preferredFolderId: sourceFolderId ?? openFolderId,
       leadId,
     })
-    const folderSelectedIds = folderSelection.ids
 
     if (context === 'folder') {
+      pushIds(folderSelectedIds)
+      pushIds(dockSelectedIds)
+      pushIds(outerSelectedIds)
+      return ordered
+    }
+
+    if (context === 'dock') {
+      pushIds(dockSelectedIds)
       pushIds(folderSelectedIds)
       pushIds(outerSelectedIds)
       return ordered
     }
 
     pushIds(outerSelectedIds)
+    pushIds(dockSelectedIds)
     pushIds(folderSelectedIds)
     return ordered
-  }
-
-  const resolveSelectionSourceFolderId = (
-    draggingIds: string[],
-    fallbackFolderId: string | null
-  ) => {
-    if (fallbackFolderId) return fallbackFolderId
-    for (const item of itemsRef.current) {
-      if (item.kind !== 'folder') continue
-      const childIds = new Set(item.children.map(child => child.key))
-      if (draggingIds.some(id => childIds.has(id))) {
-        return item.id
-      }
-    }
-    return null
   }
 
   const resolveTopLevelOrder = (context: 'outer' | 'dock'): Array<string | null> =>
@@ -690,7 +711,7 @@ export function useIconGridDragWorkflow({
         if (!withinHorizontal || !withinVertical) return null
       }
 
-      const itemRects = resolveDockItemOrder(state.draggingId)
+      const itemRects = resolveDockItemOrder(state.draggingIds)
         .map((id, index) => ({
           index,
           rect: dockItemRefs.current.get(id)?.getBoundingClientRect() ?? null,
@@ -1133,15 +1154,13 @@ export function useIconGridDragWorkflow({
       sourceOrder,
       sourceFolderId: pending.sourceFolderId,
     })
-    const effectiveSourceFolderId = resolveSelectionSourceFolderId(
-      draggingIds,
-      pending.sourceFolderId
+    const selectedFolderChildrenByFolderId = getFolderChildSelectionsByIds(
+      itemsRef.current,
+      draggingIds
     )
-    const selectedFolderDragIds = effectiveSourceFolderId
-      ? getFolderChildrenById(itemsRef.current, effectiveSourceFolderId)
-          .map(child => child.key)
-          .filter(id => draggingIds.includes(id))
-      : []
+    const selectedFolderDragIds = Array.from(selectedFolderChildrenByFolderId.values()).flatMap(
+      children => children.map(child => child.key)
+    )
 
     const workingOrder: Array<string | null> = [...sourceOrder]
     if (pending.context === 'folder') {
@@ -1151,7 +1170,7 @@ export function useIconGridDragWorkflow({
     }
     const nextState: DragState = {
       context: pending.context,
-      sourceFolderId: effectiveSourceFolderId,
+      sourceFolderId: pending.sourceFolderId,
       pointerId: pending.pointerId,
       dragStartedAt: performance.now(),
       draggingId: pending.itemId,
@@ -1181,34 +1200,35 @@ export function useIconGridDragWorkflow({
             ? collectCenters(dockItemRefs.current)
             : collectCenters(tileRefs.current),
     }
+    seedMissingInitialCentersFromTopLevelRefs(nextState.initialCenters, draggingIds)
     if (pending.context !== 'folder' && selectedFolderDragIds.length > 0) {
       const folderCenters = collectCenters(folderTileRefs.current)
-      const folderTileNode =
-        effectiveSourceFolderId !== null
-          ? tileRefs.current.get(`folder:${effectiveSourceFolderId}`)
+      selectedFolderChildrenByFolderId.forEach((children, folderId) => {
+        const folderTileNode =
+          tileRefs.current.get(`folder:${folderId}`) ?? dockItemRefs.current.get(`folder:${folderId}`)
+        const folderTileRect = folderTileNode?.getBoundingClientRect() ?? null
+        const collapsedFolderCenter = folderTileRect
+          ? {
+              x: folderTileRect.left + folderTileRect.width / 2,
+              y: folderTileRect.top + folderTileRect.height / 2,
+            }
           : null
-      const folderTileRect = folderTileNode?.getBoundingClientRect() ?? null
-      const collapsedFolderCenter = folderTileRect
-        ? {
-            x: folderTileRect.left + folderTileRect.width / 2,
-            y: folderTileRect.top + folderTileRect.height / 2,
-          }
-        : null
-      selectedFolderDragIds.forEach(id => {
-        if (folderCenters[id]) {
-          nextState.initialCenters[id] = folderCenters[id]
-          return
-        }
-        if (!collapsedFolderCenter) return
-
         const stackOffset = Math.min(10, Math.max(4, Math.round(iconConfig.imgSize * 0.14)))
-        const index = selectedFolderDragIds.indexOf(id)
-        const columnOffset = (index % 2) - 0.5
-        const rowOffset = Math.floor(index / 2)
-        nextState.initialCenters[id] = {
-          x: collapsedFolderCenter.x + columnOffset * stackOffset * 2,
-          y: collapsedFolderCenter.y + rowOffset * stackOffset - stackOffset / 2,
-        }
+
+        children.forEach((child, index) => {
+          if (folderCenters[child.key]) {
+            nextState.initialCenters[child.key] = folderCenters[child.key]
+            return
+          }
+          if (!collapsedFolderCenter) return
+
+          const columnOffset = (index % 2) - 0.5
+          const rowOffset = Math.floor(index / 2)
+          nextState.initialCenters[child.key] = {
+            x: collapsedFolderCenter.x + columnOffset * stackOffset * 2,
+            y: collapsedFolderCenter.y + rowOffset * stackOffset - stackOffset / 2,
+          }
+        })
       })
       setOpenFolderId(null)
     }
@@ -1256,11 +1276,11 @@ export function useIconGridDragWorkflow({
     }
 
     if (baseState.context !== 'folder') {
-      const isMultiOuterDrag = baseState.context === 'outer' && baseState.draggingIds.length > 1
-      const topLevelContext = isMultiOuterDrag ? 'outer' : resolveTopLevelContextAtPoint(x, y)
-      if (!isMultiOuterDrag && baseState.context !== topLevelContext) {
+      const topLevelContext = resolveTopLevelContextAtPoint(x, y)
+      if (baseState.context !== topLevelContext) {
         baseState = moveDragToTopLevelContext(baseState, topLevelContext, x, y)
       }
+      const isMultiOuterDrag = baseState.context === 'outer' && baseState.draggingIds.length > 1
 
       if (baseState.context === 'outer') {
         maybeHandleOuterEdgeSwitch(baseState, x, y)
@@ -1279,6 +1299,7 @@ export function useIconGridDragWorkflow({
         overlapHit = null
       }
       const draggingFromDock = isDraggingFromDock(baseState.draggingId)
+      const isMultiDockDrag = baseState.context === 'dock' && baseState.draggingIds.length > 1
 
       if (!overlapHit) {
         clearOuterDwellTimer()
@@ -1309,6 +1330,7 @@ export function useIconGridDragWorkflow({
           baseState.dockPreviewIndex ?? nearestSlotIndex ?? overlapHit.targetIndex
 
         const canCreateFolder =
+          !isMultiDockDrag &&
           source.kind === 'icon' &&
           target.kind === 'icon' &&
           overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
@@ -1348,6 +1370,7 @@ export function useIconGridDragWorkflow({
       if (baseState.context === 'dock' && draggingFromDock) {
         clearOuterDwellTimer()
         const canFolderPreview =
+          !isMultiDockDrag &&
           source.kind === 'icon' &&
           target.kind === 'icon' &&
           overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
@@ -1712,7 +1735,7 @@ export function useIconGridDragWorkflow({
   }
 
   const handleDockItemPointerDown = (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => {
-    if (selectionMode || event.button !== 0) return
+    if (event.button !== 0) return
     const rect = event.currentTarget.getBoundingClientRect()
     pendingRef.current = {
       context: 'dock',

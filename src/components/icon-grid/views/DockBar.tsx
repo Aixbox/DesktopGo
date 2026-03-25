@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react'
 import { motion } from 'framer-motion'
 import {
   useLayoutEffect,
@@ -39,6 +40,8 @@ interface DockBarProps {
   iconTileWidth: number
   iconTileHeight: number
   selectionMode: boolean
+  selectedSet: Set<string>
+  onToggleSelectIcon: (key: string) => void
   openFolderId: string | null
   activeFolderSharedLayoutId: string | null
   bindDockContainerRef: (node: HTMLDivElement | null) => void
@@ -123,6 +126,8 @@ export function DockBar({
   iconTileWidth,
   iconTileHeight,
   selectionMode,
+  selectedSet,
+  onToggleSelectIcon,
   openFolderId,
   activeFolderSharedLayoutId,
   bindDockContainerRef,
@@ -557,6 +562,7 @@ export function DockBar({
               const folderOpen = item?.kind === 'folder' && openFolderId === item.id
               const sharedLayoutActive =
                 item?.kind === 'folder' && activeFolderSharedLayoutId === item.id
+              const selectableIcon = item?.kind === 'icon'
 
               return (
                 <div
@@ -592,13 +598,20 @@ export function DockBar({
                             title={item.kind === 'icon' ? item.icon.name : item.name}
                             className={`relative flex cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
                               selectionMode
-                                ? 'pointer-events-none'
+                                ? ''
                                 : 'hover:-translate-y-0.5 active:translate-y-0'
                             }`}
                             style={{ width: dockButtonSize, height: dockButtonSize }}
                             onClick={event => {
                               event.stopPropagation()
-                              if (selectionMode) return
+                              if (selectionMode) {
+                                if (item.kind === 'icon') {
+                                  onToggleSelectIcon(id)
+                                  return
+                                }
+                                onOpenFolder(item.id)
+                                return
+                              }
                               if (item.kind === 'icon') {
                                 onLaunchIcon(item.icon.path)
                                 return
@@ -606,6 +619,17 @@ export function DockBar({
                               onOpenFolder(item.id)
                             }}
                           >
+                            {selectionMode && selectableIcon ? (
+                              <span
+                                className={`absolute right-0.5 top-0.5 z-10 flex h-4 w-4 items-center justify-center rounded-full border text-xs ${
+                                  selectedSet.has(id)
+                                    ? 'border-blue-500 bg-blue-500 text-white'
+                                    : 'border-white/60 bg-black/30 text-transparent'
+                                }`}
+                              >
+                                {selectedSet.has(id) ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+                              </span>
+                            ) : null}
                             {item.kind === 'icon' ? (
                               <>
                                 <div

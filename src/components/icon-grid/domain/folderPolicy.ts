@@ -10,6 +10,35 @@ export const getFolderChildrenById = (items: GridItem[], folderId: string): Icon
   return item && item.kind === 'folder' ? item.children : []
 }
 
+export const findFolderIdContainingChild = (items: GridItem[], iconId: string): string | null => {
+  for (const item of items) {
+    if (item.kind !== 'folder') continue
+    if (item.children.some(child => child.key === iconId)) {
+      return item.id
+    }
+  }
+  return null
+}
+
+export const getFolderChildSelectionsByIds = (
+  items: GridItem[],
+  iconIds: string[]
+): Map<string, IconItem[]> => {
+  const iconIdSet = new Set(iconIds)
+  const selectedByFolder = new Map<string, IconItem[]>()
+  if (iconIdSet.size === 0) return selectedByFolder
+
+  items.forEach(item => {
+    if (item.kind !== 'folder') return
+    const selectedChildren = item.children.filter(child => iconIdSet.has(child.key))
+    if (selectedChildren.length > 0) {
+      selectedByFolder.set(item.id, selectedChildren)
+    }
+  })
+
+  return selectedByFolder
+}
+
 interface ReplaceFolderChildrenOptions {
   collapseSingleChild?: boolean
 }

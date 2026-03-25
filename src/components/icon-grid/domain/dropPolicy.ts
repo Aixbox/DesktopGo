@@ -674,6 +674,7 @@ export const applyMultiOuterDropFromSession = ({
   pageSize,
   columns = 1,
   resolveNearestSlotIndexByContext,
+  mode = 'paged',
 }: ApplyOuterDropFromSessionParams): { items: GridItem[]; slots: Array<string | null> } => {
   const safePageSize = Math.max(1, pageSize)
   const dragIds = session.draggingIds
@@ -683,7 +684,7 @@ export const applyMultiOuterDropFromSession = ({
       session,
       pageSize,
       resolveNearestSlotIndexByContext,
-      mode: 'paged',
+      mode,
     })
   }
 
@@ -701,6 +702,15 @@ export const applyMultiOuterDropFromSession = ({
 
   if (candidateDropIndex === null || candidateDropIndex < 0) {
     return { items: base, slots: nextSlots }
+  }
+
+  const prioritizedItems = prioritizeDraggedItems(base, dragIds)
+
+  if (mode === 'linear') {
+    const compactSlots = nextSlots.filter((slot): slot is string => typeof slot === 'string')
+    const dropIndex = clampNumber(candidateDropIndex, 0, compactSlots.length)
+    compactSlots.splice(dropIndex, 0, ...dragIds)
+    return { items: prioritizedItems, slots: compactSlots }
   }
 
   const dropIndex = clampNumber(candidateDropIndex, 0, Number.MAX_SAFE_INTEGER)
@@ -730,7 +740,6 @@ export const applyMultiOuterDropFromSession = ({
     stabilizedSlots.push(...Array.from({ length: safePageSize - remainder }, () => null))
   }
 
-  const prioritizedItems = prioritizeDraggedItems(base, dragIds)
   const normalizedSlots = normalizeOuterSlots(
     stabilizedSlots,
     prioritizedItems,

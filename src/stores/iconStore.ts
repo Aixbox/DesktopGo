@@ -13,6 +13,9 @@ import { getSetting, setSetting } from '../lib/settingsStore'
 export const buildIconSelectionKey = (icon: Pick<DesktopIcon, 'id' | 'source'>): string =>
   `${icon.source}:${icon.id}`
 
+const resolveSelectableIconKeySet = (icons: DesktopIcon[]) =>
+  new Set(icons.map(icon => buildIconSelectionKey(icon)))
+
 interface IconStore {
   icons: DesktopIcon[]
   loading: boolean
@@ -115,15 +118,20 @@ export const useIconStore = create<IconStore>((set, get) => ({
 
   enterSelectionMode: (initialKey?: string) => {
     set(state => {
+      const selectableKeySet = resolveSelectableIconKeySet(state.icons)
+      const selectedIconKeys = state.selectedIconKeys.filter(key => selectableKeySet.has(key))
       if (!initialKey) {
-        return { selectionMode: true }
+        return { selectionMode: true, selectedIconKeys }
       }
-      if (state.selectedIconKeys.includes(initialKey)) {
-        return { selectionMode: true }
+      if (!selectableKeySet.has(initialKey)) {
+        return { selectionMode: true, selectedIconKeys }
+      }
+      if (selectedIconKeys.includes(initialKey)) {
+        return { selectionMode: true, selectedIconKeys }
       }
       return {
         selectionMode: true,
-        selectedIconKeys: [...state.selectedIconKeys, initialKey],
+        selectedIconKeys: [...selectedIconKeys, initialKey],
       }
     })
   },
@@ -133,10 +141,19 @@ export const useIconStore = create<IconStore>((set, get) => ({
       if (!state.selectionMode) {
         return {}
       }
-      const selected = state.selectedIconKeys.includes(key)
+      const selectableKeySet = resolveSelectableIconKeySet(state.icons)
+      const selectedIconKeys = state.selectedIconKeys.filter(currentKey =>
+        selectableKeySet.has(currentKey)
+      )
+      if (!selectableKeySet.has(key)) {
+        return {
+          selectedIconKeys,
+        }
+      }
+      const selected = selectedIconKeys.includes(key)
       const nextSelectedKeys = selected
-        ? state.selectedIconKeys.filter(currentKey => currentKey !== key)
-        : [...state.selectedIconKeys, key]
+        ? selectedIconKeys.filter(currentKey => currentKey !== key)
+        : [...selectedIconKeys, key]
 
       return {
         selectedIconKeys: nextSelectedKeys,

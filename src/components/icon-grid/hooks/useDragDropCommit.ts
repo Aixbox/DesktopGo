@@ -12,6 +12,8 @@ import { compactEmptyPages, DRAG_HOLE_ID } from '../domain/slots'
 import { moveDragHoleToIndex } from '../domain/evasionPolicy'
 import {
   finalizeFolderExtractionInTopLevelLayout,
+  findFolderIdContainingChild,
+  getFolderChildSelectionsByIds,
   getFolderChildrenById,
   replaceFolderChildren,
 } from '../domain/folderPolicy'
@@ -120,7 +122,7 @@ export function useDragDropCommit({
   }
 
   const resolveSourceTopLevelContext = (session: DragState): 'outer' | 'dock' | null => {
-    if (session.sourceFolderId) return null
+    if (findFolderIdContainingChild(itemsRef.current, session.draggingId)) return null
     return dockKeysRef.current.includes(session.draggingId) ? 'dock' : 'outer'
   }
 
@@ -129,23 +131,33 @@ export function useDragDropCommit({
     return items.filter(item => idSet.has(getId(item)))
   }
 
-  const extractDraggedIconFromSourceFolder = (base: GridItem[], session: DragState): GridItem[] => {
-    if (!session.sourceFolderId) return base
-    const children = getFolderChildrenById(base, session.sourceFolderId)
-    if (children.length === 0) return base
+  const extractDraggedIconsFromSourceFolders = (
+    base: GridItem[],
+    session: DragState
+  ): GridItem[] => {
+    const draggedIds = session.draggingIds.length > 0 ? session.draggingIds : [session.draggingId]
+    const selectedChildrenByFolderId = getFolderChildSelectionsByIds(base, draggedIds)
+    if (selectedChildrenByFolderId.size === 0) return base
 
-    const draggedIdSet = new Set(
-      session.draggingIds.length > 0 ? session.draggingIds : [session.draggingId]
-    )
-    const extractedChildren = children.filter(child => draggedIdSet.has(child.key))
-    if (extractedChildren.length === 0) return base
-
-    const nextChildren = children.filter(child => !draggedIdSet.has(child.key))
-    const nextBase = replaceFolderChildren(base, session.sourceFolderId, nextChildren, {
-      collapseSingleChild: false,
+    let nextBase = base
+    const extractedById = new Map<string, IconItem>()
+    selectedChildrenByFolderId.forEach((children, folderId) => {
+      children.forEach(child => {
+        extractedById.set(child.key, child)
+      })
+      const draggedIdSet = new Set(children.map(child => child.key))
+      const nextChildren = getFolderChildrenById(nextBase, folderId).filter(
+        child => !draggedIdSet.has(child.key)
+      )
+      nextBase = replaceFolderChildren(nextBase, folderId, nextChildren, {
+        collapseSingleChild: false,
+      })
     })
+
     const existingIds = new Set(nextBase.map(getId))
-    const extractedItems = extractedChildren.filter(child => !existingIds.has(child.key))
+    const extractedItems = Array.from(extractedById.values()).filter(
+      child => !existingIds.has(child.key)
+    )
     if (extractedItems.length === 0) {
       return nextBase
     }
@@ -193,19 +205,36 @@ export function useDragDropCommit({
       return
     }
 
-    const sourceTopLevelContext = resolveSourceTopLevelContext(session)
-    let nextOuterSlots = targetContext === 'outer' ? result.slots : originalOuterSlots
+    const draggedDockIdSet = new Set(
+      session.draggingIds.filter(id => originalDockKeys.includes(id))
+    )
+    const nextOuterSlots = targetContext === 'outer' ? result.slots : originalOuterSlots
     let nextDockKeys = targetContext === 'dock' ? [...result.slots] : [...originalDockKeys]
-    if (sourceTopLevelContext === 'dock' && targetContext !== 'dock') {
-      nextDockKeys = nextDockKeys.map(key => (key === session.draggingId ? null : key))
+    if (targetContext !== 'dock' && draggedDockIdSet.size > 0) {
+      nextDockKeys = nextDockKeys.map(key =>
+        typeof key === 'string' && draggedDockIdSet.has(key) ? null : key
+      )
     }
 
-    const finalized = finalizeFolderExtractionInTopLevelLayout(
-      result.items,
-      nextOuterSlots,
-      nextDockKeys,
-      session.sourceFolderId
+    const draggedFolderIds: string[] = Array.from(
+      getFolderChildSelectionsByIds(
+        originalItems,
+        session.draggingIds.length > 0 ? session.draggingIds : [session.draggingId]
+      ).keys()
     )
+    let finalized = {
+      items: result.items,
+      outerSlots: nextOuterSlots,
+      dockKeys: nextDockKeys,
+    }
+    draggedFolderIds.forEach(folderId => {
+      finalized = finalizeFolderExtractionInTopLevelLayout(
+        finalized.items,
+        finalized.outerSlots,
+        finalized.dockKeys,
+        folderId
+      )
+    })
     commitLayouts(finalized.items, finalized.outerSlots, finalized.dockKeys)
   }
 
@@ -438,8 +467,8 @@ export function useDragDropCommit({
         return replaceFolderChildren(base, current.sourceFolderId, nextChildren)
       })
     } else {
-      const isMultiOuterDrag = current.context === 'outer' && current.draggingIds.length > 1
-      const targetContext: 'outer' | 'dock' = isMultiOuterDrag ? 'outer' : current.context
+      const isMultiTopLevelDrag = current.draggingIds.length > 1
+      const targetContext: 'outer' | 'dock' = current.context
       const topLevelMap = new Map<string, GridItem>()
       itemsRef.current.forEach(item => topLevelMap.set(getId(item), item))
       const source = current.draggingItem
@@ -478,7 +507,7 @@ export function useDragDropCommit({
       const originalItems = itemsRef.current
       const originalOuterSlots = outerSlotsRef.current
       const originalDockKeys = dockKeysRef.current
-      const baseForDrop = extractDraggedIconFromSourceFolder(originalItems, current)
+      const baseForDrop = extractDraggedIconsFromSourceFolders(originalItems, current)
 
       if (canAddToExistingFolder) {
         setFolderPreviewFreezeTargetId(null)
@@ -498,28 +527,34 @@ export function useDragDropCommit({
           targetContext,
           result
         )
-      } else if (isMultiOuterDrag) {
+      } else if (isMultiTopLevelDrag) {
         setFolderPreviewFreezeTargetId(null)
         scheduleFolderCreateTransition(null)
-        setHiddenOuterItemIds(current.draggingIds)
         setFrozenOuterOrder(null)
+        if (targetContext === 'outer') {
+          setHiddenOuterItemIds(current.draggingIds)
+        } else {
+          setHiddenOuterItemIds([])
+        }
         const result = applyMultiOuterDropFromSession({
           base: baseForDrop,
           session: current,
           pageSize: pageSizeRef.current,
           columns,
           resolveNearestSlotIndexByContext,
-          mode: 'paged',
+          mode: targetContext === 'dock' ? 'linear' : 'paged',
         })
         commitTopLevelSessionResult(
           current,
           originalItems,
           originalOuterSlots,
           originalDockKeys,
-          'outer',
+          targetContext,
           result
         )
-        scheduleMultiDropFlight(current)
+        if (targetContext === 'outer') {
+          scheduleMultiDropFlight(current)
+        }
       } else if (canCreateFolder) {
         const targetId = current.folderPreviewTargetId as string
         const sourceItem = source.kind === 'icon' ? source : null

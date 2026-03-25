@@ -28,21 +28,37 @@ export const resolveOuterItemIds = (
   return itemIds.filter(id => !dockSet.has(id))
 }
 
-const compactDockKeys = (dockKeys: Array<string | null>, draggingKey: string | null): string[] =>
-  dockKeys.filter((key): key is string => typeof key === 'string' && key !== draggingKey)
+const normalizeDraggingKeySet = (
+  draggingKeys: string | string[] | null | undefined
+): Set<string> => {
+  if (Array.isArray(draggingKeys)) {
+    return new Set(draggingKeys.filter((key): key is string => typeof key === 'string'))
+  }
+  return typeof draggingKeys === 'string' ? new Set([draggingKeys]) : new Set()
+}
+
+const compactDockKeys = (
+  dockKeys: Array<string | null>,
+  draggingKeys: string | string[] | null
+): string[] => {
+  const draggingKeySet = normalizeDraggingKeySet(draggingKeys)
+  return dockKeys.filter(
+    (key): key is string => typeof key === 'string' && !draggingKeySet.has(key)
+  )
+}
 
 export const getDockItemKeys = (
   dockKeys: Array<string | null>,
-  draggingKey: string | null = null
-): string[] => compactDockKeys(dockKeys, draggingKey)
+  draggingKeys: string | string[] | null = null
+): string[] => compactDockKeys(dockKeys, draggingKeys)
 
 export const getDockRenderSlots = (
   dockKeys: Array<string | null>,
-  draggingKey: string | null,
+  draggingKeys: string | string[] | null,
   previewIndex: number | null,
   options?: { showPlaceholderWhenEmpty?: boolean }
 ): Array<string | null> => {
-  const compact = compactDockKeys(dockKeys, draggingKey)
+  const compact = compactDockKeys(dockKeys, draggingKeys)
   const showPlaceholderWhenEmpty = options?.showPlaceholderWhenEmpty ?? true
 
   if (previewIndex !== null) {
@@ -61,7 +77,7 @@ export const getDockRenderSlots = (
 
 interface ResolveDockDisplaySlotsParams {
   dockKeys: Array<string | null>
-  draggingKey: string | null
+  draggingKeys: string[]
   previewIndex: number | null
   workingOrder?: Array<string | null> | null
   showPlaceholderWhenEmpty?: boolean
@@ -69,11 +85,12 @@ interface ResolveDockDisplaySlotsParams {
 
 export const resolveDockDisplaySlots = ({
   dockKeys,
-  draggingKey,
+  draggingKeys,
   previewIndex,
   workingOrder,
   showPlaceholderWhenEmpty = true,
 }: ResolveDockDisplaySlotsParams): Array<string | null> => {
+  const draggingKeySet = normalizeDraggingKeySet(draggingKeys)
   if (workingOrder && workingOrder.length > 0) {
     const consumed = new Set<string>()
     const next: Array<string | null> = []
@@ -83,17 +100,22 @@ export const resolveDockDisplaySlots = ({
         next.push(null)
         return
       }
-      if (slot === draggingKey || consumed.has(slot)) return
+      if (draggingKeySet.has(slot) || consumed.has(slot)) return
       next.push(slot)
       consumed.add(slot)
     })
+
+    if (previewIndex !== null && !next.includes(null)) {
+      const insertIndex = Math.max(0, Math.min(previewIndex, next.length))
+      next.splice(insertIndex, 0, null)
+    }
 
     if (next.length > 0) {
       return next
     }
   }
 
-  return getDockRenderSlots(dockKeys, draggingKey, previewIndex, {
+  return getDockRenderSlots(dockKeys, draggingKeys, previewIndex, {
     showPlaceholderWhenEmpty,
   })
 }
