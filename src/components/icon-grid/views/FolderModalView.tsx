@@ -1,8 +1,11 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import type {
-  MouseEvent as ReactMouseEvent,
-  PointerEvent as ReactPointerEvent,
-  RefObject,
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
 } from 'react'
 import { Icon } from '../../Icon'
 import { DRAG_HOLE_ID } from '../domain/slots'
@@ -33,6 +36,7 @@ interface FolderModalViewProps {
   onPanelPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void
   onPanelClick: (event: ReactMouseEvent<HTMLDivElement>) => void
   onClose: () => void
+  onRenameFolder: (folderId: string, name: string) => void
   onFolderTilePointerDown: (
     event: ReactPointerEvent<HTMLDivElement>,
     folderId: string,
@@ -63,6 +67,7 @@ export function FolderModalView({
   onPanelPointerDown,
   onPanelClick,
   onClose,
+  onRenameFolder,
   onFolderTilePointerDown,
   onTileClickCapture,
   maxModalWidth,
@@ -80,6 +85,26 @@ export function FolderModalView({
       ? getFolderSharedLayoutId(openFolder.id)
       : undefined
 
+  const [editing, setEditing] = useState(false)
+  const [editName, setEditName] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [editing])
+
+  const commitRename = () => {
+    if (!openFolder) return
+    const trimmed = editName.trim()
+    if (trimmed && trimmed !== openFolder.name) {
+      onRenameFolder(openFolder.id, trimmed)
+    }
+    setEditing(false)
+  }
+
   return (
     <AnimatePresence initial={false}>
       {openFolder ? (
@@ -96,38 +121,87 @@ export function FolderModalView({
             event.stopPropagation()
           }}
         >
-          <motion.div
-            layoutId={sharedLayoutId}
-            transition={prefersReducedMotion ? { duration: 0 } : FOLDER_SHARED_LAYOUT_TRANSITION}
-            data-icon
-            ref={folderPanelRef}
-            className="relative overflow-hidden rounded-3xl border border-white/15 bg-black/55 p-5 shadow-[0_24px_56px_rgba(0,0,0,0.5)] backdrop-blur-xl will-change-[transform,border-radius]"
-            style={{
-              width: `min(92vw, ${maxModalWidth}px)`,
-              maxHeight: `min(80vh, ${maxModalHeight}px)`,
-            }}
-            onPointerDown={onPanelPointerDown}
-            onClick={onPanelClick}
-          >
+          {/* Wrapper for title + close + panel */}
+          <div className="relative flex flex-col items-center">
+            {/* Title bar - name centered, X button right-aligned, same width as panel */}
             <motion.div
-              initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 14, scale: 0.985 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.99 }}
+              initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
               transition={contentTransition}
-              className="flex max-h-full flex-col"
+              className="mb-2 flex items-center"
+              style={{ width: `min(92vw, ${maxModalWidth}px)` }}
+              onPointerDown={e => e.stopPropagation()}
             >
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h3 className="truncate text-sm font-medium text-white/90" title={openFolder.name}>
-                  {openFolder.name}
-                </h3>
-                <button
-                  type="button"
-                  className="rounded-full border border-white/25 px-3 py-1 text-xs text-white/85 transition-colors hover:bg-white/15"
-                  onClick={onClose}
-                >
-                  Close
-                </button>
+              {/* Spacer to balance the X button */}
+              <div className="w-6" />
+              {/* Folder name - centered */}
+              <div className="flex flex-1 justify-center">
+                {editing ? (
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    onBlur={commitRename}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') commitRename()
+                      if (e.key === 'Escape') setEditing(false)
+                    }}
+                    className="rounded-md border border-white/25 bg-black/50 px-3 py-1 text-center text-sm font-medium text-white/90 outline-none backdrop-blur-sm focus:border-white/40"
+                    style={{ minWidth: '80px', maxWidth: '240px' }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="truncate rounded-md px-3 py-1 text-sm font-medium text-white/90 transition-colors hover:bg-white/10"
+                    style={{ maxWidth: '240px' }}
+                    title={openFolder.name}
+                    onClick={() => {
+                      setEditName(openFolder.name)
+                      setEditing(true)
+                    }}
+                  >
+                    {openFolder.name}
+                  </button>
+                )}
               </div>
+              {/* Close X button */}
+              <button
+                type="button"
+                className="flex h-6 w-6 items-center justify-center rounded-full bg-white/15 text-white/80 transition-colors hover:bg-white/25 hover:text-white"
+                onClick={e => {
+                  e.stopPropagation()
+                  onClose()
+                }}
+                onPointerDown={e => e.stopPropagation()}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                  <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
+                </svg>
+              </button>
+            </motion.div>
+
+            <motion.div
+              layoutId={sharedLayoutId}
+              transition={prefersReducedMotion ? { duration: 0 } : FOLDER_SHARED_LAYOUT_TRANSITION}
+              data-icon
+              ref={folderPanelRef}
+              className="relative overflow-hidden rounded-3xl border border-white/15 bg-black/55 p-5 shadow-[0_24px_56px_rgba(0,0,0,0.5)] backdrop-blur-xl will-change-[transform,border-radius]"
+              style={{
+                width: `min(92vw, ${maxModalWidth}px)`,
+                maxHeight: `min(80vh, ${maxModalHeight}px)`,
+              }}
+              onPointerDown={onPanelPointerDown}
+              onClick={onPanelClick}
+            >
+              <motion.div
+                initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 14, scale: 0.985 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.99 }}
+                transition={contentTransition}
+                className="flex max-h-full flex-col"
+              >
 
               <div
                 ref={folderGridContainerRef}
@@ -189,6 +263,7 @@ export function FolderModalView({
               </div>
             </motion.div>
           </motion.div>
+          </div>
         </motion.div>
       ) : null}
     </AnimatePresence>

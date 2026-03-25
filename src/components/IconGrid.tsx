@@ -1165,6 +1165,13 @@ export function IconGrid({ icons }: IconGridProps) {
             event.stopPropagation()
           }}
           onClose={closeFolderWithAnimation}
+          onRenameFolder={(folderId, name) => {
+            const nextItems = itemsRef.current.map(item =>
+              item.kind === 'folder' && item.id === folderId ? { ...item, name } : item
+            )
+            itemsRef.current = nextItems
+            setItems(nextItems)
+          }}
           onFolderTilePointerDown={handleFolderTilePointerDown}
           onTileClickCapture={handleTileClickCapture}
           maxModalWidth={FOLDER_MODAL_MAX_WIDTH}
