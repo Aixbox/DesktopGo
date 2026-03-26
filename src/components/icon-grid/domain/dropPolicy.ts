@@ -1,9 +1,9 @@
 import type { FolderItem, GridItem } from '../model'
-import { getId, makeFolderId } from '../model'
+import { getGridItemSpan, getId, makeFolderId } from '../model'
 import { clampNumber } from './geometry'
 import { DRAG_HOLE_ID, getManhattanDistanceBySlotIndex } from './slots'
 import type { DragState } from '../state/types'
-import { normalizeOuterSlots } from './topLevelLayout'
+import { canPlaceItemAtAnchorIndex, normalizeOuterSlots } from './topLevelLayout'
 
 export const applyFolderCreateFromSession = (
   base: GridItem[],
@@ -668,6 +668,95 @@ const stabilizeMultiDropPage = ({
   return nextSlots
 }
 
+const backfillDisplacedCurrentPageItems = ({
+  sourceSlots,
+  slots,
+  items,
+  pageStart,
+  pageSize,
+  columns,
+  dragIds,
+}: {
+  sourceSlots: Array<string | null>
+  slots: Array<string | null>
+  items: GridItem[]
+  pageStart: number
+  pageSize: number
+  columns: number
+  dragIds: string[]
+}) => {
+  const pageEnd = pageStart + pageSize
+  const dragIdSet = new Set(dragIds)
+  const currentPageIdSet = new Set(
+    slots
+      .slice(pageStart, pageEnd)
+      .filter((id): id is string => typeof id === 'string' && !dragIdSet.has(id))
+  )
+  const candidateIds = sourceSlots
+    .slice(pageStart, pageEnd)
+    .filter(
+      (id): id is string =>
+        typeof id === 'string' && !dragIdSet.has(id) && !currentPageIdSet.has(id)
+    )
+  if (candidateIds.length === 0) {
+    return slots
+  }
+
+  const itemById = new Map<string, GridItem>()
+  items.forEach(item => itemById.set(getId(item), item))
+  const nextSlots = [...slots]
+
+  const findBestAnchorIndex = (itemId: string, originIndex: number) => {
+    const item = itemById.get(itemId)
+    if (!item) return null
+
+    const span = getGridItemSpan(item)
+    let bestAnchorIndex: number | null = null
+    let bestScore: [number, number, number] | null = null
+
+    for (let anchorIndex = pageStart; anchorIndex < pageEnd; anchorIndex += 1) {
+      if (!canPlaceItemAtAnchorIndex(nextSlots, items, anchorIndex, span, columns, pageSize)) {
+        continue
+      }
+
+      const score: [number, number, number] = [
+        getManhattanDistanceBySlotIndex(originIndex, anchorIndex, pageStart, columns),
+        Math.abs(anchorIndex - originIndex),
+        anchorIndex,
+      ]
+      if (
+        !bestScore ||
+        score[0] < bestScore[0] ||
+        (score[0] === bestScore[0] && score[1] < bestScore[1]) ||
+        (score[0] === bestScore[0] && score[1] === bestScore[1] && score[2] < bestScore[2])
+      ) {
+        bestAnchorIndex = anchorIndex
+        bestScore = score
+      }
+    }
+
+    return bestAnchorIndex
+  }
+
+  candidateIds.forEach(itemId => {
+    const currentIndex = nextSlots.indexOf(itemId)
+    if (currentIndex < pageEnd) return
+
+    const sourceIndex = sourceSlots.indexOf(itemId)
+    const originIndex = sourceIndex >= pageStart && sourceIndex < pageEnd ? sourceIndex : currentIndex
+    const anchorIndex = findBestAnchorIndex(itemId, originIndex)
+    if (anchorIndex === null) return
+
+    if (currentIndex >= 0) {
+      nextSlots[currentIndex] = null
+    }
+    nextSlots[anchorIndex] = itemId
+    currentPageIdSet.add(itemId)
+  })
+
+  return nextSlots
+}
+
 export const applyMultiOuterDropFromSession = ({
   base,
   session,
@@ -731,17 +820,26 @@ export const applyMultiOuterDropFromSession = ({
     pageSize: safePageSize,
     dragIds,
   })
+  const backfilledSlots = backfillDisplacedCurrentPageItems({
+    sourceSlots: nextSlots,
+    slots: stabilizedSlots,
+    items: prioritizedItems,
+    pageStart,
+    pageSize: safePageSize,
+    columns,
+    dragIds,
+  })
 
-  if (stabilizedSlots.length === 0) {
-    stabilizedSlots.push(...Array.from({ length: safePageSize }, () => null))
+  if (backfilledSlots.length === 0) {
+    backfilledSlots.push(...Array.from({ length: safePageSize }, () => null))
   }
-  const remainder = stabilizedSlots.length % safePageSize
+  const remainder = backfilledSlots.length % safePageSize
   if (remainder > 0) {
-    stabilizedSlots.push(...Array.from({ length: safePageSize - remainder }, () => null))
+    backfilledSlots.push(...Array.from({ length: safePageSize - remainder }, () => null))
   }
 
   const normalizedSlots = normalizeOuterSlots(
-    stabilizedSlots,
+    backfilledSlots,
     prioritizedItems,
     safePageSize,
     columns
@@ -749,3 +847,4 @@ export const applyMultiOuterDropFromSession = ({
 
   return { items: prioritizedItems, slots: normalizedSlots }
 }
+
