@@ -13,6 +13,7 @@ import {
   resetLaunchpadLayout,
 } from '@/components/icon-grid/services/layoutStore'
 import { UpdatePanel } from '@/components/settings/UpdatePanel'
+import { Logo, LogoText } from '@/components/Logo'
 import { SearchSettingsPanel } from '@/components/search/SearchSettingsPanel'
 import { Button } from '@/components/ui/button'
 import type {
@@ -1136,9 +1137,7 @@ function AboutPanel() {
 
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-3">
-                <h2 className="text-3xl font-semibold tracking-tight text-foreground">
-                  {appInfo.name}
-                </h2>
+                <Logo iconSize={36} textSize="lg" />
                 <span className="rounded-full border border-border bg-background/80 px-3 py-1 font-mono text-xs text-muted-foreground">
                   v{appInfo.version}
                 </span>
@@ -1152,7 +1151,7 @@ function AboutPanel() {
 
           <div className="grid gap-3 sm:grid-cols-2 xl:w-[24rem]">
             <div className="rounded-2xl border border-border bg-background/80 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">DesktopGo</p>
+              <LogoText size="sm" />
               <p className="mt-2 text-base font-medium text-foreground">本地优先</p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 没有账号系统；主要设置、布局和搜索配置都保存在本地环境。
@@ -1397,7 +1396,7 @@ export function Settings() {
           onDoubleClick={handleToggleMaximizeWindow}
           className="flex min-w-0 flex-1 items-center gap-3 cursor-grab active:cursor-grabbing"
         >
-          <p className="shrink-0 text-sm font-semibold">DesktopGo</p>
+          <Logo iconSize={20} textSize="sm" className="shrink-0" />
           <span className="h-1 w-1 shrink-0 rounded-full bg-muted-foreground/60" />
           <p className="truncate text-sm text-muted-foreground">设置 / {activeNavItem.label}</p>
         </div>
