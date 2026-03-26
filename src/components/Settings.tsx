@@ -10,6 +10,7 @@ import {
   LAUNCHPAD_LAYOUT_RESET_EVENT,
   resetLaunchpadLayout,
 } from '@/components/icon-grid/services/layoutStore'
+import { UpdatePanel } from '@/components/settings/UpdatePanel'
 import { SearchSettingsPanel } from '@/components/search/SearchSettingsPanel'
 import type {
   IconManagerItem,
@@ -544,14 +545,6 @@ function SettingsPanel() {
         </div>
       </div>
     </>
-  )
-}
-
-function UpdatePanel() {
-  return (
-    <div className="flex h-full items-center justify-center">
-      <p className="text-sm text-muted-foreground">暂无更新内容</p>
-    </div>
   )
 }
 

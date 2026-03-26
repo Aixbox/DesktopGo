@@ -3,11 +3,13 @@ mod everything;
 mod icons;
 mod layout_db;
 mod search_preview;
+mod updater;
 
 use commands::{
-    delete_desktop_icons, get_default_customapp_dir, get_desktop_icons, get_icon_manager_items,
-    get_layout_payload, get_layout_payloads, get_search_preview, get_search_runtime_status,
-    hide_desktop_icons, launch_app, record_search_result_run, search_files, set_layout_payload,
+    check_for_app_update, delete_desktop_icons, get_default_customapp_dir, get_desktop_icons,
+    get_icon_manager_items, get_layout_payload, get_layout_payloads, get_search_preview,
+    get_search_runtime_status, get_updater_configuration_status, hide_desktop_icons,
+    install_app_update, launch_app, record_search_result_run, search_files, set_layout_payload,
     set_layout_payloads, set_window_mode, start_search_runtime, sync_full_customapp_icons,
     sync_full_desktop_icons, sync_new_customapp_icons, sync_new_desktop_icons, toggle_window,
     unhide_desktop_icons,
@@ -19,12 +21,18 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .manage(updater::PendingUpdate::default());
+
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+
+    builder
         .setup(|app| {
             let show_item = MenuItem::with_id(app, "show", "显示启动台", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
@@ -86,7 +94,10 @@ pub fn run() {
             get_search_runtime_status,
             search_files,
             get_search_preview,
-            record_search_result_run
+            record_search_result_run,
+            get_updater_configuration_status,
+            check_for_app_update,
+            install_app_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

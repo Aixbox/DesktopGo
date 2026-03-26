@@ -33,6 +33,10 @@ dirs = "6"
 rusqlite = { version = "0.32", features = ["bundled"] }
 libloading = "0.8"
 once_cell = "1.20"
+url = "2"
+
+[target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
+tauri-plugin-updater = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
