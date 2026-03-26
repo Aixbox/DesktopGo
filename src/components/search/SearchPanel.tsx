@@ -1,5 +1,5 @@
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { SearchHistoryEntry } from '@/lib/search/history'
 import { parseEverythingHighlightedText } from '@/lib/search/highlight'
 import type { SearchHit, SearchPreview, SearchSort } from '@/lib/search/types'
@@ -416,7 +416,7 @@ export function SearchPanel({
         : 'icons-empty'
       : 'icons-idle'
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!visible) return
 
     const element = bodyContentRef.current
@@ -641,58 +641,68 @@ export function SearchPanel({
   return (
     <div
       data-search-placeholder
-      className="absolute left-1/2 top-[4.6rem] z-30 w-full max-w-2xl -translate-x-1/2 px-6"
+      className="absolute inset-x-0 top-[4.6rem] z-30 mx-auto w-full max-w-2xl px-6"
     >
       <AnimatePresence initial={false}>
         {visible ? (
           <motion.div
             key="search-panel"
-            initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: -12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+            initial={{ opacity: 1 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={panelTransition}
-            className="pointer-events-auto overflow-hidden rounded-2xl border border-white/15 bg-black/70 shadow-2xl backdrop-blur-xl will-change-[opacity,transform]"
+            className="pointer-events-auto relative overflow-hidden rounded-2xl shadow-2xl will-change-opacity"
           >
-            <div className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-2">
-              <div className="min-w-0 flex-1">
-                <SearchSourceTabs source={source} onChange={onSourceChange} />
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 rounded-2xl border border-white/15 bg-black/70 backdrop-blur-xl"
+            />
+            <div className="relative z-10">
+              <div className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <SearchSourceTabs source={source} onChange={onSourceChange} />
+                </div>
+
+                {isEverything ? (
+                  <div className="shrink-0">
+                    <SearchToolbar
+                      matchPath={matchPath}
+                      onMatchPathChange={onMatchPathChange}
+                      matchCase={matchCase}
+                      onMatchCaseChange={onMatchCaseChange}
+                      regex={regex}
+                      onRegexChange={onRegexChange}
+                      wholeWord={wholeWord}
+                      onWholeWordChange={onWholeWordChange}
+                      sort={sort}
+                      onSortChange={onSortChange}
+                      previewVisible={previewVisible}
+                      onPreviewToggle={onPreviewToggle}
+                    />
+                  </div>
+                ) : null}
               </div>
 
-              {isEverything ? (
-                <div className="shrink-0">
-                  <SearchToolbar
-                    matchPath={matchPath}
-                    onMatchPathChange={onMatchPathChange}
-                    matchCase={matchCase}
-                    onMatchCaseChange={onMatchCaseChange}
-                    regex={regex}
-                    onRegexChange={onRegexChange}
-                    wholeWord={wholeWord}
-                    onWholeWordChange={onWholeWordChange}
-                    sort={sort}
-                    onSortChange={onSortChange}
-                    previewVisible={previewVisible}
-                    onPreviewToggle={onPreviewToggle}
-                  />
-                </div>
-              ) : null}
+              {prefersReducedMotion ? (
+                bodyContent
+              ) : (
+                <motion.div
+                  initial={false}
+                  animate={{ height: bodyHeight }}
+                  transition={panelTransition}
+                  className="overflow-hidden"
+                >
+                  {bodyContent}
+                </motion.div>
+              )}
             </div>
-
-            {prefersReducedMotion ? (
-              bodyContent
-            ) : (
-              <motion.div
-                initial={false}
-                animate={{ height: bodyHeight }}
-                transition={panelTransition}
-                className="overflow-hidden"
-              >
-                {bodyContent}
-              </motion.div>
-            )}
           </motion.div>
         ) : null}
       </AnimatePresence>
     </div>
   )
 }
+
+
+
+

@@ -1,4 +1,4 @@
-import {
+﻿import {
   useCallback,
   useEffect,
   useMemo,
@@ -646,7 +646,7 @@ export function Launchpad() {
         >
           <div
             data-search-placeholder
-            className="absolute left-1/2 top-6 z-40 w-full max-w-2xl -translate-x-1/2 px-6"
+            className="absolute inset-x-0 top-6 z-40 mx-auto w-full max-w-2xl px-6"
           >
             <div className="relative min-w-0" ref={filterMenuRef}>
               <input
@@ -871,3 +871,4 @@ export function Launchpad() {
     </ContextMenu>
   )
 }
+
