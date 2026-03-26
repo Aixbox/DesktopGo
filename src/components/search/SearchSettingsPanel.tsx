@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { SEARCH_FILTERS } from '@/lib/search/filters'
 import {
   DEFAULT_SEARCH_SETTINGS,
@@ -22,6 +22,11 @@ interface ToggleRowProps {
   checked: boolean
   onChange: (next: boolean) => void
 }
+
+const secondaryButtonClassName =
+  'rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60'
+const fieldClassName =
+  'rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-blue-500'
 
 function SettingCard({ label, desc, children }: SettingCardProps) {
   return (
@@ -48,15 +53,13 @@ function SwitchButton({
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition ${
-        checked
-          ? 'border-foreground/15 bg-foreground'
-          : 'border-border bg-background/80 hover:border-foreground/20'
+      className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 ${
+        checked ? 'border-blue-500 bg-blue-500/90' : 'border-border bg-zinc-500/30'
       }`}
     >
       <span
-        className={`pointer-events-none inline-block h-4.5 w-4.5 rounded-full shadow-sm transition ${
-          checked ? 'translate-x-[22px] bg-background' : 'translate-x-[3px] bg-foreground/75'
+        className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+          checked ? 'translate-x-6' : 'translate-x-1'
         }`}
       />
     </button>
@@ -135,7 +138,7 @@ export function SearchSettingsPanel() {
         <button
           type="button"
           onClick={() => void resetDefaults()}
-          className="rounded-full border border-border bg-background px-4 py-2 text-sm transition hover:bg-accent"
+          className={secondaryButtonClassName}
         >
           恢复默认
         </button>
@@ -175,7 +178,7 @@ export function SearchSettingsPanel() {
             max={500}
             value={settings.debounceMs}
             onChange={event => void updateSetting('debounceMs', Number(event.target.value))}
-            className="w-32 rounded-full border border-border bg-background px-3 py-1.5 text-sm"
+            className={`w-32 ${fieldClassName}`}
           />
         </SettingCard>
       </section>
@@ -188,7 +191,7 @@ export function SearchSettingsPanel() {
             onChange={event =>
               void updateSetting('defaultFilter', event.target.value as SearchDefaultFilter)
             }
-            className="w-full max-w-xs rounded-full border border-border bg-background px-3 py-2 text-sm"
+            className={`w-full max-w-xs ${fieldClassName}`}
           >
             {SEARCH_FILTERS.map(option => (
               <option key={option.value} value={option.value}>
@@ -202,7 +205,7 @@ export function SearchSettingsPanel() {
           <select
             value={settings.sortBy}
             onChange={event => void updateSetting('sortBy', event.target.value as SearchSort)}
-            className="w-full max-w-sm rounded-full border border-border bg-background px-3 py-2 text-sm"
+            className={`w-full max-w-sm ${fieldClassName}`}
           >
             {SEARCH_SORT_OPTIONS.map(option => (
               <option key={option.value} value={option.value}>
@@ -219,7 +222,7 @@ export function SearchSettingsPanel() {
             max={200}
             value={settings.maxResultsPerPage}
             onChange={event => void updateSetting('maxResultsPerPage', Number(event.target.value))}
-            className="w-32 rounded-full border border-border bg-background px-3 py-1.5 text-sm"
+            className={`w-32 ${fieldClassName}`}
           />
         </SettingCard>
 
