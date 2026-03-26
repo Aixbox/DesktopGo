@@ -273,10 +273,12 @@ export function UpdatePanel() {
             <p className="text-xs leading-5 text-muted-foreground">{statusText}</p>
             {!configStatus?.configured ? (
               <div className="rounded-md border border-amber-500/30 bg-amber-500/8 px-3 py-2 text-xs leading-5 text-muted-foreground">
-                还缺少构建期变量：
-                <span className="font-medium text-foreground"> DESKTOPGO_UPDATER_PUBKEY </span>
+                还缺少 updater 配置。请在
+                <span className="font-medium text-foreground"> src-tauri/tauri.conf.json </span>
+                中设置
+                <span className="font-medium text-foreground"> plugins.updater.pubkey </span>
                 和
-                <span className="font-medium text-foreground"> DESKTOPGO_UPDATER_ENDPOINTS </span>
+                <span className="font-medium text-foreground"> plugins.updater.endpoints </span>
                 。正式发布时还需要
                 <span className="font-medium text-foreground"> TAURI_SIGNING_PRIVATE_KEY </span>
                 用于生成签名更新包。

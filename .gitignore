@@ -24,3 +24,4 @@ dist-ssr
 *.sw?
 
 updater-env.ps1
+build-script/

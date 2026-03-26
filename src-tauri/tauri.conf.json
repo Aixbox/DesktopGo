@@ -17,8 +17,10 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "",
-      "endpoints": [],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE5MkY4QkFCNUZBNjVEMDcKUldRSFhhWmZxNHN2R1hIRysxOUwxOFlCbEs3aS9KVVJMMXNFUXJKNzhHN3BXa2g3Ri9lckFrcDEK",
+      "endpoints": [
+        "https://github.com/Aixbox/DesktopGo/releases/latest/download/latest.json"
+      ],
       "windows": {
         "installMode": "passive"
       }

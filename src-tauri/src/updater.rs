@@ -3,14 +3,13 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
+use tauri::utils::config::PluginConfig;
 use tauri_plugin_updater::{Update, UpdaterExt};
 use url::Url;
 
 const UPDATE_TIMEOUT_SECONDS: u64 = 30;
 pub const UPDATE_PROGRESS_EVENT: &str = "desktopgo://updater-progress";
 
-const BUILD_UPDATER_PUBKEY: Option<&str> = option_env!("DESKTOPGO_UPDATER_PUBKEY");
-const BUILD_UPDATER_ENDPOINTS: Option<&str> = option_env!("DESKTOPGO_UPDATER_ENDPOINTS");
 const BUILD_UPDATER_TARGET: Option<&str> = option_env!("DESKTOPGO_UPDATER_TARGET");
 
 static INSTALL_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
@@ -79,7 +78,7 @@ pub fn get_updater_configuration_status(app_handle: AppHandle) -> UpdaterConfigu
     let current_version = app_handle.package_info().version.to_string();
     let target = resolved_target();
 
-    match resolve_build_config() {
+    match resolve_updater_config(&app_handle) {
         Ok(config) => match parse_endpoint_urls(&config.endpoints) {
             Ok(_) => UpdaterConfigurationStatus {
                 configured: true,
@@ -235,7 +234,7 @@ pub async fn install_app_update(
 }
 
 fn build_updater(app_handle: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
-    let config = resolve_build_config()?;
+    let config = resolve_updater_config(app_handle)?;
     let endpoints = parse_endpoint_urls(&config.endpoints)?;
     let before_exit_handle = app_handle.clone();
 
@@ -258,30 +257,31 @@ fn build_updater(app_handle: &AppHandle) -> Result<tauri_plugin_updater::Updater
         .map_err(|e| format!("更新器初始化失败：{e}"))
 }
 
-fn resolve_build_config() -> Result<UpdaterBuildConfig, String> {
-    let pubkey = read_build_value(BUILD_UPDATER_PUBKEY);
-    let endpoints = read_build_endpoints(BUILD_UPDATER_ENDPOINTS);
-    let target = read_build_value(BUILD_UPDATER_TARGET);
+fn resolve_updater_config(app_handle: &AppHandle) -> Result<UpdaterBuildConfig, String> {
+    let plugins = &app_handle.config().plugins;
+    let raw_config = read_updater_plugin_config(plugins)?;
+    let parsed_config = serde_json::from_value::<tauri_plugin_updater::Config>(raw_config)
+        .map_err(|error| format!("`src-tauri/tauri.conf.json` 中 updater 配置无效：{error}"))?;
 
-    let mut missing = Vec::new();
-    if pubkey.is_none() {
-        missing.push("DESKTOPGO_UPDATER_PUBKEY");
-    }
-    if endpoints.as_ref().map_or(true, Vec::is_empty) {
-        missing.push("DESKTOPGO_UPDATER_ENDPOINTS");
+    if parsed_config.pubkey.trim().is_empty() {
+        return Err("更新未配置。请在 `src-tauri/tauri.conf.json` 中设置 `plugins.updater.pubkey`。".into());
     }
 
-    if !missing.is_empty() {
-        return Err(format!(
-            "更新未配置。请在构建时注入 {}。",
-            missing.join(" 和 ")
-        ));
+    if parsed_config.endpoints.is_empty() {
+        return Err(
+            "更新未配置。请在 `src-tauri/tauri.conf.json` 中设置 `plugins.updater.endpoints`。"
+                .into(),
+        );
     }
 
     Ok(UpdaterBuildConfig {
-        pubkey: pubkey.unwrap_or_default(),
-        endpoints: endpoints.unwrap_or_default(),
-        target,
+        pubkey: parsed_config.pubkey,
+        endpoints: parsed_config
+            .endpoints
+            .iter()
+            .map(|endpoint| endpoint.as_str().to_string())
+            .collect(),
+        target: read_build_value(BUILD_UPDATER_TARGET),
     })
 }
 
@@ -298,31 +298,12 @@ fn read_build_value(raw: Option<&str>) -> Option<String> {
     Some(value)
 }
 
-fn read_build_endpoints(raw: Option<&str>) -> Option<Vec<String>> {
-    let value = read_build_value(raw)?;
-
-    if value.starts_with('[') {
-        let parsed = serde_json::from_str::<Vec<String>>(&value).ok()?;
-        let endpoints = parsed
-            .into_iter()
-            .map(|endpoint| endpoint.trim().to_string())
-            .filter(|endpoint| !endpoint.is_empty())
-            .collect::<Vec<_>>();
-        return if endpoints.is_empty() { None } else { Some(endpoints) };
-    }
-
-    let endpoints = value
-        .split(['\n', ';', ','])
-        .map(str::trim)
-        .filter(|endpoint| !endpoint.is_empty())
-        .map(ToOwned::to_owned)
-        .collect::<Vec<_>>();
-
-    if endpoints.is_empty() {
-        None
-    } else {
-        Some(endpoints)
-    }
+fn read_updater_plugin_config(plugins: &PluginConfig) -> Result<serde_json::Value, String> {
+    plugins
+        .0
+        .get("updater")
+        .cloned()
+        .ok_or_else(|| "更新未配置。请在 `src-tauri/tauri.conf.json` 中设置 `plugins.updater`。".into())
 }
 
 fn parse_endpoint_urls(endpoints: &[String]) -> Result<Vec<Url>, String> {
