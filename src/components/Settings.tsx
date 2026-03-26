@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { getIdentifier, getName, getTauriVersion, getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { useIconStore } from '@/stores/iconStore'
 import { applyTheme, saveTheme } from '@/lib/theme'
 import { getSetting, setSetting } from '@/lib/settingsStore'
@@ -12,6 +14,7 @@ import {
 } from '@/components/icon-grid/services/layoutStore'
 import { UpdatePanel } from '@/components/settings/UpdatePanel'
 import { SearchSettingsPanel } from '@/components/search/SearchSettingsPanel'
+import { Button } from '@/components/ui/button'
 import type {
   IconManagerItem,
   IconMutationTarget,
@@ -29,7 +32,14 @@ import {
   Search,
   Minus,
   Square,
+  Bug,
   Copy,
+  CopyCheck,
+  ExternalLink,
+  FileText,
+  Github,
+  Package2,
+  ShieldCheck,
   X,
 } from 'lucide-react'
 
@@ -66,6 +76,24 @@ const THEME_OPTIONS: { label: string; value: ThemeMode }[] = [
   { label: '深色模式', value: 'dark' },
   { label: '浅色模式', value: 'light' },
 ]
+
+type AboutAppInfo = {
+  name: string
+  version: string
+  identifier: string
+  tauriVersion: string
+}
+
+const ABOUT_APP_INFO_FALLBACK: AboutAppInfo = {
+  name: 'DesktopGo',
+  version: '0.1.0',
+  identifier: 'com.binuo.desktopgo',
+  tauriVersion: '2',
+}
+
+const ABOUT_REPOSITORY_URL = 'https://github.com/Aixbox/DesktopGo'
+const ABOUT_ISSUES_URL = `${ABOUT_REPOSITORY_URL}/issues`
+const ABOUT_RELEASES_URL = `${ABOUT_REPOSITORY_URL}/releases`
 
 type IconSyncAction =
   | 'desktopIncremental'
@@ -945,9 +973,321 @@ function IconManagerPanel() {
 }
 
 function AboutPanel() {
+  const [appInfo, setAppInfo] = useState<AboutAppInfo>(ABOUT_APP_INFO_FALLBACK)
+  const [statusText, setStatusText] = useState('正在读取应用信息...')
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    let disposed = false
+
+    void Promise.allSettled([getName(), getVersion(), getIdentifier(), getTauriVersion()])
+      .then(([nameResult, versionResult, identifierResult, tauriVersionResult]) => {
+        if (disposed) return
+
+        const nextAppInfo: AboutAppInfo = {
+          name: nameResult.status === 'fulfilled' ? nameResult.value : ABOUT_APP_INFO_FALLBACK.name,
+          version:
+            versionResult.status === 'fulfilled'
+              ? versionResult.value
+              : ABOUT_APP_INFO_FALLBACK.version,
+          identifier:
+            identifierResult.status === 'fulfilled'
+              ? identifierResult.value
+              : ABOUT_APP_INFO_FALLBACK.identifier,
+          tauriVersion:
+            tauriVersionResult.status === 'fulfilled'
+              ? tauriVersionResult.value
+              : ABOUT_APP_INFO_FALLBACK.tauriVersion,
+        }
+
+        setAppInfo(nextAppInfo)
+
+        const failedCount = [
+          nameResult,
+          versionResult,
+          identifierResult,
+          tauriVersionResult,
+        ].filter(result => result.status === 'rejected').length
+
+        setStatusText(
+          failedCount === 0
+            ? '版本、运行时与支持入口已准备好。'
+            : '部分应用信息未能读取，已使用当前项目的回退值。'
+        )
+      })
+      .catch(error => {
+        if (disposed) return
+        setStatusText(`读取应用信息失败：${String(error)}`)
+      })
+
+    return () => {
+      disposed = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!copied) return
+
+    const timeout = window.setTimeout(() => {
+      setCopied(false)
+    }, 1800)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [copied])
+
+  const openExternalLink = useCallback(async (url: string, label: string) => {
+    try {
+      await openUrl(url)
+      setStatusText(`已打开${label}。`)
+    } catch (error) {
+      setStatusText(`打开${label}失败：${String(error)}`)
+    }
+  }, [])
+
+  const handleCopyDiagnostic = useCallback(async () => {
+    if (!navigator.clipboard?.writeText) {
+      setStatusText('当前环境不支持复制诊断信息。')
+      return
+    }
+
+    const diagnosticText = [
+      `${appInfo.name} v${appInfo.version}`,
+      `Identifier: ${appInfo.identifier}`,
+      `Runtime: Tauri ${appInfo.tauriVersion}`,
+      'Search dependency: Installed Everything',
+      'Update channel: GitHub Releases latest.json',
+    ].join('\n')
+
+    try {
+      await navigator.clipboard.writeText(diagnosticText)
+      setCopied(true)
+      setStatusText('已复制版本与诊断信息。')
+    } catch (error) {
+      setStatusText(`复制诊断信息失败：${String(error)}`)
+    }
+  }, [appInfo])
+
+  const infoCards = [
+    {
+      label: '当前版本',
+      value: `v${appInfo.version}`,
+      hint: '用于定位发布说明与更新状态。',
+      mono: true,
+    },
+    {
+      label: '应用标识',
+      value: appInfo.identifier,
+      hint: '排查安装、权限或 updater 配置时会用到。',
+      mono: true,
+    },
+    {
+      label: '运行时',
+      value: `Tauri ${appInfo.tauriVersion}`,
+      hint: '当前桌面容器与应用壳版本。',
+      mono: false,
+    },
+    {
+      label: '技术栈',
+      value: 'React 19 · Vite 7 · Rust',
+      hint: '界面、构建与本地能力运行在同一桌面应用里。',
+      mono: false,
+    },
+  ]
+
+  const featureCards = [
+    {
+      title: '启动台',
+      description: '用统一入口承接桌面常用应用，适合键盘优先和快速唤起场景。',
+      meta: '全局快捷键 Ctrl + Space',
+    },
+    {
+      title: '文件搜索',
+      description: '搜索能力依赖已安装的 Everything，状态异常时会在设置页明确提示。',
+      meta: 'Installed Everything only',
+    },
+    {
+      title: '图标管理',
+      description: '支持桌面与 customapp 两套来源的增量/全量同步，并保留隐藏与整理能力。',
+      meta: '桌面 + customapp',
+    },
+    {
+      title: '应用更新',
+      description: '更新页读取 GitHub Releases 的 updater 清单，下载与安装过程可见。',
+      meta: 'GitHub Releases latest.json',
+    },
+  ]
+
   return (
-    <div className="flex h-full items-center justify-center">
-      <p className="text-sm text-muted-foreground">关于页面待完善</p>
+    <div className="space-y-8">
+      <section className="relative overflow-hidden rounded-[28px] border border-border bg-gradient-to-br from-background via-secondary/55 to-background px-6 py-6 shadow-sm">
+        <div className="pointer-events-none absolute inset-0 opacity-70">
+          <div className="absolute -right-12 top-0 h-36 w-36 rounded-full bg-blue-500/10 blur-3xl" />
+          <div className="absolute bottom-0 left-0 h-28 w-28 rounded-full bg-emerald-500/10 blur-3xl" />
+        </div>
+
+        <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-2xl space-y-4">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-background/80 px-3 py-1 text-xs font-medium text-muted-foreground">
+              <Info className="h-3.5 w-3.5" />
+              Desktop utility for launch, search, and desktop organization
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="text-3xl font-semibold tracking-tight text-foreground">
+                  {appInfo.name}
+                </h2>
+                <span className="rounded-full border border-border bg-background/80 px-3 py-1 font-mono text-xs text-muted-foreground">
+                  v{appInfo.version}
+                </span>
+              </div>
+              <p className="max-w-xl text-sm leading-6 text-muted-foreground">
+                DesktopGo 把桌面启动、文件搜索、图标整理和应用更新收进一个统一入口里。
+                关于页现在直接暴露版本、运行时和项目入口，方便你确认当前构建、提交反馈，或跳转查看发布记录。
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:w-[24rem]">
+            <div className="rounded-2xl border border-border bg-background/80 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">DesktopGo</p>
+              <p className="mt-2 text-base font-medium text-foreground">本地优先</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                没有账号系统；主要设置、布局和搜索配置都保存在本地环境。
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border bg-background/80 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Support</p>
+              <p className="mt-2 text-base font-medium text-foreground">反馈直达项目</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                仓库、Issue 和 Release 入口都放在这里，定位问题时不需要再找路径。
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {infoCards.map(card => (
+          <article
+            key={card.label}
+            className="rounded-2xl border border-border bg-secondary/25 p-4 transition-colors hover:bg-secondary/40"
+          >
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+              {card.label}
+            </p>
+            <p
+              className={`mt-3 text-base font-semibold text-foreground ${
+                card.mono ? 'break-all font-mono text-sm' : ''
+              }`}
+            >
+              {card.value}
+            </p>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">{card.hint}</p>
+          </article>
+        ))}
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
+        <div className="space-y-4 rounded-3xl border border-border bg-secondary/20 p-5">
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Capabilities</p>
+            <h3 className="text-lg font-semibold text-foreground">当前构建包含的核心能力</h3>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {featureCards.map(card => (
+              <article
+                key={card.title}
+                className="rounded-2xl border border-border bg-background/75 p-4 transition-colors hover:bg-background"
+              >
+                <p className="text-sm font-medium text-foreground">{card.title}</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{card.description}</p>
+                <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                  {card.meta}
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-4 rounded-3xl border border-border bg-secondary/20 p-5">
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Project Access
+            </p>
+            <h3 className="text-lg font-semibold text-foreground">仓库、发布和反馈入口</h3>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => void openExternalLink(ABOUT_REPOSITORY_URL, 'GitHub 仓库')}>
+              <Github className="h-4 w-4" />
+              GitHub 仓库
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => void openExternalLink(ABOUT_ISSUES_URL, '问题反馈')}
+            >
+              <Bug className="h-4 w-4" />
+              提交问题
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => void openExternalLink(ABOUT_RELEASES_URL, '发布说明')}
+            >
+              <FileText className="h-4 w-4" />
+              发布说明
+            </Button>
+            <Button variant="outline" onClick={() => void handleCopyDiagnostic()}>
+              {copied ? <CopyCheck className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copied ? '已复制' : '复制诊断'}
+            </Button>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-background/80 p-4">
+            <div className="flex items-start gap-3">
+              <Package2 className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium text-foreground">更新通道</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  当前 updater 设计为从 GitHub Releases 读取{' '}
+                  <span className="font-mono">latest.json</span> 并完成签名校验与安装流程。
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-background/80 p-4">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium text-foreground">诊断建议</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  提交问题前先复制上面的诊断信息，至少带上版本号、应用标识符和 Tauri 运行时版本。
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void openExternalLink(ABOUT_REPOSITORY_URL, '项目主页')}
+            className="group flex w-full items-center justify-between rounded-2xl border border-border bg-background/70 px-4 py-3 text-left transition-colors hover:bg-background"
+          >
+            <div>
+              <p className="text-sm font-medium text-foreground">项目主页</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {ABOUT_REPOSITORY_URL.replace('https://', '')}
+              </p>
+            </div>
+            <ExternalLink className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </button>
+        </div>
+      </section>
+
+      <p className="text-sm text-muted-foreground">{statusText}</p>
     </div>
   )
 }
