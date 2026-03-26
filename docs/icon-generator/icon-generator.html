@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>DesktopGo Icon Generator</title>
+<style>
+  body { background: #1a1a2e; color: #e2e2e8; font-family: system-ui; display: flex; flex-direction: column; align-items: center; padding: 40px; gap: 24px; }
+  h1 { font-size: 18px; font-weight: 600; }
+  .sizes { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
+  .card { background: #222; border-radius: 12px; padding: 16px; text-align: center; }
+  .card canvas { display: block; margin: 0 auto 8px; }
+  .card p { font-size: 12px; color: #888; }
+  button { background: #6366f1; color: #fff; border: none; padding: 10px 24px; border-radius: 8px; cursor: pointer; font-size: 14px; margin-top: 8px; }
+  button:hover { background: #4f46e5; }
+  .note { color: #666; font-size: 13px; max-width: 600px; text-align: center; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<h1>DesktopGo Icon Generator</h1>
+<p class="note">
+  点击每个尺寸下方的按钮下载 PNG。下载后将文件放入 <code>src-tauri/icons/</code> 目录替换同名文件。<br>
+  ICO 和 ICNS 格式请使用在线工具（如 icoconvert.com）从 256x256 PNG 转换。
+</p>
+
+<div class="sizes" id="sizes"></div>
+
+<script>
+const SIZES = [
+  { w: 32,  h: 32,  name: '32x32.png' },
+  { w: 128, h: 128, name: '128x128.png' },
+  { w: 256, h: 256, name: '128x128@2x.png' },
+  { w: 30,  h: 30,  name: 'Square30x30Logo.png' },
+  { w: 44,  h: 44,  name: 'Square44x44Logo.png' },
+  { w: 71,  h: 71,  name: 'Square71x71Logo.png' },
+  { w: 89,  h: 89,  name: 'Square89x89Logo.png' },
+  { w: 107, h: 107, name: 'Square107x107Logo.png' },
+  { w: 142, h: 142, name: 'Square142x142Logo.png' },
+  { w: 150, h: 150, name: 'Square150x150Logo.png' },
+  { w: 284, h: 284, name: 'Square284x284Logo.png' },
+  { w: 310, h: 310, name: 'Square310x310Logo.png' },
+  { w: 50,  h: 50,  name: 'StoreLogo.png' },
+  { w: 512, h: 512, name: 'icon-512.png (for icns/ico source)' },
+];
+
+function drawIcon(ctx, s) {
+  const r = s * 0.25;
+  const p = s * 0.2;
+  const g = s * 0.1;
+  const bw = (s - 2 * p - g) / 2;
+  const br = s * 0.075;
+  const bdr = Math.max(1, s * 0.025);
+
+  // Dark background base
+  ctx.beginPath();
+  roundRect(ctx, 0, 0, s, s, r);
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fill();
+
+  // Background fill
+  ctx.beginPath();
+  roundRect(ctx, 0, 0, s, s, r);
+  const grad = ctx.createLinearGradient(0, 0, s, s);
+  grad.addColorStop(0, 'rgba(100, 100, 180, 0.25)');
+  grad.addColorStop(1, 'rgba(60, 60, 120, 0.15)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Background border — use evenodd to only fill the ring
+  ctx.beginPath();
+  roundRect(ctx, 0, 0, s, s, r);
+  roundRect(ctx, bdr, bdr, s - 2 * bdr, s - 2 * bdr, Math.max(0, r - bdr));
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fill('evenodd');
+
+  const positions = [
+    [p, p],
+    [p + bw + g, p],
+    [p, p + bw + g],
+    [p + bw + g, p + bw + g],
+  ];
+
+  positions.forEach(([x, y], i) => {
+    // Border ring via evenodd
+    ctx.beginPath();
+    roundRect(ctx, x, y, bw, bw, br);
+    roundRect(ctx, x + bdr, y + bdr, bw - 2 * bdr, bw - 2 * bdr, Math.max(0, br - bdr));
+    ctx.fillStyle = i === 0 ? '#a78bfa' : 'rgba(255, 255, 255, 0.6)';
+    ctx.fill('evenodd');
+
+    // Fill inside for the active (first) cell only
+    if (i === 0) {
+      ctx.beginPath();
+      roundRect(ctx, x + bdr, y + bdr, bw - 2 * bdr, bw - 2 * bdr, Math.max(0, br - bdr));
+      ctx.fillStyle = 'rgba(167, 139, 250, 0.6)';
+      ctx.fill();
+    }
+  });
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+const container = document.getElementById('sizes');
+
+SIZES.forEach(({ w, h, name }) => {
+  const card = document.createElement('div');
+  card.className = 'card';
+
+  // 用 4x 超采样绘制，消除圆角锯齿
+  const scale = 4;
+  const canvas = document.createElement('canvas');
+  const displaySize = Math.min(w, 128);
+  canvas.width = w * scale;
+  canvas.height = h * scale;
+  canvas.style.width = displaySize + 'px';
+  canvas.style.height = displaySize + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
+  drawIcon(ctx, w);
+
+  // 创建目标尺寸的 canvas 用于导出
+  const outCanvas = document.createElement('canvas');
+  outCanvas.width = w;
+  outCanvas.height = h;
+  const outCtx = outCanvas.getContext('2d');
+  outCtx.imageSmoothingEnabled = true;
+  outCtx.imageSmoothingQuality = 'high';
+  outCtx.drawImage(canvas, 0, 0, w, h);
+
+  const label = document.createElement('p');
+  label.textContent = `${w}x${h} — ${name}`;
+
+  const btn = document.createElement('button');
+  btn.textContent = '下载';
+  btn.onclick = () => {
+    const a = document.createElement('a');
+    a.download = name.includes('(') ? 'icon-512.png' : name;
+    a.href = outCanvas.toDataURL('image/png');
+    a.click();
+  };
+
+  card.appendChild(canvas);
+  card.appendChild(label);
+  card.appendChild(btn);
+  container.appendChild(card);
+});
+</script>
+</body>
+</html>
