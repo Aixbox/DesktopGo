@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+﻿import { invoke } from '@tauri-apps/api/core'
 import type { SearchSort } from './types'
 
 export type SearchDefaultFilter =
@@ -85,6 +85,16 @@ const BOOLEAN_KEYS: Array<keyof SearchSettings> = [
   'rememberLastFilter',
   'autoStartRuntime',
 ]
+
+interface LayoutPayloadRecord {
+  key: string
+  payload: string | null
+}
+
+interface LayoutPayloadWrite {
+  key: string
+  payload: string
+}
 
 const asErrorMessage = (error: unknown) => {
   if (typeof error === 'string') return error
@@ -174,47 +184,85 @@ const normalizeValue = <K extends keyof SearchSettings>(
   return fallback
 }
 
-const readRawSetting = async (key: string): Promise<unknown | null> => {
-  const raw = await invoke<string | null>('get_layout_payload', { key })
-  if (!raw) return null
+const parsePayload = (payload: string | null): unknown | null => {
+  if (!payload) return null
   try {
-    return JSON.parse(raw) as unknown
+    return JSON.parse(payload) as unknown
   } catch {
     return null
   }
 }
 
-const writeRawSetting = async (key: string, value: unknown): Promise<void> => {
-  await invoke('set_layout_payload', {
-    key,
-    payload: JSON.stringify(value),
+const readRawSettings = async (keys: string[]): Promise<Map<string, unknown | null>> => {
+  const records = await invoke<LayoutPayloadRecord[]>('get_layout_payloads', { keys })
+  const values = new Map<string, unknown | null>()
+  records.forEach(record => {
+    values.set(record.key, parsePayload(record.payload))
   })
+  return values
+}
+
+const dedupeWrites = (writes: Array<[string, unknown]>) => {
+  const deduped = new Map<string, unknown>()
+  writes.forEach(([key, value]) => {
+    deduped.set(key, value)
+  })
+  return Array.from(deduped.entries())
+}
+
+const writeRawSettings = async (writes: Array<[string, unknown]>): Promise<void> => {
+  const deduped = dedupeWrites(writes)
+  if (deduped.length === 0) {
+    return
+  }
+
+  await invoke('set_layout_payloads', {
+    entries: deduped.map<LayoutPayloadWrite>(([key, value]) => ({
+      key,
+      payload: JSON.stringify(value),
+    })),
+  })
+}
+
+const readRawSetting = async (key: string): Promise<unknown | null> => {
+  const values = await readRawSettings([key])
+  return values.get(key) ?? null
+}
+
+const writeRawSetting = async (key: string, value: unknown): Promise<void> => {
+  await writeRawSettings([[key, value]])
 }
 
 const shouldMigrateToToolbarDefaults = (settings: SearchSettings) =>
   settings.maxResultsPerPage === LEGACY_SEARCH_DEFAULTS.maxResultsPerPage &&
   settings.sortBy === LEGACY_SEARCH_DEFAULTS.sortBy
 
-export const loadSearchSettings = async (): Promise<SearchSettings> => {
-  const entries = await Promise.all(
-    (Object.keys(SEARCH_SETTING_KEYS) as Array<keyof SearchSettings>).map(async key => {
-      const storageKey = SEARCH_SETTING_KEYS[key]
-      const raw = await readRawSetting(storageKey)
-      const fallback = DEFAULT_SEARCH_SETTINGS[key]
-      const normalized = normalizeValue(key, raw, fallback)
-      if (raw === null) {
-        await writeRawSetting(storageKey, normalized)
-      }
-      return [key, normalized] as const
-    })
-  )
+const shouldRewriteNormalizedValue = (raw: unknown | null, normalized: unknown) => {
+  if (raw === null) return true
+  return JSON.stringify(raw) !== JSON.stringify(normalized)
+}
 
+export const loadSearchSettings = async (): Promise<SearchSettings> => {
   const settings: SearchSettings = { ...DEFAULT_SEARCH_SETTINGS }
-  for (const [key, value] of entries) {
-    ;(settings as unknown as Record<string, unknown>)[key] = value
+  const storageKeys = [
+    ...(Object.values(SEARCH_SETTING_KEYS) as string[]),
+    SEARCH_PROFILE_VERSION_KEY,
+  ]
+  const rawValues = await readRawSettings(storageKeys)
+  const pendingWrites: Array<[string, unknown]> = []
+
+  for (const key of Object.keys(SEARCH_SETTING_KEYS) as Array<keyof SearchSettings>) {
+    const storageKey = SEARCH_SETTING_KEYS[key]
+    const raw = rawValues.get(storageKey) ?? null
+    const fallback = DEFAULT_SEARCH_SETTINGS[key]
+    const normalized = normalizeValue(key, raw, fallback)
+    ;(settings as unknown as Record<string, unknown>)[key] = normalized
+    if (shouldRewriteNormalizedValue(raw, normalized)) {
+      pendingWrites.push([storageKey, normalized])
+    }
   }
 
-  const profileVersionRaw = await readRawSetting(SEARCH_PROFILE_VERSION_KEY)
+  const profileVersionRaw = rawValues.get(SEARCH_PROFILE_VERSION_KEY) ?? null
   const profileVersion =
     typeof profileVersionRaw === 'number' && Number.isFinite(profileVersionRaw)
       ? profileVersionRaw
@@ -224,14 +272,17 @@ export const loadSearchSettings = async (): Promise<SearchSettings> => {
     if (shouldMigrateToToolbarDefaults(settings)) {
       settings.maxResultsPerPage = DEFAULT_SEARCH_SETTINGS.maxResultsPerPage
       settings.sortBy = DEFAULT_SEARCH_SETTINGS.sortBy
-
-      await Promise.all([
-        writeRawSetting(SEARCH_SETTING_KEYS.maxResultsPerPage, settings.maxResultsPerPage),
-        writeRawSetting(SEARCH_SETTING_KEYS.sortBy, settings.sortBy),
-      ])
+      pendingWrites.push(
+        [SEARCH_SETTING_KEYS.maxResultsPerPage, settings.maxResultsPerPage],
+        [SEARCH_SETTING_KEYS.sortBy, settings.sortBy]
+      )
     }
 
-    await writeRawSetting(SEARCH_PROFILE_VERSION_KEY, SEARCH_PROFILE_VERSION)
+    pendingWrites.push([SEARCH_PROFILE_VERSION_KEY, SEARCH_PROFILE_VERSION])
+  }
+
+  if (pendingWrites.length > 0) {
+    await writeRawSettings(pendingWrites)
   }
 
   return settings

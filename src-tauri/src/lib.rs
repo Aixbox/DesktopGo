@@ -6,10 +6,11 @@ mod search_preview;
 
 use commands::{
     delete_desktop_icons, get_default_customapp_dir, get_desktop_icons, get_icon_manager_items,
-    get_layout_payload, get_search_preview, get_search_runtime_status, hide_desktop_icons,
-    launch_app, record_search_result_run, search_files, set_layout_payload, set_window_mode,
-    start_search_runtime, sync_full_customapp_icons, sync_full_desktop_icons,
-    sync_new_customapp_icons, sync_new_desktop_icons, toggle_window, unhide_desktop_icons,
+    get_layout_payload, get_layout_payloads, get_search_preview, get_search_runtime_status,
+    hide_desktop_icons, launch_app, record_search_result_run, search_files, set_layout_payload,
+    set_layout_payloads, set_window_mode, start_search_runtime, sync_full_customapp_icons,
+    sync_full_desktop_icons, sync_new_customapp_icons, sync_new_desktop_icons, toggle_window,
+    unhide_desktop_icons,
 };
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
@@ -78,7 +79,9 @@ pub fn run() {
             delete_desktop_icons,
             get_default_customapp_dir,
             get_layout_payload,
+            get_layout_payloads,
             set_layout_payload,
+            set_layout_payloads,
             start_search_runtime,
             get_search_runtime_status,
             search_files,
