@@ -10,10 +10,9 @@ import {
 import { SEARCH_SORT_OPTIONS } from '@/lib/search/sorts'
 import type { SearchSort } from '@/lib/search/types'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { SettingCard, ToggleRow } from '@/components/ui/setting-components'
-
-const fieldClassName =
-  'rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-blue-500'
 
 export function SearchSettingsPanel() {
   const [settings, setSettings] = useState<SearchSettings>(DEFAULT_SEARCH_SETTINGS)
@@ -66,15 +65,9 @@ export function SearchSettingsPanel() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold">搜索设置</h2>
-          <p className="text-sm text-muted-foreground">
-            设置会保存到 SQLite，并在下次搜索时生效。
-          </p>
+          <p className="text-sm text-muted-foreground">设置会保存到 SQLite，并在下次搜索时生效。</p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void resetDefaults()}
-        >
+        <Button variant="outline" size="sm" onClick={() => void resetDefaults()}>
           恢复默认
         </Button>
       </div>
@@ -107,13 +100,13 @@ export function SearchSettingsPanel() {
         />
 
         <SettingCard label="防抖时间" desc="允许范围：50 - 500 毫秒。">
-          <input
+          <Input
             type="number"
             min={50}
             max={500}
             value={settings.debounceMs}
             onChange={event => void updateSetting('debounceMs', Number(event.target.value))}
-            className={`w-32 ${fieldClassName}`}
+            className="w-32"
           />
         </SettingCard>
       </section>
@@ -121,43 +114,33 @@ export function SearchSettingsPanel() {
       <section className="space-y-3">
         <h3 className="text-sm font-medium text-muted-foreground">搜索策略</h3>
         <SettingCard label="默认筛选器">
-          <select
+          <Select
             value={settings.defaultFilter}
-            onChange={event =>
-              void updateSetting('defaultFilter', event.target.value as SearchDefaultFilter)
+            onValueChange={nextValue =>
+              void updateSetting('defaultFilter', nextValue as SearchDefaultFilter)
             }
-            className={`w-full max-w-xs ${fieldClassName}`}
-          >
-            {SEARCH_FILTERS.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            options={SEARCH_FILTERS}
+            className="w-full max-w-xs"
+          />
         </SettingCard>
 
         <SettingCard label="默认排序">
-          <select
+          <Select
             value={settings.sortBy}
-            onChange={event => void updateSetting('sortBy', event.target.value as SearchSort)}
-            className={`w-full max-w-sm ${fieldClassName}`}
-          >
-            {SEARCH_SORT_OPTIONS.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            onValueChange={nextValue => void updateSetting('sortBy', nextValue as SearchSort)}
+            options={SEARCH_SORT_OPTIONS}
+            className="w-full max-w-sm"
+          />
         </SettingCard>
 
         <SettingCard label="每页最大结果数" desc="允许范围：10 - 200。">
-          <input
+          <Input
             type="number"
             min={10}
             max={200}
             value={settings.maxResultsPerPage}
             onChange={event => void updateSetting('maxResultsPerPage', Number(event.target.value))}
-            className={`w-32 ${fieldClassName}`}
+            className="w-32"
           />
         </SettingCard>
 

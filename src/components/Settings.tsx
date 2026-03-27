@@ -16,6 +16,7 @@ import { UpdatePanel } from '@/components/settings/UpdatePanel'
 import { Logo, LogoText } from '@/components/Logo'
 import { SearchSettingsPanel } from '@/components/search/SearchSettingsPanel'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   SettingGroup,
   SettingCard,
@@ -187,7 +188,6 @@ const ICON_SYNC_ACTIONS: Record<
       '该操作会扫描 customapp 文件夹（仅一级目录），仅新增缺失项并删除失效项，已存在且重叠的图标记录会保留。',
   },
 }
-
 
 function WindowControlButton({
   label,
@@ -444,55 +444,58 @@ function SettingsPanel() {
         />
       </div>
 
-      <SettingCard label="图标重置" desc="重置后会恢复默认图标布局，并清空当前创建的文件夹和 Dock 排布，不会删除图标快照记录。">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleResetLaunchpadIcons}
-              disabled={layoutResetting}
-            >
-              {layoutResetting ? '重置中...' : '重置图标'}
-            </Button>
-          </div>
-          {layoutResetText ? (
-            <p className="text-xs text-muted-foreground">{layoutResetText}</p>
-          ) : null}
+      <SettingCard
+        label="图标重置"
+        desc="重置后会恢复默认图标布局，并清空当前创建的文件夹和 Dock 排布，不会删除图标快照记录。"
+      >
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleResetLaunchpadIcons}
+            disabled={layoutResetting}
+          >
+            {layoutResetting ? '重置中...' : '重置图标'}
+          </Button>
+        </div>
+        {layoutResetText ? (
+          <p className="text-xs text-muted-foreground">{layoutResetText}</p>
+        ) : null}
       </SettingCard>
 
       <SettingCard label="自定义图标文件夹">
-          <p className="text-xs text-muted-foreground">
-            默认目录：{defaultCustomAppDir || '加载中...'}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            当前生效目录：{effectiveCustomAppDir || '加载中...'}
-          </p>
-          <input
-            value={customAppDirInput}
-            onChange={e => setCustomAppDirInput(e.target.value)}
-            placeholder="输入 customapp 文件夹绝对路径"
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-blue-500"
-          />
-          <p className="text-xs text-muted-foreground">
-            说明：customapp 只扫描一级目录，删除仅删除应用内记录，不会删除磁盘文件。
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={handlePickCustomAppDir}>
-              选择文件夹
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleOpenCustomAppDir}>
-              打开文件夹
-            </Button>
-            <Button size="sm" onClick={handleSaveCustomAppDir}>
-              保存路径
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleResetCustomAppDir}>
-              恢复默认路径
-            </Button>
-          </div>
-          {customAppDirText ? (
-            <p className="text-xs text-muted-foreground">{customAppDirText}</p>
-          ) : null}
+        <p className="text-xs text-muted-foreground">
+          默认目录：{defaultCustomAppDir || '加载中...'}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          当前生效目录：{effectiveCustomAppDir || '加载中...'}
+        </p>
+        <Input
+          value={customAppDirInput}
+          onChange={e => setCustomAppDirInput(e.target.value)}
+          placeholder="输入 customapp 文件夹绝对路径"
+          className="w-full"
+        />
+        <p className="text-xs text-muted-foreground">
+          说明：customapp 只扫描一级目录，删除仅删除应用内记录，不会删除磁盘文件。
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={handlePickCustomAppDir}>
+            选择文件夹
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleOpenCustomAppDir}>
+            打开文件夹
+          </Button>
+          <Button size="sm" onClick={handleSaveCustomAppDir}>
+            保存路径
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleResetCustomAppDir}>
+            恢复默认路径
+          </Button>
+        </div>
+        {customAppDirText ? (
+          <p className="text-xs text-muted-foreground">{customAppDirText}</p>
+        ) : null}
       </SettingCard>
     </>
   )
@@ -697,11 +700,11 @@ function IconManagerPanel() {
 
         <div className="space-y-3 rounded-lg border border-border bg-secondary/30 p-4">
           <div className="flex flex-wrap items-center gap-2">
-            <input
+            <Input
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
               placeholder="搜索图标名称或路径"
-              className="min-w-[220px] flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-blue-500"
+              className="min-w-[220px] flex-1"
             />
             <Button
               variant="outline"
@@ -856,11 +859,7 @@ function IconManagerPanel() {
               >
                 取消
               </Button>
-              <Button
-                size="sm"
-                onClick={handleConfirmSync}
-                disabled={syncing}
-              >
+              <Button size="sm" onClick={handleConfirmSync} disabled={syncing}>
                 {syncing ? '同步中...' : '开始同步'}
               </Button>
             </div>

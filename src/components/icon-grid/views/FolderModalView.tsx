@@ -15,6 +15,7 @@ import {
   FOLDER_SHARED_LAYOUT_TRANSITION,
   getFolderSharedLayoutId,
 } from './FolderVisuals'
+import { Input } from '@/components/ui/input'
 
 interface FolderModalViewProps {
   openFolder: FolderItem | null
@@ -146,7 +147,7 @@ export function FolderModalView({
               {/* Folder name - centered */}
               <div className="flex flex-1 justify-center">
                 {editing ? (
-                  <input
+                  <Input
                     ref={inputRef}
                     type="text"
                     value={editName}
@@ -156,7 +157,7 @@ export function FolderModalView({
                       if (e.key === 'Enter') commitRename()
                       if (e.key === 'Escape') setEditing(false)
                     }}
-                    className="rounded-md border border-white/25 bg-black/50 px-3 py-1 text-center text-sm font-medium text-white/90 outline-none backdrop-blur-sm focus:border-white/40"
+                    className="h-auto w-auto border-white/25 bg-black/50 py-1 text-center font-medium text-white/90 shadow-none backdrop-blur-sm focus-visible:border-white/40 focus-visible:ring-white/10"
                     style={{ minWidth: '80px', maxWidth: '240px' }}
                   />
                 ) : (
@@ -184,7 +185,12 @@ export function FolderModalView({
                 }}
                 onPointerDown={e => e.stopPropagation()}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                  className="h-3 w-3"
+                >
                   <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
                 </svg>
               </button>
@@ -204,77 +210,78 @@ export function FolderModalView({
               onClick={onPanelClick}
             >
               <motion.div
-                initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 14, scale: 0.985 }}
+                initial={
+                  prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 14, scale: 0.985 }
+                }
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.99 }}
                 transition={contentTransition}
                 className="flex max-h-full flex-col"
               >
-
-              <div
-                ref={folderGridContainerRef}
-                className="-mr-5 overflow-auto pr-5"
-                style={{ maxHeight: `calc(min(80vh, ${maxModalHeight}px) - 48px)` }}
-              >
                 <div
-                  ref={folderGridRef}
-                  className="grid content-start justify-items-center gap-2"
-                  style={{
-                    gridTemplateColumns: `repeat(${Math.max(1, folderColumns)}, ${folderItemWidth}px)`,
-                  }}
+                  ref={folderGridContainerRef}
+                  className="-mr-5 overflow-auto pr-5"
+                  style={{ maxHeight: `calc(min(80vh, ${maxModalHeight}px) - 48px)` }}
                 >
-                  {folderRenderOrder.map((entry, index) => {
-                    if (entry === null || entry === DRAG_HOLE_ID) {
-                      const showDropSlot = entry === DRAG_HOLE_ID && dragContext === 'folder'
+                  <div
+                    ref={folderGridRef}
+                    className="grid content-start justify-items-center gap-2"
+                    style={{
+                      gridTemplateColumns: `repeat(${Math.max(1, folderColumns)}, ${folderItemWidth}px)`,
+                    }}
+                  >
+                    {folderRenderOrder.map((entry, index) => {
+                      if (entry === null || entry === DRAG_HOLE_ID) {
+                        const showDropSlot = entry === DRAG_HOLE_ID && dragContext === 'folder'
+                        return (
+                          <div
+                            key={`folder-${showDropSlot ? 'drop' : 'empty'}-${index}`}
+                            data-folder-grid-item
+                            className={`h-full w-full rounded-2xl ${
+                              showDropSlot
+                                ? 'border border-white/20 bg-white/8'
+                                : 'border border-transparent bg-transparent'
+                            }`}
+                            style={{ minHeight: `${folderItemHeight}px` }}
+                            aria-hidden="true"
+                          />
+                        )
+                      }
+
+                      const item = folderItemById.get(entry)
+                      if (!item) return null
+                      const hiddenItem = hiddenItemIds.has(entry)
+
                       return (
                         <div
-                          key={`folder-${showDropSlot ? 'drop' : 'empty'}-${index}`}
+                          key={entry}
+                          ref={node => {
+                            bindFolderTileRef(entry, node)
+                          }}
                           data-folder-grid-item
-                          className={`h-full w-full rounded-2xl ${
-                            showDropSlot
-                              ? 'border border-white/20 bg-white/8'
-                              : 'border border-transparent bg-transparent'
+                          className={`relative touch-none transition-opacity duration-150 ${
+                            hiddenItem ? 'pointer-events-none opacity-0' : 'opacity-100'
                           }`}
-                          style={{ minHeight: `${folderItemHeight}px` }}
-                          aria-hidden="true"
-                        />
+                          onPointerDown={event =>
+                            onFolderTilePointerDown(event, openFolder.id, entry)
+                          }
+                          onClickCapture={onTileClickCapture}
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <Icon
+                            icon={item.icon}
+                            selectionKey={item.key}
+                            selectionMode={selectionMode}
+                            selected={selectedSet.has(item.key)}
+                            onToggleSelect={onToggleSelectIcon}
+                          />
+                        </div>
                       )
-                    }
-
-                    const item = folderItemById.get(entry)
-                    if (!item) return null
-                    const hiddenItem = hiddenItemIds.has(entry)
-
-                    return (
-                      <div
-                        key={entry}
-                        ref={node => {
-                          bindFolderTileRef(entry, node)
-                        }}
-                        data-folder-grid-item
-                        className={`relative touch-none transition-opacity duration-150 ${
-                          hiddenItem ? 'pointer-events-none opacity-0' : 'opacity-100'
-                        }`}
-                        onPointerDown={event =>
-                          onFolderTilePointerDown(event, openFolder.id, entry)
-                        }
-                        onClickCapture={onTileClickCapture}
-                        onClick={e => e.stopPropagation()}
-                      >
-                        <Icon
-                          icon={item.icon}
-                          selectionKey={item.key}
-                          selectionMode={selectionMode}
-                          selected={selectedSet.has(item.key)}
-                          onToggleSelect={onToggleSelectIcon}
-                        />
-                      </div>
-                    )
-                  })}
+                    })}
+                  </div>
                 </div>
-              </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
           </div>
         </motion.div>
       ) : null}
