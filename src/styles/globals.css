@@ -216,6 +216,17 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+.number-input {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.number-input::-webkit-inner-spin-button,
+.number-input::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
 .launchpad-bg {
   background: rgba(240, 240, 245, 0.85);
   backdrop-filter: blur(50px) saturate(180%);

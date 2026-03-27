@@ -10,7 +10,7 @@ import {
 import { SEARCH_SORT_OPTIONS } from '@/lib/search/sorts'
 import type { SearchSort } from '@/lib/search/types'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { NumberInput } from '@/components/ui/number-input'
 import { Select } from '@/components/ui/select'
 import { SettingCard, ToggleRow } from '@/components/ui/setting-components'
 
@@ -100,12 +100,12 @@ export function SearchSettingsPanel() {
         />
 
         <SettingCard label="防抖时间" desc="允许范围：50 - 500 毫秒。">
-          <Input
-            type="number"
+          <NumberInput
             min={50}
             max={500}
             value={settings.debounceMs}
-            onChange={event => void updateSetting('debounceMs', Number(event.target.value))}
+            onValueChange={value => void updateSetting('debounceMs', value)}
+            aria-label="防抖时间"
             className="w-32"
           />
         </SettingCard>
@@ -134,12 +134,12 @@ export function SearchSettingsPanel() {
         </SettingCard>
 
         <SettingCard label="每页最大结果数" desc="允许范围：10 - 200。">
-          <Input
-            type="number"
+          <NumberInput
             min={10}
             max={200}
             value={settings.maxResultsPerPage}
-            onChange={event => void updateSetting('maxResultsPerPage', Number(event.target.value))}
+            onValueChange={value => void updateSetting('maxResultsPerPage', value)}
+            aria-label="每页最大结果数"
             className="w-32"
           />
         </SettingCard>
