@@ -62,142 +62,150 @@ export function SearchSettingsPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold">搜索设置</h2>
-          <p className="text-sm text-muted-foreground">设置会保存到 SQLite，并在下次搜索时生效。</p>
+          <p className="max-w-3xl text-sm text-muted-foreground">
+            设置会保存到 SQLite，并在下次搜索时生效。
+          </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => void resetDefaults()}>
           恢复默认
         </Button>
       </div>
 
-      <section className="space-y-3">
-        <h3 className="text-sm font-medium text-muted-foreground">基础交互</h3>
-        <ToggleRow
-          title="实时搜索"
-          description="输入时立即搜索。关闭后仅在按下 Enter 时触发搜索。"
-          checked={settings.liveOnType}
-          onChange={next => void updateSetting('liveOnType', next)}
-        />
-        <ToggleRow
-          title="自动选中首个结果"
-          description="返回新结果页时，自动聚焦到第一个结果。"
-          checked={settings.autoSelectFirst}
-          onChange={next => void updateSetting('autoSelectFirst', next)}
-        />
-        <ToggleRow
-          title="回车打开结果"
-          description="允许按 Enter 打开当前选中的结果。"
-          checked={settings.openOnEnter}
-          onChange={next => void updateSetting('openOnEnter', next)}
-        />
-        <ToggleRow
-          title="双击打开结果"
-          description="允许通过鼠标双击打开结果项。"
-          checked={settings.openOnDoubleClick}
-          onChange={next => void updateSetting('openOnDoubleClick', next)}
-        />
+      <div className="grid gap-6 xl:grid-cols-2 xl:items-start">
+        <div className="space-y-6">
+          <section className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground">基础交互</h3>
+            <ToggleRow
+              title="实时搜索"
+              description="输入时立即搜索。关闭后仅在按下 Enter 时触发搜索。"
+              checked={settings.liveOnType}
+              onChange={next => void updateSetting('liveOnType', next)}
+            />
+            <ToggleRow
+              title="自动选中首个结果"
+              description="返回新结果页时，自动聚焦到第一个结果。"
+              checked={settings.autoSelectFirst}
+              onChange={next => void updateSetting('autoSelectFirst', next)}
+            />
+            <ToggleRow
+              title="回车打开结果"
+              description="允许按 Enter 打开当前选中的结果。"
+              checked={settings.openOnEnter}
+              onChange={next => void updateSetting('openOnEnter', next)}
+            />
+            <ToggleRow
+              title="双击打开结果"
+              description="允许通过鼠标双击打开结果项。"
+              checked={settings.openOnDoubleClick}
+              onChange={next => void updateSetting('openOnDoubleClick', next)}
+            />
 
-        <SettingCard label="防抖时间" desc="允许范围：50 - 500 毫秒。">
-          <NumberInput
-            min={50}
-            max={500}
-            value={settings.debounceMs}
-            onValueChange={value => void updateSetting('debounceMs', value)}
-            aria-label="防抖时间"
-            className="w-32"
-          />
-        </SettingCard>
-      </section>
+            <SettingCard label="防抖时间" desc="允许范围：50 - 500 毫秒。">
+              <NumberInput
+                min={50}
+                max={500}
+                value={settings.debounceMs}
+                onValueChange={value => void updateSetting('debounceMs', value)}
+                aria-label="防抖时间"
+                className="w-32"
+              />
+            </SettingCard>
+          </section>
 
-      <section className="space-y-3">
-        <h3 className="text-sm font-medium text-muted-foreground">搜索策略</h3>
-        <SettingCard label="默认筛选器">
-          <Select
-            value={settings.defaultFilter}
-            onValueChange={nextValue =>
-              void updateSetting('defaultFilter', nextValue as SearchDefaultFilter)
-            }
-            options={SEARCH_FILTERS}
-            className="w-full max-w-xs"
-          />
-        </SettingCard>
+          <section className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground">搜索策略</h3>
+            <SettingCard label="默认筛选器">
+              <Select
+                value={settings.defaultFilter}
+                onValueChange={nextValue =>
+                  void updateSetting('defaultFilter', nextValue as SearchDefaultFilter)
+                }
+                options={SEARCH_FILTERS}
+                className="w-full max-w-xs"
+              />
+            </SettingCard>
 
-        <SettingCard label="默认排序">
-          <Select
-            value={settings.sortBy}
-            onValueChange={nextValue => void updateSetting('sortBy', nextValue as SearchSort)}
-            options={SEARCH_SORT_OPTIONS}
-            className="w-full max-w-sm"
-          />
-        </SettingCard>
+            <SettingCard label="默认排序">
+              <Select
+                value={settings.sortBy}
+                onValueChange={nextValue => void updateSetting('sortBy', nextValue as SearchSort)}
+                options={SEARCH_SORT_OPTIONS}
+                className="w-full max-w-sm"
+              />
+            </SettingCard>
 
-        <SettingCard label="每页最大结果数" desc="允许范围：10 - 200。">
-          <NumberInput
-            min={10}
-            max={200}
-            value={settings.maxResultsPerPage}
-            onValueChange={value => void updateSetting('maxResultsPerPage', value)}
-            aria-label="每页最大结果数"
-            className="w-32"
-          />
-        </SettingCard>
+            <SettingCard label="每页最大结果数" desc="允许范围：10 - 200。">
+              <NumberInput
+                min={10}
+                max={200}
+                value={settings.maxResultsPerPage}
+                onValueChange={value => void updateSetting('maxResultsPerPage', value)}
+                aria-label="每页最大结果数"
+                className="w-32"
+              />
+            </SettingCard>
 
-        <ToggleRow
-          title="记住上次筛选器"
-          description="保存最近一次使用的筛选器，并在下次启动时恢复。"
-          checked={settings.rememberLastFilter}
-          onChange={next => void updateSetting('rememberLastFilter', next)}
-        />
-      </section>
+            <ToggleRow
+              title="记住上次筛选器"
+              description="保存最近一次使用的筛选器，并在下次启动时恢复。"
+              checked={settings.rememberLastFilter}
+              onChange={next => void updateSetting('rememberLastFilter', next)}
+            />
+          </section>
+        </div>
 
-      <section className="space-y-3">
-        <h3 className="text-sm font-medium text-muted-foreground">匹配与筛选</h3>
-        <ToggleRow
-          title="匹配路径"
-          description="让关键字匹配包含完整路径片段。"
-          checked={settings.matchPath}
-          onChange={next => void updateSetting('matchPath', next)}
-        />
-        <ToggleRow
-          title="区分大小写"
-          description="使用区分大小写的匹配方式。"
-          checked={settings.matchCase}
-          onChange={next => void updateSetting('matchCase', next)}
-        />
-        <ToggleRow
-          title="正则表达式"
-          description="将关键字按正则表达式语法处理。"
-          checked={settings.regex}
-          onChange={next => void updateSetting('regex', next)}
-        />
-        <ToggleRow
-          title="全字匹配"
-          description="只匹配完整单词。"
-          checked={settings.matchWholeWord}
-          onChange={next => void updateSetting('matchWholeWord', next)}
-        />
-      </section>
+        <div className="space-y-6">
+          <section className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground">匹配与筛选</h3>
+            <ToggleRow
+              title="匹配路径"
+              description="让关键字匹配包含完整路径片段。"
+              checked={settings.matchPath}
+              onChange={next => void updateSetting('matchPath', next)}
+            />
+            <ToggleRow
+              title="区分大小写"
+              description="使用区分大小写的匹配方式。"
+              checked={settings.matchCase}
+              onChange={next => void updateSetting('matchCase', next)}
+            />
+            <ToggleRow
+              title="正则表达式"
+              description="将关键字按正则表达式语法处理。"
+              checked={settings.regex}
+              onChange={next => void updateSetting('regex', next)}
+            />
+            <ToggleRow
+              title="全字匹配"
+              description="只匹配完整单词。"
+              checked={settings.matchWholeWord}
+              onChange={next => void updateSetting('matchWholeWord', next)}
+            />
+          </section>
 
-      <section className="space-y-3">
-        <h3 className="text-sm font-medium text-muted-foreground">运行时</h3>
-        <ToggleRow
-          title="自动连接运行时"
-          description="自动检测并连接已安装的 Everything 运行时。"
-          checked={settings.autoStartRuntime}
-          onChange={next => void updateSetting('autoStartRuntime', next)}
-        />
+          <section className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground">运行时</h3>
+            <ToggleRow
+              title="自动连接运行时"
+              description="自动检测并连接已安装的 Everything 运行时。"
+              checked={settings.autoStartRuntime}
+              onChange={next => void updateSetting('autoStartRuntime', next)}
+            />
 
-        <SettingCard
-          label="仅支持已安装的 Everything"
-          desc="DesktopGo 的文件搜索目前仅支持已安装的 Everything 应用。"
-        >
-          <p className="text-sm leading-6 text-muted-foreground">
-            如果搜索不可用，请重新安装 DesktopGo，并勾选 Everything 安装选项。
-          </p>
-        </SettingCard>
-      </section>
+            <SettingCard
+              label="仅支持已安装的 Everything"
+              desc="DesktopGo 的文件搜索目前仅支持已安装的 Everything 应用。"
+            >
+              <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                如果搜索不可用，请重新安装 DesktopGo，并勾选 Everything 安装选项。
+              </p>
+            </SettingCard>
+          </section>
+        </div>
+      </div>
 
       {statusText ? <p className="text-xs text-muted-foreground">{statusText}</p> : null}
     </div>

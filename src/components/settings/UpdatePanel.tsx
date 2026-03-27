@@ -216,168 +216,174 @@ export function UpdatePanel() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-foreground">应用更新</p>
-            <p className="text-xs text-muted-foreground">
-              当前版本 v{currentVersion}，当前目标 {currentTarget}
-            </p>
-          </div>
-          <div className="rounded-full border border-border/80 bg-muted px-3 py-1 text-xs text-foreground/75">
-            {configStatus?.configured ? '更新已接入' : '等待配置'}
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button onClick={() => void handleCheck()} disabled={loadingConfig || checking || installing}>
-            {checking ? (
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            检查更新
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => void handleInstall()}
-            disabled={!checkResult?.available || checking || installing}
-          >
-            {installing ? (
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-            下载并安装
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => void refreshConfiguration()}
-            disabled={loadingConfig || checking || installing}
-          >
-            刷新配置
-          </Button>
-        </div>
-      </div>
-
-      <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
-        <div className="flex items-start gap-3">
-          {configStatus?.configured ? (
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-          ) : (
-            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-          )}
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">当前状态</p>
-            <p className="text-xs leading-5 text-muted-foreground">{statusText}</p>
-            {!configStatus?.configured ? (
-              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-foreground/80">
-                还缺少 updater 配置。请在
-                <span className="font-medium text-foreground"> src-tauri/tauri.conf.json </span>
-                中设置
-                <span className="font-medium text-foreground"> plugins.updater.pubkey </span>
-                和
-                <span className="font-medium text-foreground"> plugins.updater.endpoints </span>
-                。正式发布时还需要
-                <span className="font-medium text-foreground"> TAURI_SIGNING_PRIVATE_KEY </span>
-                用于生成签名更新包。
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
-        <div className="flex items-start gap-3">
-          <Globe className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">更新源</p>
-            {configStatus?.configured && configStatus.endpoints.length > 0 ? (
-              <div className="space-y-2">
-                {configStatus.endpoints.map(endpoint => (
-                  <div
-                    key={endpoint}
-                    className="rounded-md border border-border/85 bg-background px-3 py-2 text-xs text-muted-foreground shadow-sm"
-                  >
-                    {endpoint}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs leading-5 text-muted-foreground">
-                建议直接指向静态
-                <span className="mx-1 font-medium text-foreground">latest.json</span>
-                地址。这个项目的第一版适合用 GitHub Releases 托管。
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {updateInfo ? (
-        <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
-          <div className="flex items-start gap-3">
-            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
-            <div className="space-y-3">
+    <div className="space-y-6">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] xl:items-start">
+        <div className="space-y-4">
+          <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">检测到新版本 v{updateInfo.version}</p>
+                <p className="text-sm font-medium text-foreground">应用更新</p>
                 <p className="text-xs text-muted-foreground">
-                  基于目标 {updateInfo.target}
-                  {releaseDate ? `，发布时间 ${releaseDate}` : ''}
+                  当前版本 v{currentVersion}，当前目标 {currentTarget}
                 </p>
               </div>
-              <div className="rounded-md border border-border/85 bg-background px-3 py-2 text-xs leading-5 text-muted-foreground shadow-sm">
-                {updateInfo.body?.trim() ? (
-                  <p className="whitespace-pre-wrap">{updateInfo.body}</p>
+              <div className="rounded-full border border-border/80 bg-muted px-3 py-1 text-xs text-foreground/75">
+                {configStatus?.configured ? '更新已接入' : '等待配置'}
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button onClick={() => void handleCheck()} disabled={loadingConfig || checking || installing}>
+                {checking ? (
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
                 ) : (
-                  <p>当前更新没有附带发布说明。</p>
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                检查更新
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => void handleInstall()}
+                disabled={!checkResult?.available || checking || installing}
+              >
+                {installing ? (
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                下载并安装
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => void refreshConfiguration()}
+                disabled={loadingConfig || checking || installing}
+              >
+                刷新配置
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
+            <div className="flex items-start gap-3">
+              {configStatus?.configured ? (
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+              ) : (
+                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              )}
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-foreground">当前状态</p>
+                <p className="max-w-md text-xs leading-5 text-muted-foreground">{statusText}</p>
+                {!configStatus?.configured ? (
+                  <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-foreground/80">
+                    还缺少 updater 配置。请在
+                    <span className="font-medium text-foreground"> src-tauri/tauri.conf.json </span>
+                    中设置
+                    <span className="font-medium text-foreground"> plugins.updater.pubkey </span>
+                    和
+                    <span className="font-medium text-foreground"> plugins.updater.endpoints </span>
+                    。正式发布时还需要
+                    <span className="font-medium text-foreground"> TAURI_SIGNING_PRIVATE_KEY </span>
+                    用于生成签名更新包。
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          {installStage !== 'idle' ? (
+            <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                {installStage === 'finished' ? (
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                ) : (
+                  <LoaderCircle className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-blue-500" />
+                )}
+                <div className="w-full space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-foreground">安装进度</p>
+                    <p className="text-xs text-muted-foreground">
+                      {installStage === 'downloading' && '正在下载更新包'}
+                      {installStage === 'installing' && '正在启动安装程序'}
+                      {installStage === 'finished' && '更新安装流程已完成'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={`h-full rounded-full bg-blue-500 transition-all duration-300 ${
+                          progressPercent === null ? 'w-1/2 animate-pulse' : ''
+                        }`}
+                        style={progressPercent === null ? undefined : { width: `${progressPercent}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {progressPercent === null
+                        ? contentLength
+                          ? `已准备下载 ${formatBytes(contentLength)}`
+                          : '正在等待安装程序返回下载信息...'
+                        : `已下载 ${formatBytes(downloadedBytes)} / ${formatBytes(contentLength)} (${progressPercent.toFixed(1)}%)`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
+            <div className="flex items-start gap-3">
+              <Globe className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-foreground">更新源</p>
+                {configStatus?.configured && configStatus.endpoints.length > 0 ? (
+                  <div className="space-y-2">
+                    {configStatus.endpoints.map(endpoint => (
+                      <div
+                        key={endpoint}
+                        className="rounded-md border border-border/85 bg-background px-3 py-2 text-xs text-muted-foreground shadow-sm"
+                      >
+                        {endpoint}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
+                    建议直接指向静态
+                    <span className="mx-1 font-medium text-foreground">latest.json</span>
+                    地址。这个项目的第一版适合用 GitHub Releases 托管。
+                  </p>
                 )}
               </div>
             </div>
           </div>
-        </div>
-      ) : null}
 
-      {installStage !== 'idle' ? (
-        <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
-          <div className="flex items-start gap-3">
-            {installStage === 'finished' ? (
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-            ) : (
-              <LoaderCircle className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-blue-500" />
-            )}
-            <div className="w-full space-y-3">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">安装进度</p>
-                <p className="text-xs text-muted-foreground">
-                  {installStage === 'downloading' && '正在下载更新包'}
-                  {installStage === 'installing' && '正在启动安装程序'}
-                  {installStage === 'finished' && '更新安装流程已完成'}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <div className="h-2 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={`h-full rounded-full bg-blue-500 transition-all duration-300 ${
-                      progressPercent === null ? 'w-1/2 animate-pulse' : ''
-                    }`}
-                    style={progressPercent === null ? undefined : { width: `${progressPercent}%` }}
-                  />
+          {updateInfo ? (
+            <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-foreground">检测到新版本 v{updateInfo.version}</p>
+                    <p className="text-xs text-muted-foreground">
+                      基于目标 {updateInfo.target}
+                      {releaseDate ? `，发布时间 ${releaseDate}` : ''}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-border/85 bg-background px-3 py-2 text-xs leading-5 text-muted-foreground shadow-sm">
+                    {updateInfo.body?.trim() ? (
+                      <p className="whitespace-pre-wrap">{updateInfo.body}</p>
+                    ) : (
+                      <p>当前更新没有附带发布说明。</p>
+                    )}
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {progressPercent === null
-                    ? contentLength
-                      ? `已准备下载 ${formatBytes(contentLength)}`
-                      : '正在等待安装程序返回下载信息...'
-                    : `已下载 ${formatBytes(downloadedBytes)} / ${formatBytes(contentLength)} (${progressPercent.toFixed(1)}%)`}
-                </p>
               </div>
             </div>
-          </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
     </div>
   )
 }

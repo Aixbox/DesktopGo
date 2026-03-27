@@ -5,6 +5,7 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
+import { cn } from '@/lib/utils'
 import { useIconStore } from '@/stores/iconStore'
 import { applyTheme, saveTheme } from '@/lib/theme'
 import { getSetting, setSetting } from '@/lib/settingsStore'
@@ -60,6 +61,14 @@ const NAV_ITEMS: { key: NavItem; label: string; icon: React.ReactNode }[] = [
   { key: 'update', label: '更新', icon: <RefreshCw className="w-4 h-4" /> },
   { key: 'about', label: '关于', icon: <Info className="w-4 h-4" /> },
 ]
+
+const NAV_CONTENT_WIDTH: Record<NavItem, string> = {
+  settings: 'max-w-[1120px]',
+  search: 'max-w-[1180px]',
+  iconManager: 'max-w-[1240px]',
+  update: 'max-w-[1240px]',
+  about: 'max-w-[1360px]',
+}
 
 const ICON_SIZE_OPTIONS: { label: string; value: IconSize }[] = [
   { label: '大图标', value: 'large' },
@@ -673,8 +682,8 @@ function IconManagerPanel() {
 
   return (
     <>
-      <div className="space-y-6">
-        <div className="space-y-2">
+      <div className="min-w-0 space-y-6">
+        <div className="max-w-3xl space-y-2">
           <h2 className="text-lg font-semibold">图标管理</h2>
           <p className="text-sm text-muted-foreground">
             首次进入主页面会自动建立桌面和自定义应用快照，后续由你在这里手动同步和整理。
@@ -684,329 +693,343 @@ function IconManagerPanel() {
           </p>
         </div>
 
-        <SettingCard
-          label="自定义图标文件夹"
-          desc="自定义应用目录只扫描一级目录。这里修改后，图标列表和后续同步都会使用新目录。"
-        >
-          <p className="text-xs text-muted-foreground">默认目录：{defaultCustomAppDir || '加载中...'}</p>
-          <p className="text-xs text-muted-foreground">
-            当前生效目录：{effectiveCustomAppDir || '加载中...'}
-          </p>
-          <Input
-            value={customAppDirInput}
-            onChange={e => setCustomAppDirInput(e.target.value)}
-            placeholder="输入自定义应用文件夹绝对路径"
-            className="w-full"
-            disabled={syncing || mutating || listLoading}
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handlePickCustomAppDir}
-              disabled={syncing || mutating || listLoading}
+        <div className="grid gap-6 xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)] xl:items-start">
+          <div className="min-w-0 space-y-4">
+            <SettingCard
+              label="自定义图标文件夹"
+              desc="自定义应用目录只扫描一级目录。这里修改后，图标列表和后续同步都会使用新目录。"
             >
-              选择文件夹
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleOpenCustomAppDir}
-              disabled={syncing || mutating}
-            >
-              打开文件夹
-            </Button>
-            <Button size="sm" onClick={handleSaveCustomAppDir} disabled={syncing || mutating || listLoading}>
-              保存路径
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleResetCustomAppDir}
-              disabled={syncing || mutating || listLoading}
-            >
-              恢复默认路径
-            </Button>
-          </div>
-          {customAppDirText ? <p className="text-xs text-muted-foreground">{customAppDirText}</p> : null}
-        </SettingCard>
+              <p className="break-all text-xs text-muted-foreground">
+                默认目录：{defaultCustomAppDir || '加载中...'}
+              </p>
+              <p className="break-all text-xs text-muted-foreground">
+                当前生效目录：{effectiveCustomAppDir || '加载中...'}
+              </p>
+              <Input
+                value={customAppDirInput}
+                onChange={e => setCustomAppDirInput(e.target.value)}
+                placeholder="输入自定义应用文件夹绝对路径"
+                className="w-full"
+                disabled={syncing || mutating || listLoading}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePickCustomAppDir}
+                  disabled={syncing || mutating || listLoading}
+                >
+                  选择文件夹
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenCustomAppDir}
+                  disabled={syncing || mutating}
+                >
+                  打开文件夹
+                </Button>
+                <Button size="sm" onClick={handleSaveCustomAppDir} disabled={syncing || mutating || listLoading}>
+                  保存路径
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResetCustomAppDir}
+                  disabled={syncing || mutating || listLoading}
+                >
+                  恢复默认路径
+                </Button>
+              </div>
+              {customAppDirText ? (
+                <p className="break-all text-xs text-muted-foreground">{customAppDirText}</p>
+              ) : null}
+            </SettingCard>
 
-        <div className="grid gap-4 xl:grid-cols-2">
-          {ICON_SYNC_GROUPS.map(group => {
-            return (
-              <div
-                key={group.source}
-                className="space-y-4 rounded-xl border border-border/90 bg-card p-4 shadow-sm"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-medium text-foreground">{group.title}</h3>
-                    <span className="rounded-full border border-border/70 bg-muted px-2 py-0.5 text-[11px] text-foreground/75">
-                      {group.source === 'desktop' ? '桌面来源' : '目录来源'}
-                    </span>
+            {ICON_SYNC_GROUPS.map(group => {
+              return (
+                <div
+                  key={group.source}
+                  className="space-y-4 rounded-xl border border-border/90 bg-card p-4 shadow-sm"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-medium text-foreground">{group.title}</h3>
+                      <span className="rounded-full border border-border/70 bg-muted px-2 py-0.5 text-[11px] text-foreground/75">
+                        {group.source === 'desktop' ? '桌面来源' : '目录来源'}
+                      </span>
+                    </div>
+                    <p className="text-xs leading-5 text-muted-foreground">{group.desc}</p>
                   </div>
-                  <p className="text-xs leading-5 text-muted-foreground">{group.desc}</p>
-                </div>
 
-                <div className="space-y-3">
-                  {group.actions.map(actionKey => {
-                    const action = ICON_SYNC_ACTIONS[actionKey]
-                    const isActive = syncing && activeSyncAction === actionKey
-                    const isIncremental = action.mode === 'incremental'
+                  <div className="space-y-3">
+                    {group.actions.map(actionKey => {
+                      const action = ICON_SYNC_ACTIONS[actionKey]
+                      const isActive = syncing && activeSyncAction === actionKey
+                      const isIncremental = action.mode === 'incremental'
 
-                    return (
-                      <div
-                        key={actionKey}
-                        className={`rounded-lg border px-3 py-3 shadow-sm ${
-                          isIncremental
-                            ? 'border-border/85 bg-background'
-                            : 'border-amber-500/30 bg-amber-500/8'
-                        }`}
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1 space-y-1.5">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-sm font-medium text-foreground">{action.title}</p>
+                      return (
+                        <div
+                          key={actionKey}
+                          className={`rounded-lg border px-3 py-3 shadow-sm ${
+                            isIncremental
+                              ? 'border-border/85 bg-background'
+                              : 'border-amber-500/30 bg-amber-500/8'
+                          }`}
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1 space-y-1.5">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-medium text-foreground">{action.title}</p>
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[11px] ${
+                                    isIncremental
+                                      ? 'bg-emerald-500/15 text-emerald-400'
+                                      : 'bg-amber-500/15 text-amber-400'
+                                  }`}
+                                >
+                                  {action.toneLabel}
+                                </span>
+                              </div>
+                              <p className="text-xs leading-5 text-muted-foreground">{action.desc}</p>
+                              <p className="text-[11px] leading-5 text-muted-foreground/90">
+                                {action.impact}
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2 self-center">
                               <span
-                                className={`rounded-full px-2 py-0.5 text-[11px] ${
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] ${
                                   isIncremental
-                                    ? 'bg-emerald-500/15 text-emerald-400'
-                                    : 'bg-amber-500/15 text-amber-400'
+                                    ? 'border border-border/70 bg-muted text-foreground/75'
+                                    : 'bg-amber-500/12 text-amber-300'
                                 }`}
                               >
-                                {action.toneLabel}
+                                {isActive ? (
+                                  <>
+                                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                                    处理中
+                                  </>
+                                ) : isIncremental ? (
+                                  '直接执行'
+                                ) : (
+                                  '需确认'
+                                )}
                               </span>
                             </div>
-                            <p className="text-xs leading-5 text-muted-foreground">{action.desc}</p>
-                            <p className="text-[11px] leading-5 text-muted-foreground/90">
-                              {action.impact}
-                            </p>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2 self-center">
-                            <span
-                              className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] ${
+                            <Button
+                              size="sm"
+                              variant={isIncremental ? 'default' : 'outline'}
+                              onClick={() => handleTriggerSync(actionKey)}
+                              disabled={syncing || mutating || layoutResetting}
+                              className={
                                 isIncremental
-                                  ? 'border border-border/70 bg-muted text-foreground/75'
-                                  : 'bg-amber-500/12 text-amber-300'
-                              }`}
+                                  ? ''
+                                  : 'border-amber-500/30 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300'
+                              }
                             >
                               {isActive ? (
                                 <>
                                   <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                                  处理中
+                                  {`${action.buttonLabel}中...`}
                                 </>
-                              ) : isIncremental ? (
-                                '直接执行'
                               ) : (
-                                '需确认'
+                                action.buttonLabel
                               )}
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {syncFeedback?.source === group.source ? (
+                    <div
+                      className={`break-all rounded-lg border px-3 py-2 text-xs leading-5 ${
+                        syncFeedback.tone === 'error'
+                          ? 'border-red-500/30 bg-red-500/10 text-red-400'
+                          : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                      }`}
+                      role={syncFeedback.tone === 'error' ? 'alert' : 'status'}
+                      aria-live="polite"
+                    >
+                      {syncFeedback.text}
+                    </div>
+                  ) : null}
+                </div>
+              )
+            })}
+
+            <SettingCard
+              label="图标布局重置"
+              desc="重置后会恢复默认图标布局，并清空当前创建的文件夹和 Dock 排布，不会删除图标快照记录。"
+            >
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResetLaunchpadIcons}
+                  disabled={layoutResetting || syncing || mutating}
+                >
+                  {layoutResetting ? '重置中...' : '重置图标'}
+                </Button>
+              </div>
+              {layoutResetText ? (
+                <p className="break-all text-xs text-muted-foreground">{layoutResetText}</p>
+              ) : null}
+            </SettingCard>
+          </div>
+
+          <div className="min-w-0 space-y-3 rounded-lg border border-border/90 bg-card p-4 shadow-sm">
+            <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
+              <Input
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                placeholder="搜索图标名称或路径"
+                className="w-full md:min-w-[220px] md:flex-1 xl:max-w-md"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void refreshIconManagerList()}
+                disabled={listLoading || syncing || mutating}
+                className="w-full md:w-auto"
+              >
+                刷新列表
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {ICON_VISIBILITY_FILTER_OPTIONS.map(opt => (
+                <OptionButton
+                  key={opt.value}
+                  label={opt.label}
+                  selected={visibilityFilter === opt.value}
+                  onClick={() => setVisibilityFilter(opt.value)}
+                />
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {ICON_SOURCE_FILTER_OPTIONS.map(opt => (
+                <OptionButton
+                  key={opt.value}
+                  label={opt.label}
+                  selected={sourceFilter === opt.value}
+                  onClick={() => setSourceFilter(opt.value)}
+                />
+              ))}
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              图标总数 {allIcons.length} 项，当前筛选结果 {filteredIcons.length} 项。
+            </p>
+
+            {managerErrorText ? (
+              <p className="break-all text-sm text-red-500">{managerErrorText}</p>
+            ) : null}
+            {managerResultText ? (
+              <p className="max-w-3xl break-all text-sm text-muted-foreground" aria-live="polite">
+                {managerResultText}
+              </p>
+            ) : null}
+
+            <div className="space-y-2">
+              {listLoading ? (
+                <p className="text-sm text-muted-foreground">图标列表加载中...</p>
+              ) : filteredIcons.length === 0 ? (
+                <p className="text-sm text-muted-foreground">当前筛选条件下没有图标。</p>
+              ) : (
+                filteredIcons.map(icon => {
+                  const sourceLabel = icon.source === 'desktop' ? '桌面' : '自定义应用'
+                  const sourceBadgeClass =
+                    icon.source === 'desktop'
+                      ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+                      : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                  return (
+                    <div
+                      key={`${icon.source}:${icon.id}`}
+                      className="rounded-md border border-border/85 bg-background p-3 shadow-sm"
+                    >
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start">
+                        <div className="h-10 w-10 shrink-0 overflow-hidden">
+                          {icon.icon_base64 ? (
+                            <img
+                              src={icon.icon_base64}
+                              alt={icon.name}
+                              className="h-full w-full object-contain"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                              无图标
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="truncate text-sm font-medium">{icon.name || '未命名'}</p>
+                            <span
+                              className={`rounded border px-2 py-0.5 text-[11px] ${sourceBadgeClass}`}
+                            >
+                              {sourceLabel}
+                            </span>
+                            <span
+                              className={`rounded border px-2 py-0.5 text-[11px] ${
+                                icon.hidden
+                                  ? 'border-orange-500/30 bg-orange-500/15 text-orange-400'
+                                  : 'border-emerald-500/30 bg-emerald-500/15 text-emerald-400'
+                              }`}
+                            >
+                              {icon.hidden ? '隐藏' : '未隐藏'}
                             </span>
                           </div>
+                          <p className="break-all text-xs text-muted-foreground md:truncate">
+                            路径：{icon.path}
+                          </p>
+                          <p className="break-all text-xs text-muted-foreground md:truncate">
+                            目标：{icon.target_path || '-'}
+                          </p>
+                        </div>
+
+                        <div className="flex w-full shrink-0 flex-wrap gap-2 md:w-auto md:justify-end">
+                          {icon.hidden ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setPendingMutation({ type: 'unhide', icon })}
+                              disabled={syncing || mutating}
+                              className="flex-1 md:flex-none"
+                            >
+                              取消隐藏
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setPendingMutation({ type: 'hide', icon })}
+                              disabled={syncing || mutating}
+                              className="flex-1 md:flex-none"
+                            >
+                              隐藏
+                            </Button>
+                          )}
                           <Button
+                            variant="destructive"
                             size="sm"
-                            variant={isIncremental ? 'default' : 'outline'}
-                            onClick={() => handleTriggerSync(actionKey)}
-                            disabled={syncing || mutating || layoutResetting}
-                            className={
-                              isIncremental
-                                ? ''
-                                : 'border-amber-500/30 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300'
-                            }
+                            onClick={() => setPendingMutation({ type: 'delete', icon })}
+                            disabled={syncing || mutating}
+                            className="flex-1 md:flex-none"
                           >
-                            {isActive ? (
-                              <>
-                                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                                {`${action.buttonLabel}中...`}
-                              </>
-                            ) : (
-                              action.buttonLabel
-                            )}
+                            删除
                           </Button>
                         </div>
-                      </div>
-                    )
-                  })}
-                </div>
-
-                {syncFeedback?.source === group.source ? (
-                  <div
-                    className={`rounded-lg border px-3 py-2 text-xs leading-5 ${
-                      syncFeedback.tone === 'error'
-                        ? 'border-red-500/30 bg-red-500/10 text-red-400'
-                        : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-                    }`}
-                    role={syncFeedback.tone === 'error' ? 'alert' : 'status'}
-                    aria-live="polite"
-                  >
-                    {syncFeedback.text}
-                  </div>
-                ) : null}
-              </div>
-            )
-          })}
-        </div>
-
-        <SettingCard
-          label="图标布局重置"
-          desc="重置后会恢复默认图标布局，并清空当前创建的文件夹和 Dock 排布，不会删除图标快照记录。"
-        >
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleResetLaunchpadIcons}
-              disabled={layoutResetting || syncing || mutating}
-            >
-              {layoutResetting ? '重置中...' : '重置图标'}
-            </Button>
-          </div>
-          {layoutResetText ? (
-            <p className="text-xs text-muted-foreground">{layoutResetText}</p>
-          ) : null}
-        </SettingCard>
-
-        <div className="space-y-3 rounded-lg border border-border/90 bg-card p-4 shadow-sm">
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              value={searchInput}
-              onChange={e => setSearchInput(e.target.value)}
-              placeholder="搜索图标名称或路径"
-              className="min-w-[220px] flex-1"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void refreshIconManagerList()}
-              disabled={listLoading || syncing || mutating}
-            >
-              刷新列表
-            </Button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {ICON_VISIBILITY_FILTER_OPTIONS.map(opt => (
-              <OptionButton
-                key={opt.value}
-                label={opt.label}
-                selected={visibilityFilter === opt.value}
-                onClick={() => setVisibilityFilter(opt.value)}
-              />
-            ))}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {ICON_SOURCE_FILTER_OPTIONS.map(opt => (
-              <OptionButton
-                key={opt.value}
-                label={opt.label}
-                selected={sourceFilter === opt.value}
-                onClick={() => setSourceFilter(opt.value)}
-              />
-            ))}
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            图标总数 {allIcons.length} 项，当前筛选结果 {filteredIcons.length} 项。
-          </p>
-
-          {managerErrorText ? <p className="text-sm text-red-500">{managerErrorText}</p> : null}
-          {managerResultText ? (
-            <p className="text-sm text-muted-foreground" aria-live="polite">
-              {managerResultText}
-            </p>
-          ) : null}
-
-          <div className="space-y-2">
-            {listLoading ? (
-              <p className="text-sm text-muted-foreground">图标列表加载中...</p>
-            ) : filteredIcons.length === 0 ? (
-              <p className="text-sm text-muted-foreground">当前筛选条件下没有图标。</p>
-            ) : (
-              filteredIcons.map(icon => {
-                const sourceLabel = icon.source === 'desktop' ? '桌面' : '自定义应用'
-                const sourceBadgeClass =
-                  icon.source === 'desktop'
-                    ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
-                    : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                return (
-                  <div
-                    key={`${icon.source}:${icon.id}`}
-                    className="rounded-md border border-border/85 bg-background p-3 shadow-sm"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="h-10 w-10 shrink-0 overflow-hidden">
-                        {icon.icon_base64 ? (
-                          <img
-                            src={icon.icon_base64}
-                            alt={icon.name}
-                            className="h-full w-full object-contain"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                            无图标
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="truncate text-sm font-medium">{icon.name || '未命名'}</p>
-                          <span
-                            className={`rounded border px-2 py-0.5 text-[11px] ${sourceBadgeClass}`}
-                          >
-                            {sourceLabel}
-                          </span>
-                          <span
-                            className={`rounded border px-2 py-0.5 text-[11px] ${
-                              icon.hidden
-                                ? 'border-orange-500/30 bg-orange-500/15 text-orange-400'
-                                : 'border-emerald-500/30 bg-emerald-500/15 text-emerald-400'
-                            }`}
-                          >
-                            {icon.hidden ? '隐藏' : '未隐藏'}
-                          </span>
-                        </div>
-                        <p className="truncate text-xs text-muted-foreground">路径：{icon.path}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          目标：{icon.target_path || '-'}
-                        </p>
-                      </div>
-
-                      <div className="flex shrink-0 gap-2">
-                        {icon.hidden ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setPendingMutation({ type: 'unhide', icon })}
-                            disabled={syncing || mutating}
-                          >
-                            取消隐藏
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setPendingMutation({ type: 'hide', icon })}
-                            disabled={syncing || mutating}
-                          >
-                            隐藏
-                          </Button>
-                        )}
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => setPendingMutation({ type: 'delete', icon })}
-                          disabled={syncing || mutating}
-                        >
-                          删除
-                        </Button>
                       </div>
                     </div>
-                  </div>
-                )
-              })
-            )}
+                  )
+                })
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1528,12 +1551,14 @@ export function Settings() {
           </ul>
         </nav>
 
-        <main className="min-h-0 flex-1 overflow-y-auto p-8">
-          {activeNav === 'settings' && <SettingsPanel />}
-          {activeNav === 'search' && <SearchSettingsPanel />}
-          {activeNav === 'iconManager' && <IconManagerPanel />}
-          {activeNav === 'update' && <UpdatePanel />}
-          {activeNav === 'about' && <AboutPanel />}
+        <main className="min-h-0 flex-1 overflow-y-auto px-6 py-6 xl:px-8">
+          <div className={cn('mx-auto w-full', NAV_CONTENT_WIDTH[activeNav])}>
+            {activeNav === 'settings' && <SettingsPanel />}
+            {activeNav === 'search' && <SearchSettingsPanel />}
+            {activeNav === 'iconManager' && <IconManagerPanel />}
+            {activeNav === 'update' && <UpdatePanel />}
+            {activeNav === 'about' && <AboutPanel />}
+          </div>
         </main>
       </div>
     </div>
