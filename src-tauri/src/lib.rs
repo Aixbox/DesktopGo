@@ -14,10 +14,19 @@ use commands::{
     sync_full_desktop_icons, sync_new_customapp_icons, sync_new_desktop_icons, toggle_window,
     unhide_desktop_icons,
 };
+#[cfg(windows)]
+use once_cell::sync::OnceCell;
+#[cfg(windows)]
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
-use tauri::Manager;
+use tauri::{Manager, RunEvent};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+
+#[cfg(windows)]
+static WINDOWS_CONSOLE_APP_HANDLE: OnceCell<tauri::AppHandle> = OnceCell::new();
+#[cfg(windows)]
+static WINDOWS_CONSOLE_EXIT_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -32,7 +41,7 @@ pub fn run() {
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
-    builder
+    let app = builder
         .setup(|app| {
             let show_item = MenuItem::with_id(app, "show", "显示启动台", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
@@ -60,6 +69,7 @@ pub fn run() {
                 .build(app)?;
 
             create_main_window(app.handle(), false);
+            install_windows_console_exit_handler(app.handle());
 
             let shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
             let handle = app.handle().clone();
@@ -99,8 +109,14 @@ pub fn run() {
             check_for_app_update,
             install_app_update
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if let RunEvent::Exit = event {
+            everything::shutdown_search_runtime(app_handle);
+        }
+    });
 }
 
 fn show_or_create_main_window(app: &tauri::AppHandle) {
@@ -146,4 +162,51 @@ fn attach_blur_handler(app: &tauri::AppHandle) {
             }
         });
     }
+}
+
+#[cfg(windows)]
+fn install_windows_console_exit_handler(app: &tauri::AppHandle) {
+    let _ = WINDOWS_CONSOLE_APP_HANDLE.set(app.clone());
+
+    if let Err(error) = unsafe {
+        windows::Win32::System::Console::SetConsoleCtrlHandler(
+            Some(windows_console_ctrl_handler),
+            true,
+        )
+    } {
+        eprintln!(
+            "Warning: Failed to install Windows console exit handler: {}",
+            error
+        );
+    }
+}
+
+#[cfg(not(windows))]
+fn install_windows_console_exit_handler(_app: &tauri::AppHandle) {}
+
+#[cfg(windows)]
+unsafe extern "system" fn windows_console_ctrl_handler(ctrl_type: u32) -> windows::core::BOOL {
+    use windows::Win32::System::Console::{
+        CTRL_BREAK_EVENT, CTRL_CLOSE_EVENT, CTRL_C_EVENT, CTRL_SHUTDOWN_EVENT,
+    };
+
+    let should_exit = matches!(
+        ctrl_type,
+        CTRL_C_EVENT | CTRL_BREAK_EVENT | CTRL_CLOSE_EVENT | CTRL_SHUTDOWN_EVENT
+    );
+    if !should_exit {
+        return false.into();
+    }
+
+    if !WINDOWS_CONSOLE_EXIT_REQUESTED.swap(true, Ordering::SeqCst) {
+        if let Some(app) = WINDOWS_CONSOLE_APP_HANDLE.get() {
+            app.exit(0);
+            return true.into();
+        }
+
+        WINDOWS_CONSOLE_EXIT_REQUESTED.store(false, Ordering::SeqCst);
+        return false.into();
+    }
+
+    true.into()
 }

@@ -1,4 +1,4 @@
-﻿use std::fs::{self, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -68,7 +68,10 @@ fn rotate_debug_logs(base_dir: &Path) {
         return;
     }
 
-    let oldest_backup = base_dir.join(format!("{}.{}", DEBUG_LOG_FILE_NAME, DEBUG_LOG_ROTATION_COUNT));
+    let oldest_backup = base_dir.join(format!(
+        "{}.{}",
+        DEBUG_LOG_FILE_NAME, DEBUG_LOG_ROTATION_COUNT
+    ));
     let _ = fs::remove_file(&oldest_backup);
 
     for index in (1..DEBUG_LOG_ROTATION_COUNT).rev() {
@@ -425,3 +428,14 @@ pub fn record_search_result_run(app_handle: &tauri::AppHandle, path: &str) -> Re
     Ok(())
 }
 
+pub fn shutdown_search_runtime(app_handle: &tauri::AppHandle) {
+    append_debug_log(app_handle, "shutdown_search_runtime: enter");
+    ipc::shutdown_worker(app_handle);
+
+    if let Ok(mut guard) = RUNTIME_STATE.lock() {
+        guard.state = Some(SearchRuntimeState::Unknown);
+        guard.provider = None;
+        guard.message = None;
+        guard.dll_path = None;
+    }
+}

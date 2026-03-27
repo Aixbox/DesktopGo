@@ -126,11 +126,8 @@ pub fn set_layout_payload(
     }
 
     let conn = open_db(app_handle)?;
-    conn.execute(
-        UPSERT_KV_SQL,
-        params![normalized_key, payload],
-    )
-    .map_err(|e| format!("Failed to write layout payload to SQLite: {}", e))?;
+    conn.execute(UPSERT_KV_SQL, params![normalized_key, payload])
+        .map_err(|e| format!("Failed to write layout payload to SQLite: {}", e))?;
 
     Ok(())
 }

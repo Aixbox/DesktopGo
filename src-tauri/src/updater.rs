@@ -2,8 +2,8 @@ use serde::Serialize;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, State};
 use tauri::utils::config::PluginConfig;
+use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 use url::Url;
 
@@ -140,7 +140,10 @@ pub async fn check_for_app_update(
     });
     let has_update = metadata.is_some();
 
-    *pending_update.0.lock().map_err(|_| "无法写入待安装更新状态".to_string())? = update;
+    *pending_update
+        .0
+        .lock()
+        .map_err(|_| "无法写入待安装更新状态".to_string())? = update;
 
     Ok(UpdateCheckResult {
         configured: true,
@@ -205,10 +208,8 @@ pub async fn install_app_update(
                 );
             },
             move || {
-                let _ = app_handle_installing.emit(
-                    UPDATE_PROGRESS_EVENT,
-                    UpdateProgressEvent::Installing,
-                );
+                let _ = app_handle_installing
+                    .emit(UPDATE_PROGRESS_EVENT, UpdateProgressEvent::Installing);
             },
         )
         .await;
@@ -264,7 +265,9 @@ fn resolve_updater_config(app_handle: &AppHandle) -> Result<UpdaterBuildConfig, 
         .map_err(|error| format!("`src-tauri/tauri.conf.json` 中 updater 配置无效：{error}"))?;
 
     if parsed_config.pubkey.trim().is_empty() {
-        return Err("更新未配置。请在 `src-tauri/tauri.conf.json` 中设置 `plugins.updater.pubkey`。".into());
+        return Err(
+            "更新未配置。请在 `src-tauri/tauri.conf.json` 中设置 `plugins.updater.pubkey`。".into(),
+        );
     }
 
     if parsed_config.endpoints.is_empty() {
@@ -299,19 +302,16 @@ fn read_build_value(raw: Option<&str>) -> Option<String> {
 }
 
 fn read_updater_plugin_config(plugins: &PluginConfig) -> Result<serde_json::Value, String> {
-    plugins
-        .0
-        .get("updater")
-        .cloned()
-        .ok_or_else(|| "更新未配置。请在 `src-tauri/tauri.conf.json` 中设置 `plugins.updater`。".into())
+    plugins.0.get("updater").cloned().ok_or_else(|| {
+        "更新未配置。请在 `src-tauri/tauri.conf.json` 中设置 `plugins.updater`。".into()
+    })
 }
 
 fn parse_endpoint_urls(endpoints: &[String]) -> Result<Vec<Url>, String> {
     endpoints
         .iter()
         .map(|endpoint| {
-            Url::parse(endpoint)
-                .map_err(|error| format!("更新地址 `{endpoint}` 无法解析：{error}"))
+            Url::parse(endpoint).map_err(|error| format!("更新地址 `{endpoint}` 无法解析：{error}"))
         })
         .collect()
 }

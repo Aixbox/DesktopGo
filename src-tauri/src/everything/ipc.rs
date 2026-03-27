@@ -199,6 +199,9 @@ mod windows_impl {
             query: SearchQuery,
             response: Sender<Result<SearchResponse, String>>,
         },
+        Shutdown {
+            response: Sender<()>,
+        },
     }
 
     enum ActiveRequest {
@@ -242,7 +245,8 @@ mod windows_impl {
         Lazy::new(|| to_wide_null_terminated(REPLY_WINDOW_CLASS));
     static WINDOW_CLASS_REGISTERED: OnceCell<()> = OnceCell::new();
     static QUERY_REPLY_STATE: Lazy<Mutex<Option<ReplyState>>> = Lazy::new(|| Mutex::new(None));
-    static WORKER_SENDER: OnceCell<Sender<WorkerCommand>> = OnceCell::new();
+    static WORKER_SENDER: Lazy<Mutex<Option<Sender<WorkerCommand>>>> =
+        Lazy::new(|| Mutex::new(None));
     static WORKER_INIT_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
     unsafe fn load_symbol<T: Copy>(lib: &Library, name: &[u8]) -> Result<T, String> {
         let symbol: Symbol<T> = lib.get(name).map_err(|e| {
@@ -655,6 +659,21 @@ mod windows_impl {
         }
     }
 
+    fn teardown_worker(
+        api: &EverythingApi,
+        reply_hwnd: HWND,
+        app_handle: &tauri::AppHandle,
+        active: &mut Option<ActiveRequest>,
+    ) {
+        cancel_active_request(api, app_handle, active);
+        clear_reply_state();
+        unsafe {
+            (api.set_reply_window)(HWND(std::ptr::null_mut()));
+            (api.clean_up)();
+            let _ = DestroyWindow(reply_hwnd);
+        }
+    }
+
     fn start_probe(
         api: &EverythingApi,
         reply_hwnd: HWND,
@@ -732,9 +751,7 @@ mod windows_impl {
             let mut message = MSG::default();
             while unsafe { PeekMessageW(&mut message, None, 0, 0, PM_REMOVE) }.into() {
                 if message.message == WM_QUIT {
-                    unsafe {
-                        let _ = DestroyWindow(reply_hwnd);
-                    }
+                    teardown_worker(&api, reply_hwnd, &app_handle, &mut active);
                     return;
                 }
                 unsafe {
@@ -784,6 +801,12 @@ mod windows_impl {
                             }
                         }
                     }
+                    WorkerCommand::Shutdown { response } => {
+                        append_debug_log(&app_handle, "ipc worker shutdown requested");
+                        teardown_worker(&api, reply_hwnd, &app_handle, &mut active);
+                        let _ = response.send(());
+                        return;
+                    }
                 }
             }
 
@@ -808,16 +831,24 @@ mod windows_impl {
         dll_path: &Path,
         app_handle: &tauri::AppHandle,
     ) -> Result<Sender<WorkerCommand>, String> {
-        if let Some(sender) = WORKER_SENDER.get() {
-            return Ok(sender.clone());
+        if let Some(sender) = WORKER_SENDER
+            .lock()
+            .map_err(|_| "Failed to lock Everything IPC worker sender".to_string())?
+            .clone()
+        {
+            return Ok(sender);
         }
 
         let _guard = WORKER_INIT_LOCK
             .lock()
             .map_err(|_| "Failed to lock Everything IPC worker init".to_string())?;
 
-        if let Some(sender) = WORKER_SENDER.get() {
-            return Ok(sender.clone());
+        if let Some(sender) = WORKER_SENDER
+            .lock()
+            .map_err(|_| "Failed to lock Everything IPC worker sender".to_string())?
+            .clone()
+        {
+            return Ok(sender);
         }
 
         let dll_path = dll_path.to_path_buf();
@@ -856,8 +887,11 @@ mod windows_impl {
 
         match init_rx.recv_timeout(Duration::from_secs(5)) {
             Ok(Ok(())) => {
-                let _ = WORKER_SENDER.set(command_tx.clone());
-                Ok(WORKER_SENDER.get().cloned().unwrap_or(command_tx))
+                let mut guard = WORKER_SENDER
+                    .lock()
+                    .map_err(|_| "Failed to lock Everything IPC worker sender".to_string())?;
+                *guard = Some(command_tx.clone());
+                Ok(command_tx)
             }
             Ok(Err(error)) => Err(error),
             Err(RecvTimeoutError::Timeout) => {
@@ -934,6 +968,38 @@ mod windows_impl {
 
         Ok(value)
     }
+
+    pub(super) fn shutdown_worker(app_handle: &tauri::AppHandle) {
+        let sender = match WORKER_SENDER.lock() {
+            Ok(mut guard) => guard.take(),
+            Err(_) => None,
+        };
+        let Some(sender) = sender else {
+            return;
+        };
+
+        append_debug_log(app_handle, "ipc worker shutdown dispatch");
+        let (response_tx, response_rx) = mpsc::channel();
+        if sender
+            .send(WorkerCommand::Shutdown {
+                response: response_tx,
+            })
+            .is_err()
+        {
+            append_debug_log(app_handle, "ipc worker already stopped before shutdown");
+            return;
+        }
+
+        match response_rx.recv_timeout(Duration::from_secs(2)) {
+            Ok(()) => append_debug_log(app_handle, "ipc worker shutdown complete"),
+            Err(RecvTimeoutError::Timeout) => {
+                append_debug_log(app_handle, "ipc worker shutdown timed out")
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                append_debug_log(app_handle, "ipc worker stopped during shutdown")
+            }
+        }
+    }
 }
 
 #[cfg(windows)]
@@ -955,6 +1021,11 @@ pub fn increment_run_count(dll_path: &Path, file_name: &str) -> Result<u32, Stri
     windows_impl::increment_run_count(dll_path, file_name)
 }
 
+#[cfg(windows)]
+pub fn shutdown_worker(app_handle: &tauri::AppHandle) {
+    windows_impl::shutdown_worker(app_handle)
+}
+
 #[cfg(not(windows))]
 pub fn probe_connection(_dll_path: &Path, _app_handle: &tauri::AppHandle) -> Result<(), String> {
     Err("Everything search is only supported on Windows".to_string())
@@ -973,3 +1044,6 @@ pub fn search(
 pub fn increment_run_count(_dll_path: &Path, _file_name: &str) -> Result<u32, String> {
     Err("Everything search is only supported on Windows".to_string())
 }
+
+#[cfg(not(windows))]
+pub fn shutdown_worker(_app_handle: &tauri::AppHandle) {}
