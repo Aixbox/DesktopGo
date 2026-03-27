@@ -231,7 +231,7 @@ const ICON_SYNC_GROUPS: {
   {
     source: 'customapp',
     title: '自定义应用目录',
-    desc: '适合维护自定义应用文件夹中的图标快照。',
+    desc: '适合维护当前配置的自定义应用目录中的图标快照。',
     actions: ['customappIncremental', 'customappFull'],
   },
 ]
@@ -267,30 +267,17 @@ function WindowControlButton({
 function SettingsPanel() {
   const { iconSize, windowMode, titleLineCount, dockEnabled, setDockEnabled } = useIconStore()
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark')
-  const [defaultCustomAppDir, setDefaultCustomAppDir] = useState('')
-  const [customAppDirInput, setCustomAppDirInput] = useState('')
-  const [effectiveCustomAppDir, setEffectiveCustomAppDir] = useState('')
-  const [customAppDirText, setCustomAppDirText] = useState('')
 
   useEffect(() => {
     void (async () => {
       try {
-        const [
-          savedIconSize,
-          savedWindowMode,
-          savedTitleLineCount,
-          savedDockEnabled,
-          savedThemeMode,
-          savedCustomAppDir,
-          resolvedDefaultCustomAppDir,
-        ] = await Promise.all([
+        const [savedIconSize, savedWindowMode, savedTitleLineCount, savedDockEnabled, savedThemeMode] =
+          await Promise.all([
           getSetting('iconSize'),
           getSetting('windowMode'),
           getSetting('titleLineCount'),
           getSetting('dockEnabled'),
           getSetting('themeMode'),
-          getSetting('customAppDir'),
-          invoke<string>('get_default_customapp_dir'),
         ])
 
         useIconStore.setState({
@@ -300,12 +287,6 @@ function SettingsPanel() {
           dockEnabled: savedDockEnabled,
         })
         setThemeMode(savedThemeMode)
-        setDefaultCustomAppDir(resolvedDefaultCustomAppDir)
-
-        const nextCustomAppDir = savedCustomAppDir.trim()
-        const nextEffectiveCustomAppDir = nextCustomAppDir || resolvedDefaultCustomAppDir
-        setCustomAppDirInput(nextEffectiveCustomAppDir)
-        setEffectiveCustomAppDir(nextEffectiveCustomAppDir)
       } catch (e) {
         console.error('Failed to load settings:', e)
       } finally {
@@ -343,63 +324,6 @@ function SettingsPanel() {
     void saveTheme(value).catch(e => console.error('Failed to save theme mode:', e))
     setThemeMode(value)
     applyTheme(value)
-  }
-
-  const handlePickCustomAppDir = async () => {
-    try {
-      const selected = await openDialog({
-        directory: true,
-        multiple: false,
-        defaultPath: customAppDirInput.trim() || defaultCustomAppDir || undefined,
-      })
-
-      if (typeof selected === 'string') {
-        setCustomAppDirInput(selected)
-        setCustomAppDirText('已选择文件夹，请点击“保存路径”后生效。')
-      }
-    } catch (e) {
-      setCustomAppDirText(`选择文件夹失败：${String(e)}`)
-    }
-  }
-
-  const handleOpenCustomAppDir = async () => {
-    const targetDir = customAppDirInput.trim() || effectiveCustomAppDir || defaultCustomAppDir
-    if (!targetDir) {
-      setCustomAppDirText('没有可打开的目录，请先选择或输入自定义应用目录。')
-      return
-    }
-
-    try {
-      await invoke('launch_app', { path: targetDir })
-      setCustomAppDirText(`已打开目录：${targetDir}`)
-    } catch (e) {
-      setCustomAppDirText(`打开目录失败：${String(e)}`)
-    }
-  }
-
-  const handleSaveCustomAppDir = async () => {
-    try {
-      const nextCustomAppDir = customAppDirInput.trim()
-      await setSetting('customAppDir', nextCustomAppDir)
-      const nextEffectiveCustomAppDir = nextCustomAppDir || defaultCustomAppDir
-      setEffectiveCustomAppDir(nextEffectiveCustomAppDir)
-      setCustomAppDirText(
-        nextCustomAppDir ? '路径已保存，后续自定义应用同步将使用该目录。' : '已恢复使用默认自定义应用目录。'
-      )
-    } catch (e) {
-      setCustomAppDirText(`保存失败：${String(e)}`)
-    }
-  }
-
-  const handleResetCustomAppDir = async () => {
-    try {
-      await setSetting('customAppDir', '')
-      setCustomAppDirInput(defaultCustomAppDir)
-      setEffectiveCustomAppDir(defaultCustomAppDir)
-      setCustomAppDirText('已恢复默认自定义应用目录。')
-    } catch (e) {
-      setCustomAppDirText(`恢复默认失败：${String(e)}`)
-    }
   }
 
   return (
@@ -460,41 +384,6 @@ function SettingsPanel() {
           onChange={handleDockEnabled}
         />
       </div>
-
-      <SettingCard label="自定义图标文件夹">
-        <p className="text-xs text-muted-foreground">
-          默认目录：{defaultCustomAppDir || '加载中...'}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          当前生效目录：{effectiveCustomAppDir || '加载中...'}
-        </p>
-        <Input
-          value={customAppDirInput}
-          onChange={e => setCustomAppDirInput(e.target.value)}
-          placeholder="输入自定义应用文件夹绝对路径"
-          className="w-full"
-        />
-        <p className="text-xs text-muted-foreground">
-          说明：自定义应用目录只扫描一级目录，删除仅删除应用内记录，不会删除磁盘文件。
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={handlePickCustomAppDir}>
-            选择文件夹
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleOpenCustomAppDir}>
-            打开文件夹
-          </Button>
-          <Button size="sm" onClick={handleSaveCustomAppDir}>
-            保存路径
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleResetCustomAppDir}>
-            恢复默认路径
-          </Button>
-        </div>
-        {customAppDirText ? (
-          <p className="text-xs text-muted-foreground">{customAppDirText}</p>
-        ) : null}
-      </SettingCard>
     </>
   )
 }
@@ -515,6 +404,8 @@ function IconManagerPanel() {
   const [managerErrorText, setManagerErrorText] = useState<string>('')
   const [layoutResetText, setLayoutResetText] = useState('')
   const [defaultCustomAppDir, setDefaultCustomAppDir] = useState('')
+  const [customAppDirInput, setCustomAppDirInput] = useState('')
+  const [customAppDirText, setCustomAppDirText] = useState('')
   const [effectiveCustomAppDir, setEffectiveCustomAppDir] = useState('')
   const [allIcons, setAllIcons] = useState<IconManagerItem[]>([])
   const [searchInput, setSearchInput] = useState('')
@@ -522,15 +413,19 @@ function IconManagerPanel() {
   const [visibilityFilter, setVisibilityFilter] = useState<IconVisibilityFilter>('all')
   const [sourceFilter, setSourceFilter] = useState<IconSourceFilter>('all')
 
-  const refreshCustomAppDirDisplay = async () => {
+  const refreshCustomAppDirDisplay = async (options?: { syncInput?: boolean }) => {
     try {
       const [savedCustomAppDir, resolvedDefaultCustomAppDir] = await Promise.all([
         getSetting('customAppDir'),
         invoke<string>('get_default_customapp_dir'),
       ])
       const nextSavedCustomAppDir = savedCustomAppDir.trim()
+      const nextEffectiveCustomAppDir = nextSavedCustomAppDir || resolvedDefaultCustomAppDir
       setDefaultCustomAppDir(resolvedDefaultCustomAppDir)
-      setEffectiveCustomAppDir(nextSavedCustomAppDir || resolvedDefaultCustomAppDir)
+      setEffectiveCustomAppDir(nextEffectiveCustomAppDir)
+      if (options?.syncInput) {
+        setCustomAppDirInput(nextEffectiveCustomAppDir)
+      }
     } catch (e) {
       console.error('Failed to load customapp dir:', e)
     }
@@ -555,7 +450,7 @@ function IconManagerPanel() {
 
   useEffect(() => {
     void (async () => {
-      await refreshCustomAppDirDisplay()
+      await refreshCustomAppDirDisplay({ syncInput: true })
       await refreshIconManagerList()
     })()
   }, [])
@@ -668,6 +563,65 @@ function IconManagerPanel() {
     }
   }
 
+  const handlePickCustomAppDir = async () => {
+    try {
+      const selected = await openDialog({
+        directory: true,
+        multiple: false,
+        defaultPath: customAppDirInput.trim() || effectiveCustomAppDir || defaultCustomAppDir || undefined,
+      })
+
+      if (typeof selected === 'string') {
+        setCustomAppDirInput(selected)
+        setCustomAppDirText('已选择文件夹，请点击“保存路径”后生效。')
+      }
+    } catch (e) {
+      setCustomAppDirText(`选择文件夹失败：${String(e)}`)
+    }
+  }
+
+  const handleOpenCustomAppDir = async () => {
+    const targetDir = customAppDirInput.trim() || effectiveCustomAppDir || defaultCustomAppDir
+    if (!targetDir) {
+      setCustomAppDirText('没有可打开的目录，请先选择或输入自定义应用目录。')
+      return
+    }
+
+    try {
+      await invoke('launch_app', { path: targetDir })
+      setCustomAppDirText(`已打开目录：${targetDir}`)
+    } catch (e) {
+      setCustomAppDirText(`打开目录失败：${String(e)}`)
+    }
+  }
+
+  const handleSaveCustomAppDir = async () => {
+    try {
+      const nextCustomAppDir = customAppDirInput.trim()
+      await setSetting('customAppDir', nextCustomAppDir)
+      const nextEffectiveCustomAppDir = nextCustomAppDir || defaultCustomAppDir
+      setEffectiveCustomAppDir(nextEffectiveCustomAppDir)
+      setCustomAppDirText(
+        nextCustomAppDir ? '路径已保存，后续自定义应用同步将使用该目录。' : '已恢复使用默认自定义应用目录。'
+      )
+      await refreshIconManagerList()
+    } catch (e) {
+      setCustomAppDirText(`保存失败：${String(e)}`)
+    }
+  }
+
+  const handleResetCustomAppDir = async () => {
+    try {
+      await setSetting('customAppDir', '')
+      setCustomAppDirInput(defaultCustomAppDir)
+      setEffectiveCustomAppDir(defaultCustomAppDir)
+      setCustomAppDirText('已恢复默认自定义应用目录。')
+      await refreshIconManagerList()
+    } catch (e) {
+      setCustomAppDirText(`恢复默认失败：${String(e)}`)
+    }
+  }
+
   const handleResetLaunchpadIcons = async () => {
     if (layoutResetting) return
     const confirmed = window.confirm(
@@ -730,6 +684,53 @@ function IconManagerPanel() {
           </p>
         </div>
 
+        <SettingCard
+          label="自定义图标文件夹"
+          desc="自定义应用目录只扫描一级目录。这里修改后，图标列表和后续同步都会使用新目录。"
+        >
+          <p className="text-xs text-muted-foreground">默认目录：{defaultCustomAppDir || '加载中...'}</p>
+          <p className="text-xs text-muted-foreground">
+            当前生效目录：{effectiveCustomAppDir || '加载中...'}
+          </p>
+          <Input
+            value={customAppDirInput}
+            onChange={e => setCustomAppDirInput(e.target.value)}
+            placeholder="输入自定义应用文件夹绝对路径"
+            className="w-full"
+            disabled={syncing || mutating || listLoading}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePickCustomAppDir}
+              disabled={syncing || mutating || listLoading}
+            >
+              选择文件夹
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleOpenCustomAppDir}
+              disabled={syncing || mutating}
+            >
+              打开文件夹
+            </Button>
+            <Button size="sm" onClick={handleSaveCustomAppDir} disabled={syncing || mutating || listLoading}>
+              保存路径
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleResetCustomAppDir}
+              disabled={syncing || mutating || listLoading}
+            >
+              恢复默认路径
+            </Button>
+          </div>
+          {customAppDirText ? <p className="text-xs text-muted-foreground">{customAppDirText}</p> : null}
+        </SettingCard>
+
         <div className="grid gap-4 xl:grid-cols-2">
           {ICON_SYNC_GROUPS.map(group => {
             return (
@@ -745,12 +746,6 @@ function IconManagerPanel() {
                     </span>
                   </div>
                   <p className="text-xs leading-5 text-muted-foreground">{group.desc}</p>
-                  {group.source === 'customapp' ? (
-                    <div className="space-y-1 rounded-lg border border-border/80 bg-muted px-3 py-2 text-[11px] text-foreground/75">
-                      <p>当前生效目录：{effectiveCustomAppDir || '加载中...'}</p>
-                      <p>默认目录：{defaultCustomAppDir || '加载中...'}</p>
-                    </div>
-                  ) : null}
                 </div>
 
                 <div className="space-y-3">
