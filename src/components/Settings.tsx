@@ -16,6 +16,12 @@ import { UpdatePanel } from '@/components/settings/UpdatePanel'
 import { Logo, LogoText } from '@/components/Logo'
 import { SearchSettingsPanel } from '@/components/search/SearchSettingsPanel'
 import { Button } from '@/components/ui/button'
+import {
+  SettingGroup,
+  SettingCard,
+  OptionButton,
+  ToggleRow,
+} from '@/components/ui/setting-components'
 import type {
   IconManagerItem,
   IconMutationTarget,
@@ -182,75 +188,6 @@ const ICON_SYNC_ACTIONS: Record<
   },
 }
 
-function SettingGroup({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="mb-6">
-      <h2 className="mb-3 text-sm font-medium text-muted-foreground">{title}</h2>
-      <div className="flex flex-wrap gap-2">{children}</div>
-    </div>
-  )
-}
-
-function OptionButton({
-  label,
-  selected,
-  onClick,
-}: {
-  label: string
-  selected: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-lg border px-4 py-2 text-sm transition-all duration-150 cursor-pointer ${
-        selected
-          ? 'border-blue-500 bg-blue-500/20 text-blue-400'
-          : 'border-border bg-secondary text-secondary-foreground hover:border-muted-foreground hover:bg-accent'
-      }`}
-    >
-      {label}
-    </button>
-  )
-}
-
-function ToggleSettingRow({
-  title,
-  description,
-  checked,
-  onChange,
-}: {
-  title: string
-  description: string
-  checked: boolean
-  onChange: (checked: boolean) => void
-}) {
-  return (
-    <div className="mb-6">
-      <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-secondary/30 p-4">
-        <div className="space-y-1">
-          <h2 className="text-sm font-medium text-foreground">{title}</h2>
-          <p className="text-xs text-muted-foreground">{description}</p>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={checked}
-          onClick={() => onChange(!checked)}
-          className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 ${
-            checked ? 'border-blue-500 bg-blue-500/90' : 'border-border bg-zinc-500/30'
-          }`}
-        >
-          <span
-            className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-              checked ? 'translate-x-6' : 'translate-x-1'
-            }`}
-          />
-        </button>
-      </div>
-    </div>
-  )
-}
 
 function WindowControlButton({
   label,
@@ -494,41 +431,36 @@ function SettingsPanel() {
         ))}
       </SettingGroup>
 
-      <ToggleSettingRow
-        title="显示 Dock 栏"
-        description={
-          dockEnabled
-            ? '当前已开启，Dock 会在启动台底部显示。'
-            : '当前已关闭，Dock 中的图标会回到图标网格。'
-        }
-        checked={dockEnabled}
-        onChange={handleDockEnabled}
-      />
-
       <div className="mb-6">
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">图标重置</h2>
-        <div className="space-y-3 rounded-lg border border-border bg-secondary/30 p-4">
-          <p className="text-xs text-muted-foreground">
-            重置后会恢复默认图标布局，并清空当前创建的文件夹和 Dock 排布，不会删除图标快照记录。
-          </p>
+        <ToggleRow
+          title="显示 Dock 栏"
+          description={
+            dockEnabled
+              ? '当前已开启，Dock 会在启动台底部显示。'
+              : '当前已关闭，Dock 中的图标会回到图标网格。'
+          }
+          checked={dockEnabled}
+          onChange={handleDockEnabled}
+        />
+      </div>
+
+      <SettingCard label="图标重置" desc="重置后会恢复默认图标布局，并清空当前创建的文件夹和 Dock 排布，不会删除图标快照记录。">
           <div className="flex flex-wrap gap-2">
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={handleResetLaunchpadIcons}
               disabled={layoutResetting}
-              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               {layoutResetting ? '重置中...' : '重置图标'}
-            </button>
+            </Button>
           </div>
           {layoutResetText ? (
             <p className="text-xs text-muted-foreground">{layoutResetText}</p>
           ) : null}
-        </div>
-      </div>
+      </SettingCard>
 
-      <div className="mb-6">
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">自定义图标文件夹</h2>
-        <div className="space-y-3 rounded-lg border border-border bg-secondary/30 p-4">
+      <SettingCard label="自定义图标文件夹">
           <p className="text-xs text-muted-foreground">
             默认目录：{defaultCustomAppDir || '加载中...'}
           </p>
@@ -545,36 +477,23 @@ function SettingsPanel() {
             说明：customapp 只扫描一级目录，删除仅删除应用内记录，不会删除磁盘文件。
           </p>
           <div className="flex flex-wrap gap-2">
-            <button
-              onClick={handlePickCustomAppDir}
-              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
-            >
+            <Button variant="outline" size="sm" onClick={handlePickCustomAppDir}>
               选择文件夹
-            </button>
-            <button
-              onClick={handleOpenCustomAppDir}
-              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
-            >
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleOpenCustomAppDir}>
               打开文件夹
-            </button>
-            <button
-              onClick={handleSaveCustomAppDir}
-              className="rounded-md bg-blue-500 px-3 py-1.5 text-sm text-white hover:bg-blue-600"
-            >
+            </Button>
+            <Button size="sm" onClick={handleSaveCustomAppDir}>
               保存路径
-            </button>
-            <button
-              onClick={handleResetCustomAppDir}
-              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
-            >
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleResetCustomAppDir}>
               恢复默认路径
-            </button>
+            </Button>
           </div>
           {customAppDirText ? (
             <p className="text-xs text-muted-foreground">{customAppDirText}</p>
           ) : null}
-        </div>
-      </div>
+      </SettingCard>
     </>
   )
 }
@@ -723,25 +642,22 @@ function IconManagerPanel() {
     ? pendingMutation.type === 'hide'
       ? {
           title: '确认隐藏图标',
-          desc: `将隐藏图标“${pendingMutation.icon.name}”。隐藏后不会在主页面显示。`,
+          desc: `将隐藏图标”${pendingMutation.icon.name}”。隐藏后不会在主页面显示。`,
           confirmLabel: '确认隐藏',
-          confirmClass:
-            'rounded-md bg-blue-500 px-3 py-1.5 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60',
+          confirmVariant: 'default' as const,
         }
       : pendingMutation.type === 'unhide'
         ? {
             title: '确认取消隐藏图标',
-            desc: `将取消隐藏图标“${pendingMutation.icon.name}”。取消后图标会重新显示。`,
+            desc: `将取消隐藏图标”${pendingMutation.icon.name}”。取消后图标会重新显示。`,
             confirmLabel: '确认取消隐藏',
-            confirmClass:
-              'rounded-md bg-emerald-500 px-3 py-1.5 text-sm text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60',
+            confirmVariant: 'default' as const,
           }
         : {
             title: '确认删除图标记录',
-            desc: `将删除图标“${pendingMutation.icon.name}”在应用内的记录，不会删除磁盘文件。`,
+            desc: `将删除图标”${pendingMutation.icon.name}”在应用内的记录，不会删除磁盘文件。`,
             confirmLabel: '确认删除',
-            confirmClass:
-              'rounded-md bg-red-500 px-3 py-1.5 text-sm text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60',
+            confirmVariant: 'destructive' as const,
           }
     : null
 
@@ -770,7 +686,7 @@ function IconManagerPanel() {
                 key={actionKey}
                 onClick={() => setPendingAction(actionKey)}
                 disabled={syncing || mutating}
-                className="rounded-lg border border-border bg-secondary px-4 py-3 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg border border-border bg-secondary/30 px-4 py-3 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <p className="text-sm font-medium">{action.label}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{action.desc}</p>
@@ -787,13 +703,14 @@ function IconManagerPanel() {
               placeholder="搜索图标名称或路径"
               className="min-w-[220px] flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-blue-500"
             />
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => void refreshIconManagerList()}
               disabled={listLoading || syncing || mutating}
-              className="rounded-md border border-border px-3 py-2 text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               刷新列表
-            </button>
+            </Button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -883,29 +800,32 @@ function IconManagerPanel() {
 
                       <div className="flex shrink-0 gap-2">
                         {icon.hidden ? (
-                          <button
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => setPendingMutation({ type: 'unhide', icon })}
                             disabled={syncing || mutating}
-                            className="rounded-md border border-emerald-500/40 px-3 py-1.5 text-xs text-emerald-400 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             取消隐藏
-                          </button>
+                          </Button>
                         ) : (
-                          <button
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => setPendingMutation({ type: 'hide', icon })}
                             disabled={syncing || mutating}
-                            className="rounded-md border border-blue-500/40 px-3 py-1.5 text-xs text-blue-400 hover:bg-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             隐藏
-                          </button>
+                          </Button>
                         )}
-                        <button
+                        <Button
+                          variant="destructive"
+                          size="sm"
                           onClick={() => setPendingMutation({ type: 'delete', icon })}
                           disabled={syncing || mutating}
-                          className="rounded-md border border-red-500/40 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           删除
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -928,20 +848,21 @@ function IconManagerPanel() {
               {ICON_SYNC_ACTIONS[pendingAction].confirmDesc}
             </p>
             <div className="mt-5 flex justify-end gap-2">
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setPendingAction(null)}
                 disabled={syncing}
-                className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 取消
-              </button>
-              <button
+              </Button>
+              <Button
+                size="sm"
                 onClick={handleConfirmSync}
                 disabled={syncing}
-                className="rounded-md bg-blue-500 px-3 py-1.5 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {syncing ? '同步中...' : '开始同步'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -953,20 +874,22 @@ function IconManagerPanel() {
             <h3 className="text-base font-semibold">{mutationDialogText.title}</h3>
             <p className="mt-2 text-sm text-muted-foreground">{mutationDialogText.desc}</p>
             <div className="mt-5 flex justify-end gap-2">
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setPendingMutation(null)}
                 disabled={mutating}
-                className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 取消
-              </button>
-              <button
+              </Button>
+              <Button
+                variant={mutationDialogText.confirmVariant}
+                size="sm"
                 onClick={handleConfirmMutation}
                 disabled={mutating}
-                className={mutationDialogText.confirmClass}
               >
                 {mutating ? '处理中...' : mutationDialogText.confirmLabel}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

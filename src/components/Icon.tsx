@@ -3,7 +3,6 @@ import {
   getIconGridRowHeight,
   ICON_GRID_TILE_PADDING_Y,
   ICON_GRID_TITLE_GAP,
-  ICON_GRID_TITLE_HEIGHT,
   ICON_SIZE_CONFIG,
 } from '../types'
 import { useIconStore } from '../stores/iconStore'
