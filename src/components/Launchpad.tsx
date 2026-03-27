@@ -628,6 +628,7 @@ export function Launchpad() {
       resizable: true,
       decorations: false,
       shadow: true,
+      visible: false,
     })
     settingsWindow.once('tauri://created', async () => {
       await getCurrentWindow().hide()

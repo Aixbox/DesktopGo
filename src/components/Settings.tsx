@@ -326,6 +326,8 @@ function SettingsPanel() {
         setEffectiveCustomAppDir(nextEffectiveCustomAppDir)
       } catch (e) {
         console.error('Failed to load settings:', e)
+      } finally {
+        void getCurrentWindow().show()
       }
     })()
   }, [])
