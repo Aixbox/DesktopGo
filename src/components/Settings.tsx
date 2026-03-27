@@ -934,7 +934,7 @@ function IconManagerPanel() {
                     className="rounded-md border border-border/85 bg-background p-3 shadow-sm"
                   >
                     <div className="flex items-start gap-3">
-                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md border border-border/80 bg-muted">
+                      <div className="h-10 w-10 shrink-0 overflow-hidden">
                         {icon.icon_base64 ? (
                           <img
                             src={icon.icon_base64}
