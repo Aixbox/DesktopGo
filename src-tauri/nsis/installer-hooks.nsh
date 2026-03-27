@@ -3,6 +3,8 @@ Var EverythingInstallerPath
 Var InstallEverythingCheckbox
 Var InstallEverythingCheckboxState
 
+; Override the default NSIS welcome copy so it doesn't tell users to close all apps.
+!define MUI_WELCOMEPAGE_TEXT "此程序将引导你完成 $(^NameDA) 的安装。$\r$\n$\r$\n安装前，建议先关闭正在运行的相关程序，以避免文件被占用，并减少安装后需要重新启动计算机的可能性。$\r$\n$\r$\n$_CLICK"
 Page custom PageEverythingInstall PageLeaveEverythingInstall
 
 Function DetectEverythingInstalled

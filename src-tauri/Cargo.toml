@@ -2,7 +2,10 @@
 name = "desktopgo"
 version = "0.1.0"
 description = "A macOS-like launchpad for Windows"
-authors = ["you"]
+authors = ["Aixbox"]
+homepage = "https://github.com/Aixbox/DesktopGo"
+repository = "https://github.com/Aixbox/DesktopGo"
+license = "MIT"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

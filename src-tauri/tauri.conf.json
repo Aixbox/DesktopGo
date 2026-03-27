@@ -29,10 +29,26 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
-    "targets": "all",
+    "targets": "nsis",
+    "publisher": "Aixbox",
+    "homepage": "https://github.com/Aixbox/DesktopGo",
+    "copyright": "Copyright (c) Aixbox",
+    "license": "MIT",
+    "licenseFile": "LICENSE.txt",
+    "shortDescription": "A macOS-like launchpad for Windows",
+    "longDescription": "DesktopGo is a focused desktop launcher for Windows with fast app access, polished full-screen presentation, and Everything-powered file search.",
     "windows": {
       "nsis": {
-        "installerHooks": "nsis/installer-hooks.nsh"
+        "installerHooks": "nsis/installer-hooks.nsh",
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "icons/nsis-header.bmp",
+        "sidebarImage": "icons/nsis-sidebar.bmp",
+        "languages": [
+          "SimpChinese"
+        ],
+        "customLanguageFiles": {
+          "SimpChinese": "nsis/SimpChinese.nsh"
+        }
       }
     },
     "resources": [
