@@ -9,7 +9,7 @@
 } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import { Check, ChevronDown } from 'lucide-react'
 import { applyTheme, getSavedTheme } from '@/lib/theme'
 import { getSearchPreview, recordSearchResultRun } from '@/lib/search/api'
@@ -53,6 +53,18 @@ const TITLE_LINE_OPTIONS: { label: string; value: TitleLineCount }[] = [
 
 const LONG_PRESS_MS = 420
 const ICON_SEARCH_LIMIT = 48
+const SETTINGS_WINDOW_WIDTH = 800
+const SETTINGS_WINDOW_HEIGHT = 600
+
+async function ensureSettingsWindowMinSize(window: WebviewWindow) {
+  const minSize = new LogicalSize(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
+  await window.setMinSize(minSize)
+
+  const currentSize = await window.innerSize()
+  if (currentSize.width < SETTINGS_WINDOW_WIDTH || currentSize.height < SETTINGS_WINDOW_HEIGHT) {
+    await window.setSize(minSize)
+  }
+}
 
 type SearchSource = 'icons' | 'everything'
 
@@ -612,6 +624,7 @@ export function Launchpad() {
   const openSettings = async () => {
     const existing = await WebviewWindow.getByLabel('settings')
     if (existing) {
+      await ensureSettingsWindowMinSize(existing)
       await existing.unminimize()
       await existing.show()
       await existing.setFocus()
@@ -622,8 +635,11 @@ export function Launchpad() {
     const settingsWindow = new WebviewWindow('settings', {
       url: 'index.html?page=settings',
       title: '设置',
-      width: 800,
-      height: 600,
+      // 设置窗口允许放大，但默认尺寸同时作为最小尺寸，避免布局继续被压缩。
+      width: SETTINGS_WINDOW_WIDTH,
+      height: SETTINGS_WINDOW_HEIGHT,
+      minWidth: SETTINGS_WINDOW_WIDTH,
+      minHeight: SETTINGS_WINDOW_HEIGHT,
       center: true,
       resizable: true,
       decorations: false,
