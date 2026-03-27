@@ -1306,27 +1306,19 @@ export function Settings() {
     }
   }, [])
 
-  const restoreMainWindow = useCallback(async () => {
-    const mainWindow = await WebviewWindow.getByLabel('main')
-    if (!mainWindow) return
-
-    await mainWindow.unminimize().catch(() => undefined)
-    await mainWindow.show().catch(() => undefined)
-    await mainWindow.setFocus().catch(() => undefined)
-  }, [])
-
   const closeSettingsWindow = useCallback(async () => {
     if (isClosingRef.current) return
 
+    const currentWindow = getCurrentWindow()
     isClosingRef.current = true
     try {
-      await restoreMainWindow()
-      await getCurrentWindow().close()
+      await currentWindow.hide()
     } catch (e) {
-      isClosingRef.current = false
       console.error('Failed to close settings window:', e)
+    } finally {
+      isClosingRef.current = false
     }
-  }, [restoreMainWindow])
+  }, [])
 
   useEffect(() => {
     let disposed = false
