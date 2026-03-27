@@ -916,7 +916,7 @@ function IconManagerPanel() {
             </p>
           ) : null}
 
-          <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+          <div className="space-y-2">
             {listLoading ? (
               <p className="text-sm text-muted-foreground">图标列表加载中...</p>
             ) : filteredIcons.length === 0 ? (
