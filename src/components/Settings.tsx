@@ -115,6 +115,8 @@ type IconSyncCommand =
   | 'sync_new_customapp_icons'
   | 'sync_full_customapp_icons'
 
+type IconSyncMode = 'incremental' | 'full'
+
 type IconSyncResult = {
   mode: string
   scanned_count: number
@@ -125,6 +127,12 @@ type IconSyncResult = {
 type IconVisibilityFilter = 'all' | 'visible' | 'hidden'
 type IconSourceFilter = 'all' | IconSource
 
+type IconSyncFeedback = {
+  source: 'desktop' | 'customapp'
+  tone: 'success' | 'error'
+  text: string
+}
+
 const ICON_VISIBILITY_FILTER_OPTIONS: { label: string; value: IconVisibilityFilter }[] = [
   { label: '全部', value: 'all' },
   { label: '未隐藏', value: 'visible' },
@@ -134,60 +142,99 @@ const ICON_VISIBILITY_FILTER_OPTIONS: { label: string; value: IconVisibilityFilt
 const ICON_SOURCE_FILTER_OPTIONS: { label: string; value: IconSourceFilter }[] = [
   { label: '全部来源', value: 'all' },
   { label: '桌面', value: 'desktop' },
-  { label: 'customapp', value: 'customapp' },
+  { label: '自定义应用', value: 'customapp' },
 ]
 
 const ICON_SYNC_ACTIONS: Record<
   IconSyncAction,
   {
-    label: string
+    title: string
+    buttonLabel: string
     command: IconSyncCommand
     source: 'desktop' | 'customapp'
     sourceLabel: string
+    mode: IconSyncMode
     desc: string
-    confirmTitle: string
-    confirmDesc: string
+    impact: string
+    toneLabel: string
+    confirmTitle?: string
+    confirmDesc?: string
+    confirmLabel?: string
   }
 > = {
   desktopIncremental: {
-    label: '桌面新增图标同步',
+    title: '导入新增项',
+    buttonLabel: '立即导入',
     command: 'sync_new_desktop_icons',
     source: 'desktop',
     sourceLabel: '桌面',
-    desc: '仅追加桌面上新增的图标，已有图标保持不变。',
-    confirmTitle: '确认执行桌面新增图标同步',
-    confirmDesc: '该操作会扫描桌面并仅新增快照中不存在的图标，不会删除或覆盖已有图标记录。',
+    mode: 'incremental',
+    desc: '扫描桌面，只补进新增图标，不改动已有快照记录。',
+    impact: '适合日常维护，风险最低，可直接执行。',
+    toneLabel: '推荐',
   },
   desktopFull: {
-    label: '桌面全量图标同步',
+    title: '全量对账',
+    buttonLabel: '开始对账',
     command: 'sync_full_desktop_icons',
     source: 'desktop',
     sourceLabel: '桌面',
-    desc: '按当前桌面与快照对账：重叠保留，多出删除，缺失新增。',
-    confirmTitle: '确认执行桌面全量图标同步',
+    mode: 'full',
+    desc: '重新对照当前桌面状态，补齐缺失项并清理失效记录。',
+    impact: '适合批量整理后执行，会更新快照结果，需要二次确认。',
+    toneLabel: '谨慎',
+    confirmTitle: '确认执行桌面全量对账',
     confirmDesc:
-      '该操作会重新扫描整个桌面，仅新增缺失项并删除失效项，已存在且重叠的图标记录会保留。',
+      '该操作会重新扫描整个桌面，补齐缺失项并清理快照中的失效记录，不会删除磁盘文件。',
+    confirmLabel: '确认对账',
   },
   customappIncremental: {
-    label: 'customapp新增图标同步',
+    title: '导入新增项',
+    buttonLabel: '立即导入',
     command: 'sync_new_customapp_icons',
     source: 'customapp',
-    sourceLabel: 'customapp',
-    desc: '仅追加 customapp 文件夹中新增的图标项，已有图标保持不变。',
-    confirmTitle: '确认执行 customapp 新增图标同步',
-    confirmDesc: '该操作会扫描 customapp 文件夹（仅一级目录），并仅新增快照中不存在的图标记录。',
+    sourceLabel: '自定义应用',
+    mode: 'incremental',
+    desc: '扫描当前生效目录，只补进新增图标，不改动已有快照记录。',
+    impact: '适合新增应用后执行，风险最低，可直接执行。',
+    toneLabel: '推荐',
   },
   customappFull: {
-    label: 'customapp全量图标同步',
+    title: '全量对账',
+    buttonLabel: '开始对账',
     command: 'sync_full_customapp_icons',
     source: 'customapp',
-    sourceLabel: 'customapp',
-    desc: '按当前 customapp 内容与快照对账：重叠保留，多出删除，缺失新增。',
-    confirmTitle: '确认执行 customapp 全量图标同步',
+    sourceLabel: '自定义应用',
+    mode: 'full',
+    desc: '重新对照当前目录内容，补齐缺失项并清理失效记录。',
+    impact: '适合整理目录后执行，会更新快照结果，需要二次确认。',
+    toneLabel: '谨慎',
+    confirmTitle: '确认执行自定义应用全量对账',
     confirmDesc:
-      '该操作会扫描 customapp 文件夹（仅一级目录），仅新增缺失项并删除失效项，已存在且重叠的图标记录会保留。',
+      '该操作会扫描当前自定义应用目录（仅一级目录），补齐缺失项并清理快照中的失效记录，不会删除磁盘文件。',
+    confirmLabel: '确认对账',
   },
 }
+
+const ICON_SYNC_GROUPS: {
+  source: 'desktop' | 'customapp'
+  title: string
+  desc: string
+  actions: [IconSyncAction, IconSyncAction]
+}[] = [
+  {
+    source: 'desktop',
+    title: '桌面图标',
+    desc: '适合把桌面新增或整理后的图标状态同步回应用快照。',
+    actions: ['desktopIncremental', 'desktopFull'],
+  },
+  {
+    source: 'customapp',
+    title: '自定义应用目录',
+    desc: '适合维护自定义应用文件夹中的图标快照。',
+    actions: ['customappIncremental', 'customappFull'],
+  },
+]
 
 function WindowControlButton({
   label,
@@ -224,8 +271,6 @@ function SettingsPanel() {
   const [customAppDirInput, setCustomAppDirInput] = useState('')
   const [effectiveCustomAppDir, setEffectiveCustomAppDir] = useState('')
   const [customAppDirText, setCustomAppDirText] = useState('')
-  const [layoutResetting, setLayoutResetting] = useState(false)
-  const [layoutResetText, setLayoutResetText] = useState('')
 
   useEffect(() => {
     void (async () => {
@@ -320,7 +365,7 @@ function SettingsPanel() {
   const handleOpenCustomAppDir = async () => {
     const targetDir = customAppDirInput.trim() || effectiveCustomAppDir || defaultCustomAppDir
     if (!targetDir) {
-      setCustomAppDirText('没有可打开的目录，请先选择或输入 customapp 目录。')
+      setCustomAppDirText('没有可打开的目录，请先选择或输入自定义应用目录。')
       return
     }
 
@@ -339,9 +384,7 @@ function SettingsPanel() {
       const nextEffectiveCustomAppDir = nextCustomAppDir || defaultCustomAppDir
       setEffectiveCustomAppDir(nextEffectiveCustomAppDir)
       setCustomAppDirText(
-        nextCustomAppDir
-          ? '路径已保存，后续 customapp 同步将使用该目录。'
-          : '已恢复使用默认 customapp 目录。'
+        nextCustomAppDir ? '路径已保存，后续自定义应用同步将使用该目录。' : '已恢复使用默认自定义应用目录。'
       )
     } catch (e) {
       setCustomAppDirText(`保存失败：${String(e)}`)
@@ -353,35 +396,9 @@ function SettingsPanel() {
       await setSetting('customAppDir', '')
       setCustomAppDirInput(defaultCustomAppDir)
       setEffectiveCustomAppDir(defaultCustomAppDir)
-      setCustomAppDirText('已恢复默认 customapp 目录。')
+      setCustomAppDirText('已恢复默认自定义应用目录。')
     } catch (e) {
       setCustomAppDirText(`恢复默认失败：${String(e)}`)
-    }
-  }
-
-  const handleResetLaunchpadIcons = async () => {
-    if (layoutResetting) return
-    const confirmed = window.confirm(
-      '确定要重置图标布局吗？这会清空当前宫格排序、文件夹和 Dock 排布，但不会删除图标记录。'
-    )
-    if (!confirmed) return
-
-    setLayoutResetting(true)
-    setLayoutResetText('正在重置图标布局...')
-
-    try {
-      await resetLaunchpadLayout()
-      const mainWindow = await WebviewWindow.getByLabel('main')
-      if (mainWindow) {
-        await mainWindow.emit(LAUNCHPAD_LAYOUT_RESET_EVENT)
-        setLayoutResetText('图标布局已重置，主窗口已刷新。')
-      } else {
-        setLayoutResetText('图标布局已重置，主窗口下次同步时会应用。')
-      }
-    } catch (e) {
-      setLayoutResetText(`重置图标失败：${String(e)}`)
-    } finally {
-      setLayoutResetting(false)
     }
   }
 
@@ -444,25 +461,6 @@ function SettingsPanel() {
         />
       </div>
 
-      <SettingCard
-        label="图标重置"
-        desc="重置后会恢复默认图标布局，并清空当前创建的文件夹和 Dock 排布，不会删除图标快照记录。"
-      >
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleResetLaunchpadIcons}
-            disabled={layoutResetting}
-          >
-            {layoutResetting ? '重置中...' : '重置图标'}
-          </Button>
-        </div>
-        {layoutResetText ? (
-          <p className="text-xs text-muted-foreground">{layoutResetText}</p>
-        ) : null}
-      </SettingCard>
-
       <SettingCard label="自定义图标文件夹">
         <p className="text-xs text-muted-foreground">
           默认目录：{defaultCustomAppDir || '加载中...'}
@@ -473,11 +471,11 @@ function SettingsPanel() {
         <Input
           value={customAppDirInput}
           onChange={e => setCustomAppDirInput(e.target.value)}
-          placeholder="输入 customapp 文件夹绝对路径"
+          placeholder="输入自定义应用文件夹绝对路径"
           className="w-full"
         />
         <p className="text-xs text-muted-foreground">
-          说明：customapp 只扫描一级目录，删除仅删除应用内记录，不会删除磁盘文件。
+          说明：自定义应用目录只扫描一级目录，删除仅删除应用内记录，不会删除磁盘文件。
         </p>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={handlePickCustomAppDir}>
@@ -503,6 +501,7 @@ function SettingsPanel() {
 
 function IconManagerPanel() {
   const [pendingAction, setPendingAction] = useState<IconSyncAction | null>(null)
+  const [activeSyncAction, setActiveSyncAction] = useState<IconSyncAction | null>(null)
   const [pendingMutation, setPendingMutation] = useState<{
     type: 'hide' | 'unhide' | 'delete'
     icon: IconManagerItem
@@ -510,8 +509,11 @@ function IconManagerPanel() {
   const [syncing, setSyncing] = useState(false)
   const [mutating, setMutating] = useState(false)
   const [listLoading, setListLoading] = useState(false)
-  const [resultText, setResultText] = useState<string>('')
+  const [layoutResetting, setLayoutResetting] = useState(false)
+  const [syncFeedback, setSyncFeedback] = useState<IconSyncFeedback | null>(null)
+  const [managerResultText, setManagerResultText] = useState<string>('')
   const [managerErrorText, setManagerErrorText] = useState<string>('')
+  const [layoutResetText, setLayoutResetText] = useState('')
   const [defaultCustomAppDir, setDefaultCustomAppDir] = useState('')
   const [effectiveCustomAppDir, setEffectiveCustomAppDir] = useState('')
   const [allIcons, setAllIcons] = useState<IconManagerItem[]>([])
@@ -576,13 +578,13 @@ function IconManagerPanel() {
     })
   }, [allIcons, visibilityFilter, sourceFilter, searchKeyword])
 
-  const handleConfirmSync = async () => {
-    if (!pendingAction) return
+  const runSyncAction = async (actionKey: IconSyncAction) => {
     setSyncing(true)
-    setResultText('')
+    setActiveSyncAction(actionKey)
+    setSyncFeedback(null)
 
     try {
-      const action = ICON_SYNC_ACTIONS[pendingAction]
+      const action = ICON_SYNC_ACTIONS[actionKey]
       let result: IconSyncResult
 
       if (action.source === 'customapp') {
@@ -594,23 +596,48 @@ function IconManagerPanel() {
         result = await invoke<IconSyncResult>(action.command)
       }
 
-      const modeText = result.mode === 'full' ? '全量同步' : '新增同步'
-      setResultText(
-        `${action.sourceLabel}${modeText}完成：扫描 ${result.scanned_count} 项，新增 ${result.added_count} 项，当前快照共 ${result.total_count} 项。`
-      )
+      const modeText = action.mode === 'full' ? '全量对账' : '导入新增项'
+      setSyncFeedback({
+        source: action.source,
+        tone: 'success',
+        text: `${action.sourceLabel}${modeText}完成：扫描 ${result.scanned_count} 项，新增 ${result.added_count} 项，当前快照共 ${result.total_count} 项。`,
+      })
       await refreshCustomAppDirDisplay()
       await refreshIconManagerList()
     } catch (e) {
-      setResultText(`同步失败：${String(e)}`)
+      const action = ICON_SYNC_ACTIONS[actionKey]
+      const modeText = action.mode === 'full' ? '全量对账' : '导入新增项'
+      setSyncFeedback({
+        source: action.source,
+        tone: 'error',
+        text: `${action.sourceLabel}${modeText}失败：${String(e)}`,
+      })
     } finally {
       setSyncing(false)
+      setActiveSyncAction(null)
       setPendingAction(null)
     }
+  }
+
+  const handleTriggerSync = (actionKey: IconSyncAction) => {
+    const action = ICON_SYNC_ACTIONS[actionKey]
+    if (action.mode === 'full') {
+      setPendingAction(actionKey)
+      return
+    }
+
+    void runSyncAction(actionKey)
+  }
+
+  const handleConfirmSync = async () => {
+    if (!pendingAction) return
+    await runSyncAction(pendingAction)
   }
 
   const handleConfirmMutation = async () => {
     if (!pendingMutation) return
     setMutating(true)
+    setManagerResultText('')
     try {
       const targets: IconMutationTarget[] = [
         {
@@ -630,14 +657,40 @@ function IconManagerPanel() {
       }
 
       const affected = await invoke<number>(command, { targets })
-      const sourceText = pendingMutation.icon.source === 'desktop' ? '桌面' : 'customapp'
-      setResultText(`${actionLabel}完成：${sourceText} 图标影响 ${affected} 项。`)
+      const sourceText = pendingMutation.icon.source === 'desktop' ? '桌面' : '自定义应用'
+      setManagerResultText(`${actionLabel}完成：${sourceText} 图标影响 ${affected} 项。`)
       await refreshIconManagerList()
     } catch (e) {
-      setResultText(`操作失败：${String(e)}`)
+      setManagerResultText(`操作失败：${String(e)}`)
     } finally {
       setMutating(false)
       setPendingMutation(null)
+    }
+  }
+
+  const handleResetLaunchpadIcons = async () => {
+    if (layoutResetting) return
+    const confirmed = window.confirm(
+      '确定要重置图标布局吗？这会清空当前宫格排序、文件夹和 Dock 排布，但不会删除图标记录。'
+    )
+    if (!confirmed) return
+
+    setLayoutResetting(true)
+    setLayoutResetText('正在重置图标布局...')
+
+    try {
+      await resetLaunchpadLayout()
+      const mainWindow = await WebviewWindow.getByLabel('main')
+      if (mainWindow) {
+        await mainWindow.emit(LAUNCHPAD_LAYOUT_RESET_EVENT)
+        setLayoutResetText('图标布局已重置，主窗口已刷新。')
+      } else {
+        setLayoutResetText('图标布局已重置，主窗口下次同步时会应用。')
+      }
+    } catch (e) {
+      setLayoutResetText(`重置图标失败：${String(e)}`)
+    } finally {
+      setLayoutResetting(false)
     }
   }
 
@@ -670,33 +723,152 @@ function IconManagerPanel() {
         <div className="space-y-2">
           <h2 className="text-lg font-semibold">图标管理</h2>
           <p className="text-sm text-muted-foreground">
-            首次进入主页面会自动扫描并保存桌面与 customapp
-            图标快照，后续不会主动扫描。你可以在这里手动同步并管理图标。
+            首次进入主页面会自动建立桌面和自定义应用快照，后续由你在这里手动同步和整理。
           </p>
           <p className="text-xs text-muted-foreground">
-            customapp 默认目录：{defaultCustomAppDir || '加载中...'}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            customapp 当前生效目录：{effectiveCustomAppDir || '加载中...'}
+            日常优先使用“导入新增项”；只有需要清理失效记录时，再执行“全量对账”。
           </p>
         </div>
 
-        <div className="grid gap-3">
-          {(Object.keys(ICON_SYNC_ACTIONS) as IconSyncAction[]).map(actionKey => {
-            const action = ICON_SYNC_ACTIONS[actionKey]
+        <div className="grid gap-4 xl:grid-cols-2">
+          {ICON_SYNC_GROUPS.map(group => {
             return (
-              <button
-                key={actionKey}
-                onClick={() => setPendingAction(actionKey)}
-                disabled={syncing || mutating}
-                className="rounded-lg border border-border bg-secondary/30 px-4 py-3 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              <div
+                key={group.source}
+                className="space-y-4 rounded-xl border border-border bg-secondary/20 p-4"
               >
-                <p className="text-sm font-medium">{action.label}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{action.desc}</p>
-              </button>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-medium text-foreground">{group.title}</h3>
+                    <span className="rounded-full bg-background/80 px-2 py-0.5 text-[11px] text-muted-foreground">
+                      {group.source === 'desktop' ? '桌面来源' : '目录来源'}
+                    </span>
+                  </div>
+                  <p className="text-xs leading-5 text-muted-foreground">{group.desc}</p>
+                  {group.source === 'customapp' ? (
+                    <div className="space-y-1 rounded-lg border border-border/70 bg-background/60 px-3 py-2 text-[11px] text-muted-foreground">
+                      <p>当前生效目录：{effectiveCustomAppDir || '加载中...'}</p>
+                      <p>默认目录：{defaultCustomAppDir || '加载中...'}</p>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="space-y-3">
+                  {group.actions.map(actionKey => {
+                    const action = ICON_SYNC_ACTIONS[actionKey]
+                    const isActive = syncing && activeSyncAction === actionKey
+                    const isIncremental = action.mode === 'incremental'
+
+                    return (
+                      <div
+                        key={actionKey}
+                        className={`rounded-lg border px-3 py-3 ${
+                          isIncremental
+                            ? 'border-border bg-background/70'
+                            : 'border-amber-500/20 bg-amber-500/5'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1 space-y-1.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-medium text-foreground">{action.title}</p>
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[11px] ${
+                                  isIncremental
+                                    ? 'bg-emerald-500/15 text-emerald-400'
+                                    : 'bg-amber-500/15 text-amber-400'
+                                }`}
+                              >
+                                {action.toneLabel}
+                              </span>
+                            </div>
+                            <p className="text-xs leading-5 text-muted-foreground">{action.desc}</p>
+                            <p className="text-[11px] leading-5 text-muted-foreground/90">
+                              {action.impact}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2 self-center">
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] ${
+                                isIncremental
+                                  ? 'bg-background text-muted-foreground'
+                                  : 'bg-amber-500/10 text-amber-400'
+                              }`}
+                            >
+                              {isActive ? (
+                                <>
+                                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                                  处理中
+                                </>
+                              ) : isIncremental ? (
+                                '直接执行'
+                              ) : (
+                                '需确认'
+                              )}
+                            </span>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant={isIncremental ? 'default' : 'outline'}
+                            onClick={() => handleTriggerSync(actionKey)}
+                            disabled={syncing || mutating || layoutResetting}
+                            className={
+                              isIncremental
+                                ? ''
+                                : 'border-amber-500/30 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300'
+                            }
+                          >
+                            {isActive ? (
+                              <>
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                                {`${action.buttonLabel}中...`}
+                              </>
+                            ) : (
+                              action.buttonLabel
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {syncFeedback?.source === group.source ? (
+                  <div
+                    className={`rounded-lg border px-3 py-2 text-xs leading-5 ${
+                      syncFeedback.tone === 'error'
+                        ? 'border-red-500/30 bg-red-500/10 text-red-400'
+                        : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                    }`}
+                    role={syncFeedback.tone === 'error' ? 'alert' : 'status'}
+                    aria-live="polite"
+                  >
+                    {syncFeedback.text}
+                  </div>
+                ) : null}
+              </div>
             )
           })}
         </div>
+
+        <SettingCard
+          label="图标布局重置"
+          desc="重置后会恢复默认图标布局，并清空当前创建的文件夹和 Dock 排布，不会删除图标快照记录。"
+        >
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleResetLaunchpadIcons}
+              disabled={layoutResetting || syncing || mutating}
+            >
+              {layoutResetting ? '重置中...' : '重置图标'}
+            </Button>
+          </div>
+          {layoutResetText ? (
+            <p className="text-xs text-muted-foreground">{layoutResetText}</p>
+          ) : null}
+        </SettingCard>
 
         <div className="space-y-3 rounded-lg border border-border bg-secondary/30 p-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -743,6 +915,11 @@ function IconManagerPanel() {
           </p>
 
           {managerErrorText ? <p className="text-sm text-red-500">{managerErrorText}</p> : null}
+          {managerResultText ? (
+            <p className="text-sm text-muted-foreground" aria-live="polite">
+              {managerResultText}
+            </p>
+          ) : null}
 
           <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
             {listLoading ? (
@@ -751,7 +928,7 @@ function IconManagerPanel() {
               <p className="text-sm text-muted-foreground">当前筛选条件下没有图标。</p>
             ) : (
               filteredIcons.map(icon => {
-                const sourceLabel = icon.source === 'desktop' ? '桌面' : 'customapp'
+                const sourceLabel = icon.source === 'desktop' ? '桌面' : '自定义应用'
                 const sourceBadgeClass =
                   icon.source === 'desktop'
                     ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
@@ -772,7 +949,7 @@ function IconManagerPanel() {
                           />
                         ) : (
                           <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                            No Icon
+                            无图标
                           </div>
                         )}
                       </div>
@@ -837,8 +1014,6 @@ function IconManagerPanel() {
             )}
           </div>
         </div>
-
-        {resultText ? <p className="text-sm text-muted-foreground">{resultText}</p> : null}
       </div>
 
       {pendingAction ? (
@@ -860,7 +1035,9 @@ function IconManagerPanel() {
                 取消
               </Button>
               <Button size="sm" onClick={handleConfirmSync} disabled={syncing}>
-                {syncing ? '同步中...' : '开始同步'}
+                {syncing
+                  ? `${ICON_SYNC_ACTIONS[pendingAction].buttonLabel}中...`
+                  : ICON_SYNC_ACTIONS[pendingAction].confirmLabel}
               </Button>
             </div>
           </div>
@@ -1034,8 +1211,8 @@ function AboutPanel() {
     },
     {
       title: '图标管理',
-      description: '支持桌面与 customapp 两套来源的增量/全量同步，并保留隐藏与整理能力。',
-      meta: '桌面 + customapp',
+      description: '支持桌面与自定义应用两套来源的增量与全量同步，并保留隐藏与整理能力。',
+      meta: '桌面 + 自定义应用',
     },
     {
       title: '应用更新',
