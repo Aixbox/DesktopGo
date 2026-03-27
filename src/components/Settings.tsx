@@ -735,18 +735,18 @@ function IconManagerPanel() {
             return (
               <div
                 key={group.source}
-                className="space-y-4 rounded-xl border border-border bg-secondary/20 p-4"
+                className="space-y-4 rounded-xl border border-border/90 bg-card p-4 shadow-sm"
               >
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-medium text-foreground">{group.title}</h3>
-                    <span className="rounded-full bg-background/80 px-2 py-0.5 text-[11px] text-muted-foreground">
+                    <span className="rounded-full border border-border/70 bg-muted px-2 py-0.5 text-[11px] text-foreground/75">
                       {group.source === 'desktop' ? '桌面来源' : '目录来源'}
                     </span>
                   </div>
                   <p className="text-xs leading-5 text-muted-foreground">{group.desc}</p>
                   {group.source === 'customapp' ? (
-                    <div className="space-y-1 rounded-lg border border-border/70 bg-background/60 px-3 py-2 text-[11px] text-muted-foreground">
+                    <div className="space-y-1 rounded-lg border border-border/80 bg-muted px-3 py-2 text-[11px] text-foreground/75">
                       <p>当前生效目录：{effectiveCustomAppDir || '加载中...'}</p>
                       <p>默认目录：{defaultCustomAppDir || '加载中...'}</p>
                     </div>
@@ -762,10 +762,10 @@ function IconManagerPanel() {
                     return (
                       <div
                         key={actionKey}
-                        className={`rounded-lg border px-3 py-3 ${
+                        className={`rounded-lg border px-3 py-3 shadow-sm ${
                           isIncremental
-                            ? 'border-border bg-background/70'
-                            : 'border-amber-500/20 bg-amber-500/5'
+                            ? 'border-border/85 bg-background'
+                            : 'border-amber-500/30 bg-amber-500/8'
                         }`}
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -791,8 +791,8 @@ function IconManagerPanel() {
                             <span
                               className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] ${
                                 isIncremental
-                                  ? 'bg-background text-muted-foreground'
-                                  : 'bg-amber-500/10 text-amber-400'
+                                  ? 'border border-border/70 bg-muted text-foreground/75'
+                                  : 'bg-amber-500/12 text-amber-300'
                               }`}
                             >
                               {isActive ? (
@@ -870,7 +870,7 @@ function IconManagerPanel() {
           ) : null}
         </SettingCard>
 
-        <div className="space-y-3 rounded-lg border border-border bg-secondary/30 p-4">
+        <div className="space-y-3 rounded-lg border border-border/90 bg-card p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-2">
             <Input
               value={searchInput}
@@ -936,10 +936,10 @@ function IconManagerPanel() {
                 return (
                   <div
                     key={`${icon.source}:${icon.id}`}
-                    className="rounded-md border border-border bg-background/60 p-3"
+                    className="rounded-md border border-border/85 bg-background p-3 shadow-sm"
                   >
                     <div className="flex items-start gap-3">
-                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md border border-border bg-secondary">
+                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md border border-border/80 bg-muted">
                         {icon.icon_base64 ? (
                           <img
                             src={icon.icon_base64}
@@ -1223,7 +1223,7 @@ function AboutPanel() {
 
   return (
     <div className="space-y-8">
-      <section className="relative overflow-hidden rounded-[28px] border border-border bg-gradient-to-br from-background via-secondary/55 to-background px-6 py-6 shadow-sm">
+      <section className="relative overflow-hidden rounded-[28px] border border-border/90 bg-gradient-to-br from-card via-muted to-background px-6 py-6 shadow-sm">
         <div className="pointer-events-none absolute inset-0 opacity-70">
           <div className="absolute -right-12 top-0 h-36 w-36 rounded-full bg-blue-500/10 blur-3xl" />
           <div className="absolute bottom-0 left-0 h-28 w-28 rounded-full bg-emerald-500/10 blur-3xl" />
@@ -1231,15 +1231,15 @@ function AboutPanel() {
 
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-2xl space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-background/80 px-3 py-1 text-xs font-medium text-muted-foreground">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-card px-3 py-1 text-xs font-medium text-foreground/75 shadow-sm">
               <Info className="h-3.5 w-3.5" />
-              Desktop utility for launch, search, and desktop organization
+              桌面启动、搜索与整理工具
             </div>
 
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-3">
                 <Logo iconSize={36} textSize="lg" />
-                <span className="rounded-full border border-border bg-background/80 px-3 py-1 font-mono text-xs text-muted-foreground">
+                <span className="rounded-full border border-border/80 bg-card px-3 py-1 font-mono text-xs text-foreground/75 shadow-sm">
                   v{appInfo.version}
                 </span>
               </div>
@@ -1251,15 +1251,15 @@ function AboutPanel() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:w-[24rem]">
-            <div className="rounded-2xl border border-border bg-background/80 p-4">
+            <div className="rounded-2xl border border-border/85 bg-card p-4 shadow-sm">
               <LogoText size="sm" />
               <p className="mt-2 text-base font-medium text-foreground">本地优先</p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 没有账号系统；主要设置、布局和搜索配置都保存在本地环境。
               </p>
             </div>
-            <div className="rounded-2xl border border-border bg-background/80 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Support</p>
+            <div className="rounded-2xl border border-border/85 bg-card p-4 shadow-sm">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">支持入口</p>
               <p className="mt-2 text-base font-medium text-foreground">反馈直达项目</p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 仓库、Issue 和 Release 入口都放在这里，定位问题时不需要再找路径。
@@ -1273,7 +1273,7 @@ function AboutPanel() {
         {infoCards.map(card => (
           <article
             key={card.label}
-            className="rounded-2xl border border-border bg-secondary/25 p-4 transition-colors hover:bg-secondary/40"
+            className="rounded-2xl border border-border/85 bg-card p-4 shadow-sm transition-colors hover:bg-accent"
           >
             <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
               {card.label}
@@ -1291,9 +1291,9 @@ function AboutPanel() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
-        <div className="space-y-4 rounded-3xl border border-border bg-secondary/20 p-5">
+        <div className="space-y-4 rounded-3xl border border-border/90 bg-card p-5 shadow-sm">
           <div className="space-y-1">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Capabilities</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">功能概览</p>
             <h3 className="text-lg font-semibold text-foreground">当前构建包含的核心能力</h3>
           </div>
 
@@ -1301,7 +1301,7 @@ function AboutPanel() {
             {featureCards.map(card => (
               <article
                 key={card.title}
-                className="rounded-2xl border border-border bg-background/75 p-4 transition-colors hover:bg-background"
+                className="rounded-2xl border border-border/85 bg-background p-4 shadow-sm transition-colors hover:bg-accent"
               >
                 <p className="text-sm font-medium text-foreground">{card.title}</p>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">{card.description}</p>
@@ -1313,11 +1313,9 @@ function AboutPanel() {
           </div>
         </div>
 
-        <div className="space-y-4 rounded-3xl border border-border bg-secondary/20 p-5">
+        <div className="space-y-4 rounded-3xl border border-border/90 bg-card p-5 shadow-sm">
           <div className="space-y-1">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Project Access
-            </p>
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">项目入口</p>
             <h3 className="text-lg font-semibold text-foreground">仓库、发布和反馈入口</h3>
           </div>
 
@@ -1346,7 +1344,7 @@ function AboutPanel() {
             </Button>
           </div>
 
-          <div className="rounded-2xl border border-border bg-background/80 p-4">
+          <div className="rounded-2xl border border-border/85 bg-background p-4 shadow-sm">
             <div className="flex items-start gap-3">
               <Package2 className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
               <div>
@@ -1359,7 +1357,7 @@ function AboutPanel() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border bg-background/80 p-4">
+          <div className="rounded-2xl border border-border/85 bg-background p-4 shadow-sm">
             <div className="flex items-start gap-3">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
               <div>
@@ -1374,7 +1372,7 @@ function AboutPanel() {
           <button
             type="button"
             onClick={() => void openExternalLink(ABOUT_REPOSITORY_URL, '项目主页')}
-            className="group flex w-full items-center justify-between rounded-2xl border border-border bg-background/70 px-4 py-3 text-left transition-colors hover:bg-background"
+            className="group flex w-full items-center justify-between rounded-2xl border border-border/85 bg-background px-4 py-3 text-left shadow-sm transition-colors hover:bg-accent"
           >
             <div>
               <p className="text-sm font-medium text-foreground">项目主页</p>
@@ -1482,8 +1480,8 @@ export function Settings() {
   }
 
   return (
-    <div className="flex h-screen w-screen flex-col bg-background text-foreground">
-      <header className="flex h-12 items-center gap-3 border-b border-border bg-secondary/50 px-4">
+    <div className="settings-shell flex h-screen w-screen flex-col bg-background text-foreground">
+      <header className="flex h-12 items-center gap-3 border-b border-border/90 bg-card px-4 shadow-sm">
         <div
           onPointerDown={handleWindowDragStart}
           onDoubleClick={handleToggleMaximizeWindow}
@@ -1515,16 +1513,16 @@ export function Settings() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <nav className="flex w-48 flex-col border-r border-border bg-secondary/50 px-4 py-3">
+        <nav className="flex w-48 flex-col border-r border-border/90 bg-card px-4 py-3 shadow-sm">
           <ul className="flex flex-col gap-1">
             {NAV_ITEMS.map(item => (
               <li key={item.key}>
                 <button
                   onClick={() => setActiveNav(item.key)}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors cursor-pointer ${
+                  className={`flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors cursor-pointer ${
                     activeNav === item.key
-                      ? 'bg-zinc-200 text-foreground font-medium dark:bg-zinc-700/60'
-                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                      ? 'border-border/90 bg-background text-foreground shadow-sm font-medium'
+                      : 'border-transparent text-muted-foreground hover:border-border/70 hover:bg-accent hover:text-foreground'
                   }`}
                 >
                   {item.icon}

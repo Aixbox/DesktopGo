@@ -217,7 +217,7 @@ export function UpdatePanel() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-border bg-secondary/30 p-4">
+      <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
             <p className="text-sm font-medium text-foreground">应用更新</p>
@@ -225,7 +225,7 @@ export function UpdatePanel() {
               当前版本 v{currentVersion}，当前目标 {currentTarget}
             </p>
           </div>
-          <div className="rounded-full border border-border bg-background/70 px-3 py-1 text-xs text-muted-foreground">
+          <div className="rounded-full border border-border/80 bg-muted px-3 py-1 text-xs text-foreground/75">
             {configStatus?.configured ? '更新已接入' : '等待配置'}
           </div>
         </div>
@@ -261,7 +261,7 @@ export function UpdatePanel() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-border bg-secondary/30 p-4">
+      <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
         <div className="flex items-start gap-3">
           {configStatus?.configured ? (
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
@@ -272,7 +272,7 @@ export function UpdatePanel() {
             <p className="text-sm font-medium text-foreground">当前状态</p>
             <p className="text-xs leading-5 text-muted-foreground">{statusText}</p>
             {!configStatus?.configured ? (
-              <div className="rounded-md border border-amber-500/30 bg-amber-500/8 px-3 py-2 text-xs leading-5 text-muted-foreground">
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-foreground/80">
                 还缺少 updater 配置。请在
                 <span className="font-medium text-foreground"> src-tauri/tauri.conf.json </span>
                 中设置
@@ -288,7 +288,7 @@ export function UpdatePanel() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-border bg-secondary/30 p-4">
+      <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
         <div className="flex items-start gap-3">
           <Globe className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
           <div className="space-y-2">
@@ -298,7 +298,7 @@ export function UpdatePanel() {
                 {configStatus.endpoints.map(endpoint => (
                   <div
                     key={endpoint}
-                    className="rounded-md border border-border bg-background/60 px-3 py-2 text-xs text-muted-foreground"
+                    className="rounded-md border border-border/85 bg-background px-3 py-2 text-xs text-muted-foreground shadow-sm"
                   >
                     {endpoint}
                   </div>
@@ -316,7 +316,7 @@ export function UpdatePanel() {
       </div>
 
       {updateInfo ? (
-        <div className="rounded-lg border border-border bg-secondary/30 p-4">
+        <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
           <div className="flex items-start gap-3">
             <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
             <div className="space-y-3">
@@ -327,7 +327,7 @@ export function UpdatePanel() {
                   {releaseDate ? `，发布时间 ${releaseDate}` : ''}
                 </p>
               </div>
-              <div className="rounded-md border border-border bg-background/60 px-3 py-2 text-xs leading-5 text-muted-foreground">
+              <div className="rounded-md border border-border/85 bg-background px-3 py-2 text-xs leading-5 text-muted-foreground shadow-sm">
                 {updateInfo.body?.trim() ? (
                   <p className="whitespace-pre-wrap">{updateInfo.body}</p>
                 ) : (
@@ -340,7 +340,7 @@ export function UpdatePanel() {
       ) : null}
 
       {installStage !== 'idle' ? (
-        <div className="rounded-lg border border-border bg-secondary/30 p-4">
+        <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
           <div className="flex items-start gap-3">
             {installStage === 'finished' ? (
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
@@ -358,7 +358,7 @@ export function UpdatePanel() {
               </div>
 
               <div className="space-y-2">
-                <div className="h-2 overflow-hidden rounded-full bg-background/80">
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
                   <div
                     className={`h-full rounded-full bg-blue-500 transition-all duration-300 ${
                       progressPercent === null ? 'w-1/2 animate-pulse' : ''

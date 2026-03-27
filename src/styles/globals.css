@@ -172,6 +172,32 @@ body,
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+.settings-shell {
+  --background: oklch(0.982 0 0);
+  --card: oklch(1 0 0);
+  --popover: oklch(1 0 0);
+  --secondary: oklch(0.946 0 0);
+  --muted: oklch(0.958 0 0);
+  --muted-foreground: oklch(0.468 0 0);
+  --accent: oklch(0.928 0 0);
+  --border: oklch(0.884 0 0);
+  --input: oklch(0.872 0 0);
+  --ring: oklch(0.63 0 0);
+}
+
+.dark .settings-shell {
+  --background: oklch(0.168 0 0);
+  --card: oklch(0.226 0 0);
+  --popover: oklch(0.226 0 0);
+  --secondary: oklch(0.302 0 0);
+  --muted: oklch(0.282 0 0);
+  --muted-foreground: oklch(0.78 0 0);
+  --accent: oklch(0.338 0 0);
+  --border: oklch(1 0 0 / 18%);
+  --input: oklch(1 0 0 / 24%);
+  --ring: oklch(0.7 0 0);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

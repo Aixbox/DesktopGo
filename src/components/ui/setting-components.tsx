@@ -6,7 +6,7 @@ interface SettingGroupProps {
 export function SettingGroup({ title, children }: SettingGroupProps) {
   return (
     <div className="mb-6">
-      <h3 className="mb-3 text-sm font-medium text-muted-foreground">{title}</h3>
+      <h3 className="mb-3 text-sm font-medium text-foreground/80">{title}</h3>
       <div className="flex flex-wrap gap-2">{children}</div>
     </div>
   )
@@ -20,7 +20,7 @@ interface SettingCardProps {
 
 export function SettingCard({ label, desc, children }: SettingCardProps) {
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-secondary/30 p-4">
+    <div className="space-y-3 rounded-lg border border-border/90 bg-card p-4 shadow-sm">
       <div className="space-y-1">
         <h4 className="text-sm font-medium text-foreground">{label}</h4>
         {desc ? <p className="text-xs leading-5 text-muted-foreground">{desc}</p> : null}
@@ -64,7 +64,7 @@ interface ToggleRowProps {
 
 export function ToggleRow({ title, description, checked, onChange }: ToggleRowProps) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-secondary/30 p-4">
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-border/90 bg-card p-4 shadow-sm">
       <div className="min-w-0 space-y-1">
         <h4 className="text-sm font-medium text-foreground">{title}</h4>
         <p className="text-xs leading-5 text-muted-foreground">{description}</p>
@@ -88,8 +88,8 @@ export function OptionButton({ label, selected, onClick }: OptionButtonProps) {
       onClick={onClick}
       className={`rounded-lg border px-4 py-2 text-sm transition-all duration-150 cursor-pointer ${
         selected
-          ? 'border-blue-500 bg-blue-500/20 text-blue-400'
-          : 'border-border bg-secondary text-secondary-foreground hover:border-muted-foreground hover:bg-accent'
+          ? 'border-blue-500/55 bg-blue-500/15 text-blue-300 shadow-sm dark:text-blue-200'
+          : 'border-border/90 bg-card text-foreground hover:border-foreground/15 hover:bg-accent'
       }`}
     >
       {label}
