@@ -54,7 +54,9 @@ export const useIconStore = create<IconStore>((set, get) => ({
   selectedIconKeys: [],
 
   fetchIcons: async () => {
-    set({ loading: true, error: null })
+    if (get().icons.length === 0) {
+      set({ loading: true, error: null })
+    }
     try {
       const { iconSize } = get()
       const iconSizeValue = ICON_SIZE_CONFIG[iconSize].logicalSize
