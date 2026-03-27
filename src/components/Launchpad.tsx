@@ -159,6 +159,10 @@ export function Launchpad() {
         applyTheme(await getSavedTheme())
       } catch (e) {
         console.error('Failed to initialize launchpad settings:', e)
+      } finally {
+        void invoke('notify_main_window_ready').catch(error => {
+          console.error('Failed to notify launchpad readiness:', error)
+        })
       }
     })()
   }, [fetchIcons, hydrateSettings])

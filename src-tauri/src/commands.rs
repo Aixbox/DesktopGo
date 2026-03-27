@@ -3,7 +3,9 @@ use crate::icons::{self, DesktopIcon, IconManagerItem, IconMutationTarget, IconS
 use crate::layout_db;
 use crate::search_preview::{self, SearchPreview};
 use crate::updater::{self, PendingUpdate, UpdateCheckResult, UpdaterConfigurationStatus};
+use crate::MainWindowState;
 use tauri::Manager;
+use std::sync::atomic::Ordering;
 
 #[tauri::command]
 pub fn toggle_window(window: tauri::Window) {
@@ -28,6 +30,25 @@ pub fn set_window_mode(
             }
         }
     }
+}
+
+#[tauri::command]
+pub fn notify_main_window_ready(
+    app_handle: tauri::AppHandle,
+    main_window_state: tauri::State<'_, MainWindowState>,
+) -> Result<(), String> {
+    main_window_state.ready.store(true, Ordering::SeqCst);
+
+    if !main_window_state.pending_show.swap(false, Ordering::SeqCst) {
+        return Ok(());
+    }
+
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+
+    Ok(())
 }
 
 #[tauri::command]

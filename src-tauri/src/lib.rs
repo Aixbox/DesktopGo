@@ -9,10 +9,10 @@ use commands::{
     check_for_app_update, delete_desktop_icons, get_default_customapp_dir, get_desktop_icons,
     get_icon_manager_items, get_layout_payload, get_layout_payloads, get_search_preview,
     get_search_runtime_status, get_updater_configuration_status, hide_desktop_icons,
-    install_app_update, launch_app, record_search_result_run, search_files, set_layout_payload,
-    set_layout_payloads, set_window_mode, start_search_runtime, sync_full_customapp_icons,
-    sync_full_desktop_icons, sync_new_customapp_icons, sync_new_desktop_icons, toggle_window,
-    unhide_desktop_icons,
+    install_app_update, launch_app, notify_main_window_ready, record_search_result_run,
+    search_files, set_layout_payload, set_layout_payloads, set_window_mode, start_search_runtime,
+    sync_full_customapp_icons, sync_full_desktop_icons, sync_new_customapp_icons,
+    sync_new_desktop_icons, toggle_window, unhide_desktop_icons,
 };
 #[cfg(windows)]
 use once_cell::sync::OnceCell;
@@ -28,6 +28,12 @@ static WINDOWS_CONSOLE_APP_HANDLE: OnceCell<tauri::AppHandle> = OnceCell::new();
 #[cfg(windows)]
 static WINDOWS_CONSOLE_EXIT_REQUESTED: AtomicBool = AtomicBool::new(false);
 
+#[derive(Default)]
+struct MainWindowState {
+    ready: AtomicBool,
+    pending_show: AtomicBool,
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -36,7 +42,8 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::default().build())
-        .manage(updater::PendingUpdate::default());
+        .manage(updater::PendingUpdate::default())
+        .manage(MainWindowState::default());
 
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
@@ -51,7 +58,7 @@ pub fn run() {
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
-                        show_or_create_main_window(app);
+                        request_main_window_show(app);
                     }
                     "quit" => app.exit(0),
                     _ => {}
@@ -63,19 +70,19 @@ pub fn run() {
                     } = event
                     {
                         let app = tray.app_handle();
-                        show_or_create_main_window(app);
+                        request_main_window_show(app);
                     }
                 })
                 .build(app)?;
 
-            create_main_window(app.handle(), false);
+            create_main_window(app.handle());
             install_windows_console_exit_handler(app.handle());
 
             let shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
             let handle = app.handle().clone();
             app.global_shortcut()
                 .on_shortcut(shortcut, move |_app, _shortcut, _event| {
-                    show_or_create_main_window(&handle);
+                    request_main_window_show(&handle);
                 })?;
             if let Err(e) = app.global_shortcut().register(shortcut) {
                 eprintln!("Warning: Failed to register Ctrl+Space: {}", e);
@@ -105,6 +112,7 @@ pub fn run() {
             search_files,
             get_search_preview,
             record_search_result_run,
+            notify_main_window_ready,
             get_updater_configuration_status,
             check_for_app_update,
             install_app_update
@@ -119,16 +127,31 @@ pub fn run() {
     });
 }
 
-fn show_or_create_main_window(app: &tauri::AppHandle) {
-    if let Some(w) = app.get_webview_window("main") {
-        let _ = w.show();
-        let _ = w.set_focus();
+fn request_main_window_show(app: &tauri::AppHandle) {
+    let state = app.state::<MainWindowState>();
+
+    if app.get_webview_window("main").is_none() {
+        create_main_window(app);
+    }
+
+    if state.ready.load(Ordering::SeqCst) {
+        show_main_window(app);
     } else {
-        create_main_window(app, true);
+        state.pending_show.store(true, Ordering::SeqCst);
     }
 }
 
-fn create_main_window(app: &tauri::AppHandle, visible: bool) {
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+fn create_main_window(app: &tauri::AppHandle) {
+    let state = app.state::<MainWindowState>();
+    state.ready.store(false, Ordering::SeqCst);
+
     let builder =
         tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
             .title("DesktopGo")
@@ -139,7 +162,8 @@ fn create_main_window(app: &tauri::AppHandle, visible: bool) {
             .transparent(true)
             .always_on_top(true)
             .skip_taskbar(true)
-            .visible(visible)
+            .visible(false)
+            .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
             .devtools(cfg!(debug_assertions))
             .center();
 
