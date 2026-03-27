@@ -93,10 +93,10 @@ export function Icon({
         )}
       </div>
       <span
-        className="icon-label text-[11px] text-center leading-[1.05] text-foreground drop-shadow-md"
+        className="icon-label text-[11px] text-center leading-[13px] text-foreground drop-shadow-md"
         style={{
           maxWidth: config.containerWidth - 10,
-          minHeight: ICON_GRID_TITLE_HEIGHT,
+          height: isSingleLineTitle ? 13 : 26,
           display: isSingleLineTitle ? 'block' : '-webkit-box',
           WebkitLineClamp: isSingleLineTitle ? 1 : 2,
           WebkitBoxOrient: isSingleLineTitle ? undefined : 'vertical',
