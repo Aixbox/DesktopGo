@@ -1426,10 +1426,9 @@ export function Settings() {
   const closeSettingsWindow = useCallback(async () => {
     if (isClosingRef.current) return
 
-    const currentWindow = getCurrentWindow()
     isClosingRef.current = true
     try {
-      await currentWindow.hide()
+      await invoke('activate_main_window')
     } catch (e) {
       console.error('Failed to close settings window:', e)
     } finally {

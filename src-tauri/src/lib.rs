@@ -6,18 +6,20 @@ mod search_preview;
 mod updater;
 
 use commands::{
-    check_for_app_update, delete_desktop_icons, get_default_customapp_dir, get_desktop_icons,
-    get_icon_manager_items, get_layout_payload, get_layout_payloads, get_search_preview,
-    get_search_runtime_status, get_updater_configuration_status, hide_desktop_icons,
-    install_app_update, launch_app, notify_main_window_ready, record_search_result_run,
-    search_files, set_layout_payload, set_layout_payloads, set_window_mode, start_search_runtime,
-    sync_full_customapp_icons, sync_full_desktop_icons, sync_new_customapp_icons,
-    sync_new_desktop_icons, toggle_window, unhide_desktop_icons,
+    activate_main_window, check_for_app_update, delete_desktop_icons, get_default_customapp_dir,
+    get_desktop_icons, get_icon_manager_items, get_layout_payload, get_layout_payloads,
+    get_search_preview, get_search_runtime_status, get_updater_configuration_status,
+    hide_desktop_icons, install_app_update, launch_app, notify_main_window_ready,
+    record_search_result_run, search_files, set_layout_payload, set_layout_payloads,
+    set_window_mode, start_search_runtime, sync_full_customapp_icons, sync_full_desktop_icons,
+    sync_new_customapp_icons, sync_new_desktop_icons, toggle_window, unhide_desktop_icons,
 };
 #[cfg(windows)]
 use once_cell::sync::OnceCell;
-#[cfg(windows)]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(windows)]
+use std::sync::Mutex;
+use std::time::Instant;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, RunEvent};
@@ -28,10 +30,22 @@ static WINDOWS_CONSOLE_APP_HANDLE: OnceCell<tauri::AppHandle> = OnceCell::new();
 #[cfg(windows)]
 static WINDOWS_CONSOLE_EXIT_REQUESTED: AtomicBool = AtomicBool::new(false);
 
-#[derive(Default)]
 struct MainWindowState {
     ready: AtomicBool,
     pending_show: AtomicBool,
+    suppress_blur: AtomicBool,
+    last_show_request: Mutex<Option<Instant>>,
+}
+
+impl Default for MainWindowState {
+    fn default() -> Self {
+        Self {
+            ready: AtomicBool::new(false),
+            pending_show: AtomicBool::new(false),
+            suppress_blur: AtomicBool::new(false),
+            last_show_request: Mutex::new(None),
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -91,6 +105,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             toggle_window,
+            activate_main_window,
             get_desktop_icons,
             get_icon_manager_items,
             launch_app,
@@ -130,9 +145,24 @@ pub fn run() {
 fn request_main_window_show(app: &tauri::AppHandle) {
     let state = app.state::<MainWindowState>();
 
+    // 防抖：忽略 300ms 内的重复请求（全局快捷键可能在按下和抬起各触发一次）
+    if let Ok(mut last) = state.last_show_request.lock() {
+        let now = Instant::now();
+        if let Some(t) = *last {
+            if now.duration_since(t).as_millis() < 300 {
+                return;
+            }
+        }
+        *last = Some(now);
+    }
+
     if app.get_webview_window("main").is_none() {
         create_main_window(app);
     }
+
+    // 在显示主窗口之前，临时抑制 blur 隐藏，防止其他窗口（如 settings）
+    // 占据焦点导致主窗口刚显示就因失焦被自动隐藏。
+    state.suppress_blur.store(true, Ordering::SeqCst);
 
     if state.ready.load(Ordering::SeqCst) {
         show_main_window(app);
@@ -143,6 +173,8 @@ fn request_main_window_show(app: &tauri::AppHandle) {
 
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.set_always_on_top(true);
         let _ = window.show();
         let _ = window.set_focus();
     }
@@ -180,10 +212,21 @@ fn create_main_window(app: &tauri::AppHandle) {
 fn attach_blur_handler(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let window_clone = window.clone();
-        window.on_window_event(move |event| {
-            if let tauri::WindowEvent::Focused(false) = event {
-                let _ = window_clone.hide();
+        let app_handle = app.clone();
+        window.on_window_event(move |event| match event {
+            tauri::WindowEvent::Focused(true) => {
+                // 主窗口成功获得焦点，清除抑制标记。
+                let state = app_handle.state::<MainWindowState>();
+                state.suppress_blur.store(false, Ordering::SeqCst);
             }
+            tauri::WindowEvent::Focused(false) => {
+                // swap(false) 读取并清除标记：若为 true 说明正在显示流程中，跳过隐藏。
+                let state = app_handle.state::<MainWindowState>();
+                if !state.suppress_blur.swap(false, Ordering::SeqCst) {
+                    let _ = window_clone.hide();
+                }
+            }
+            _ => {}
         });
     }
 }

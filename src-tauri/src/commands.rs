@@ -4,12 +4,18 @@ use crate::layout_db;
 use crate::search_preview::{self, SearchPreview};
 use crate::updater::{self, PendingUpdate, UpdateCheckResult, UpdaterConfigurationStatus};
 use crate::MainWindowState;
-use tauri::Manager;
 use std::sync::atomic::Ordering;
+use tauri::Manager;
 
 #[tauri::command]
 pub fn toggle_window(window: tauri::Window) {
     let _ = window.hide();
+}
+
+#[tauri::command]
+pub fn activate_main_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+    crate::request_main_window_show(&app_handle);
+    Ok(())
 }
 
 #[tauri::command]

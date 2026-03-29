@@ -624,11 +624,17 @@ export function Launchpad() {
   const openSettings = async () => {
     const existing = await WebviewWindow.getByLabel('settings')
     if (existing) {
-      await ensureSettingsWindowMinSize(existing)
-      await existing.unminimize()
-      await existing.show()
-      await existing.setFocus()
-      await getCurrentWindow().hide()
+      try {
+        // 先隐藏主窗口（带 always_on_top），再恢复设置窗口，
+        // 否则主窗口会遮挡设置窗口无法置顶。
+        await getCurrentWindow().hide()
+        await existing.unminimize()
+        await existing.show()
+        await ensureSettingsWindowMinSize(existing)
+        await existing.setFocus()
+      } catch (e) {
+        console.error('Failed to reopen settings window:', e)
+      }
       return
     }
 
@@ -689,9 +695,8 @@ export function Launchpad() {
                   searchSource === 'everything' ? '搜索文件、文件夹和应用...' : '搜索桌面图标...'
                 }
                 aria-label={searchSource === 'everything' ? '搜索文件' : '搜索桌面图标'}
-                className={`h-11 w-full rounded-full border border-white/20 bg-black/25 px-4 text-sm text-white/90 shadow-lg backdrop-blur-md placeholder:text-white/50 ${
-                  searchSource === 'everything' ? 'pr-32' : ''
-                }`}
+                className={`h-11 w-full rounded-full border border-white/20 bg-black/25 px-4 text-sm text-white/90 shadow-lg backdrop-blur-md placeholder:text-white/50 ${searchSource === 'everything' ? 'pr-32' : ''
+                  }`}
               />
 
               {searchSource === 'everything' ? (
@@ -715,11 +720,10 @@ export function Launchpad() {
                         <button
                           key={entry.value}
                           type="button"
-                          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
-                            searchFilter === entry.value
-                              ? 'bg-white/14 text-white'
-                              : 'text-white/70 hover:bg-white/8 hover:text-white'
-                          }`}
+                          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition ${searchFilter === entry.value
+                            ? 'bg-white/14 text-white'
+                            : 'text-white/70 hover:bg-white/8 hover:text-white'
+                            }`}
                           onClick={() => {
                             setSearchFilter(entry.value)
                             setIsFilterMenuOpen(false)
