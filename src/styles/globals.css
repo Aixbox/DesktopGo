@@ -183,6 +183,15 @@ body,
   --border: oklch(0.884 0 0);
   --input: oklch(0.872 0 0);
   --ring: oklch(0.63 0 0);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.settings-shell input,
+.settings-shell textarea,
+.settings-shell [contenteditable='true'] {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .dark .settings-shell {
