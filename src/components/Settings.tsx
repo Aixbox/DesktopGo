@@ -1871,14 +1871,9 @@ export function Settings() {
     if (isClosingRef.current) return
 
     isClosingRef.current = true
-    const currentWindow = getCurrentWindow()
     try {
-      await currentWindow.hide()
-      await invoke('activate_main_window')
+      await getCurrentWindow().destroy()
     } catch (e) {
-      void currentWindow.show().catch(() => {
-        // Best effort rollback when reactivating the main window fails.
-      })
       console.error('Failed to close settings window:', e)
     } finally {
       isClosingRef.current = false

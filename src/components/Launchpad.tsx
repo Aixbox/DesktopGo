@@ -66,6 +66,17 @@ async function ensureSettingsWindowMinSize(settingsWindow: WebviewWindow) {
   }
 }
 
+async function waitForSettingsWindowDisposed() {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const existing = await WebviewWindow.getByLabel('settings')
+    if (!existing) {
+      return
+    }
+
+    await new Promise(resolve => window.setTimeout(resolve, 25))
+  }
+}
+
 type SearchSource = 'icons' | 'everything'
 
 export function Launchpad() {
@@ -624,13 +635,10 @@ export function Launchpad() {
   const openSettings = async () => {
     const existing = await WebviewWindow.getByLabel('settings')
     if (existing) {
-      try {
-        await ensureSettingsWindowMinSize(existing)
-        await invoke('activate_settings_window')
-      } catch (e) {
-        console.error('Failed to reopen settings window:', e)
-      }
-      return
+      await existing.destroy().catch(closeError => {
+        console.error('Failed to dispose existing settings window:', closeError)
+      })
+      await waitForSettingsWindowDisposed()
     }
 
     const settingsWindow = new WebviewWindow('settings', {
