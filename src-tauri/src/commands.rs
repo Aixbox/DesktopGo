@@ -3,7 +3,7 @@ use crate::icons::{self, DesktopIcon, IconManagerItem, IconMutationTarget, IconS
 use crate::layout_db;
 use crate::search_preview::{self, SearchPreview};
 use crate::updater::{self, PendingUpdate, UpdateCheckResult, UpdaterConfigurationStatus};
-use crate::MainWindowState;
+use crate::{LaunchpadShortcutState, MainWindowState};
 use std::sync::atomic::Ordering;
 use tauri::Manager;
 #[cfg(windows)]
@@ -23,6 +23,15 @@ pub fn toggle_window(window: tauri::Window) {
 pub fn activate_main_window(app_handle: tauri::AppHandle) -> Result<(), String> {
     crate::request_main_window_show(&app_handle);
     Ok(())
+}
+
+#[tauri::command]
+pub fn update_launchpad_shortcut(
+    app_handle: tauri::AppHandle,
+    shortcut_state: tauri::State<'_, LaunchpadShortcutState>,
+    shortcut: String,
+) -> Result<String, String> {
+    crate::update_launchpad_shortcut_registration(&app_handle, shortcut_state.inner(), &shortcut)
 }
 
 #[tauri::command]

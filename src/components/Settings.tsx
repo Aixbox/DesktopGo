@@ -8,7 +8,7 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import { cn } from '@/lib/utils'
 import { useIconStore } from '@/stores/iconStore'
 import { applyTheme, saveTheme } from '@/lib/theme'
-import { getSetting, setSetting } from '@/lib/settingsStore'
+import { DEFAULT_LAUNCHPAD_SHORTCUT, getSetting, setSetting } from '@/lib/settingsStore'
 import {
   LAUNCHPAD_LAYOUT_RESET_EVENT,
   resetLaunchpadLayout,
@@ -193,8 +193,7 @@ const ICON_SYNC_ACTIONS: Record<
     impact: '适合批量整理后执行，会更新快照结果，需要二次确认。',
     toneLabel: '谨慎',
     confirmTitle: '确认执行桌面全量对账',
-    confirmDesc:
-      '该操作会重新扫描整个桌面，补齐缺失项并清理快照中的失效记录，不会删除磁盘文件。',
+    confirmDesc: '该操作会重新扫描整个桌面，补齐缺失项并清理快照中的失效记录，不会删除磁盘文件。',
     confirmLabel: '确认对账',
   },
   customappIncremental: {
@@ -245,6 +244,156 @@ const ICON_SYNC_GROUPS: {
   },
 ]
 
+type ShortcutStatusTone = 'default' | 'success' | 'error'
+
+const SHORTCUT_MODIFIER_CODES = new Set([
+  'ControlLeft',
+  'ControlRight',
+  'ShiftLeft',
+  'ShiftRight',
+  'AltLeft',
+  'AltRight',
+  'MetaLeft',
+  'MetaRight',
+])
+
+const SHORTCUT_KEY_DISPLAY_LABELS: Record<string, string> = {
+  ArrowDown: 'Down',
+  ArrowLeft: 'Left',
+  ArrowRight: 'Right',
+  ArrowUp: 'Up',
+  Backquote: '`',
+  Backslash: '\\',
+  BracketLeft: '[',
+  BracketRight: ']',
+  CapsLock: 'Caps Lock',
+  Comma: ',',
+  ContextMenu: 'Menu',
+  Delete: 'Delete',
+  Enter: 'Enter',
+  Equal: '=',
+  Escape: 'Esc',
+  Home: 'Home',
+  Insert: 'Insert',
+  Minus: '-',
+  PageDown: 'Page Down',
+  PageUp: 'Page Up',
+  Period: '.',
+  PrintScreen: 'Print Screen',
+  Quote: "'",
+  ScrollLock: 'Scroll Lock',
+  Semicolon: ';',
+  Slash: '/',
+  Space: 'Space',
+  Tab: 'Tab',
+}
+
+function isMacShortcutPlatform() {
+  if (typeof navigator === 'undefined') {
+    return false
+  }
+
+  return /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform)
+}
+
+function formatShortcutToken(token: string) {
+  const normalizedToken = token.trim()
+  const lowerToken = normalizedToken.toLowerCase()
+
+  switch (lowerToken) {
+    case 'control':
+    case 'ctrl':
+      return 'Ctrl'
+    case 'alt':
+    case 'option':
+      return 'Alt'
+    case 'shift':
+      return 'Shift'
+    case 'super':
+    case 'command':
+    case 'cmd':
+      return isMacShortcutPlatform() ? 'Cmd' : 'Win'
+    case 'commandorcontrol':
+    case 'commandorctrl':
+    case 'cmdorctrl':
+    case 'cmdorcontrol':
+      return isMacShortcutPlatform() ? 'Cmd' : 'Ctrl'
+    default:
+      break
+  }
+
+  const mappedLabel = SHORTCUT_KEY_DISPLAY_LABELS[normalizedToken]
+  if (mappedLabel) {
+    return mappedLabel
+  }
+
+  if (/^key[a-z]$/i.test(normalizedToken)) {
+    return normalizedToken.slice(3).toUpperCase()
+  }
+
+  if (/^digit[0-9]$/i.test(normalizedToken)) {
+    return normalizedToken.slice(5)
+  }
+
+  if (/^numpad[0-9]$/i.test(normalizedToken)) {
+    return `Num ${normalizedToken.slice(6)}`
+  }
+
+  if (/^f[0-9]{1,2}$/i.test(normalizedToken)) {
+    return normalizedToken.toUpperCase()
+  }
+
+  return normalizedToken.charAt(0).toUpperCase() + normalizedToken.slice(1)
+}
+
+function formatShortcutForDisplay(shortcut: string) {
+  const tokens = shortcut
+    .split('+')
+    .map(token => token.trim())
+    .filter(Boolean)
+
+  if (tokens.length === 0) {
+    return '未设置'
+  }
+
+  return tokens.map(formatShortcutToken).join(' + ')
+}
+
+function buildShortcutFromKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+  const hasModifier = event.ctrlKey || event.altKey || event.shiftKey || event.metaKey
+
+  if (!hasModifier) {
+    return {
+      error: '快捷键至少需要一个修饰键，例如 Ctrl + Space。',
+    }
+  }
+
+  if (!event.code || event.code === 'Unidentified' || SHORTCUT_MODIFIER_CODES.has(event.code)) {
+    return {
+      error: '请在按住修饰键后，再按一个主键，例如 Space、K 或 F1。',
+    }
+  }
+
+  const tokens: string[] = []
+  if (event.ctrlKey) {
+    tokens.push('Ctrl')
+  }
+  if (event.altKey) {
+    tokens.push('Alt')
+  }
+  if (event.shiftKey) {
+    tokens.push('Shift')
+  }
+  if (event.metaKey) {
+    tokens.push('Super')
+  }
+  tokens.push(event.code)
+
+  return {
+    shortcut: tokens.join('+'),
+  }
+}
+
 function WindowControlButton({
   label,
   onClick,
@@ -276,17 +425,31 @@ function WindowControlButton({
 function SettingsPanel() {
   const { iconSize, windowMode, titleLineCount, dockEnabled, setDockEnabled } = useIconStore()
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark')
+  const [launchpadShortcut, setLaunchpadShortcut] = useState(DEFAULT_LAUNCHPAD_SHORTCUT)
+  const [launchpadShortcutDraft, setLaunchpadShortcutDraft] = useState(DEFAULT_LAUNCHPAD_SHORTCUT)
+  const [shortcutStatusText, setShortcutStatusText] = useState('')
+  const [shortcutStatusTone, setShortcutStatusTone] = useState<ShortcutStatusTone>('default')
+  const [isRecordingShortcut, setIsRecordingShortcut] = useState(false)
+  const [isSavingShortcut, setIsSavingShortcut] = useState(false)
+  const shortcutInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     void (async () => {
       try {
-        const [savedIconSize, savedWindowMode, savedTitleLineCount, savedDockEnabled, savedThemeMode] =
-          await Promise.all([
+        const [
+          savedIconSize,
+          savedWindowMode,
+          savedTitleLineCount,
+          savedDockEnabled,
+          savedThemeMode,
+          savedLaunchpadShortcut,
+        ] = await Promise.all([
           getSetting('iconSize'),
           getSetting('windowMode'),
           getSetting('titleLineCount'),
           getSetting('dockEnabled'),
           getSetting('themeMode'),
+          getSetting('launchpadShortcut'),
         ])
 
         useIconStore.setState({
@@ -296,6 +459,11 @@ function SettingsPanel() {
           dockEnabled: savedDockEnabled,
         })
         setThemeMode(savedThemeMode)
+        setLaunchpadShortcut(savedLaunchpadShortcut)
+        setLaunchpadShortcutDraft(savedLaunchpadShortcut)
+        setShortcutStatusText(
+          `当前生效快捷键：${formatShortcutForDisplay(savedLaunchpadShortcut)}。`
+        )
       } catch (e) {
         console.error('Failed to load settings:', e)
       } finally {
@@ -334,6 +502,142 @@ function SettingsPanel() {
     setThemeMode(value)
     applyTheme(value)
   }
+
+  const handleToggleShortcutRecording = () => {
+    if (isRecordingShortcut) {
+      setIsRecordingShortcut(false)
+      setShortcutStatusTone('default')
+      setShortcutStatusText('已取消录制，当前快捷键未变化。')
+      return
+    }
+
+    setIsRecordingShortcut(true)
+    setShortcutStatusTone('default')
+    setShortcutStatusText('请按下新的组合键，至少包含一个修饰键。')
+    window.setTimeout(() => {
+      shortcutInputRef.current?.focus()
+    }, 0)
+  }
+
+  const handleShortcutInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isRecordingShortcut) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (event.repeat) {
+      return
+    }
+
+    if (
+      event.code === 'Escape' &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.shiftKey &&
+      !event.metaKey
+    ) {
+      setIsRecordingShortcut(false)
+      setShortcutStatusTone('default')
+      setShortcutStatusText('已取消录制，当前快捷键未变化。')
+      return
+    }
+
+    const result = buildShortcutFromKeyDown(event)
+    if (!result.shortcut) {
+      setShortcutStatusTone('error')
+      setShortcutStatusText(result.error ?? '未能识别该快捷键。')
+      return
+    }
+
+    setLaunchpadShortcutDraft(result.shortcut)
+    setIsRecordingShortcut(false)
+    setShortcutStatusTone('default')
+    setShortcutStatusText(
+      `已捕获 ${formatShortcutForDisplay(result.shortcut)}，点击“保存快捷键”后生效。`
+    )
+  }
+
+  const handleShortcutInputBlur = () => {
+    if (!isRecordingShortcut) {
+      return
+    }
+
+    setIsRecordingShortcut(false)
+    setShortcutStatusTone('default')
+    setShortcutStatusText('录制已结束，当前快捷键未变化。')
+  }
+
+  const handleResetLaunchpadShortcut = () => {
+    setIsRecordingShortcut(false)
+    setLaunchpadShortcutDraft(DEFAULT_LAUNCHPAD_SHORTCUT)
+    setShortcutStatusTone('default')
+    setShortcutStatusText(
+      launchpadShortcut === DEFAULT_LAUNCHPAD_SHORTCUT
+        ? `当前已经是默认快捷键：${formatShortcutForDisplay(DEFAULT_LAUNCHPAD_SHORTCUT)}。`
+        : `已恢复默认值 ${formatShortcutForDisplay(DEFAULT_LAUNCHPAD_SHORTCUT)}，点击“保存快捷键”后生效。`
+    )
+  }
+
+  const handleSaveLaunchpadShortcut = async () => {
+    if (isSavingShortcut) {
+      return
+    }
+
+    const previousShortcut = launchpadShortcut
+    setIsRecordingShortcut(false)
+    setIsSavingShortcut(true)
+    setShortcutStatusTone('default')
+    setShortcutStatusText('正在更新启动台快捷键...')
+
+    try {
+      const normalizedShortcut = await invoke<string>('update_launchpad_shortcut', {
+        shortcut: launchpadShortcutDraft,
+      })
+
+      try {
+        await setSetting('launchpadShortcut', normalizedShortcut)
+      } catch (storageError) {
+        let rollbackMessage = '已回滚到原快捷键。'
+
+        try {
+          await invoke<string>('update_launchpad_shortcut', {
+            shortcut: previousShortcut,
+          })
+        } catch (rollbackError) {
+          console.error('Failed to rollback launchpad shortcut registration:', rollbackError)
+          rollbackMessage = '回滚也失败了，当前运行时快捷键可能仍是新值。'
+        }
+
+        throw new Error(`写入本地设置失败：${String(storageError)} ${rollbackMessage}`)
+      }
+
+      setLaunchpadShortcut(normalizedShortcut)
+      setLaunchpadShortcutDraft(normalizedShortcut)
+      setShortcutStatusTone('success')
+      setShortcutStatusText(
+        `启动台快捷键已更新为 ${formatShortcutForDisplay(normalizedShortcut)}。`
+      )
+    } catch (error) {
+      console.error('Failed to save launchpad shortcut:', error)
+      setShortcutStatusTone('error')
+      setShortcutStatusText(`保存快捷键失败：${String(error)}`)
+    } finally {
+      setIsSavingShortcut(false)
+    }
+  }
+
+  const shortcutDraftChanged = launchpadShortcutDraft !== launchpadShortcut
+  const shortcutDisplayValue = isRecordingShortcut
+    ? '请按下新的组合键'
+    : formatShortcutForDisplay(launchpadShortcutDraft)
+  const shortcutStatusClassName =
+    shortcutStatusTone === 'error'
+      ? 'text-red-500 dark:text-red-300'
+      : shortcutStatusTone === 'success'
+        ? 'text-emerald-600 dark:text-emerald-300'
+        : 'text-muted-foreground'
 
   return (
     <>
@@ -392,6 +696,77 @@ function SettingsPanel() {
           checked={dockEnabled}
           onChange={handleDockEnabled}
         />
+      </div>
+
+      <div className="mb-6">
+        <SettingCard
+          label="打开启动台快捷键"
+          desc="修改唤起启动台的全局快捷键。新快捷键至少要包含一个修饰键，例如 Ctrl、Alt、Shift。"
+        >
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="rounded-full border border-border/80 bg-background px-2.5 py-1">
+              当前生效：{formatShortcutForDisplay(launchpadShortcut)}
+            </span>
+            {shortcutDraftChanged ? (
+              <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-amber-700 dark:text-amber-300">
+                待保存：{formatShortcutForDisplay(launchpadShortcutDraft)}
+              </span>
+            ) : null}
+            {isRecordingShortcut ? (
+              <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-blue-600 dark:text-blue-300">
+                录制中
+              </span>
+            ) : null}
+          </div>
+
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+            <Input
+              ref={shortcutInputRef}
+              readOnly
+              value={shortcutDisplayValue}
+              aria-label="启动台快捷键"
+              placeholder="点击“录制快捷键”后按下组合键"
+              onKeyDown={handleShortcutInputKeyDown}
+              onBlur={handleShortcutInputBlur}
+              className={cn(
+                'font-medium',
+                isRecordingShortcut && 'border-blue-500/60 ring-2 ring-blue-500/15'
+              )}
+            />
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant={isRecordingShortcut ? 'secondary' : 'outline'}
+                onClick={handleToggleShortcutRecording}
+                disabled={isSavingShortcut}
+              >
+                {isRecordingShortcut ? '取消录制' : '录制快捷键'}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void handleSaveLaunchpadShortcut()}
+                disabled={isSavingShortcut || isRecordingShortcut || !shortcutDraftChanged}
+              >
+                {isSavingShortcut ? '保存中...' : '保存快捷键'}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={handleResetLaunchpadShortcut}
+                disabled={isSavingShortcut}
+              >
+                恢复默认
+              </Button>
+            </div>
+          </div>
+
+          <p className={cn('text-xs leading-5', shortcutStatusClassName)}>
+            {shortcutStatusText || '录制后按下组合键，保存成功后会立即生效。'}
+          </p>
+        </SettingCard>
       </div>
     </>
   )
@@ -577,7 +952,8 @@ function IconManagerPanel() {
       const selected = await openDialog({
         directory: true,
         multiple: false,
-        defaultPath: customAppDirInput.trim() || effectiveCustomAppDir || defaultCustomAppDir || undefined,
+        defaultPath:
+          customAppDirInput.trim() || effectiveCustomAppDir || defaultCustomAppDir || undefined,
       })
 
       if (typeof selected === 'string') {
@@ -611,7 +987,9 @@ function IconManagerPanel() {
       const nextEffectiveCustomAppDir = nextCustomAppDir || defaultCustomAppDir
       setEffectiveCustomAppDir(nextEffectiveCustomAppDir)
       setCustomAppDirText(
-        nextCustomAppDir ? '路径已保存，后续自定义应用同步将使用该目录。' : '已恢复使用默认自定义应用目录。'
+        nextCustomAppDir
+          ? '路径已保存，后续自定义应用同步将使用该目录。'
+          : '已恢复使用默认自定义应用目录。'
       )
       await refreshIconManagerList()
     } catch (e) {
@@ -729,7 +1107,11 @@ function IconManagerPanel() {
                 >
                   打开文件夹
                 </Button>
-                <Button size="sm" onClick={handleSaveCustomAppDir} disabled={syncing || mutating || listLoading}>
+                <Button
+                  size="sm"
+                  onClick={handleSaveCustomAppDir}
+                  disabled={syncing || mutating || listLoading}
+                >
                   保存路径
                 </Button>
                 <Button
@@ -780,7 +1162,9 @@ function IconManagerPanel() {
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="min-w-0 flex-1 space-y-1.5">
                               <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-sm font-medium text-foreground">{action.title}</p>
+                                <p className="text-sm font-medium text-foreground">
+                                  {action.title}
+                                </p>
                                 <span
                                   className={`rounded-full px-2 py-0.5 text-[11px] ${
                                     isIncremental
@@ -791,7 +1175,9 @@ function IconManagerPanel() {
                                   {action.toneLabel}
                                 </span>
                               </div>
-                              <p className="text-xs leading-5 text-muted-foreground">{action.desc}</p>
+                              <p className="text-xs leading-5 text-muted-foreground">
+                                {action.desc}
+                              </p>
                               <p className="text-[11px] leading-5 text-muted-foreground/90">
                                 {action.impact}
                               </p>
@@ -1096,6 +1482,9 @@ function AboutPanel() {
   const [appInfo, setAppInfo] = useState<AboutAppInfo>(ABOUT_APP_INFO_FALLBACK)
   const [statusText, setStatusText] = useState('正在读取应用信息...')
   const [copied, setCopied] = useState(false)
+  const [launchpadShortcutMeta, setLaunchpadShortcutMeta] = useState(
+    `全局快捷键 ${formatShortcutForDisplay(DEFAULT_LAUNCHPAD_SHORTCUT)}`
+  )
 
   useEffect(() => {
     let disposed = false
@@ -1138,6 +1527,17 @@ function AboutPanel() {
       .catch(error => {
         if (disposed) return
         setStatusText(`读取应用信息失败：${String(error)}`)
+      })
+
+    void getSetting('launchpadShortcut')
+      .then(shortcut => {
+        if (disposed) return
+        setLaunchpadShortcutMeta(`全局快捷键 ${formatShortcutForDisplay(shortcut)}`)
+      })
+      .catch(error => {
+        if (disposed) return
+        console.error('Failed to load launchpad shortcut for about panel:', error)
+        setLaunchpadShortcutMeta('全局快捷键可自定义')
       })
 
     return () => {
@@ -1220,7 +1620,7 @@ function AboutPanel() {
     {
       title: '启动台',
       description: '用统一入口承接桌面常用应用，适合键盘优先和快速唤起场景。',
-      meta: '全局快捷键 Ctrl + Space',
+      meta: launchpadShortcutMeta,
     },
     {
       title: '文件搜索',

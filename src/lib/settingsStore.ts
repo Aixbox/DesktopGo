@@ -1,7 +1,15 @@
-﻿import { LazyStore } from "@tauri-apps/plugin-store";
+import { LazyStore } from "@tauri-apps/plugin-store";
 import type { IconSize, ThemeMode, TitleLineCount, WindowMode } from "@/types";
 
-type SettingKey = "iconSize" | "windowMode" | "titleLineCount" | "themeMode" | "dockEnabled";
+export const DEFAULT_LAUNCHPAD_SHORTCUT = "Ctrl+Space";
+
+type SettingKey =
+  | "iconSize"
+  | "windowMode"
+  | "titleLineCount"
+  | "themeMode"
+  | "dockEnabled"
+  | "launchpadShortcut";
 type ExtendedSettingKey = SettingKey | "customAppDir";
 
 type SettingValueMap = {
@@ -10,10 +18,11 @@ type SettingValueMap = {
   titleLineCount: TitleLineCount;
   themeMode: ThemeMode;
   dockEnabled: boolean;
+  launchpadShortcut: string;
   customAppDir: string;
 };
 
-const SETTINGS_STORE_VERSION = 1;
+const SETTINGS_STORE_VERSION = 2;
 const SETTINGS_VERSION_KEY = "settingsVersion";
 const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   "iconSize",
@@ -21,6 +30,7 @@ const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   "titleLineCount",
   "themeMode",
   "dockEnabled",
+  "launchpadShortcut",
   "customAppDir",
 ];
 
@@ -30,6 +40,7 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   titleLineCount: "two",
   themeMode: "dark",
   dockEnabled: true,
+  launchpadShortcut: DEFAULT_LAUNCHPAD_SHORTCUT,
   customAppDir: "",
 };
 
@@ -51,6 +62,8 @@ const isThemeMode = (value: unknown): value is ThemeMode =>
 
 const isDockEnabled = (value: unknown): value is boolean => typeof value === "boolean";
 
+const isLaunchpadShortcut = (value: unknown): value is string => typeof value === "string";
+
 const isCustomAppDir = (value: unknown): value is string => typeof value === "string";
 
 const validators: {
@@ -61,6 +74,7 @@ const validators: {
   titleLineCount: isTitleLineCount,
   themeMode: isThemeMode,
   dockEnabled: isDockEnabled,
+  launchpadShortcut: isLaunchpadShortcut,
   customAppDir: isCustomAppDir,
 };
 
@@ -95,7 +109,9 @@ async function ensureStoreReady(): Promise<void> {
   await storeReadyPromise;
 }
 
-export async function getSetting<K extends ExtendedSettingKey>(key: K): Promise<SettingValueMap[K]> {
+export async function getSetting<K extends ExtendedSettingKey>(
+  key: K,
+): Promise<SettingValueMap[K]> {
   await ensureStoreReady();
   const value = await store.get<unknown>(key);
   return validators[key](value) ? value : DEFAULT_SETTINGS[key];

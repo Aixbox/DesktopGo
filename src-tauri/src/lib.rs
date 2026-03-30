@@ -13,18 +13,17 @@ use commands::{
     notify_main_window_ready, record_search_result_run, search_files, set_layout_payload,
     set_layout_payloads, set_window_mode, start_search_runtime, sync_full_customapp_icons,
     sync_full_desktop_icons, sync_new_customapp_icons, sync_new_desktop_icons, toggle_window,
-    unhide_desktop_icons,
+    unhide_desktop_icons, update_launchpad_shortcut,
 };
 #[cfg(windows)]
 use once_cell::sync::OnceCell;
-use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(windows)]
-use std::sync::Mutex;
+use std::sync::{Mutex, atomic::{AtomicBool, Ordering}};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, RunEvent};
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+use tauri_plugin_store::StoreExt;
 
 #[cfg(windows)]
 static WINDOWS_CONSOLE_APP_HANDLE: OnceCell<tauri::AppHandle> = OnceCell::new();
@@ -33,12 +32,25 @@ static WINDOWS_CONSOLE_EXIT_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 const MAIN_WINDOW_FOCUS_RETRY_COUNT: usize = 8;
 const MAIN_WINDOW_FOCUS_RETRY_DELAY_MS: u64 = 40;
+pub(crate) const DEFAULT_LAUNCHPAD_SHORTCUT: &str = "Ctrl+Space";
 
 struct MainWindowState {
     ready: AtomicBool,
     pending_show: AtomicBool,
     suppress_blur: AtomicBool,
     last_show_request: Mutex<Option<Instant>>,
+}
+
+pub(crate) struct LaunchpadShortcutState {
+    current: Mutex<Option<String>>,
+}
+
+impl Default for LaunchpadShortcutState {
+    fn default() -> Self {
+        Self {
+            current: Mutex::new(None),
+        }
+    }
 }
 
 impl Default for MainWindowState {
@@ -61,7 +73,8 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::default().build())
         .manage(updater::PendingUpdate::default())
-        .manage(MainWindowState::default());
+        .manage(MainWindowState::default())
+        .manage(LaunchpadShortcutState::default());
 
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
@@ -95,16 +108,7 @@ pub fn run() {
 
             create_main_window(app.handle());
             install_windows_console_exit_handler(app.handle());
-
-            let shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
-            let handle = app.handle().clone();
-            app.global_shortcut()
-                .on_shortcut(shortcut, move |_app, _shortcut, event| {
-                    if event.state != ShortcutState::Released {
-                        return;
-                    }
-                    request_main_window_show(&handle);
-                })?;
+            initialize_launchpad_shortcut(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -135,7 +139,8 @@ pub fn run() {
             notify_main_window_ready,
             get_updater_configuration_status,
             check_for_app_update,
-            install_app_update
+            install_app_update,
+            update_launchpad_shortcut
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
@@ -145,6 +150,126 @@ pub fn run() {
             everything::shutdown_search_runtime(app_handle);
         }
     });
+}
+
+fn normalize_launchpad_shortcut(shortcut: &str) -> Result<String, String> {
+    let trimmed = shortcut.trim();
+    if trimmed.is_empty() {
+        return Err("快捷键不能为空。".to_string());
+    }
+
+    let parsed: Shortcut = trimmed
+        .parse()
+        .map_err(|error| format!("无效快捷键：{}", error))?;
+
+    if parsed.mods.is_empty() {
+        return Err("快捷键至少需要一个修饰键，例如 Ctrl、Alt、Shift。".to_string());
+    }
+
+    Ok(parsed.into_string())
+}
+
+fn register_launchpad_shortcut_handler(
+    app: &tauri::AppHandle,
+    shortcut: &str,
+) -> Result<String, String> {
+    let normalized = normalize_launchpad_shortcut(shortcut)?;
+    let handle = app.clone();
+
+    app.global_shortcut()
+        .on_shortcut(normalized.as_str(), move |_app, _shortcut, event| {
+            if event.state != ShortcutState::Released {
+                return;
+            }
+            request_main_window_show(&handle);
+        })
+        .map_err(|error| format!("无法注册启动台快捷键 `{}`：{}", normalized, error))?;
+
+    Ok(normalized)
+}
+
+fn read_saved_launchpad_shortcut(app: &tauri::AppHandle) -> String {
+    app.store("settings.json")
+        .ok()
+        .and_then(|store| {
+            store
+                .get("launchpadShortcut")
+                .and_then(|value| value.as_str().map(str::to_owned))
+        })
+        .unwrap_or_else(|| DEFAULT_LAUNCHPAD_SHORTCUT.to_string())
+}
+
+fn persist_launchpad_shortcut(app: &tauri::AppHandle, shortcut: &str) {
+    if let Ok(store) = app.store("settings.json") {
+        store.set("launchpadShortcut", shortcut.to_string());
+        let _ = store.save();
+    }
+}
+
+fn initialize_launchpad_shortcut(app: &tauri::AppHandle) {
+    let saved_shortcut = read_saved_launchpad_shortcut(app);
+    let shortcut_state = app.state::<LaunchpadShortcutState>();
+
+    match update_launchpad_shortcut_registration(app, shortcut_state.inner(), &saved_shortcut) {
+        Ok(normalized) => {
+            if normalized != saved_shortcut {
+                persist_launchpad_shortcut(app, &normalized);
+            }
+        }
+        Err(error) => {
+            eprintln!(
+                "Warning: Failed to register saved launchpad shortcut `{}`: {}",
+                saved_shortcut, error
+            );
+
+            if saved_shortcut == DEFAULT_LAUNCHPAD_SHORTCUT {
+                return;
+            }
+
+            match update_launchpad_shortcut_registration(
+                app,
+                shortcut_state.inner(),
+                DEFAULT_LAUNCHPAD_SHORTCUT,
+            ) {
+                Ok(normalized) => persist_launchpad_shortcut(app, &normalized),
+                Err(fallback_error) => eprintln!(
+                    "Warning: Failed to register default launchpad shortcut `{}`: {}",
+                    DEFAULT_LAUNCHPAD_SHORTCUT, fallback_error
+                ),
+            }
+        }
+    }
+}
+
+pub(crate) fn update_launchpad_shortcut_registration(
+    app: &tauri::AppHandle,
+    shortcut_state: &LaunchpadShortcutState,
+    shortcut: &str,
+) -> Result<String, String> {
+    let normalized = normalize_launchpad_shortcut(shortcut)?;
+    let mut current = shortcut_state
+        .current
+        .lock()
+        .map_err(|_| "无法锁定当前启动台快捷键状态。".to_string())?;
+
+    if current.as_deref() == Some(normalized.as_str()) {
+        return Ok(normalized);
+    }
+
+    register_launchpad_shortcut_handler(app, &normalized)?;
+
+    if let Some(previous) = current.as_deref() {
+        if let Err(error) = app.global_shortcut().unregister(previous) {
+            let _ = app.global_shortcut().unregister(normalized.as_str());
+            return Err(format!(
+                "无法卸载旧的启动台快捷键 `{}`：{}",
+                previous, error
+            ));
+        }
+    }
+
+    *current = Some(normalized.clone());
+    Ok(normalized)
 }
 
 fn request_main_window_show(app: &tauri::AppHandle) {
