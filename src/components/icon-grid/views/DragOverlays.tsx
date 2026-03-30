@@ -1,4 +1,4 @@
-import { AppWindow } from 'lucide-react'
+﻿import { AppWindow } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from 'react'
 import type { DesktopIcon } from '../../../types'
 import {
@@ -9,7 +9,7 @@ import {
 import type { FolderItem, GridItem } from '../model'
 import { getGridItemSpan } from '../model'
 import type { FolderDropFlight, MultiDropFlightItem } from '../state/types'
-import { FolderIconVisual } from './FolderVisuals'
+import { DESKTOP_FOLDER_SURFACE_CLASS, FolderIconVisual } from './FolderVisuals'
 
 interface DragGhostPointer {
   pointerX: number
@@ -35,8 +35,6 @@ interface DragOverlaysProps {
   folderPreviewEasing: string
 }
 
-const GHOST_FOLDER_SURFACE_CLASS =
-  'relative overflow-hidden border border-white/14 bg-[linear-gradient(145deg,rgba(20,31,52,0.94),rgba(8,12,22,0.9))] shadow-[0_16px_36px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-md'
 const GHOST_FOLDER_INNER_PADDING = 8
 const GHOST_FOLDER_INNER_GAP = 6
 const GHOST_PREVIEW_ICON_SCALE = 0.84
@@ -213,7 +211,7 @@ function FolderGhost({
         style={{ width: `${bodyWidth}px`, height: `${bodyHeight}px` }}
       >
         <div
-          className={`${GHOST_FOLDER_SURFACE_CLASS} flex items-center justify-center`}
+          className={`${DESKTOP_FOLDER_SURFACE_CLASS} flex items-center justify-center`}
           style={{
             width: `${shapeWidth}px`,
             height: `${shapeHeight}px`,
@@ -250,7 +248,7 @@ function FolderGhost({
       style={{ width: `${bodyWidth}px`, height: `${bodyHeight}px` }}
     >
       <div
-        className={`${GHOST_FOLDER_SURFACE_CLASS}`}
+        className={`${DESKTOP_FOLDER_SURFACE_CLASS}`}
         style={{
           width: `${shapeWidth}px`,
           height: `${shapeHeight}px`,
@@ -655,4 +653,6 @@ export function DragOverlays({
     </>
   )
 }
+
+
 

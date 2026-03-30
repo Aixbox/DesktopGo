@@ -1,4 +1,4 @@
-import { AppWindow } from 'lucide-react'
+﻿import { AppWindow } from 'lucide-react'
 import {
   ICON_GRID_TILE_PADDING_Y,
   ICON_GRID_TITLE_GAP,
@@ -20,10 +20,10 @@ export const FOLDER_SHARED_LAYOUT_TRANSITION = {
   damping: 30,
   mass: 0.9,
 } as const
-const FOLDER_SURFACE_CLASS =
-  'relative h-full w-full overflow-hidden rounded-xl bg-[linear-gradient(145deg,rgba(20,31,52,0.92),rgba(8,12,22,0.9))] shadow-[0_12px_28px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.14)] backdrop-blur-md'
+export const FOLDER_SURFACE_CLASS =
+  'relative h-full w-full overflow-hidden rounded-xl bg-black/24 shadow-[0_12px_28px_rgba(0,0,0,0.26)] backdrop-blur-lg'
 export const DESKTOP_FOLDER_SURFACE_CLASS =
-  'relative h-full w-full overflow-hidden border border-white/14 bg-[linear-gradient(145deg,rgba(20,31,52,0.94),rgba(8,12,22,0.9))] shadow-[0_16px_36px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-md'
+  'relative h-full w-full overflow-hidden border border-white/16 bg-black/30 shadow-[0_16px_36px_rgba(0,0,0,0.24)] backdrop-blur-xl'
 
 const clampNumber = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
@@ -250,3 +250,6 @@ export function FolderIconVisual({
     </div>
   )
 }
+
+
+

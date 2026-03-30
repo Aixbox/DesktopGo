@@ -18,6 +18,7 @@ import {
 } from '../../ui/context-menu'
 import type { FolderItem, FolderSize, GridSpan } from '../model'
 import {
+  DESKTOP_FOLDER_SURFACE_CLASS,
   FOLDER_SHARED_LAYOUT_TRANSITION,
   FolderIconVisual,
   getFolderSharedLayoutId,
@@ -48,9 +49,6 @@ const FOLDER_SIZES: Array<{ value: FolderSize; label: string; span: GridSpan }> 
 ]
 const MENU_OPEN_LABEL = 'Open Folder'
 const MENU_SIZE_LABEL = 'Folder Size'
-
-const SURFACE_CLASS =
-  'relative overflow-hidden border border-white/14 bg-[linear-gradient(145deg,rgba(20,31,52,0.94),rgba(8,12,22,0.9))] shadow-[0_16px_36px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-md'
 
 const TITLE_HEIGHT = ICON_GRID_TITLE_HEIGHT
 const TILE_PADDING = ICON_GRID_TILE_PADDING_Y
@@ -87,8 +85,8 @@ function FolderSizePreview({ span, active }: FolderSizePreviewProps) {
       <span
         className={`relative overflow-hidden border shadow-[0_6px_14px_rgba(0,0,0,0.14),inset_0_1px_0_rgba(255,255,255,0.32)] transition ${
           active
-            ? 'border-white/45 bg-[linear-gradient(145deg,rgba(252,253,255,0.9),rgba(215,221,230,0.72))]'
-            : 'border-white/28 bg-[linear-gradient(145deg,rgba(247,249,252,0.7),rgba(198,205,214,0.5))]'
+            ? 'border-white/24 bg-white/12 shadow-[0_6px_14px_rgba(0,0,0,0.16)] ring-1 ring-white/[0.08]'
+            : 'border-white/16 bg-white/[0.04] shadow-[0_4px_12px_rgba(0,0,0,0.12)] ring-1 ring-white/[0.05]'
         }`}
         style={{
           width: `${shellWidth}px`,
@@ -110,8 +108,8 @@ function FolderSizePreview({ span, active }: FolderSizePreviewProps) {
               key={index}
               className={`border transition ${
                 active
-                  ? 'border-white/40 bg-[linear-gradient(145deg,rgba(255,255,255,0.78),rgba(217,224,232,0.52))]'
-                  : 'border-white/24 bg-[linear-gradient(145deg,rgba(255,255,255,0.5),rgba(210,217,225,0.3))]'
+                  ? 'border-white/18 bg-white/14'
+                  : 'border-white/10 bg-white/[0.05]'
               }`}
               style={{ borderRadius: `${slotRadius}px` }}
             />
@@ -249,8 +247,8 @@ function FolderBody({
         <motion.div
           layoutId={sharedLayoutActive ? getFolderSharedLayoutId(folder.id) : undefined}
           transition={FOLDER_SHARED_LAYOUT_TRANSITION}
-          className={`${SURFACE_CLASS} flex items-center justify-center transition-all duration-200 ${
-            highlightSurface ? 'ring-1 ring-white/35 shadow-[0_18px_42px_rgba(0,0,0,0.42)]' : ''
+          className={`${DESKTOP_FOLDER_SURFACE_CLASS} flex items-center justify-center transition-all duration-200 ${
+            highlightSurface ? 'border-white/40 bg-black/40 shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_18px_42px_rgba(0,0,0,0.34)]' : ''
           }`}
           data-folder-body-hitbox
           style={{
@@ -303,8 +301,8 @@ function FolderBody({
       <motion.div
         layoutId={sharedLayoutActive ? getFolderSharedLayoutId(folder.id) : undefined}
         transition={FOLDER_SHARED_LAYOUT_TRANSITION}
-        className={`${SURFACE_CLASS} transition-all duration-200 ${
-          highlightSurface ? 'ring-1 ring-white/35 shadow-[0_18px_42px_rgba(0,0,0,0.42)]' : ''
+        className={`${DESKTOP_FOLDER_SURFACE_CLASS} transition-all duration-200 ${
+          highlightSurface ? 'border-white/40 bg-black/40 shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_18px_42px_rgba(0,0,0,0.34)]' : ''
         }`}
         data-folder-body-hitbox
         style={{
@@ -450,3 +448,6 @@ export function OuterFolderTile({
     </ContextMenu>
   )
 }
+
+
+
