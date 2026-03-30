@@ -45,7 +45,10 @@ export const getIconGridRowHeight = (iconSize: IconSize): number =>
 
 export type WindowMode = 'fullscreen' | 'large' | 'medium' | 'small'
 
-export const WINDOW_SIZE_CONFIG: Record<Exclude<WindowMode, 'fullscreen'>, { width: number; height: number }> = {
+export const WINDOW_SIZE_CONFIG: Record<
+  Exclude<WindowMode, 'fullscreen'>,
+  { width: number; height: number }
+> = {
   large: { width: 1600, height: 900 },
   medium: { width: 1280, height: 720 },
   small: { width: 800, height: 600 },
@@ -54,3 +57,5 @@ export const WINDOW_SIZE_CONFIG: Record<Exclude<WindowMode, 'fullscreen'>, { wid
 export type TitleLineCount = 'one' | 'two'
 
 export type ThemeMode = 'system' | 'dark' | 'light'
+
+export type IconManagerViewMode = 'list' | 'grid'

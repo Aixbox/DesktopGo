@@ -5,6 +5,12 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
+import {
+  filterIconManagerItems,
+  getPathLeaf,
+  type IconSourceFilter,
+  type IconVisibilityFilter,
+} from '@/lib/iconManager'
 import { cn } from '@/lib/utils'
 import { useIconStore } from '@/stores/iconStore'
 import { applyTheme, saveTheme } from '@/lib/theme'
@@ -26,9 +32,9 @@ import {
 } from '@/components/ui/setting-components'
 import type {
   IconManagerItem,
+  IconManagerViewMode,
   IconMutationTarget,
   IconSize,
-  IconSource,
   ThemeMode,
   TitleLineCount,
   WindowMode,
@@ -50,6 +56,8 @@ import {
   Package2,
   ShieldCheck,
   X,
+  LayoutGrid,
+  List,
 } from 'lucide-react'
 
 type NavItem = 'settings' | 'search' | 'iconManager' | 'update' | 'about'
@@ -133,9 +141,6 @@ type IconSyncResult = {
   total_count: number
 }
 
-type IconVisibilityFilter = 'all' | 'visible' | 'hidden'
-type IconSourceFilter = 'all' | IconSource
-
 type IconSyncFeedback = {
   source: 'desktop' | 'customapp'
   tone: 'success' | 'error'
@@ -152,6 +157,15 @@ const ICON_SOURCE_FILTER_OPTIONS: { label: string; value: IconSourceFilter }[] =
   { label: '全部来源', value: 'all' },
   { label: '桌面', value: 'desktop' },
   { label: '自定义应用', value: 'customapp' },
+]
+
+const ICON_MANAGER_VIEW_MODE_OPTIONS: {
+  label: string
+  value: IconManagerViewMode
+  icon: React.ReactNode
+}[] = [
+  { label: '列表', value: 'list', icon: <List className="h-3.5 w-3.5" /> },
+  { label: '宫格', value: 'grid', icon: <LayoutGrid className="h-3.5 w-3.5" /> },
 ]
 
 const ICON_SYNC_ACTIONS: Record<
@@ -665,9 +679,7 @@ function SettingsPanel() {
   const currentShortcutInputValue = formatShortcutForInput(launchpadShortcut)
   const shortcutDraftChanged =
     normalizedDraftShortcut !== normalizeShortcutDraftText(currentShortcutInputValue)
-  const shortcutDisplayValue = isRecordingShortcut
-    ? '请按下新的组合键'
-    : launchpadShortcutDraft
+  const shortcutDisplayValue = isRecordingShortcut ? '请按下新的组合键' : launchpadShortcutDraft
   const shortcutStatusClassName =
     shortcutStatusTone === 'error'
       ? 'text-red-500 dark:text-red-300'
@@ -803,8 +815,8 @@ function SettingsPanel() {
           </div>
 
           <p className="text-xs leading-5 text-muted-foreground">
-            支持手动输入 `Ctrl+Space`、`Ctrl+Alt+K`、`Alt+Shift+P`。录制模式只识别
-            `Ctrl / Alt / Shift`。
+            支持手动输入 `Ctrl+Space`、`Ctrl+Alt+K`、`Alt+Shift+P`。录制模式只识别 `Ctrl / Alt /
+            Shift`。
           </p>
 
           <p className={cn('text-xs leading-5', shortcutStatusClassName)}>
@@ -836,6 +848,7 @@ function IconManagerPanel() {
   const [customAppDirText, setCustomAppDirText] = useState('')
   const [effectiveCustomAppDir, setEffectiveCustomAppDir] = useState('')
   const [allIcons, setAllIcons] = useState<IconManagerItem[]>([])
+  const [viewMode, setViewMode] = useState<IconManagerViewMode>('list')
   const [searchInput, setSearchInput] = useState('')
   const [searchKeyword, setSearchKeyword] = useState('')
   const [visibilityFilter, setVisibilityFilter] = useState<IconVisibilityFilter>('all')
@@ -877,6 +890,10 @@ function IconManagerPanel() {
   }
 
   useEffect(() => {
+    void getSetting('iconManagerViewMode')
+      .then(setViewMode)
+      .catch(e => console.error('Failed to load icon manager view mode:', e))
+
     void (async () => {
       await refreshCustomAppDirDisplay({ syncInput: true })
       await refreshIconManagerList()
@@ -891,15 +908,22 @@ function IconManagerPanel() {
   }, [searchInput])
 
   const filteredIcons = useMemo(() => {
-    return allIcons.filter(icon => {
-      if (visibilityFilter === 'visible' && icon.hidden) return false
-      if (visibilityFilter === 'hidden' && !icon.hidden) return false
-      if (sourceFilter !== 'all' && icon.source !== sourceFilter) return false
-      if (!searchKeyword) return true
-      const haystack = `${icon.name} ${icon.path} ${icon.target_path}`.toLowerCase()
-      return haystack.includes(searchKeyword)
+    return filterIconManagerItems(allIcons, {
+      visibilityFilter,
+      sourceFilter,
+      searchKeyword,
     })
   }, [allIcons, visibilityFilter, sourceFilter, searchKeyword])
+
+  const handleViewModeChange = (nextMode: IconManagerViewMode) => {
+    if (nextMode === viewMode) return
+
+    // 视图模式属于用户偏好，持久化后可避免每次进入设置页都重新切回常用展示。
+    setViewMode(nextMode)
+    void setSetting('iconManagerViewMode', nextMode).catch(e =>
+      console.error('Failed to save icon manager view mode:', e)
+    )
+  }
 
   const runSyncAction = async (actionKey: IconSyncAction) => {
     setSyncing(true)
@@ -1310,22 +1334,50 @@ function IconManagerPanel() {
           </div>
 
           <div className="min-w-0 space-y-3 rounded-lg border border-border/90 bg-card p-4 shadow-sm">
-            <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
-              <Input
-                value={searchInput}
-                onChange={e => setSearchInput(e.target.value)}
-                placeholder="搜索图标名称或路径"
-                className="w-full md:min-w-[220px] md:flex-1 xl:max-w-md"
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void refreshIconManagerList()}
-                disabled={listLoading || syncing || mutating}
-                className="w-full md:w-auto"
-              >
-                刷新列表
-              </Button>
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center xl:flex-1">
+                <Input
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                  placeholder="搜索图标名称或路径"
+                  className="w-full md:min-w-[220px] md:flex-1 xl:max-w-md"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void refreshIconManagerList()}
+                  disabled={listLoading || syncing || mutating}
+                  className="w-full md:w-auto"
+                >
+                  刷新列表
+                </Button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">展示方式</span>
+                <div className="inline-flex rounded-lg border border-border/90 bg-background p-1 shadow-sm">
+                  {ICON_MANAGER_VIEW_MODE_OPTIONS.map(option => {
+                    const selected = viewMode === option.value
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => handleViewModeChange(option.value)}
+                        className={cn(
+                          'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                          selected
+                            ? 'bg-accent text-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                        )}
+                      >
+                        {option.icon}
+                        <span>{option.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -1351,7 +1403,8 @@ function IconManagerPanel() {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              图标总数 {allIcons.length} 项，当前筛选结果 {filteredIcons.length} 项。
+              图标总数 {allIcons.length} 项，当前筛选结果 {filteredIcons.length} 项，当前为
+              {viewMode === 'list' ? '列表' : '宫格'}展示。
             </p>
 
             {managerErrorText ? (
@@ -1363,7 +1416,13 @@ function IconManagerPanel() {
               </p>
             ) : null}
 
-            <div className="space-y-2">
+            <div
+              className={
+                viewMode === 'grid'
+                  ? 'grid items-start gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(100%,9.5rem),1fr))]'
+                  : 'space-y-2'
+              }
+            >
               {listLoading ? (
                 <p className="text-sm text-muted-foreground">图标列表加载中...</p>
               ) : filteredIcons.length === 0 ? (
@@ -1371,17 +1430,114 @@ function IconManagerPanel() {
               ) : (
                 filteredIcons.map(icon => {
                   const sourceLabel = icon.source === 'desktop' ? '桌面' : '自定义应用'
+                  const compactPathLabel = getPathLeaf(icon.target_path || icon.path) || '-'
                   const sourceBadgeClass =
                     icon.source === 'desktop'
                       ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
                       : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                  const visibilityBadgeClass = icon.hidden
+                    ? 'border-orange-500/30 bg-orange-500/15 text-orange-400'
+                    : 'border-emerald-500/30 bg-emerald-500/15 text-emerald-400'
+                  if (viewMode === 'grid') {
+                    return (
+                      <div
+                        key={`${icon.source}:${icon.id}`}
+                        title={`路径：${icon.path}\n目标：${icon.target_path || '-'}`}
+                        className="min-w-0 self-start rounded-md border border-border/85 bg-background p-2.5 shadow-sm"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/70 bg-muted/35">
+                            {icon.icon_base64 ? (
+                              <img
+                                src={icon.icon_base64}
+                                alt={icon.name}
+                                className="h-full w-full object-contain"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                                无图标
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex min-w-0 flex-wrap justify-end gap-1">
+                            <span
+                              className={`rounded border px-1.5 py-0.5 text-[10px] leading-none ${sourceBadgeClass}`}
+                            >
+                              {sourceLabel}
+                            </span>
+                            <span
+                              className={`rounded border px-1.5 py-0.5 text-[10px] leading-none ${visibilityBadgeClass}`}
+                            >
+                              {icon.hidden ? '隐藏' : '未隐藏'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="mt-2 min-w-0 space-y-1">
+                          <p
+                            className="min-w-0 overflow-hidden text-left text-sm font-medium leading-4 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] [overflow-wrap:anywhere]"
+                            title={icon.name || '未命名'}
+                          >
+                            {icon.name || '未命名'}
+                          </p>
+                          <p
+                            className="min-w-0 truncate text-left text-[11px] text-muted-foreground"
+                            title={icon.target_path || icon.path}
+                          >
+                            {compactPathLabel}
+                          </p>
+                        </div>
+
+                        <div className="mt-2 grid grid-cols-2 gap-1.5">
+                          {icon.hidden ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setPendingMutation({ type: 'unhide', icon })}
+                              disabled={syncing || mutating}
+                              className="h-7 min-w-0 overflow-hidden px-2 text-[11px]"
+                            >
+                              显示
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setPendingMutation({ type: 'hide', icon })}
+                              disabled={syncing || mutating}
+                              className="h-7 min-w-0 overflow-hidden px-2 text-[11px]"
+                            >
+                              隐藏
+                            </Button>
+                          )}
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setPendingMutation({ type: 'delete', icon })}
+                            disabled={syncing || mutating}
+                            className="h-7 min-w-0 overflow-hidden px-2 text-[11px]"
+                          >
+                            删除
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  }
+
                   return (
                     <div
                       key={`${icon.source}:${icon.id}`}
+                      title={`路径：${icon.path}\n目标：${icon.target_path || '-'}`}
                       className="rounded-md border border-border/85 bg-background p-3 shadow-sm"
                     >
                       <div className="flex flex-col gap-3 md:flex-row md:items-start">
-                        <div className="h-10 w-10 shrink-0 overflow-hidden">
+                        <div
+                          className={cn(
+                            'flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/70 bg-muted/35'
+                          )}
+                        >
                           {icon.icon_base64 ? (
                             <img
                               src={icon.icon_base64}
@@ -1398,28 +1554,28 @@ function IconManagerPanel() {
 
                         <div className="min-w-0 flex-1 space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="truncate text-sm font-medium">{icon.name || '未命名'}</p>
+                            <p className={cn('truncate text-sm font-medium')}>
+                              {icon.name || '未命名'}
+                            </p>
                             <span
                               className={`rounded border px-2 py-0.5 text-[11px] ${sourceBadgeClass}`}
                             >
                               {sourceLabel}
                             </span>
                             <span
-                              className={`rounded border px-2 py-0.5 text-[11px] ${
-                                icon.hidden
-                                  ? 'border-orange-500/30 bg-orange-500/15 text-orange-400'
-                                  : 'border-emerald-500/30 bg-emerald-500/15 text-emerald-400'
-                              }`}
+                              className={`rounded border px-2 py-0.5 text-[11px] ${visibilityBadgeClass}`}
                             >
                               {icon.hidden ? '隐藏' : '未隐藏'}
                             </span>
                           </div>
-                          <p className="break-all text-xs text-muted-foreground md:truncate">
-                            路径：{icon.path}
-                          </p>
-                          <p className="break-all text-xs text-muted-foreground md:truncate">
-                            目标：{icon.target_path || '-'}
-                          </p>
+                          <div className="space-y-1">
+                            <p className="break-all text-xs text-muted-foreground md:truncate">
+                              路径：{icon.path}
+                            </p>
+                            <p className="break-all text-xs text-muted-foreground md:truncate">
+                              目标：{icon.target_path || '-'}
+                            </p>
+                          </div>
                         </div>
 
                         <div className="flex w-full shrink-0 flex-wrap gap-2 md:w-auto md:justify-end">
