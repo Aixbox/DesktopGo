@@ -288,14 +288,6 @@ const SHORTCUT_KEY_DISPLAY_LABELS: Record<string, string> = {
   Tab: 'Tab',
 }
 
-function isMacShortcutPlatform() {
-  if (typeof navigator === 'undefined') {
-    return false
-  }
-
-  return /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform)
-}
-
 function formatShortcutToken(token: string) {
   const normalizedToken = token.trim()
   const lowerToken = normalizedToken.toLowerCase()
@@ -312,12 +304,12 @@ function formatShortcutToken(token: string) {
     case 'super':
     case 'command':
     case 'cmd':
-      return isMacShortcutPlatform() ? 'Cmd' : 'Win'
+      return 'Super'
     case 'commandorcontrol':
     case 'commandorctrl':
     case 'cmdorctrl':
     case 'cmdorcontrol':
-      return isMacShortcutPlatform() ? 'Cmd' : 'Ctrl'
+      return 'Ctrl'
     default:
       break
   }
@@ -359,8 +351,28 @@ function formatShortcutForDisplay(shortcut: string) {
   return tokens.map(formatShortcutToken).join(' + ')
 }
 
+function formatShortcutForInput(shortcut: string) {
+  const tokens = shortcut
+    .split('+')
+    .map(token => token.trim())
+    .filter(Boolean)
+
+  if (tokens.length === 0) {
+    return ''
+  }
+
+  return tokens.map(formatShortcutToken).join('+')
+}
+
+function normalizeShortcutDraftText(shortcut: string) {
+  return shortcut
+    .trim()
+    .replace(/\s*\+\s*/g, '+')
+    .replace(/\s+/g, ' ')
+}
+
 function buildShortcutFromKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-  const hasModifier = event.ctrlKey || event.altKey || event.shiftKey || event.metaKey
+  const hasModifier = event.ctrlKey || event.altKey || event.shiftKey
 
   if (!hasModifier) {
     return {
@@ -383,9 +395,6 @@ function buildShortcutFromKeyDown(event: React.KeyboardEvent<HTMLInputElement>) 
   }
   if (event.shiftKey) {
     tokens.push('Shift')
-  }
-  if (event.metaKey) {
-    tokens.push('Super')
   }
   tokens.push(event.code)
 
@@ -426,7 +435,9 @@ function SettingsPanel() {
   const { iconSize, windowMode, titleLineCount, dockEnabled, setDockEnabled } = useIconStore()
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark')
   const [launchpadShortcut, setLaunchpadShortcut] = useState(DEFAULT_LAUNCHPAD_SHORTCUT)
-  const [launchpadShortcutDraft, setLaunchpadShortcutDraft] = useState(DEFAULT_LAUNCHPAD_SHORTCUT)
+  const [launchpadShortcutDraft, setLaunchpadShortcutDraft] = useState(
+    formatShortcutForInput(DEFAULT_LAUNCHPAD_SHORTCUT)
+  )
   const [shortcutStatusText, setShortcutStatusText] = useState('')
   const [shortcutStatusTone, setShortcutStatusTone] = useState<ShortcutStatusTone>('default')
   const [isRecordingShortcut, setIsRecordingShortcut] = useState(false)
@@ -460,7 +471,7 @@ function SettingsPanel() {
         })
         setThemeMode(savedThemeMode)
         setLaunchpadShortcut(savedLaunchpadShortcut)
-        setLaunchpadShortcutDraft(savedLaunchpadShortcut)
+        setLaunchpadShortcutDraft(formatShortcutForInput(savedLaunchpadShortcut))
         setShortcutStatusText(
           `当前生效快捷键：${formatShortcutForDisplay(savedLaunchpadShortcut)}。`
         )
@@ -513,10 +524,24 @@ function SettingsPanel() {
 
     setIsRecordingShortcut(true)
     setShortcutStatusTone('default')
-    setShortcutStatusText('请按下新的组合键，至少包含一个修饰键。')
+    setShortcutStatusText(
+      '请按下新的组合键。录制仅识别 Ctrl、Alt、Shift；像 Ctrl+Space 这种组合可以直接手动输入。'
+    )
     window.setTimeout(() => {
       shortcutInputRef.current?.focus()
     }, 0)
+  }
+
+  const handleShortcutInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (isRecordingShortcut) {
+      return
+    }
+
+    setLaunchpadShortcutDraft(event.target.value)
+    setShortcutStatusTone('default')
+    setShortcutStatusText(
+      '已更新待保存的快捷键文本。像 Ctrl+Space 这种录制不到的组合，可以直接手动输入后保存。'
+    )
   }
 
   const handleShortcutInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -571,7 +596,7 @@ function SettingsPanel() {
 
   const handleResetLaunchpadShortcut = () => {
     setIsRecordingShortcut(false)
-    setLaunchpadShortcutDraft(DEFAULT_LAUNCHPAD_SHORTCUT)
+    setLaunchpadShortcutDraft(formatShortcutForInput(DEFAULT_LAUNCHPAD_SHORTCUT))
     setShortcutStatusTone('default')
     setShortcutStatusText(
       launchpadShortcut === DEFAULT_LAUNCHPAD_SHORTCUT
@@ -586,6 +611,14 @@ function SettingsPanel() {
     }
 
     const previousShortcut = launchpadShortcut
+    const draftShortcut = normalizeShortcutDraftText(launchpadShortcutDraft)
+
+    if (!draftShortcut) {
+      setShortcutStatusTone('error')
+      setShortcutStatusText('请输入快捷键，例如 Ctrl+Space 或 Ctrl+Alt+K。')
+      return
+    }
+
     setIsRecordingShortcut(false)
     setIsSavingShortcut(true)
     setShortcutStatusTone('default')
@@ -593,7 +626,7 @@ function SettingsPanel() {
 
     try {
       const normalizedShortcut = await invoke<string>('update_launchpad_shortcut', {
-        shortcut: launchpadShortcutDraft,
+        shortcut: draftShortcut,
       })
 
       try {
@@ -614,7 +647,7 @@ function SettingsPanel() {
       }
 
       setLaunchpadShortcut(normalizedShortcut)
-      setLaunchpadShortcutDraft(normalizedShortcut)
+      setLaunchpadShortcutDraft(formatShortcutForInput(normalizedShortcut))
       setShortcutStatusTone('success')
       setShortcutStatusText(
         `启动台快捷键已更新为 ${formatShortcutForDisplay(normalizedShortcut)}。`
@@ -628,10 +661,13 @@ function SettingsPanel() {
     }
   }
 
-  const shortcutDraftChanged = launchpadShortcutDraft !== launchpadShortcut
+  const normalizedDraftShortcut = normalizeShortcutDraftText(launchpadShortcutDraft)
+  const currentShortcutInputValue = formatShortcutForInput(launchpadShortcut)
+  const shortcutDraftChanged =
+    normalizedDraftShortcut !== normalizeShortcutDraftText(currentShortcutInputValue)
   const shortcutDisplayValue = isRecordingShortcut
     ? '请按下新的组合键'
-    : formatShortcutForDisplay(launchpadShortcutDraft)
+    : launchpadShortcutDraft
   const shortcutStatusClassName =
     shortcutStatusTone === 'error'
       ? 'text-red-500 dark:text-red-300'
@@ -701,7 +737,7 @@ function SettingsPanel() {
       <div className="mb-6">
         <SettingCard
           label="打开启动台快捷键"
-          desc="修改唤起启动台的全局快捷键。新快捷键至少要包含一个修饰键，例如 Ctrl、Alt、Shift。"
+          desc="修改唤起启动台的全局快捷键。录制支持 Ctrl、Alt、Shift；像 Ctrl+Space 这种可能被系统或输入法拦截的组合，可以直接手动输入。"
         >
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span className="rounded-full border border-border/80 bg-background px-2.5 py-1">
@@ -722,10 +758,13 @@ function SettingsPanel() {
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
             <Input
               ref={shortcutInputRef}
-              readOnly
               value={shortcutDisplayValue}
               aria-label="启动台快捷键"
-              placeholder="点击“录制快捷键”后按下组合键"
+              placeholder="可手动输入，例如 Ctrl+Space"
+              spellCheck={false}
+              autoCorrect="off"
+              autoCapitalize="off"
+              onChange={handleShortcutInputChange}
               onKeyDown={handleShortcutInputKeyDown}
               onBlur={handleShortcutInputBlur}
               className={cn(
@@ -762,6 +801,11 @@ function SettingsPanel() {
               </Button>
             </div>
           </div>
+
+          <p className="text-xs leading-5 text-muted-foreground">
+            支持手动输入 `Ctrl+Space`、`Ctrl+Alt+K`、`Alt+Shift+P`。录制模式只识别
+            `Ctrl / Alt / Shift`。
+          </p>
 
           <p className={cn('text-xs leading-5', shortcutStatusClassName)}>
             {shortcutStatusText || '录制后按下组合键，保存成功后会立即生效。'}
