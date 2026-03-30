@@ -16,13 +16,7 @@ interface IconProps {
   onToggleSelect: (key: string) => void
 }
 
-export function Icon({
-  icon,
-  selectionKey,
-  selectionMode,
-  selected,
-  onToggleSelect,
-}: IconProps) {
+export function Icon({ icon, selectionKey, selectionMode, selected, onToggleSelect }: IconProps) {
   const { launchApp, iconSize, titleLineCount } = useIconStore()
   const config = ICON_SIZE_CONFIG[iconSize]
   const tileHeight = getIconGridRowHeight(iconSize)
@@ -39,12 +33,8 @@ export function Icon({
 
   const buttonStateClass = selectionMode
     ? 'bg-transparent'
-    : 'bg-transparent hover:bg-black/10 active:bg-black/20 dark:hover:bg-white/10 dark:active:bg-white/20'
-  const layerClass = selectionMode
-    ? selected
-      ? 'z-30'
-      : 'z-10'
-    : 'z-10 hover:z-20'
+    : 'bg-transparent hover:bg-foreground/6 active:bg-foreground/10 dark:hover:bg-white/10 dark:active:bg-white/20'
+  const layerClass = selectionMode ? (selected ? 'z-30' : 'z-10') : 'z-10 hover:z-20'
   const imageMotionClass = selectionMode ? '' : 'group-hover:scale-105 group-active:scale-95'
 
   return (
@@ -67,8 +57,8 @@ export function Icon({
         <span
           className={`absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full border text-xs ${
             selected
-              ? 'border-blue-500 bg-blue-500 text-white'
-              : 'border-white/60 bg-black/30 text-transparent'
+              ? 'border-blue-500 bg-blue-500 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950'
+              : 'border-border/70 bg-background/72 text-transparent shadow-sm dark:border-white/60 dark:bg-black/30'
           }`}
         >
           {selected ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}

@@ -21,9 +21,9 @@ export const FOLDER_SHARED_LAYOUT_TRANSITION = {
   mass: 0.9,
 } as const
 export const FOLDER_SURFACE_CLASS =
-  'relative h-full w-full overflow-hidden rounded-xl bg-black/24 shadow-[0_12px_28px_rgba(0,0,0,0.26)] backdrop-blur-lg'
+  'relative h-full w-full overflow-hidden rounded-xl border border-border/35 bg-background/42 shadow-[0_12px_28px_rgba(15,23,42,0.16)] backdrop-blur-lg dark:border-white/14 dark:bg-black/24 dark:shadow-[0_12px_28px_rgba(0,0,0,0.26)]'
 export const DESKTOP_FOLDER_SURFACE_CLASS =
-  'relative h-full w-full overflow-hidden border border-white/16 bg-black/30 shadow-[0_16px_36px_rgba(0,0,0,0.24)] backdrop-blur-xl'
+  'relative h-full w-full overflow-hidden border border-border/45 bg-background/48 shadow-[0_16px_36px_rgba(15,23,42,0.18)] backdrop-blur-xl dark:border-white/16 dark:bg-black/30 dark:shadow-[0_16px_36px_rgba(0,0,0,0.24)]'
 
 const clampNumber = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
@@ -250,6 +250,3 @@ export function FolderIconVisual({
     </div>
   )
 }
-
-
-

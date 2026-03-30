@@ -532,7 +532,7 @@ export function DockBar({
     >
       <div
         ref={panelRef}
-        className="relative overflow-hidden rounded-[28px] border border-white/16 bg-black/24 px-4 py-3 shadow-[0_20px_60px_rgba(0,0,0,0.24)] backdrop-blur-2xl transition-[width] duration-[220ms]"
+        className="launchpad-glass-panel relative overflow-hidden rounded-[28px] px-4 py-3 shadow-[0_20px_60px_rgba(15,23,42,0.18)] transition-[width] duration-[220ms] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]"
         style={{
           maxWidth: `calc(100vw - ${DOCK_PANEL_VIEWPORT_MARGIN * 2}px)`,
           transitionTimingFunction: DOCK_CONTAINER_EASING,
@@ -597,9 +597,7 @@ export function DockBar({
                             type="button"
                             title={item.kind === 'icon' ? item.icon.name : item.name}
                             className={`relative flex cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
-                              selectionMode
-                                ? ''
-                                : 'hover:-translate-y-0.5 active:translate-y-0'
+                              selectionMode ? '' : 'hover:-translate-y-0.5 active:translate-y-0'
                             }`}
                             style={{ width: dockButtonSize, height: dockButtonSize }}
                             onClick={event => {
@@ -623,11 +621,13 @@ export function DockBar({
                               <span
                                 className={`absolute right-0.5 top-0.5 z-10 flex h-4 w-4 items-center justify-center rounded-full border text-xs ${
                                   selectedSet.has(id)
-                                    ? 'border-blue-500 bg-blue-500 text-white'
-                                    : 'border-white/60 bg-black/30 text-transparent'
+                                    ? 'border-blue-500 bg-blue-500 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950'
+                                    : 'border-border/70 bg-background/72 text-transparent shadow-sm dark:border-white/60 dark:bg-black/30'
                                 }`}
                               >
-                                {selectedSet.has(id) ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+                                {selectedSet.has(id) ? (
+                                  <Check className="h-3 w-3" strokeWidth={3} />
+                                ) : null}
                               </span>
                             ) : null}
                             {item.kind === 'icon' ? (
@@ -647,7 +647,7 @@ export function DockBar({
                                     />
                                   ) : (
                                     <div
-                                      className="icon-image rounded-xl bg-white/12"
+                                      className="icon-image rounded-xl bg-foreground/8 dark:bg-white/12"
                                       style={{ width: iconImageSize, height: iconImageSize }}
                                       aria-hidden="true"
                                     />
@@ -674,7 +674,7 @@ export function DockBar({
                                   transition={FOLDER_SHARED_LAYOUT_TRANSITION}
                                   className={`${DESKTOP_FOLDER_SURFACE_CLASS} flex items-center justify-center transition-all duration-150 ${
                                     folderPreview || folderOpen
-                                      ? 'ring-1 ring-white/35 shadow-[0_18px_42px_rgba(0,0,0,0.42)]'
+                                      ? 'ring-1 ring-foreground/18 shadow-[0_18px_42px_rgba(15,23,42,0.22)] dark:ring-white/35 dark:shadow-[0_18px_42px_rgba(0,0,0,0.42)]'
                                       : ''
                                   }`}
                                   style={{
@@ -698,10 +698,10 @@ export function DockBar({
                       {!selectionMode ? (
                         <ContextMenuContent
                           data-dock-menu="true"
-                          className="w-44 rounded-2xl border-white/15 bg-black/90 p-1.5 text-white shadow-2xl backdrop-blur-xl"
+                          className="w-44 rounded-2xl p-1.5 shadow-2xl backdrop-blur-xl"
                         >
                           <ContextMenuItem
-                            className="rounded-xl px-3 py-2 text-white/85 focus:bg-white/12 focus:text-white"
+                            className="rounded-xl px-3 py-2 text-foreground/85 focus:bg-accent focus:text-foreground"
                             onSelect={() => {
                               if (item.kind === 'icon') {
                                 onLaunchIcon(item.icon.path)
@@ -713,7 +713,7 @@ export function DockBar({
                             {MENU_OPEN_LABEL}
                           </ContextMenuItem>
                           <ContextMenuItem
-                            className="rounded-xl px-3 py-2 text-red-200 focus:bg-red-500/20 focus:text-red-100"
+                            className="rounded-xl px-3 py-2 text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/20 dark:focus:text-red-100"
                             onSelect={() => {
                               onRemoveItem(id)
                             }}
@@ -727,8 +727,8 @@ export function DockBar({
                     <div
                       className={`pointer-events-none flex items-center justify-center rounded-[18px] border border-dashed transition ${
                         hasVisibleItems
-                          ? 'border-white/18 bg-white/[0.04]'
-                          : 'border-white/24 bg-white/[0.06]'
+                          ? 'border-border/35 bg-background/36 dark:border-white/18 dark:bg-white/[0.04]'
+                          : 'border-border/45 bg-background/48 dark:border-white/24 dark:bg-white/[0.06]'
                       } ${showInsertionPreview ? 'scale-100 opacity-100' : 'opacity-80'}`}
                       style={{ width: iconImageSize + 8, height: iconImageSize + 8 }}
                       aria-hidden="true"
@@ -755,8 +755,8 @@ export function DockBar({
                 ref={indicatorThumbRef}
                 className={`absolute top-1/2 h-[5px] -translate-y-1/2 rounded-full will-change-transform transition-[width,opacity,background-color,box-shadow] duration-150 ${
                   isIndicatorDragging
-                    ? 'cursor-grabbing bg-white/55 opacity-100 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]'
-                    : 'cursor-grab bg-white/36 opacity-85 shadow-[0_0_0_1px_rgba(255,255,255,0.05)] group-hover/dock-scrollbar:bg-white/48 group-hover/dock-scrollbar:opacity-100'
+                    ? 'cursor-grabbing bg-foreground/50 opacity-100 shadow-[0_0_0_1px_rgba(15,23,42,0.08)] dark:bg-white/55 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.08)]'
+                    : 'cursor-grab bg-foreground/34 opacity-85 shadow-[0_0_0_1px_rgba(15,23,42,0.06)] group-hover/dock-scrollbar:bg-foreground/46 group-hover/dock-scrollbar:opacity-100 dark:bg-white/36 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.05)] dark:group-hover/dock-scrollbar:bg-white/48'
                 }`}
                 style={{
                   width: '0px',

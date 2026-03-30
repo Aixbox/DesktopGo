@@ -40,8 +40,7 @@ const GHOST_FOLDER_INNER_GAP = 6
 const GHOST_PREVIEW_ICON_SCALE = 0.84
 const GHOST_PREVIEW_ICON_FALLBACK_SCALE = 0.68
 
-const clampNumber = (value: number, min: number, max: number) =>
-  Math.max(min, Math.min(max, value))
+const clampNumber = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
 const getGhostFolderSurfaceRadius = (panelBase: number) =>
   Math.round(clampNumber(panelBase * 0.2, 16, 24))
@@ -141,7 +140,7 @@ function GhostPreviewIcon({ iconBase64, name, size }: GhostPreviewIconProps) {
         />
       ) : (
         <AppWindow
-          className="text-white/70"
+          className="text-foreground/55 dark:text-white/70"
           style={{
             width: `${Math.max(16, Math.floor(size * GHOST_PREVIEW_ICON_FALLBACK_SCALE))}px`,
             height: `${Math.max(16, Math.floor(size * GHOST_PREVIEW_ICON_FALLBACK_SCALE))}px`,
@@ -169,17 +168,11 @@ function FolderGhost({
   const bodyWidth = Math.max(40, footprintWidth - ICON_GRID_TILE_PADDING_Y * 2)
   const bodyHeight = Math.max(
     32,
-    footprintHeight -
-      ICON_GRID_TILE_PADDING_Y * 2 -
-      ICON_GRID_TITLE_HEIGHT -
-      ICON_GRID_TITLE_GAP
+    footprintHeight - ICON_GRID_TILE_PADDING_Y * 2 - ICON_GRID_TITLE_HEIGHT - ICON_GRID_TITLE_GAP
   )
   const singleSlotBodyExtent = Math.max(
     32,
-    slotHeight -
-      ICON_GRID_TILE_PADDING_Y * 2 -
-      ICON_GRID_TITLE_HEIGHT -
-      ICON_GRID_TITLE_GAP
+    slotHeight - ICON_GRID_TILE_PADDING_Y * 2 - ICON_GRID_TITLE_HEIGHT - ICON_GRID_TITLE_GAP
   )
   const shapeWidth =
     folder.size === '1x2'
@@ -195,10 +188,7 @@ function FolderGhost({
         : bodyHeight
   const panelBase = Math.max(32, Math.min(shapeWidth, shapeHeight))
   const surfaceRadius = getGhostFolderSurfaceRadius(panelBase)
-  const innerPadding = Math.min(
-    GHOST_FOLDER_INNER_PADDING,
-    Math.max(4, Math.floor(panelBase / 8))
-  )
+  const innerPadding = Math.min(GHOST_FOLDER_INNER_PADDING, Math.max(4, Math.floor(panelBase / 8)))
   const innerGap = Math.min(GHOST_FOLDER_INNER_GAP, Math.max(4, Math.floor(panelBase / 16)))
 
   if (folder.size === '1x1') {
@@ -310,10 +300,12 @@ export function DragOverlays({
   stackedIconsRef.current = stackedIcons
 
   const folderSpan = ghostItem?.kind === 'folder' ? getGridItemSpan(ghostItem) : null
-  const folderFootprintWidth =
-    folderSpan ? folderSpan.cols * slotWidth + Math.max(0, folderSpan.cols - 1) * gridGap : 0
-  const folderFootprintHeight =
-    folderSpan ? folderSpan.rows * slotHeight + Math.max(0, folderSpan.rows - 1) * gridGap : 0
+  const folderFootprintWidth = folderSpan
+    ? folderSpan.cols * slotWidth + Math.max(0, folderSpan.cols - 1) * gridGap
+    : 0
+  const folderFootprintHeight = folderSpan
+    ? folderSpan.rows * slotHeight + Math.max(0, folderSpan.rows - 1) * gridGap
+    : 0
   const ghostWidth = ghostItem?.kind === 'folder' ? folderFootprintWidth : iconImageSize
   const ghostHeight = ghostItem?.kind === 'folder' ? folderFootprintHeight : iconImageSize
   const initialDragPointer = dragPointerRef.current
@@ -343,7 +335,11 @@ export function DragOverlays({
     stackedIcons.forEach((entry, index) => {
       const position = stackPositionsRef.current[index]
       if (position) {
-        applyGhostTransform(stackNodeRefs.current.get(entry.id) ?? null, position.left, position.top)
+        applyGhostTransform(
+          stackNodeRefs.current.get(entry.id) ?? null,
+          position.left,
+          position.top
+        )
         return
       }
 
@@ -387,7 +383,12 @@ export function DragOverlays({
 
   useEffect(() => {
     const initialPointer = dragPointerRef.current
-    if (!dragSessionId || ghostItem?.kind !== 'icon' || stackedIcons.length === 0 || !initialPointer) {
+    if (
+      !dragSessionId ||
+      ghostItem?.kind !== 'icon' ||
+      stackedIcons.length === 0 ||
+      !initialPointer
+    ) {
       if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current)
         animationFrameRef.current = null
@@ -453,11 +454,10 @@ export function DragOverlays({
           left: currentLeaderLeft,
           top: currentLeaderTop + STACK_REST_OFFSET_Y + index * STACK_REST_STEP_Y,
         }
-        const target =
-          isMoving
-            ? (sampleTrailPosition(trailSamples, now - STACK_TRAIL_DELAY_MS * (index + 1)) ??
-              restTarget)
-            : restTarget
+        const target = isMoving
+          ? (sampleTrailPosition(trailSamples, now - STACK_TRAIL_DELAY_MS * (index + 1)) ??
+            restTarget)
+          : restTarget
         const current = previousPositions[index] ?? initialPositions[index] ?? restTarget
         if (!isMoving) {
           const settleBlend = Math.max(
@@ -628,12 +628,16 @@ export function DragOverlays({
           style={{
             left:
               (folderDropFlight.animate ? folderDropFlight.endX : folderDropFlight.startX) -
-              (folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize) / 2,
+              (folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize) /
+                2,
             top:
               (folderDropFlight.animate ? folderDropFlight.endY : folderDropFlight.startY) -
-              (folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize) / 2,
+              (folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize) /
+                2,
             width: folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize,
-            height: folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize,
+            height: folderDropFlight.animate
+              ? folderDropFlight.endSize
+              : folderDropFlight.startSize,
             opacity: folderDropFlight.animate ? 0.92 : 1,
             transition: `left ${reorderAnimationMs}ms ${folderPreviewEasing}, top ${reorderAnimationMs}ms ${folderPreviewEasing}, width ${reorderAnimationMs}ms ${folderPreviewEasing}, height ${reorderAnimationMs}ms ${folderPreviewEasing}, opacity ${reorderAnimationMs}ms ease-out`,
           }}
@@ -653,6 +657,3 @@ export function DragOverlays({
     </>
   )
 }
-
-
-

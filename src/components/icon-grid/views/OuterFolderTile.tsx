@@ -85,8 +85,8 @@ function FolderSizePreview({ span, active }: FolderSizePreviewProps) {
       <span
         className={`relative overflow-hidden border shadow-[0_6px_14px_rgba(0,0,0,0.14),inset_0_1px_0_rgba(255,255,255,0.32)] transition ${
           active
-            ? 'border-white/24 bg-white/12 shadow-[0_6px_14px_rgba(0,0,0,0.16)] ring-1 ring-white/[0.08]'
-            : 'border-white/16 bg-white/[0.04] shadow-[0_4px_12px_rgba(0,0,0,0.12)] ring-1 ring-white/[0.05]'
+            ? 'border-border/60 bg-background/62 shadow-[0_6px_14px_rgba(15,23,42,0.12)] ring-1 ring-foreground/[0.05] dark:border-white/24 dark:bg-white/12 dark:shadow-[0_6px_14px_rgba(0,0,0,0.16)] dark:ring-white/[0.08]'
+            : 'border-border/45 bg-background/42 shadow-[0_4px_12px_rgba(15,23,42,0.1)] ring-1 ring-foreground/[0.03] dark:border-white/16 dark:bg-white/[0.04] dark:shadow-[0_4px_12px_rgba(0,0,0,0.12)] dark:ring-white/[0.05]'
         }`}
         style={{
           width: `${shellWidth}px`,
@@ -108,8 +108,8 @@ function FolderSizePreview({ span, active }: FolderSizePreviewProps) {
               key={index}
               className={`border transition ${
                 active
-                  ? 'border-white/18 bg-white/14'
-                  : 'border-white/10 bg-white/[0.05]'
+                  ? 'border-border/40 bg-background/72 dark:border-white/18 dark:bg-white/14'
+                  : 'border-border/30 bg-background/50 dark:border-white/10 dark:bg-white/[0.05]'
               }`}
               style={{ borderRadius: `${slotRadius}px` }}
             />
@@ -172,7 +172,7 @@ function PreviewIconButton({
         />
       ) : (
         <AppWindow
-          className="text-white/70"
+          className="text-foreground/55 dark:text-white/70"
           style={{
             width: `${Math.max(16, Math.floor(size * PREVIEW_ICON_FALLBACK_SCALE))}px`,
             height: `${Math.max(16, Math.floor(size * PREVIEW_ICON_FALLBACK_SCALE))}px`,
@@ -248,7 +248,9 @@ function FolderBody({
           layoutId={sharedLayoutActive ? getFolderSharedLayoutId(folder.id) : undefined}
           transition={FOLDER_SHARED_LAYOUT_TRANSITION}
           className={`${DESKTOP_FOLDER_SURFACE_CLASS} flex items-center justify-center transition-all duration-200 ${
-            highlightSurface ? 'border-white/40 bg-black/40 shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_18px_42px_rgba(0,0,0,0.34)]' : ''
+            highlightSurface
+              ? 'border-border/70 bg-background/72 shadow-[0_0_0_1px_rgba(15,23,42,0.06),0_18px_42px_rgba(15,23,42,0.18)] dark:border-white/40 dark:bg-black/40 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_18px_42px_rgba(0,0,0,0.34)]'
+              : ''
           }`}
           data-folder-body-hitbox
           style={{
@@ -302,7 +304,9 @@ function FolderBody({
         layoutId={sharedLayoutActive ? getFolderSharedLayoutId(folder.id) : undefined}
         transition={FOLDER_SHARED_LAYOUT_TRANSITION}
         className={`${DESKTOP_FOLDER_SURFACE_CLASS} transition-all duration-200 ${
-          highlightSurface ? 'border-white/40 bg-black/40 shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_18px_42px_rgba(0,0,0,0.34)]' : ''
+          highlightSurface
+            ? 'border-border/70 bg-background/72 shadow-[0_0_0_1px_rgba(15,23,42,0.06),0_18px_42px_rgba(15,23,42,0.18)] dark:border-white/40 dark:bg-black/40 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_18px_42px_rgba(0,0,0,0.34)]'
+            : ''
         }`}
         data-folder-body-hitbox
         style={{
@@ -411,17 +415,17 @@ export function OuterFolderTile({
       </ContextMenuTrigger>
 
       {!selectionMode ? (
-        <ContextMenuContent className="w-44 rounded-2xl border-white/15 bg-black/90 p-1.5 text-white shadow-2xl backdrop-blur-xl">
+        <ContextMenuContent className="w-44 rounded-2xl p-1.5 shadow-2xl backdrop-blur-xl">
           <ContextMenuItem
-            className="rounded-xl px-3 py-2 text-white/85 focus:bg-white/12 focus:text-white"
+            className="rounded-xl px-3 py-2 text-foreground/85 focus:bg-accent focus:text-foreground"
             onSelect={() => {
               onOpenFolder(folder.id)
             }}
           >
             {MENU_OPEN_LABEL}
           </ContextMenuItem>
-          <ContextMenuSeparator className="mx-1 my-1 bg-white/10" />
-          <ContextMenuLabel className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-white/45">
+          <ContextMenuSeparator className="mx-1 my-1 bg-border/70" />
+          <ContextMenuLabel className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
             {MENU_SIZE_LABEL}
           </ContextMenuLabel>
           <ContextMenuRadioGroup
@@ -434,7 +438,7 @@ export function OuterFolderTile({
               <ContextMenuRadioItem
                 key={option.value}
                 value={option.value}
-                className="rounded-xl px-3 py-1.5 text-white/85 focus:bg-white/12 focus:text-white data-[state=checked]:bg-white/10 data-[state=checked]:text-white"
+                className="rounded-xl px-3 py-1.5 text-foreground/85 focus:bg-accent focus:text-foreground data-[state=checked]:bg-accent/80 data-[state=checked]:text-foreground"
               >
                 <div className="flex items-center gap-3 pr-4">
                   <FolderSizePreview span={option.span} active={folder.size === option.value} />
@@ -448,6 +452,3 @@ export function OuterFolderTile({
     </ContextMenu>
   )
 }
-
-
-

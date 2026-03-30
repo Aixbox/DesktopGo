@@ -120,7 +120,7 @@ export function FolderModalView({
         <motion.div
           key={openFolder.id}
           data-folder-modal="true"
-          className="absolute inset-0 z-40 flex items-center justify-center bg-black/45 backdrop-blur-[2px]"
+          className="launchpad-overlay-backdrop absolute inset-0 z-40 flex items-center justify-center backdrop-blur-[2px]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -157,13 +157,13 @@ export function FolderModalView({
                       if (e.key === 'Enter') commitRename()
                       if (e.key === 'Escape') setEditing(false)
                     }}
-                    className="h-auto w-auto border-white/25 bg-black/50 py-1 text-center font-medium text-white/90 shadow-none backdrop-blur-sm focus-visible:border-white/40 focus-visible:ring-white/10"
+                    className="h-auto w-auto border-border/55 bg-background/78 py-1 text-center font-medium text-foreground shadow-sm backdrop-blur-sm focus-visible:border-ring/70 focus-visible:ring-ring/20 dark:border-white/25 dark:bg-black/50 dark:text-white/90 dark:focus-visible:border-white/40 dark:focus-visible:ring-white/10"
                     style={{ minWidth: '80px', maxWidth: '240px' }}
                   />
                 ) : (
                   <button
                     type="button"
-                    className="truncate rounded-md px-3 py-1 text-sm font-medium text-white/90 transition-colors hover:bg-white/10"
+                    className="truncate rounded-md px-3 py-1 text-sm font-medium text-foreground/90 transition-colors hover:bg-accent/80 dark:text-white/90 dark:hover:bg-white/10"
                     style={{ maxWidth: '240px' }}
                     title={openFolder.name}
                     onClick={() => {
@@ -178,7 +178,7 @@ export function FolderModalView({
               {/* Close X button */}
               <button
                 type="button"
-                className="flex h-6 w-6 items-center justify-center rounded-full bg-white/15 text-white/80 transition-colors hover:bg-white/25 hover:text-white"
+                className="flex h-6 w-6 items-center justify-center rounded-full bg-background/72 text-foreground/75 transition-colors hover:bg-background/92 hover:text-foreground dark:bg-white/15 dark:text-white/80 dark:hover:bg-white/25 dark:hover:text-white"
                 onClick={e => {
                   e.stopPropagation()
                   onClose()
@@ -201,7 +201,7 @@ export function FolderModalView({
               transition={prefersReducedMotion ? { duration: 0 } : FOLDER_SHARED_LAYOUT_TRANSITION}
               data-icon
               ref={folderPanelRef}
-              className="relative overflow-hidden rounded-3xl border border-white/15 bg-black/55 p-5 shadow-[0_24px_56px_rgba(0,0,0,0.5)] backdrop-blur-xl will-change-[transform,border-radius]"
+              className="launchpad-glass-panel-strong relative overflow-hidden rounded-3xl p-5 shadow-[0_24px_56px_rgba(15,23,42,0.22)] will-change-[transform,border-radius] dark:shadow-[0_24px_56px_rgba(0,0,0,0.5)]"
               style={{
                 width: `${panelWidth}px`,
                 maxHeight: `min(80vh, ${maxModalHeight}px)`,
@@ -239,7 +239,7 @@ export function FolderModalView({
                             data-folder-grid-item
                             className={`h-full w-full rounded-2xl ${
                               showDropSlot
-                                ? 'border border-white/20 bg-white/8'
+                                ? 'border border-border/60 bg-background/35 dark:border-white/20 dark:bg-white/8'
                                 : 'border border-transparent bg-transparent'
                             }`}
                             style={{ minHeight: `${folderItemHeight}px` }}

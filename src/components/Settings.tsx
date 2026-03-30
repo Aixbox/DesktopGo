@@ -1236,8 +1236,8 @@ function IconManagerPanel() {
                                 <span
                                   className={`rounded-full px-2 py-0.5 text-[11px] ${
                                     isIncremental
-                                      ? 'bg-emerald-500/15 text-emerald-400'
-                                      : 'bg-amber-500/15 text-amber-400'
+                                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                      : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
                                   }`}
                                 >
                                   {action.toneLabel}
@@ -1255,7 +1255,7 @@ function IconManagerPanel() {
                                 className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] ${
                                   isIncremental
                                     ? 'border border-border/70 bg-muted text-foreground/75'
-                                    : 'bg-amber-500/12 text-amber-300'
+                                    : 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
                                 }`}
                               >
                                 {isActive ? (
@@ -1278,7 +1278,7 @@ function IconManagerPanel() {
                               className={
                                 isIncremental
                                   ? ''
-                                  : 'border-amber-500/30 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300'
+                                  : 'border-amber-500/30 text-amber-700 hover:bg-amber-500/10 hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200'
                               }
                             >
                               {isActive ? (
@@ -1300,8 +1300,8 @@ function IconManagerPanel() {
                     <div
                       className={`break-all rounded-lg border px-3 py-2 text-xs leading-5 ${
                         syncFeedback.tone === 'error'
-                          ? 'border-red-500/30 bg-red-500/10 text-red-400'
-                          : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                          ? 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300'
+                          : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
                       }`}
                       role={syncFeedback.tone === 'error' ? 'alert' : 'status'}
                       aria-live="polite"
@@ -1408,7 +1408,7 @@ function IconManagerPanel() {
             </p>
 
             {managerErrorText ? (
-              <p className="break-all text-sm text-red-500">{managerErrorText}</p>
+              <p className="break-all text-sm text-red-600 dark:text-red-300">{managerErrorText}</p>
             ) : null}
             {managerResultText ? (
               <p className="max-w-3xl break-all text-sm text-muted-foreground" aria-live="polite">
@@ -1433,11 +1433,11 @@ function IconManagerPanel() {
                   const compactPathLabel = getPathLeaf(icon.target_path || icon.path) || '-'
                   const sourceBadgeClass =
                     icon.source === 'desktop'
-                      ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
-                      : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                      ? 'border-blue-500/30 bg-blue-500/15 text-blue-700 dark:text-blue-300'
+                      : 'border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
                   const visibilityBadgeClass = icon.hidden
-                    ? 'border-orange-500/30 bg-orange-500/15 text-orange-400'
-                    : 'border-emerald-500/30 bg-emerald-500/15 text-emerald-400'
+                    ? 'border-orange-500/30 bg-orange-500/15 text-orange-700 dark:text-orange-300'
+                    : 'border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
                   if (viewMode === 'grid') {
                     return (
                       <div
@@ -1621,7 +1621,7 @@ function IconManagerPanel() {
       </div>
 
       {pendingAction ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/22 p-4 backdrop-blur-[1px] dark:bg-black/45">
           <div className="w-full max-w-md rounded-xl border border-border bg-background p-5 shadow-xl">
             <h3 className="text-base font-semibold">
               {ICON_SYNC_ACTIONS[pendingAction].confirmTitle}
@@ -1649,7 +1649,7 @@ function IconManagerPanel() {
       ) : null}
 
       {pendingMutation && mutationDialogText ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/22 p-4 backdrop-blur-[1px] dark:bg-black/45">
           <div className="w-full max-w-md rounded-xl border border-border bg-background p-5 shadow-xl">
             <h3 className="text-base font-semibold">{mutationDialogText.title}</h3>
             <p className="mt-2 text-sm text-muted-foreground">{mutationDialogText.desc}</p>

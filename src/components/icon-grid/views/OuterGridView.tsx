@@ -141,7 +141,7 @@ export function OuterGridView({
 
         {dragContext === 'outer' && dragPreviewSlotIndex !== null && previewFootprint !== null ? (
           <div
-            className="pointer-events-none rounded-2xl border border-white/22 bg-white/8"
+            className="pointer-events-none rounded-2xl border border-border/60 bg-background/35 dark:border-white/22 dark:bg-white/8"
             style={{
               gridColumn: `${previewFootprint.col + 1} / span ${previewFootprint.span.cols}`,
               gridRow: `${previewFootprint.row + 1} / span ${previewFootprint.span.rows}`,
@@ -229,7 +229,7 @@ export function OuterGridView({
           data-pagination
           type="button"
           aria-label="Previous page"
-          className="absolute top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/35 text-white/85 backdrop-blur-sm transition-colors hover:bg-black/55"
+          className="absolute top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-background/78 text-foreground/80 shadow-[0_8px_24px_rgba(15,23,42,0.1)] backdrop-blur-sm transition-colors hover:bg-background/92 dark:border-white/25 dark:bg-black/35 dark:text-white/85 dark:hover:bg-black/55"
           style={{ left: `-${sideArrowOffset}px` }}
           onClick={onGoLeft}
         >
@@ -242,7 +242,7 @@ export function OuterGridView({
           data-pagination
           type="button"
           aria-label="Next page"
-          className="absolute top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/35 text-white/85 backdrop-blur-sm transition-colors hover:bg-black/55"
+          className="absolute top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-background/78 text-foreground/80 shadow-[0_8px_24px_rgba(15,23,42,0.1)] backdrop-blur-sm transition-colors hover:bg-background/92 dark:border-white/25 dark:bg-black/35 dark:text-white/85 dark:hover:bg-black/55"
           style={{ right: `-${sideArrowOffset}px` }}
           onClick={onGoRight}
         >
@@ -271,10 +271,10 @@ export function OuterGridView({
                 onClick={() => onSwitchPage(index)}
                 className={`relative rounded-full transition-all duration-250 ease-out ${
                   isCurrent
-                    ? 'bg-white/95 shadow-[0_0_10px_rgba(255,255,255,0.75)]'
+                    ? 'bg-foreground/88 shadow-[0_0_10px_rgba(15,23,42,0.25)] dark:bg-white/95 dark:shadow-[0_0_10px_rgba(255,255,255,0.75)]'
                     : isHovered
-                      ? 'bg-white/55'
-                      : 'bg-white/35 hover:bg-white/45'
+                      ? 'bg-foreground/45 dark:bg-white/55'
+                      : 'bg-foreground/25 hover:bg-foreground/35 dark:bg-white/35 dark:hover:bg-white/45'
                 }`}
                 style={{
                   width: `${shouldExpand ? paginationActiveWidth : paginationDotSize}px`,

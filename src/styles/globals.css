@@ -281,3 +281,38 @@ body {
 .dark .launchpad-bg {
   background: rgba(30, 30, 40, 0.85);
 }
+
+.launchpad-glass-panel {
+  border: 1px solid color-mix(in oklch, var(--foreground) 14%, transparent);
+  background: color-mix(in oklch, var(--background) 76%, transparent);
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.14);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+}
+
+.launchpad-glass-panel-strong {
+  border: 1px solid color-mix(in oklch, var(--foreground) 16%, transparent);
+  background: color-mix(in oklch, var(--background) 86%, transparent);
+  box-shadow: 0 24px 56px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(20px) saturate(165%);
+  -webkit-backdrop-filter: blur(20px) saturate(165%);
+}
+
+.launchpad-glass-button {
+  border: 1px solid color-mix(in oklch, var(--foreground) 15%, transparent);
+  background: color-mix(in oklch, var(--background) 64%, transparent);
+  color: color-mix(in oklch, var(--foreground) 82%, transparent);
+}
+
+.launchpad-glass-button:hover {
+  background: color-mix(in oklch, var(--background) 78%, transparent);
+  color: var(--foreground);
+}
+
+.launchpad-overlay-backdrop {
+  background: color-mix(in oklch, var(--foreground) 18%, transparent);
+}
+
+.dark .launchpad-overlay-backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}

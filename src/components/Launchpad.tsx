@@ -699,8 +699,9 @@ export function Launchpad() {
                   searchSource === 'everything' ? '搜索文件、文件夹和应用...' : '搜索桌面图标...'
                 }
                 aria-label={searchSource === 'everything' ? '搜索文件' : '搜索桌面图标'}
-                className={`h-11 w-full rounded-full border border-white/20 bg-black/25 px-4 text-sm text-white/90 shadow-lg backdrop-blur-md placeholder:text-white/50 ${searchSource === 'everything' ? 'pr-32' : ''
-                  }`}
+                className={`launchpad-glass-panel h-11 w-full rounded-full px-4 text-sm text-foreground/90 shadow-lg outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 ${
+                  searchSource === 'everything' ? 'pr-32' : ''
+                }`}
               />
 
               {searchSource === 'everything' ? (
@@ -708,7 +709,7 @@ export function Launchpad() {
                   <button
                     data-search-placeholder
                     type="button"
-                    className="inline-flex h-8 items-center gap-1 rounded-full border border-white/15 bg-white/8 px-3 text-xs text-white/80 transition hover:bg-white/12"
+                    className="launchpad-glass-button inline-flex h-8 items-center gap-1 rounded-full px-3 text-xs transition-colors"
                     onClick={() => setIsFilterMenuOpen(open => !open)}
                   >
                     <span className="truncate">{selectedFilterLabel}</span>
@@ -718,16 +719,17 @@ export function Launchpad() {
                   {isFilterMenuOpen ? (
                     <div
                       data-search-floating-menu="true"
-                      className="absolute left-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-2xl border border-white/15 bg-black/90 p-1.5 shadow-2xl backdrop-blur-xl"
+                      className="launchpad-glass-panel-strong absolute left-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-2xl p-1.5 shadow-2xl"
                     >
                       {SEARCH_FILTERS.map(entry => (
                         <button
                           key={entry.value}
                           type="button"
-                          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition ${searchFilter === entry.value
-                            ? 'bg-white/14 text-white'
-                            : 'text-white/70 hover:bg-white/8 hover:text-white'
-                            }`}
+                          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
+                            searchFilter === entry.value
+                              ? 'bg-accent text-foreground'
+                              : 'text-foreground/70 hover:bg-accent hover:text-foreground'
+                          }`}
                           onClick={() => {
                             setSearchFilter(entry.value)
                             setIsFilterMenuOpen(false)
@@ -735,7 +737,7 @@ export function Launchpad() {
                         >
                           <span>{entry.label}</span>
                           {searchFilter === entry.value ? (
-                            <Check className="h-4 w-4 text-emerald-200" />
+                            <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
                           ) : null}
                         </button>
                       ))}
@@ -803,27 +805,27 @@ export function Launchpad() {
           {selectionMode ? (
             <div
               data-selection-toolbar
-              className="absolute left-1/2 top-20 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-black/55 px-3 py-2 text-sm text-white/90 backdrop-blur-md"
+              className="launchpad-glass-panel-strong absolute left-1/2 top-20 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full px-3 py-2 text-sm text-foreground/90"
             >
               <span className="px-2">已选择：{selectedIconKeys.length}</span>
               <button
                 type="button"
                 onClick={handleHideSelected}
-                className="rounded-full border border-white/25 px-3 py-1 text-xs hover:bg-white/15"
+                className="launchpad-glass-button rounded-full px-3 py-1 text-xs transition-colors"
               >
                 隐藏
               </button>
               <button
                 type="button"
                 onClick={handleDeleteSelected}
-                className="rounded-full border border-red-300/40 px-3 py-1 text-xs text-red-200 hover:bg-red-500/25"
+                className="rounded-full border border-red-500/30 px-3 py-1 text-xs text-red-700 transition-colors hover:bg-red-500/12 hover:text-red-800 dark:text-red-200 dark:hover:bg-red-500/25 dark:hover:text-red-100"
               >
                 删除
               </button>
               <button
                 type="button"
                 onClick={clearSelection}
-                className="rounded-full border border-white/25 px-3 py-1 text-xs hover:bg-white/15"
+                className="launchpad-glass-button rounded-full px-3 py-1 text-xs transition-colors"
               >
                 取消
               </button>
@@ -900,4 +902,3 @@ export function Launchpad() {
     </ContextMenu>
   )
 }
-

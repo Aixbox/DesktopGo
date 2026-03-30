@@ -184,7 +184,7 @@ export function UpdatePanel() {
       setStatusText(
         result.available
           ? `发现新版本 v${result.update?.version ?? ''}，可以开始下载安装。`
-          : result.message ?? '当前已是最新版本。'
+          : (result.message ?? '当前已是最新版本。')
       )
     } catch (error) {
       setCheckResult(null)
@@ -233,7 +233,10 @@ export function UpdatePanel() {
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button onClick={() => void handleCheck()} disabled={loadingConfig || checking || installing}>
+              <Button
+                onClick={() => void handleCheck()}
+                disabled={loadingConfig || checking || installing}
+              >
                 {checking ? (
                   <LoaderCircle className="h-4 w-4 animate-spin" />
                 ) : (
@@ -266,20 +269,19 @@ export function UpdatePanel() {
           <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
             <div className="flex items-start gap-3">
               {configStatus?.configured ? (
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
               ) : (
-                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" />
               )}
               <div className="space-y-2">
                 <p className="text-sm font-medium text-foreground">当前状态</p>
                 <p className="max-w-md text-xs leading-5 text-muted-foreground">{statusText}</p>
                 {!configStatus?.configured ? (
-                  <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-foreground/80">
+                  <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-900/80 dark:text-foreground/80">
                     还缺少 updater 配置。请在
                     <span className="font-medium text-foreground"> src-tauri/tauri.conf.json </span>
                     中设置
-                    <span className="font-medium text-foreground"> plugins.updater.pubkey </span>
-                    和
+                    <span className="font-medium text-foreground"> plugins.updater.pubkey </span>和
                     <span className="font-medium text-foreground"> plugins.updater.endpoints </span>
                     。正式发布时还需要
                     <span className="font-medium text-foreground"> TAURI_SIGNING_PRIVATE_KEY </span>
@@ -294,9 +296,9 @@ export function UpdatePanel() {
             <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
               <div className="flex items-start gap-3">
                 {installStage === 'finished' ? (
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
                 ) : (
-                  <LoaderCircle className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-blue-500" />
+                  <LoaderCircle className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-blue-600 dark:text-blue-300" />
                 )}
                 <div className="w-full space-y-3">
                   <div className="space-y-1">
@@ -311,10 +313,12 @@ export function UpdatePanel() {
                   <div className="space-y-2">
                     <div className="h-2 overflow-hidden rounded-full bg-muted">
                       <div
-                        className={`h-full rounded-full bg-blue-500 transition-all duration-300 ${
+                        className={`h-full rounded-full bg-blue-600 transition-all duration-300 dark:bg-blue-400 ${
                           progressPercent === null ? 'w-1/2 animate-pulse' : ''
                         }`}
-                        style={progressPercent === null ? undefined : { width: `${progressPercent}%` }}
+                        style={
+                          progressPercent === null ? undefined : { width: `${progressPercent}%` }
+                        }
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
@@ -334,7 +338,7 @@ export function UpdatePanel() {
         <div className="space-y-4">
           <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
             <div className="flex items-start gap-3">
-              <Globe className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+              <Globe className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
               <div className="space-y-2">
                 <p className="text-sm font-medium text-foreground">更新源</p>
                 {configStatus?.configured && configStatus.endpoints.length > 0 ? (
@@ -362,10 +366,12 @@ export function UpdatePanel() {
           {updateInfo ? (
             <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
               <div className="flex items-start gap-3">
-                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
                 <div className="space-y-3">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-foreground">检测到新版本 v{updateInfo.version}</p>
+                    <p className="text-sm font-medium text-foreground">
+                      检测到新版本 v{updateInfo.version}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       基于目标 {updateInfo.target}
                       {releaseDate ? `，发布时间 ${releaseDate}` : ''}
