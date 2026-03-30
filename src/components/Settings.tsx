@@ -2150,7 +2150,7 @@ export function Settings() {
           </ul>
         </nav>
 
-        <main className="min-h-0 flex-1 overflow-y-auto px-6 py-6 xl:px-8">
+        <main className="settings-main-scroll min-h-0 flex-1 overflow-y-auto px-6 py-6 xl:px-8">
           <div className={cn('mx-auto w-full', NAV_CONTENT_WIDTH[activeNav])}>
             {activeNav === 'settings' && <SettingsPanel />}
             {activeNav === 'search' && <SearchSettingsPanel />}
