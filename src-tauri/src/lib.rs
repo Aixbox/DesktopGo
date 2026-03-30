@@ -6,29 +6,33 @@ mod search_preview;
 mod updater;
 
 use commands::{
-    activate_main_window, check_for_app_update, delete_desktop_icons, get_default_customapp_dir,
-    get_desktop_icons, get_icon_manager_items, get_layout_payload, get_layout_payloads,
-    get_search_preview, get_search_runtime_status, get_updater_configuration_status,
-    hide_desktop_icons, install_app_update, launch_app, notify_main_window_ready,
-    record_search_result_run, search_files, set_layout_payload, set_layout_payloads,
-    set_window_mode, start_search_runtime, sync_full_customapp_icons, sync_full_desktop_icons,
-    sync_new_customapp_icons, sync_new_desktop_icons, toggle_window, unhide_desktop_icons,
+    activate_main_window, activate_settings_window, check_for_app_update, delete_desktop_icons,
+    get_default_customapp_dir, get_desktop_icons, get_icon_manager_items, get_layout_payload,
+    get_layout_payloads, get_search_preview, get_search_runtime_status,
+    get_updater_configuration_status, hide_desktop_icons, install_app_update, launch_app,
+    notify_main_window_ready, record_search_result_run, search_files, set_layout_payload,
+    set_layout_payloads, set_window_mode, start_search_runtime, sync_full_customapp_icons,
+    sync_full_desktop_icons, sync_new_customapp_icons, sync_new_desktop_icons, toggle_window,
+    unhide_desktop_icons,
 };
 #[cfg(windows)]
 use once_cell::sync::OnceCell;
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(windows)]
 use std::sync::Mutex;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, RunEvent};
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 #[cfg(windows)]
 static WINDOWS_CONSOLE_APP_HANDLE: OnceCell<tauri::AppHandle> = OnceCell::new();
 #[cfg(windows)]
 static WINDOWS_CONSOLE_EXIT_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+const MAIN_WINDOW_FOCUS_RETRY_COUNT: usize = 8;
+const MAIN_WINDOW_FOCUS_RETRY_DELAY_MS: u64 = 40;
 
 struct MainWindowState {
     ready: AtomicBool,
@@ -95,17 +99,18 @@ pub fn run() {
             let shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
             let handle = app.handle().clone();
             app.global_shortcut()
-                .on_shortcut(shortcut, move |_app, _shortcut, _event| {
+                .on_shortcut(shortcut, move |_app, _shortcut, event| {
+                    if event.state != ShortcutState::Released {
+                        return;
+                    }
                     request_main_window_show(&handle);
                 })?;
-            if let Err(e) = app.global_shortcut().register(shortcut) {
-                eprintln!("Warning: Failed to register Ctrl+Space: {}", e);
-            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             toggle_window,
             activate_main_window,
+            activate_settings_window,
             get_desktop_icons,
             get_icon_manager_items,
             launch_app,
@@ -145,7 +150,7 @@ pub fn run() {
 fn request_main_window_show(app: &tauri::AppHandle) {
     let state = app.state::<MainWindowState>();
 
-    // 防抖：忽略 300ms 内的重复请求（全局快捷键可能在按下和抬起各触发一次）
+    // 防抖：忽略 300ms 内的重复请求，避免快捷键和托盘事件连发时重复抢焦点。
     if let Ok(mut last) = state.last_show_request.lock() {
         let now = Instant::now();
         if let Some(t) = *last {
@@ -171,13 +176,41 @@ fn request_main_window_show(app: &tauri::AppHandle) {
     }
 }
 
-fn show_main_window(app: &tauri::AppHandle) {
+pub(crate) fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.set_always_on_top(true);
         let _ = window.show();
         let _ = window.set_focus();
+        schedule_main_window_focus_retry(app.clone());
     }
+}
+
+fn schedule_main_window_focus_retry(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        for _ in 0..MAIN_WINDOW_FOCUS_RETRY_COUNT {
+            std::thread::sleep(Duration::from_millis(MAIN_WINDOW_FOCUS_RETRY_DELAY_MS));
+
+            let Some(window) = app.get_webview_window("main") else {
+                return;
+            };
+
+            if !window.is_visible().unwrap_or(false) {
+                return;
+            }
+
+            if window.is_focused().unwrap_or(false) {
+                let state = app.state::<MainWindowState>();
+                state.suppress_blur.store(false, Ordering::SeqCst);
+                return;
+            }
+
+            let _ = window.set_focus();
+        }
+
+        let state = app.state::<MainWindowState>();
+        state.suppress_blur.store(false, Ordering::SeqCst);
+    });
 }
 
 fn create_main_window(app: &tauri::AppHandle) {

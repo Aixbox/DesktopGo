@@ -56,13 +56,13 @@ const ICON_SEARCH_LIMIT = 48
 const SETTINGS_WINDOW_WIDTH = 800
 const SETTINGS_WINDOW_HEIGHT = 600
 
-async function ensureSettingsWindowMinSize(window: WebviewWindow) {
+async function ensureSettingsWindowMinSize(settingsWindow: WebviewWindow) {
   const minSize = new LogicalSize(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
-  await window.setMinSize(minSize)
+  await settingsWindow.setMinSize(minSize)
 
-  const currentSize = await window.innerSize()
+  const currentSize = await settingsWindow.innerSize()
   if (currentSize.width < SETTINGS_WINDOW_WIDTH || currentSize.height < SETTINGS_WINDOW_HEIGHT) {
-    await window.setSize(minSize)
+    await settingsWindow.setSize(minSize)
   }
 }
 
@@ -625,13 +625,8 @@ export function Launchpad() {
     const existing = await WebviewWindow.getByLabel('settings')
     if (existing) {
       try {
-        // 先隐藏主窗口（带 always_on_top），再恢复设置窗口，
-        // 否则主窗口会遮挡设置窗口无法置顶。
-        await getCurrentWindow().hide()
-        await existing.unminimize()
-        await existing.show()
         await ensureSettingsWindowMinSize(existing)
-        await existing.setFocus()
+        await invoke('activate_settings_window')
       } catch (e) {
         console.error('Failed to reopen settings window:', e)
       }
@@ -653,7 +648,8 @@ export function Launchpad() {
       visible: false,
     })
     settingsWindow.once('tauri://created', async () => {
-      await getCurrentWindow().hide()
+      await ensureSettingsWindowMinSize(settingsWindow)
+      await invoke('activate_settings_window')
     })
     settingsWindow.once('tauri://error', e => {
       console.error('Failed to create settings window:', e)
