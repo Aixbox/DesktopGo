@@ -15,7 +15,7 @@ const TABS = [
 
 export function SearchSourceTabs({ source, onChange }: SearchSourceTabsProps) {
   return (
-    <div className="inline-flex h-8 items-center gap-1 rounded-lg bg-white/5 p-1 shadow-inner ring-1 ring-white/10">
+    <div className="search-control-group inline-flex h-8 items-center gap-1 rounded-lg p-1">
       {TABS.map(tab => {
         const isActive = source === tab.id
         const Icon = tab.icon
@@ -25,16 +25,14 @@ export function SearchSourceTabs({ source, onChange }: SearchSourceTabsProps) {
             key={tab.id}
             type="button"
             className={`relative inline-flex h-full items-center justify-center rounded-md px-3 text-xs font-medium transition-colors duration-200 ${
-              isActive
-                ? 'text-white drop-shadow-md'
-                : 'text-white/55 hover:text-white/85'
+              isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             }`}
             onClick={() => onChange(tab.id as SearchSource)}
           >
             {isActive && (
               <motion.div
                 layoutId="search-source-tab-indicator"
-                className="absolute inset-0 rounded-md bg-white/15 shadow-[0_1px_3px_rgba(0,0,0,0.1)] ring-1 ring-white/10"
+                className="search-control-indicator absolute inset-0 rounded-md"
                 transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
               />
             )}

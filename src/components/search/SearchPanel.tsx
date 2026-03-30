@@ -117,8 +117,8 @@ function IconResultTile({
       type="button"
       className={`group relative flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-none p-3 shadow-none transition-all duration-200 ${
         selected
-          ? 'bg-blue-500/20 ring-1 ring-blue-500/70'
-          : 'bg-transparent hover:bg-black/10 active:bg-black/20'
+          ? 'bg-blue-500/12 ring-1 ring-blue-500/40 dark:bg-blue-400/18 dark:ring-blue-400/45'
+          : 'bg-transparent hover:bg-accent/60 active:bg-accent'
       }`}
       style={{ width: config.containerWidth }}
       title={icon.name}
@@ -139,15 +139,15 @@ function IconResultTile({
             draggable={false}
           />
         ) : icon.item_type === 'folder' ? (
-          <Folder className="h-8 w-8 text-white/70" />
+          <Folder className="h-8 w-8 text-muted-foreground" />
         ) : (
-          <AppWindow className="h-8 w-8 text-white/60" />
+          <AppWindow className="h-8 w-8 text-muted-foreground" />
         )}
       </div>
 
       <span
-        className={`text-[11px] text-center leading-tight drop-shadow-md ${
-          selected ? 'text-blue-200' : 'text-white'
+        className={`text-[11px] text-center leading-tight ${
+          selected ? 'text-blue-700 dark:text-blue-200' : 'text-foreground'
         }`}
         style={{
           maxWidth: config.containerWidth - 10,
@@ -481,11 +481,11 @@ export function SearchPanel({
                     className="absolute left-0 right-0 px-4 py-2"
                     style={{ top, height: ROW_HEIGHT }}
                   >
-                    <div className="flex h-full animate-pulse items-center gap-3 rounded-md bg-white/5 px-4">
-                      <span className="h-8 w-8 rounded-md bg-white/10" />
+                    <div className="flex h-full animate-pulse items-center gap-3 rounded-xl border border-border/50 bg-background/45 px-4 backdrop-blur-sm">
+                      <span className="h-8 w-8 rounded-md bg-foreground/10" />
                       <span className="min-w-0 flex-1">
-                        <span className="mb-2 block h-3 w-1/3 rounded bg-white/10" />
-                        <span className="block h-2.5 w-2/3 rounded bg-white/10" />
+                        <span className="mb-2 block h-3 w-1/3 rounded bg-foreground/10" />
+                        <span className="block h-2.5 w-2/3 rounded bg-foreground/10" />
                       </span>
                     </div>
                   </div>
@@ -500,8 +500,10 @@ export function SearchPanel({
                 >
                   <button
                     type="button"
-                    className={`flex h-full w-full items-center gap-3 px-4 py-3 text-left ${
-                      selectedIndex === index ? 'bg-white/15' : 'hover:bg-white/10'
+                    className={`flex h-full w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
+                      selectedIndex === index
+                        ? 'bg-accent/85 ring-1 ring-border/70'
+                        : 'hover:bg-accent/55'
                     }`}
                     onMouseEnter={() => onSelect(index)}
                     onDoubleClick={() => {
@@ -520,9 +522,9 @@ export function SearchPanel({
                           draggable={false}
                         />
                       ) : item.isFolder ? (
-                        <Folder className="h-4 w-4 text-white/70" />
+                        <Folder className="h-4 w-4 text-muted-foreground" />
                       ) : (
-                        <File className="h-4 w-4 text-white/70" />
+                        <File className="h-4 w-4 text-muted-foreground" />
                       )}
                     </span>
 
@@ -530,14 +532,14 @@ export function SearchPanel({
                       <HighlightedText
                         highlightedText={item.highlightedName}
                         fallbackText={item.name || item.path}
-                        className="block truncate text-sm text-white"
-                        highlightClassName="text-emerald-200"
+                        className="block truncate text-sm text-foreground"
+                        highlightClassName="font-medium text-emerald-700 dark:text-emerald-300"
                       />
                       <HighlightedText
                         highlightedText={item.highlightedPath}
                         fallbackText={item.parent}
-                        className="block truncate text-xs text-white/55"
-                        highlightClassName="text-white/90"
+                        className="block truncate text-xs text-muted-foreground"
+                        highlightClassName="font-medium text-foreground/85"
                       />
                     </span>
                   </button>
@@ -548,7 +550,7 @@ export function SearchPanel({
         </div>
 
         {loadingMore ? (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-white/10 bg-black/50 px-4 py-2 text-xs text-white/60 backdrop-blur-sm">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-border/70 bg-background/82 px-4 py-2 text-xs text-muted-foreground backdrop-blur-md">
             正在加载更多...
           </div>
         ) : null}
@@ -559,8 +561,8 @@ export function SearchPanel({
           <button
             type="button"
             aria-label="调整预览宽度"
-            className={`relative z-10 shrink-0 border-l border-r border-white/10 bg-white/[0.03] transition hover:bg-white/10 ${
-              isResizingSplit ? 'bg-white/12' : ''
+            className={`relative z-10 shrink-0 border-l border-r border-border/70 bg-background/12 transition hover:bg-accent/45 ${
+              isResizingSplit ? 'bg-accent/70' : ''
             }`}
             style={{ width: SPLIT_DIVIDER_WIDTH, cursor: 'col-resize' }}
             onPointerDown={event => {
@@ -568,7 +570,7 @@ export function SearchPanel({
               setIsResizingSplit(true)
             }}
           >
-            <span className="absolute left-1/2 top-1/2 h-14 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/20" />
+            <span className="absolute left-1/2 top-1/2 h-14 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground/20" />
           </button>
 
           <div
@@ -589,7 +591,9 @@ export function SearchPanel({
 
   const bodyContent = (
     <div ref={bodyContentRef}>
-      {isEverything && error ? <div className="px-4 py-3 text-sm text-red-200">{error}</div> : null}
+      {isEverything && error ? (
+        <div className="px-4 py-3 text-sm text-red-700 dark:text-red-300">{error}</div>
+      ) : null}
 
       {isEverything && !error && showHistoryState ? (
         <SearchHistoryPanel
@@ -623,15 +627,15 @@ export function SearchPanel({
               </div>
             </div>
           ) : (
-            <div className="px-4 py-3 text-sm text-white/60">{iconEmptyText}</div>
+            <div className="px-4 py-3 text-sm text-muted-foreground">{iconEmptyText}</div>
           )
         ) : (
-          <div className="px-4 py-3 text-sm text-white/60">{iconEmptyText}</div>
+          <div className="px-4 py-3 text-sm text-muted-foreground">{iconEmptyText}</div>
         )
       ) : null}
 
       {isEverything && !error && !showHistoryState && virtualCount === 0 ? (
-        <div className="px-4 py-3 text-sm text-white/60">{everythingEmptyText}</div>
+        <div className="px-4 py-3 text-sm text-muted-foreground">{everythingEmptyText}</div>
       ) : null}
 
       {isEverything && !error && virtualCount > 0 ? everythingResultsContent : null}
@@ -651,14 +655,10 @@ export function SearchPanel({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={panelTransition}
-            className="pointer-events-auto relative overflow-hidden rounded-2xl shadow-2xl will-change-opacity"
+            className="launchpad-glass-panel-strong pointer-events-auto relative overflow-hidden rounded-2xl shadow-2xl will-change-opacity"
           >
-            <div
-              aria-hidden="true"
-              className="absolute inset-0 rounded-2xl border border-white/15 bg-black/70 backdrop-blur-xl"
-            />
             <div className="relative z-10">
-              <div className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-2">
+              <div className="flex items-center justify-between gap-3 border-b border-border/70 px-3 py-2">
                 <div className="min-w-0 flex-1">
                   <SearchSourceTabs source={source} onChange={onSourceChange} />
                 </div>
@@ -702,7 +702,3 @@ export function SearchPanel({
     </div>
   )
 }
-
-
-
-

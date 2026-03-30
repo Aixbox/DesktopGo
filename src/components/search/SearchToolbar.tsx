@@ -173,7 +173,9 @@ function MatcherToggleRow({ active, label, onClick }: MatcherToggleRowProps) {
     <button
       type="button"
       className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition ${
-        active ? 'bg-white/14 text-white' : 'text-white/70 hover:bg-white/8 hover:text-white'
+        active
+          ? 'bg-accent/80 text-foreground'
+          : 'text-muted-foreground hover:bg-accent/55 hover:text-foreground'
       }`}
       onClick={onClick}
     >
@@ -181,8 +183,8 @@ function MatcherToggleRow({ active, label, onClick }: MatcherToggleRowProps) {
       <span
         className={`rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-[0.14em] ${
           active
-            ? 'border-emerald-300/40 bg-emerald-400/10 text-emerald-100'
-            : 'border-white/15 text-white/45'
+            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+            : 'border-border/70 text-muted-foreground'
         }`}
       >
         {active ? '开' : '关'}
@@ -268,7 +270,7 @@ export function SearchToolbar({
   }, [matcherMenuOpen, sortMenuOpen])
 
   return (
-    <div className="inline-flex h-8 items-center gap-0.5 rounded-lg bg-white/5 p-1 shadow-inner ring-1 ring-white/10">
+    <div className="search-control-group inline-flex h-8 items-center gap-0.5 rounded-lg p-1">
       {/* 1. 排序下拉按钮 */}
       <div className="relative h-full">
         <button
@@ -277,9 +279,7 @@ export function SearchToolbar({
           aria-label="搜索排序"
           aria-expanded={sortMenuOpen}
           className={`group relative inline-flex h-full max-w-[10rem] items-center justify-center rounded-md px-3 text-xs font-medium transition-colors duration-200 ${
-            sortMenuOpen
-              ? 'text-white drop-shadow-md'
-              : 'text-white/55 hover:text-white/85'
+            sortMenuOpen ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
           }`}
           onClick={() =>
             setSortMenuOpen(open => {
@@ -291,9 +291,7 @@ export function SearchToolbar({
             })
           }
         >
-          {sortMenuOpen && (
-            <div className="absolute inset-0 rounded-md bg-white/15 shadow-[0_1px_3px_rgba(0,0,0,0.1)] ring-1 ring-white/10" />
-          )}
+          {sortMenuOpen && <div className="search-control-indicator absolute inset-0 rounded-md" />}
 
           <span className="relative z-10 flex items-center gap-1.5">
             <ArrowUpDown className="h-3.5 w-3.5 shrink-0" />
@@ -307,7 +305,7 @@ export function SearchToolbar({
           menuRef={sortMenuRef}
           width={256}
           align="start"
-          className="overflow-y-auto rounded-xl border border-white/[0.15] bg-black/90 p-2 shadow-[0_4px_24px_rgba(0,0,0,0.5)] ring-1 ring-white/5 backdrop-blur-xl"
+          className="search-floating-menu overflow-y-auto rounded-xl p-2"
         >
           <div className="space-y-0.5">
             {(['common', 'metadata', 'history'] as const).map(group => {
@@ -316,7 +314,7 @@ export function SearchToolbar({
 
               return (
                 <div key={group} className="mb-2 last:mb-0">
-                  <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.18em] text-white/35">
+                  <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                     {SORT_GROUP_LABELS[group]}
                   </div>
                   <div className="space-y-1">
@@ -326,8 +324,8 @@ export function SearchToolbar({
                         type="button"
                         className={`group flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-all duration-200 ${
                           sort === option.value
-                            ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10'
-                            : 'text-white/70 hover:bg-white/10 hover:text-white/95 active:scale-[0.98]'
+                            ? 'bg-accent/85 text-foreground shadow-sm ring-1 ring-border/70'
+                            : 'text-muted-foreground hover:bg-accent/55 hover:text-foreground active:scale-[0.98]'
                         }`}
                         onClick={() => {
                           onSortChange(option.value)
@@ -336,7 +334,7 @@ export function SearchToolbar({
                       >
                         <span>{option.label}</span>
                         {sort === option.value ? (
-                          <Check className="h-4 w-4 text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]" />
+                          <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                         ) : null}
                       </button>
                     ))}
@@ -348,7 +346,7 @@ export function SearchToolbar({
         </FloatingMenu>
       </div>
 
-      <div className="mx-0.5 h-3.5 w-[1px] bg-white/10" />
+      <div className="mx-0.5 h-3.5 w-[1px] bg-border/80" />
 
       {/* 2. 匹配选项下拉按钮 */}
       <div className="relative h-full">
@@ -359,8 +357,8 @@ export function SearchToolbar({
           aria-expanded={matcherMenuOpen}
           className={`relative inline-flex h-full w-8 items-center justify-center rounded-md transition-colors duration-200 ${
             matcherMenuOpen || hasActiveMatcher
-              ? 'text-white drop-shadow-md'
-              : 'text-white/55 hover:text-white/85'
+              ? 'text-foreground'
+              : 'text-muted-foreground hover:text-foreground'
           }`}
           onClick={() =>
             setMatcherMenuOpen(open => {
@@ -373,13 +371,13 @@ export function SearchToolbar({
           }
         >
           {(matcherMenuOpen || hasActiveMatcher) && (
-            <div className="absolute inset-0 rounded-md bg-white/15 shadow-[0_1px_3px_rgba(0,0,0,0.1)] ring-1 ring-white/10" />
+            <div className="search-control-indicator absolute inset-0 rounded-md" />
           )}
 
           <span className="relative z-10 flex items-center justify-center">
             <Settings2 className="h-4 w-4" />
             {hasActiveMatcher && (
-              <span className="absolute right-[-0.375rem] top-[-0.375rem] h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+              <span className="absolute right-[-0.375rem] top-[-0.375rem] h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.45)] dark:shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
             )}
           </span>
         </button>
@@ -390,10 +388,10 @@ export function SearchToolbar({
           menuRef={matcherMenuRef}
           width={224}
           align="start"
-          className="rounded-xl border border-white/[0.15] bg-black/90 p-2 shadow-[0_4px_24px_rgba(0,0,0,0.5)] ring-1 ring-white/5 backdrop-blur-xl"
+          className="search-floating-menu rounded-xl p-2"
         >
           <div>
-            <div className="px-3 pb-2 pt-1 text-[11px] uppercase tracking-[0.18em] text-white/35">
+            <div className="px-3 pb-2 pt-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
               匹配选项
             </div>
             <div className="space-y-1">
@@ -422,7 +420,7 @@ export function SearchToolbar({
         </FloatingMenu>
       </div>
 
-      <div className="mx-0.5 h-3.5 w-[1px] bg-white/10" />
+      <div className="mx-0.5 h-3.5 w-[1px] bg-border/80" />
 
       {/* 3. 预览开关按钮 */}
       <button
@@ -430,15 +428,11 @@ export function SearchToolbar({
         title={previewVisible ? '隐藏预览' : '显示预览'}
         aria-label={previewVisible ? '隐藏预览' : '显示预览'}
         className={`relative inline-flex h-full w-8 items-center justify-center rounded-md transition-colors duration-200 ${
-          previewVisible
-            ? 'text-white drop-shadow-md'
-            : 'text-white/55 hover:text-white/85'
+          previewVisible ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
         }`}
         onClick={onPreviewToggle}
       >
-        {previewVisible && (
-          <div className="absolute inset-0 rounded-md bg-white/15 shadow-[0_1px_3px_rgba(0,0,0,0.1)] ring-1 ring-white/10" />
-        )}
+        {previewVisible && <div className="search-control-indicator absolute inset-0 rounded-md" />}
         <span className="relative z-10 flex items-center justify-center">
           {previewVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </span>

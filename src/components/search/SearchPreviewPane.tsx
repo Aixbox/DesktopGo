@@ -50,13 +50,13 @@ export function SearchPreviewPane({
   stacked = false,
 }: SearchPreviewPaneProps) {
   const shellClassName = stacked
-    ? 'flex h-[18rem] flex-col overflow-hidden border-t border-white/10 bg-white/[0.03]'
-    : 'flex h-full flex-col overflow-hidden border-l border-white/10 bg-white/[0.03]'
+    ? 'flex h-[18rem] flex-col overflow-hidden border-t border-border/60 bg-background/12'
+    : 'flex h-full flex-col overflow-hidden border-l border-border/60 bg-background/12'
 
   if (!item) {
     return (
       <div
-        className={`${stacked ? 'h-36 border-t border-white/10 bg-white/[0.03]' : 'h-full'} flex items-center justify-center px-6 text-center text-sm text-white/45`}
+        className={`${stacked ? 'h-36 border-t border-border/60 bg-background/12' : 'h-full'} flex items-center justify-center px-6 text-center text-sm text-muted-foreground`}
       >
         选择一个结果后，可在这里查看预览。
       </div>
@@ -65,27 +65,29 @@ export function SearchPreviewPane({
 
   return (
     <div className={shellClassName}>
-      <div className="border-b border-white/10 px-4 py-3">
-        <div className="truncate text-sm font-medium text-white">{item.name || item.path}</div>
-        <div className="mt-1 truncate text-xs text-white/50">{item.path}</div>
+      <div className="border-b border-border/60 px-4 py-3">
+        <div className="truncate text-sm font-medium text-foreground">{item.name || item.path}</div>
+        <div className="mt-1 truncate text-xs text-muted-foreground">{item.path}</div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {loading ? (
-          <div className="text-sm text-white/55">正在加载预览...</div>
+          <div className="text-sm text-muted-foreground">正在加载预览...</div>
         ) : error ? (
-          <div className="text-sm text-red-200">{error}</div>
+          <div className="text-sm text-red-700 dark:text-red-300">{error}</div>
         ) : preview?.kind === 'image' && preview.imageDataUrl ? (
           <div className="space-y-4">
             <img
               src={preview.imageDataUrl}
               alt={preview.name}
-              className="max-h-72 w-full rounded-lg border border-white/10 object-contain"
+              className="max-h-72 w-full rounded-lg border border-border/60 bg-background/40 object-contain"
               draggable={false}
             />
-            <div className="rounded-lg border border-white/10 bg-black/25 p-3">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/35">元数据</div>
-              <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-white/70">
+            <div className="search-surface-card rounded-lg p-3">
+              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                元数据
+              </div>
+              <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-foreground/80">
                 <div>大小：{formatPreviewSize(preview.size)}</div>
                 <div>修改时间：{formatPreviewDate(preview.modifiedAt)}</div>
                 <div>类型：{preview.mimeType || preview.extension || '未知'}</div>
@@ -94,20 +96,24 @@ export function SearchPreviewPane({
           </div>
         ) : preview?.kind === 'text' ? (
           <div className="space-y-4">
-            <div className="rounded-lg border border-white/10 bg-black/25 p-3">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/35">文本预览</div>
-              <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-white/75">
+            <div className="search-surface-card rounded-lg p-3">
+              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                文本预览
+              </div>
+              <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-foreground/80">
                 {preview.textSnippet || '没有可用的文本预览。'}
               </pre>
               {preview.textTruncated ? (
-                <div className="mt-3 text-[11px] text-white/45">
+                <div className="mt-3 text-[11px] text-muted-foreground">
                   为保证加载速度，预览内容已截断。
                 </div>
               ) : null}
             </div>
-            <div className="rounded-lg border border-white/10 bg-black/25 p-3">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/35">元数据</div>
-              <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-white/70">
+            <div className="search-surface-card rounded-lg p-3">
+              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                元数据
+              </div>
+              <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-foreground/80">
                 <div>大小：{formatPreviewSize(preview.size)}</div>
                 <div>修改时间：{formatPreviewDate(preview.modifiedAt)}</div>
                 <div>类型：{preview.mimeType || preview.extension || '未知'}</div>
@@ -116,9 +122,11 @@ export function SearchPreviewPane({
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="rounded-lg border border-white/10 bg-black/25 p-3">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/35">元数据</div>
-              <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-white/70">
+            <div className="search-surface-card rounded-lg p-3">
+              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                元数据
+              </div>
+              <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-foreground/80">
                 <div>大小：{formatPreviewSize(preview?.size ?? null)}</div>
                 <div>修改时间：{formatPreviewDate(preview?.modifiedAt ?? null)}</div>
                 <div>类型：{preview?.mimeType || preview?.extension || '未知'}</div>
