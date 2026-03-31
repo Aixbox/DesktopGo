@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" role="img" aria-labelledby="title desc">
+  <title id="title">DesktopGo search panel placeholder</title>
+  <desc id="desc">Placeholder preview for the DesktopGo search panel screenshot.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0c1425" />
+      <stop offset="100%" stop-color="#142640" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="800" fill="url(#bg)" />
+  <rect x="52" y="44" width="1176" height="712" rx="34" fill="#0f172a" stroke="#23324a" />
+  <rect x="118" y="92" width="1044" height="54" rx="27" fill="#142138" stroke="#2d3f5f" />
+  <text x="162" y="126" fill="#8ea3c7" font-size="22" font-family="Segoe UI, Arial, sans-serif">
+    Search with Everything
+  </text>
+
+  <rect x="118" y="176" width="452" height="504" rx="26" fill="#111c31" stroke="#263854" />
+  <rect x="598" y="176" width="564" height="504" rx="26" fill="#111c31" stroke="#263854" />
+
+  <g>
+    <rect x="146" y="214" width="396" height="72" rx="18" fill="#17243b" stroke="#29405f" />
+    <rect x="146" y="300" width="396" height="72" rx="18" fill="#17243b" stroke="#29405f" />
+    <rect x="146" y="386" width="396" height="72" rx="18" fill="#2a244d" stroke="#6152bc" />
+    <rect x="146" y="472" width="396" height="72" rx="18" fill="#17243b" stroke="#29405f" />
+    <rect x="146" y="558" width="396" height="72" rx="18" fill="#17243b" stroke="#29405f" />
+  </g>
+
+  <g fill="#dce8ff" font-size="18" font-family="Segoe UI, Arial, sans-serif">
+    <text x="176" y="246">DesktopGo.exe</text>
+    <text x="176" y="332">Project Plan.docx</text>
+    <text x="176" y="418">Design Assets</text>
+    <text x="176" y="504">launchpad-main.png</text>
+    <text x="176" y="590">Release Notes.md</text>
+  </g>
+
+  <g fill="#8ea3c7" font-size="14" font-family="Segoe UI, Arial, sans-serif">
+    <text x="176" y="270">C:\Apps\DesktopGo\DesktopGo.exe</text>
+    <text x="176" y="356">D:\Project\docs\Project Plan.docx</text>
+    <text x="176" y="442">D:\Project\assets\Design Assets</text>
+    <text x="176" y="528">D:\Project\docs\screenshots\launchpad-main.png</text>
+    <text x="176" y="614">D:\Project\docs\RELEASE_NOTES\v0.1.0.md</text>
+  </g>
+
+  <rect x="626" y="214" width="508" height="270" rx="20" fill="#17243b" stroke="#29405f" />
+  <rect x="626" y="506" width="508" height="146" rx="20" fill="#17243b" stroke="#29405f" />
+  <text x="656" y="248" fill="#dce8ff" font-size="20" font-family="Segoe UI, Arial, sans-serif">
+    Preview
+  </text>
+  <rect x="656" y="272" width="448" height="174" rx="16" fill="#223352" />
+  <text x="880" y="366" fill="#9fb5d7" font-size="22" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif">
+    File preview area
+  </text>
+
+  <text x="656" y="540" fill="#dce8ff" font-size="20" font-family="Segoe UI, Arial, sans-serif">
+    Details
+  </text>
+  <text x="656" y="578" fill="#8ea3c7" font-size="16" font-family="Segoe UI, Arial, sans-serif">
+    Filter: All
+  </text>
+  <text x="656" y="608" fill="#8ea3c7" font-size="16" font-family="Segoe UI, Arial, sans-serif">
+    Sort: Recent
+  </text>
+  <text x="656" y="638" fill="#8ea3c7" font-size="16" font-family="Segoe UI, Arial, sans-serif">
+    Keyboard navigation enabled
+  </text>
+
+  <text x="640" y="728" fill="#8ea3c7" font-size="16" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif">
+    Replace this placeholder with a real search panel capture
+  </text>
+</svg>

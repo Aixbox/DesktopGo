@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" role="img" aria-labelledby="title desc">
+  <title id="title">DesktopGo launchpad placeholder</title>
+  <desc id="desc">Placeholder preview for the DesktopGo launchpad screenshot.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1324" />
+      <stop offset="100%" stop-color="#12263f" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#33c3ff" />
+      <stop offset="100%" stop-color="#7c5cff" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="800" fill="url(#bg)" />
+  <rect x="40" y="34" width="1200" height="732" rx="34" fill="#0f172a" stroke="#23324a" />
+  <rect x="348" y="78" width="584" height="54" rx="27" fill="#131f35" stroke="#2b3b58" />
+  <text x="640" y="112" fill="#d7e5ff" font-size="22" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif">
+    Search apps, files, and folders
+  </text>
+
+  <text x="88" y="114" fill="#7dd3fc" font-size="30" font-weight="700" font-family="Segoe UI, Arial, sans-serif">
+    DesktopGo
+  </text>
+  <text x="88" y="146" fill="#8ea3c7" font-size="18" font-family="Segoe UI, Arial, sans-serif">
+    Launchpad preview placeholder
+  </text>
+
+  <g>
+    <rect x="124" y="200" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+    <rect x="272" y="200" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+    <rect x="420" y="200" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+    <rect x="568" y="200" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+    <rect x="716" y="200" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+    <rect x="864" y="200" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+    <rect x="1012" y="200" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+
+    <rect x="124" y="362" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+    <rect x="272" y="362" width="120" height="120" rx="30" fill="#2b2450" stroke="#5f50b8" />
+    <rect x="420" y="362" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+    <rect x="568" y="362" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+    <rect x="716" y="362" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+    <rect x="864" y="362" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+    <rect x="1012" y="362" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+
+    <rect x="124" y="524" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+    <rect x="272" y="524" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+    <rect x="420" y="524" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+    <rect x="568" y="524" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+    <rect x="716" y="524" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+    <rect x="864" y="524" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+    <rect x="1012" y="524" width="120" height="120" rx="30" fill="#172338" stroke="#2a3e62" />
+  </g>
+
+  <g fill="#dce8ff" font-size="16" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif">
+    <text x="184" y="342">Browser</text>
+    <text x="332" y="342">Notes</text>
+    <text x="480" y="342">Terminal</text>
+    <text x="628" y="342">Files</text>
+    <text x="776" y="342">Music</text>
+    <text x="924" y="342">Design</text>
+    <text x="1072" y="342">Tools</text>
+
+    <text x="184" y="504">Docs</text>
+    <text x="332" y="504">Folder</text>
+    <text x="480" y="504">Chat</text>
+    <text x="628" y="504">Mail</text>
+    <text x="776" y="504">Tasks</text>
+    <text x="924" y="504">Images</text>
+    <text x="1072" y="504">Video</text>
+
+    <text x="184" y="666">Games</text>
+    <text x="332" y="666">Cloud</text>
+    <text x="480" y="666">Dev</text>
+    <text x="628" y="666">Preview</text>
+    <text x="776" y="666">Editor</text>
+    <text x="924" y="666">Archive</text>
+    <text x="1072" y="666">More</text>
+  </g>
+
+  <rect x="362" y="698" width="556" height="36" rx="18" fill="#111b2e" stroke="#263854" />
+  <circle cx="472" cy="716" r="12" fill="#7c5cff" />
+  <circle cx="560" cy="716" r="12" fill="#33c3ff" />
+  <circle cx="648" cy="716" r="12" fill="#00d0a8" />
+  <circle cx="736" cy="716" r="12" fill="#ffcc66" />
+  <circle cx="824" cy="716" r="12" fill="url(#accent)" />
+
+  <text x="640" y="760" fill="#8ea3c7" font-size="16" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif">
+    Replace this file with a real capture to keep the README layout unchanged
+  </text>
+</svg>

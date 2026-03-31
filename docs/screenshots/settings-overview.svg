@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" role="img" aria-labelledby="title desc">
+  <title id="title">DesktopGo settings placeholder</title>
+  <desc id="desc">Placeholder preview for the DesktopGo settings screenshot.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f6f8fc" />
+      <stop offset="100%" stop-color="#e9eef7" />
+    </linearGradient>
+    <linearGradient id="chip" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#36b7ff" />
+      <stop offset="100%" stop-color="#7b61ff" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="800" fill="url(#bg)" />
+  <rect x="44" y="36" width="1192" height="728" rx="34" fill="#ffffff" stroke="#d6deeb" />
+  <rect x="44" y="36" width="240" height="728" rx="34" fill="#f5f7fb" stroke="#d6deeb" />
+
+  <text x="88" y="92" fill="#1f2937" font-size="30" font-weight="700" font-family="Segoe UI, Arial, sans-serif">
+    DesktopGo
+  </text>
+  <text x="88" y="122" fill="#6b7280" font-size="16" font-family="Segoe UI, Arial, sans-serif">
+    Settings preview placeholder
+  </text>
+
+  <g font-family="Segoe UI, Arial, sans-serif" font-size="18">
+    <rect x="74" y="164" width="180" height="48" rx="14" fill="#111827" />
+    <text x="108" y="194" fill="#ffffff">General</text>
+
+    <rect x="74" y="226" width="180" height="48" rx="14" fill="#ffffff" stroke="#d4dceb" />
+    <text x="108" y="256" fill="#374151">Search</text>
+
+    <rect x="74" y="288" width="180" height="48" rx="14" fill="#ffffff" stroke="#d4dceb" />
+    <text x="108" y="318" fill="#374151">Icons</text>
+
+    <rect x="74" y="350" width="180" height="48" rx="14" fill="#ffffff" stroke="#d4dceb" />
+    <text x="108" y="380" fill="#374151">Update</text>
+
+    <rect x="74" y="412" width="180" height="48" rx="14" fill="#ffffff" stroke="#d4dceb" />
+    <text x="108" y="442" fill="#374151">About</text>
+  </g>
+
+  <text x="336" y="92" fill="#111827" font-size="34" font-weight="700" font-family="Segoe UI, Arial, sans-serif">
+    Settings
+  </text>
+  <text x="336" y="124" fill="#6b7280" font-size="18" font-family="Segoe UI, Arial, sans-serif">
+    General preferences, search controls, sync tools, and update status
+  </text>
+
+  <rect x="336" y="164" width="404" height="168" rx="24" fill="#ffffff" stroke="#d4dceb" />
+  <rect x="764" y="164" width="404" height="168" rx="24" fill="#ffffff" stroke="#d4dceb" />
+  <rect x="336" y="356" width="832" height="316" rx="28" fill="#ffffff" stroke="#d4dceb" />
+
+  <text x="370" y="204" fill="#111827" font-size="22" font-weight="700" font-family="Segoe UI, Arial, sans-serif">
+    Launchpad shortcut
+  </text>
+  <rect x="370" y="228" width="170" height="42" rx="21" fill="#eef2ff" />
+  <text x="455" y="255" fill="#4338ca" font-size="18" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif">
+    Ctrl + Space
+  </text>
+  <text x="370" y="298" fill="#6b7280" font-size="16" font-family="Segoe UI, Arial, sans-serif">
+    Customize the global shortcut used to show DesktopGo.
+  </text>
+
+  <text x="798" y="204" fill="#111827" font-size="22" font-weight="700" font-family="Segoe UI, Arial, sans-serif">
+    Theme and layout
+  </text>
+  <rect x="798" y="228" width="124" height="14" rx="7" fill="url(#chip)" />
+  <rect x="798" y="258" width="248" height="14" rx="7" fill="#dbe4f2" />
+  <rect x="798" y="288" width="210" height="14" rx="7" fill="#dbe4f2" />
+
+  <text x="370" y="404" fill="#111827" font-size="24" font-weight="700" font-family="Segoe UI, Arial, sans-serif">
+    Management panels
+  </text>
+
+  <g>
+    <rect x="370" y="434" width="228" height="96" rx="20" fill="#f8fafc" stroke="#d4dceb" />
+    <rect x="620" y="434" width="228" height="96" rx="20" fill="#f8fafc" stroke="#d4dceb" />
+    <rect x="870" y="434" width="228" height="96" rx="20" fill="#f8fafc" stroke="#d4dceb" />
+
+    <rect x="370" y="550" width="228" height="96" rx="20" fill="#f8fafc" stroke="#d4dceb" />
+    <rect x="620" y="550" width="228" height="96" rx="20" fill="#f8fafc" stroke="#d4dceb" />
+    <rect x="870" y="550" width="228" height="96" rx="20" fill="#f8fafc" stroke="#d4dceb" />
+  </g>
+
+  <g fill="#111827" font-size="18" font-family="Segoe UI, Arial, sans-serif">
+    <text x="398" y="476">Search</text>
+    <text x="648" y="476">Icon Manager</text>
+    <text x="898" y="476">Updates</text>
+    <text x="398" y="592">About</text>
+    <text x="648" y="592">Sync</text>
+    <text x="898" y="592">Diagnostics</text>
+  </g>
+
+  <text x="640" y="724" fill="#6b7280" font-size="16" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif">
+    Replace this placeholder with a real settings page capture
+  </text>
+</svg>
