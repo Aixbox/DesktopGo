@@ -34,7 +34,7 @@
     "homepage": "https://github.com/Aixbox/DesktopGo",
     "copyright": "Copyright (c) Aixbox",
     "license": "MIT",
-    "licenseFile": "LICENSE.txt",
+    "licenseFile": "../LICENSE.txt",
     "shortDescription": "A macOS-like launchpad for Windows",
     "longDescription": "DesktopGo is a focused desktop launcher for Windows with fast app access, polished full-screen presentation, and Everything-powered file search.",
     "windows": {
