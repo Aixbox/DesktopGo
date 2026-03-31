@@ -88,7 +88,7 @@ export function OptionButton({ label, selected, onClick }: OptionButtonProps) {
       onClick={onClick}
       className={`rounded-lg border px-4 py-2 text-sm transition-all duration-150 cursor-pointer ${
         selected
-          ? 'border-blue-500/55 bg-blue-500/15 text-blue-300 shadow-sm dark:text-blue-200'
+          ? 'border-blue-500/40 bg-blue-500/12 text-blue-700 shadow-sm ring-1 ring-blue-500/10 dark:border-blue-400/35 dark:bg-blue-400/14 dark:text-blue-200 dark:ring-blue-400/12'
           : 'border-border/90 bg-card text-foreground hover:border-foreground/15 hover:bg-accent'
       }`}
     >
