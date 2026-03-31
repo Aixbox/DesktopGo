@@ -606,7 +606,7 @@ export function SearchPanel({
                         highlightedText={item.highlightedName}
                         fallbackText={item.name || item.path}
                         className="block truncate text-sm text-foreground"
-                        highlightClassName="font-medium text-emerald-700 dark:text-emerald-300"
+                        highlightClassName="font-medium text-blue-700 dark:text-blue-300"
                       />
                       <HighlightedText
                         highlightedText={item.highlightedPath}
@@ -775,3 +775,4 @@ export function SearchPanel({
     </div>
   )
 }
+
