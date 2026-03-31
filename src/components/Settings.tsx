@@ -433,6 +433,9 @@ function WindowControlButton({
       type="button"
       aria-label={label}
       title={label}
+      data-no-window-drag="true"
+      onPointerDown={event => event.stopPropagation()}
+      onDoubleClick={event => event.stopPropagation()}
       onClick={onClick}
       className={`flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-sm transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 ${
         tone === 'danger'
@@ -2062,13 +2065,20 @@ export function Settings() {
     }
   }, [closeSettingsWindow, syncWindowState])
 
-  const isTitlebarInteractiveTarget = (target: EventTarget | null) =>
-    target instanceof HTMLElement &&
-    Boolean(
-      target.closest(
+  const isTitlebarInteractiveTarget = (target: EventTarget | null) => {
+    const element =
+      target instanceof Element
+        ? target
+        : target instanceof Node
+          ? target.parentElement
+          : null
+
+    return Boolean(
+      element?.closest(
         'button, a, input, textarea, select, [role="button"], [data-no-window-drag="true"]'
       )
     )
+  }
 
   const handleWindowDragStart = (event: React.PointerEvent<HTMLElement>) => {
     if (event.button !== 0) return
