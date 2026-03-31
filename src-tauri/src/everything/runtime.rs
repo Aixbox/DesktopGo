@@ -188,6 +188,17 @@ fn set_unavailable_state(message: String) -> Result<(), String> {
     Ok(())
 }
 
+fn map_search_query_error(error: String) -> String {
+    if error.starts_with("EverythingBusy") {
+        return error;
+    }
+
+    build_error(
+        SearchErrorCode::EverythingIpcUnavailable,
+        format!("Everything query failed: {}", error),
+    )
+}
+
 pub fn get_search_runtime_status() -> Result<SearchRuntimeStatus, String> {
     let guard = RUNTIME_STATE
         .lock()
@@ -370,12 +381,7 @@ pub fn search_files(
 
     let started_at = Instant::now();
     append_debug_log(app_handle, "search_files: ipc search begin");
-    let response = ipc::search(&dll_path, &query, app_handle).map_err(|e| {
-        build_error(
-            SearchErrorCode::EverythingIpcUnavailable,
-            format!("Everything query failed: {}", e),
-        )
-    })?;
+    let response = ipc::search(&dll_path, &query, app_handle).map_err(map_search_query_error)?;
     let took_ms = started_at.elapsed().as_millis() as u64;
     let has_more =
         query.offset.saturating_add(response.items.len() as u32) < response.total_results;

@@ -297,7 +297,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     flushTimerRef.current = null
 
     const context = activeQueryRef.current
-    if (!context || loading) {
+    if (!context || loading || rangeRequestRef.current) {
       return
     }
 
@@ -307,28 +307,58 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
         ? Math.floor(visibleRangeRef.current.start / pageSize) * pageSize
         : 0
 
-    const candidateOffsets = [...requestedOffsetsRef.current].filter(offset => {
+    const visibleCandidates: number[] = []
+    if (visibleRangeRef.current.end >= visibleRangeRef.current.start) {
+      const safeStart = Math.max(0, visibleRangeRef.current.start)
+      const safeEnd =
+        totalResultsRef.current > 0
+          ? Math.min(totalResultsRef.current - 1, visibleRangeRef.current.end)
+          : visibleRangeRef.current.end
+
+      for (
+        let offset = Math.floor(safeStart / pageSize) * pageSize;
+        offset <= safeEnd;
+        offset += pageSize
+      ) {
+        if (offset < 0) {
+          continue
+        }
+        if (totalResultsRef.current > 0 && offset >= totalResultsRef.current) {
+          continue
+        }
+        if (pagesRef.current[offset]) {
+          continue
+        }
+        visibleCandidates.push(offset)
+      }
+    }
+
+    const requestedOffsets = [...requestedOffsetsRef.current].filter(offset => {
       if (offset < 0) return false
       if (totalResultsRef.current > 0 && offset >= totalResultsRef.current) return false
       return !pagesRef.current[offset]
     })
-
     requestedOffsetsRef.current.clear()
 
-    if (candidateOffsets.length === 0) {
+    let nextOffset: number | null = null
+    if (requestedOffsets.length > 0) {
+      nextOffset = requestedOffsets[0]
+    } else if (visibleCandidates.length > 0) {
+      visibleCandidates.sort((left, right) => {
+        const leftDistance = Math.abs(left - visibleStartPage)
+        const rightDistance = Math.abs(right - visibleStartPage)
+        if (leftDistance !== rightDistance) {
+          return leftDistance - rightDistance
+        }
+        return left - right
+      })
+      nextOffset = visibleCandidates[0]
+    }
+
+    if (nextOffset === null) {
       return
     }
 
-    candidateOffsets.sort((left, right) => {
-      const leftDistance = Math.abs(left - visibleStartPage)
-      const rightDistance = Math.abs(right - visibleStartPage)
-      if (leftDistance !== rightDistance) {
-        return leftDistance - rightDistance
-      }
-      return left - right
-    })
-
-    const nextOffset = candidateOffsets[0]
     const nextToken = rangeRequestTokenRef.current + 1
     rangeRequestTokenRef.current = nextToken
     rangeRequestRef.current = {
@@ -389,10 +419,8 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
           setLoadingMore(false)
         }
 
-        if (requestedOffsetsRef.current.size > 0) {
-          clearFlushTimer()
-          flushTimerRef.current = window.setTimeout(flushRequestedOffsets, 0)
-        }
+        clearFlushTimer()
+        flushTimerRef.current = window.setTimeout(flushRequestedOffsets, 0)
       })
   }, [clearFlushTimer, executeSearchWithRetry, isContextActive, loading, setPagesAndRef])
 
@@ -421,8 +449,10 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
       }
 
       requestedOffsetsRef.current.add(normalizedOffset)
-      clearFlushTimer()
-      flushTimerRef.current = window.setTimeout(flushRequestedOffsets, 0)
+      if (!rangeRequestRef.current) {
+        clearFlushTimer()
+        flushTimerRef.current = window.setTimeout(flushRequestedOffsets, 0)
+      }
     },
     [clearFlushTimer, flushRequestedOffsets, loading]
   )
@@ -461,33 +491,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
         return
       }
 
-      const pageSize = context.queryOptions.limit
-      const safeEnd =
-        totalResultsRef.current > 0 ? Math.min(totalResultsRef.current - 1, endIndex) : endIndex
-
-      requestedOffsetsRef.current.clear()
-      for (
-        let offset = Math.floor(safeStart / pageSize) * pageSize;
-        offset <= safeEnd;
-        offset += pageSize
-      ) {
-        if (pagesRef.current[offset]) {
-          continue
-        }
-
-        const activeRangeRequest = rangeRequestRef.current
-        if (
-          activeRangeRequest &&
-          activeRangeRequest.seq === context.seq &&
-          activeRangeRequest.offset === offset
-        ) {
-          continue
-        }
-
-        requestedOffsetsRef.current.add(offset)
-      }
-
-      if (requestedOffsetsRef.current.size > 0) {
+      if (!rangeRequestRef.current) {
         clearFlushTimer()
         flushTimerRef.current = window.setTimeout(flushRequestedOffsets, 0)
       }
@@ -511,12 +515,10 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
         return pageItem
       }
 
-      scheduleOffsetRequest(pageOffset)
       return displayedItemsRef.current.get(index) ?? null
     },
-    [scheduleOffsetRequest, settings.maxResultsPerPage]
+    [settings.maxResultsPerPage]
   )
-
   useEffect(() => {
     void loadSettingsAndFilter().catch(searchError => {
       setError(describeSearchRuntimeError(asErrorMessage(searchError)))

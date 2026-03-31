@@ -13,7 +13,8 @@ import { SearchToolbar } from './SearchToolbar'
 
 const ROW_HEIGHT = 68
 const OVERSCAN_ROWS = 6
-const LOAD_AHEAD_ROWS = 24
+const MIN_LOAD_AHEAD_ROWS = 24
+const SCROLL_RANGE_DEBOUNCE_MS = 80
 const EVERYTHING_BODY_HEIGHT = '56vh'
 const EVERYTHING_LIST_PANE_MIN_WIDTH = 220
 const EVERYTHING_LIST_CONTENT_MIN_WIDTH = 420
@@ -36,6 +37,7 @@ interface SearchPanelProps {
   error: string | null
   totalResults: number
   loadedCount: number
+  pageSize: number
   hasCommittedQuery: boolean
   getItemAt: (index: number) => SearchHit | null
   selectedItem: SearchHit | null
@@ -177,6 +179,7 @@ export function SearchPanel({
   error,
   totalResults,
   loadedCount,
+  pageSize,
   hasCommittedQuery,
   getItemAt,
   selectedItem,
@@ -213,6 +216,8 @@ export function SearchPanel({
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const bodyContentRef = useRef<HTMLDivElement | null>(null)
   const splitContainerRef = useRef<HTMLDivElement | null>(null)
+  const rangeNotifyTimerRef = useRef<number | null>(null)
+  const pendingVisibleRangeRef = useRef<{ scrollTop: number; viewportHeight: number } | null>(null)
   const [viewportHeight, setViewportHeight] = useState(0)
   const [scrollTop, setScrollTop] = useState(0)
   const [bodyHeight, setBodyHeight] = useState(0)
@@ -236,6 +241,7 @@ export function SearchPanel({
   }, [])
 
   const virtualCount = totalResults > 0 ? totalResults : loadedCount
+  const loadAheadRows = Math.max(MIN_LOAD_AHEAD_ROWS, pageSize)
   const visibleRowCount = Math.ceil(viewportHeight / ROW_HEIGHT) + OVERSCAN_ROWS * 2
   const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN_ROWS)
   const endIndex =
@@ -252,13 +258,54 @@ export function SearchPanel({
 
       const nextStartIndex = Math.max(0, Math.floor(nextScrollTop / ROW_HEIGHT))
       const nextVisibleRowCount = Math.ceil(nextViewportHeight / ROW_HEIGHT)
+      const nextRangeStartIndex = Math.max(0, nextStartIndex - loadAheadRows)
       const nextEndIndex = Math.min(
         virtualCount - 1,
-        nextStartIndex + Math.max(nextVisibleRowCount, 1) - 1 + LOAD_AHEAD_ROWS
+        nextStartIndex + Math.max(nextVisibleRowCount, 1) - 1 + loadAheadRows
       )
-      onVisibleRangeChange(nextStartIndex, nextEndIndex)
+      onVisibleRangeChange(nextRangeStartIndex, nextEndIndex)
     },
-    [isEverything, onVisibleRangeChange, virtualCount]
+    [isEverything, loadAheadRows, onVisibleRangeChange, virtualCount]
+  )
+
+  const clearPendingRangeNotify = useCallback(() => {
+    if (rangeNotifyTimerRef.current !== null) {
+      window.clearTimeout(rangeNotifyTimerRef.current)
+      rangeNotifyTimerRef.current = null
+    }
+  }, [])
+
+  const flushPendingVisibleRange = useCallback(() => {
+    const pendingRange = pendingVisibleRangeRef.current
+    if (!pendingRange) return
+
+    pendingVisibleRangeRef.current = null
+    clearPendingRangeNotify()
+    notifyVisibleRange(pendingRange.scrollTop, pendingRange.viewportHeight)
+  }, [clearPendingRangeNotify, notifyVisibleRange])
+
+  const scheduleVisibleRange = useCallback(
+    (
+      nextScrollTop: number,
+      nextViewportHeight: number,
+      options?: { immediate?: boolean }
+    ) => {
+      pendingVisibleRangeRef.current = {
+        scrollTop: nextScrollTop,
+        viewportHeight: nextViewportHeight,
+      }
+
+      clearPendingRangeNotify()
+      if (options?.immediate) {
+        flushPendingVisibleRange()
+        return
+      }
+
+      rangeNotifyTimerRef.current = window.setTimeout(() => {
+        flushPendingVisibleRange()
+      }, SCROLL_RANGE_DEBOUNCE_MS)
+    },
+    [clearPendingRangeNotify, flushPendingVisibleRange]
   )
 
   useEffect(() => {
@@ -379,9 +426,35 @@ export function SearchPanel({
   }, [isEverything, loading, loadingMore])
 
   useEffect(() => {
-    if (!isEverything) return
-    notifyVisibleRange(scrollTop, viewportHeight)
-  }, [isEverything, notifyVisibleRange, scrollTop, viewportHeight])
+    if (!visible || !isEverything || viewportHeight <= 0) return
+
+    scheduleVisibleRange(viewportRef.current?.scrollTop ?? 0, viewportHeight, {
+      immediate: true,
+    })
+  }, [isEverything, scheduleVisibleRange, viewportHeight, virtualCount, visible])
+
+  useEffect(() => {
+    if (!visible || !isEverything) return
+
+    const flush = () => {
+      flushPendingVisibleRange()
+    }
+
+    window.addEventListener('pointerup', flush, true)
+    window.addEventListener('mouseup', flush, true)
+
+    return () => {
+      window.removeEventListener('pointerup', flush, true)
+      window.removeEventListener('mouseup', flush, true)
+    }
+  }, [flushPendingVisibleRange, isEverything, visible])
+
+  useEffect(() => {
+    return () => {
+      pendingVisibleRangeRef.current = null
+      clearPendingRangeNotify()
+    }
+  }, [clearPendingRangeNotify])
 
   const virtualRows = useMemo(() => {
     if (!isEverything || endIndex < startIndex) return []
@@ -461,7 +534,7 @@ export function SearchPanel({
             const nextScrollTop = e.currentTarget.scrollTop
             const nextViewportHeight = e.currentTarget.clientHeight
             setScrollTop(nextScrollTop)
-            notifyVisibleRange(nextScrollTop, nextViewportHeight)
+            scheduleVisibleRange(nextScrollTop, nextViewportHeight)
           }}
         >
           <div

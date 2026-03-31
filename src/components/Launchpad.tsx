@@ -759,6 +759,7 @@ export function Launchpad() {
             error={searchError}
             totalResults={searchTotalResults}
             loadedCount={searchLoadedCount}
+            pageSize={searchSettings.maxResultsPerPage}
             hasCommittedQuery={hasCommittedQuery}
             getItemAt={getSearchItemAt}
             selectedItem={selectedSearchItem}

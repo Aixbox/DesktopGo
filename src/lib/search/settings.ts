@@ -29,7 +29,7 @@ export interface SearchSettings {
   autoStartRuntime: boolean
 }
 
-const SEARCH_PROFILE_VERSION = 4
+const SEARCH_PROFILE_VERSION = 5
 const SEARCH_PROFILE_VERSION_KEY = 'search.profileVersion'
 
 export const DEFAULT_SEARCH_SETTINGS: SearchSettings = {
@@ -39,7 +39,7 @@ export const DEFAULT_SEARCH_SETTINGS: SearchSettings = {
   openOnEnter: true,
   openOnDoubleClick: true,
   defaultFilter: 'all',
-  maxResultsPerPage: 200,
+  maxResultsPerPage: 50,
   matchPath: false,
   matchCase: false,
   regex: false,
@@ -278,6 +278,11 @@ export const loadSearchSettings = async (): Promise<SearchSettings> => {
       )
     }
 
+
+    if (profileVersion < 5 && settings.maxResultsPerPage !== 50) {
+      settings.maxResultsPerPage = 50
+      pendingWrites.push([SEARCH_SETTING_KEYS.maxResultsPerPage, settings.maxResultsPerPage])
+    }
     pendingWrites.push([SEARCH_PROFILE_VERSION_KEY, SEARCH_PROFILE_VERSION])
   }
 
