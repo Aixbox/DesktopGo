@@ -796,7 +796,6 @@ function SettingsPanel() {
               </Button>
               <Button
                 type="button"
-                size="sm"
                 onClick={() => void handleSaveLaunchpadShortcut()}
                 disabled={isSavingShortcut || isRecordingShortcut || !shortcutDraftChanged}
               >
@@ -804,7 +803,6 @@ function SettingsPanel() {
               </Button>
               <Button
                 type="button"
-                size="sm"
                 variant="outline"
                 onClick={handleResetLaunchpadShortcut}
                 disabled={isSavingShortcut}
