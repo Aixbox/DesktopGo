@@ -1332,45 +1332,33 @@ function IconManagerPanel() {
           </div>
 
           <div className="min-w-0 space-y-3 rounded-lg border border-border/90 bg-card p-4 shadow-sm">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center xl:flex-1">
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center">
                 <Input
                   value={searchInput}
                   onChange={e => setSearchInput(e.target.value)}
                   placeholder="搜索图标名称或路径"
                   className="w-full md:min-w-[220px] md:flex-1 xl:max-w-md"
                 />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void refreshIconManagerList()}
-                  disabled={listLoading || syncing || mutating}
-                  className="w-full md:w-auto"
-                >
-                  刷新列表
-                </Button>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground">展示方式</span>
-                <div className="inline-flex rounded-lg border border-border/90 bg-background p-1 shadow-sm">
+                <div className="inline-flex h-10 shrink-0 self-start rounded-lg border border-border/90 bg-background p-1 shadow-sm">
                   {ICON_MANAGER_VIEW_MODE_OPTIONS.map(option => {
                     const selected = viewMode === option.value
                     return (
                       <button
                         key={option.value}
                         type="button"
+                        aria-label={option.label}
+                        title={option.label}
                         aria-pressed={selected}
                         onClick={() => handleViewModeChange(option.value)}
                         className={cn(
-                          'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                          'inline-flex h-full w-8 items-center justify-center rounded-md transition-colors',
                           selected
                             ? 'bg-accent text-foreground shadow-sm'
                             : 'text-muted-foreground hover:text-foreground'
                         )}
                       >
                         {option.icon}
-                        <span>{option.label}</span>
                       </button>
                     )
                   })}
@@ -2115,9 +2103,7 @@ export function Settings() {
         onDoubleClick={handleTitlebarDoubleClick}
         className="flex h-12 items-center gap-3 border-b border-border/90 bg-card px-4 shadow-sm cursor-grab active:cursor-grabbing"
       >
-        <div
-          className="flex min-w-0 flex-1 items-center gap-3 h-full"
-        >
+        <div className="flex min-w-0 flex-1 items-center gap-3 h-full">
           <Logo iconSize={20} textSize="sm" className="shrink-0" />
           <span className="h-1 w-1 shrink-0 rounded-full bg-muted-foreground/60" />
           <p className="truncate text-sm text-muted-foreground">设置 / {activeNavItem.label}</p>
