@@ -24,6 +24,10 @@ export const FOLDER_SURFACE_CLASS =
   'relative h-full w-full overflow-hidden rounded-xl border border-border/35 bg-background/42 shadow-[0_12px_28px_rgba(15,23,42,0.16)] backdrop-blur-lg dark:border-white/14 dark:bg-black/24 dark:shadow-[0_12px_28px_rgba(0,0,0,0.26)]'
 export const DESKTOP_FOLDER_SURFACE_CLASS =
   'relative h-full w-full overflow-hidden border border-border/45 bg-background/48 shadow-[0_16px_36px_rgba(15,23,42,0.18)] backdrop-blur-xl dark:border-white/16 dark:bg-black/30 dark:shadow-[0_16px_36px_rgba(0,0,0,0.24)]'
+export const DOCK_FOLDER_SURFACE_CLASS =
+  'relative h-full w-full overflow-hidden border border-foreground/[0.12] bg-background/46 shadow-[inset_0_1px_0_rgba(255,255,255,0.34),inset_0_0_0_1px_rgba(15,23,42,0.03)] backdrop-blur-xl dark:border-white/14 dark:bg-black/24 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
+export const DOCK_FOLDER_SURFACE_ACTIVE_CLASS =
+  'border-foreground/[0.18] bg-background/62 ring-1 ring-foreground/[0.12] dark:border-white/28 dark:bg-black/34 dark:ring-white/[0.16]'
 
 const clampNumber = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
@@ -83,6 +87,7 @@ interface FolderCreatePreviewProps {
   reorderAnimationMs: number
   tileWidth?: number
   tileHeight?: number
+  surfaceClassName?: string
 }
 
 export function FolderCreatePreview({
@@ -92,6 +97,7 @@ export function FolderCreatePreview({
   reorderAnimationMs,
   tileWidth,
   tileHeight,
+  surfaceClassName = FOLDER_SURFACE_CLASS,
 }: FolderCreatePreviewProps) {
   if (tileWidth !== undefined && tileHeight !== undefined) {
     const metrics = getDesktopSingleSlotFolderMetrics(tileWidth, tileHeight)
@@ -153,7 +159,7 @@ export function FolderCreatePreview({
       aria-hidden="true"
     >
       <div
-        className={`${FOLDER_SURFACE_CLASS} absolute transition-all duration-200 ${
+        className={`${surfaceClassName} absolute transition-all duration-200 ${
           active ? 'opacity-100' : 'opacity-0'
         }`}
         style={surfaceStyle}

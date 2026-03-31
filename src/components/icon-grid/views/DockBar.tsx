@@ -19,7 +19,8 @@ import {
 } from '../../ui/context-menu'
 import { DOCK_GAP } from '../domain/dock'
 import {
-  DESKTOP_FOLDER_SURFACE_CLASS,
+  DOCK_FOLDER_SURFACE_ACTIVE_CLASS,
+  DOCK_FOLDER_SURFACE_CLASS,
   FolderCreatePreview,
   FolderIconVisual,
   FOLDER_SHARED_LAYOUT_TRANSITION,
@@ -658,6 +659,7 @@ export function DockBar({
                                   icon={item.icon}
                                   imgSize={iconImageSize}
                                   reorderAnimationMs={220}
+                                  surfaceClassName={DOCK_FOLDER_SURFACE_CLASS}
                                 />
                               </>
                             ) : (
@@ -672,10 +674,8 @@ export function DockBar({
                                       : undefined
                                   }
                                   transition={FOLDER_SHARED_LAYOUT_TRANSITION}
-                                  className={`${DESKTOP_FOLDER_SURFACE_CLASS} flex items-center justify-center transition-all duration-150 ${
-                                    folderPreview || folderOpen
-                                      ? 'ring-1 ring-foreground/18 shadow-[0_18px_42px_rgba(15,23,42,0.22)] dark:ring-white/35 dark:shadow-[0_18px_42px_rgba(0,0,0,0.42)]'
-                                      : ''
+                                  className={`${DOCK_FOLDER_SURFACE_CLASS} flex items-center justify-center transition-all duration-150 ${
+                                    folderPreview || folderOpen ? DOCK_FOLDER_SURFACE_ACTIVE_CLASS : ''
                                   }`}
                                   style={{
                                     width: `${singleSlotFolderMetrics.surfaceSize}px`,
