@@ -50,6 +50,18 @@ function getMenuStyle(
   }
 }
 
+function getViewportMaxHeight(maxHeight: React.CSSProperties['maxHeight'], verticalInset: string) {
+  if (typeof maxHeight === 'number') {
+    return `calc(${maxHeight}px - ${verticalInset})`
+  }
+
+  if (typeof maxHeight === 'string' && maxHeight.length > 0) {
+    return `calc(${maxHeight} - ${verticalInset})`
+  }
+
+  return undefined
+}
+
 function findEnabledIndex(options: readonly SelectOption[], startIndex: number, direction: 1 | -1) {
   if (options.length === 0) return -1
 
@@ -129,6 +141,16 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
     const selectedIndex = options.findIndex(option => option.value === value)
     const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : undefined
     const hasValue = selectedOption !== undefined
+    const resolvedMenuStyle =
+      menuStyle ?? {
+        position: 'fixed',
+        top: MENU_MARGIN,
+        left: MENU_MARGIN,
+        width: MENU_MIN_WIDTH,
+        visibility: 'hidden',
+        zIndex: 100,
+      }
+    const viewportMaxHeight = getViewportMaxHeight(resolvedMenuStyle.maxHeight, '0.5rem')
 
     const setTriggerRef = React.useCallback(
       (node: HTMLButtonElement | null) => {
@@ -354,101 +376,99 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
                 role="listbox"
                 aria-labelledby={triggerId}
                 className={cn(
-                  'overflow-y-auto rounded-xl border border-border bg-background/95 p-1 shadow-xl backdrop-blur-sm',
+                  'overflow-hidden rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur-sm',
                   contentClassName
                 )}
-                style={
-                  menuStyle ?? {
-                    position: 'fixed',
-                    top: MENU_MARGIN,
-                    left: MENU_MARGIN,
-                    width: MENU_MIN_WIDTH,
-                    visibility: 'hidden',
-                    zIndex: 100,
-                  }
-                }
+                style={{
+                  ...resolvedMenuStyle,
+                  ['--select-menu-viewport-max-height' as string]: viewportMaxHeight,
+                }}
               >
-                {options.length === 0 ? (
-                  <div className="px-3 py-2 text-sm text-muted-foreground">{emptyText}</div>
-                ) : (
-                  <div className="space-y-1">
-                    {options.map((option, index) => {
-                      const selected = option.value === value
-                      return (
-                        <button
-                          key={option.value}
-                          ref={element => {
-                            optionRefs.current[index] = element
-                          }}
-                          type="button"
-                          role="option"
-                          aria-selected={selected}
-                          disabled={option.disabled}
-                          className={cn(
-                            'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors disabled:pointer-events-none disabled:opacity-50',
-                            selected
-                              ? 'bg-accent text-accent-foreground'
-                              : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
-                            highlightedIndex === index && !selected && 'bg-accent/55',
-                            optionClassName
-                          )}
-                          onMouseEnter={() => {
-                            if (!option.disabled) {
-                              setHighlightedIndex(index)
-                            }
-                          }}
-                          onFocus={() => {
-                            if (!option.disabled) {
-                              setHighlightedIndex(index)
-                            }
-                          }}
-                          onClick={() => {
-                            if (!option.disabled) {
-                              commitValue(option.value)
-                            }
-                          }}
-                          onKeyDown={event => {
-                            switch (event.key) {
-                              case 'ArrowDown': {
-                                event.preventDefault()
-                                const nextIndex = findEnabledIndex(options, index, 1)
-                                if (nextIndex >= 0) {
-                                  setHighlightedIndex(nextIndex)
+                <div className="max-h-[var(--select-menu-viewport-max-height)] overflow-y-auto overflow-x-hidden">
+                  <div className="p-1">
+                    {options.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-muted-foreground">{emptyText}</div>
+                    ) : (
+                      <div className="space-y-1">
+                        {options.map((option, index) => {
+                          const selected = option.value === value
+                          return (
+                            <button
+                              key={option.value}
+                              ref={element => {
+                                optionRefs.current[index] = element
+                              }}
+                              type="button"
+                              role="option"
+                              aria-selected={selected}
+                              disabled={option.disabled}
+                              className={cn(
+                                'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors disabled:pointer-events-none disabled:opacity-50',
+                                selected
+                                  ? 'bg-accent text-accent-foreground'
+                                  : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
+                                highlightedIndex === index && !selected && 'bg-accent/55',
+                                optionClassName
+                              )}
+                              onMouseEnter={() => {
+                                if (!option.disabled) {
+                                  setHighlightedIndex(index)
                                 }
-                                break
-                              }
-                              case 'ArrowUp': {
-                                event.preventDefault()
-                                const nextIndex = findEnabledIndex(options, index, -1)
-                                if (nextIndex >= 0) {
-                                  setHighlightedIndex(nextIndex)
+                              }}
+                              onFocus={() => {
+                                if (!option.disabled) {
+                                  setHighlightedIndex(index)
                                 }
-                                break
-                              }
-                              case 'Home':
-                                event.preventDefault()
-                                setHighlightedIndex(getFirstEnabledIndex(options))
-                                break
-                              case 'End':
-                                event.preventDefault()
-                                setHighlightedIndex(getLastEnabledIndex(options))
-                                break
-                              case 'Escape':
-                                event.preventDefault()
-                                closeMenu(true)
-                                break
-                            }
-                          }}
-                        >
-                          <span className="min-w-0 truncate">{option.label}</span>
-                          <span className="ml-3 flex h-4 w-4 items-center justify-center">
-                            {selected ? <Check className="h-4 w-4 text-blue-500" /> : null}
-                          </span>
-                        </button>
-                      )
-                    })}
+                              }}
+                              onClick={() => {
+                                if (!option.disabled) {
+                                  commitValue(option.value)
+                                }
+                              }}
+                              onKeyDown={event => {
+                                switch (event.key) {
+                                  case 'ArrowDown': {
+                                    event.preventDefault()
+                                    const nextIndex = findEnabledIndex(options, index, 1)
+                                    if (nextIndex >= 0) {
+                                      setHighlightedIndex(nextIndex)
+                                    }
+                                    break
+                                  }
+                                  case 'ArrowUp': {
+                                    event.preventDefault()
+                                    const nextIndex = findEnabledIndex(options, index, -1)
+                                    if (nextIndex >= 0) {
+                                      setHighlightedIndex(nextIndex)
+                                    }
+                                    break
+                                  }
+                                  case 'Home':
+                                    event.preventDefault()
+                                    setHighlightedIndex(getFirstEnabledIndex(options))
+                                    break
+                                  case 'End':
+                                    event.preventDefault()
+                                    setHighlightedIndex(getLastEnabledIndex(options))
+                                    break
+                                  case 'Escape':
+                                    event.preventDefault()
+                                    closeMenu(true)
+                                    break
+                                }
+                              }}
+                            >
+                              <span className="min-w-0 truncate">{option.label}</span>
+                              <span className="ml-3 flex h-4 w-4 items-center justify-center">
+                                {selected ? <Check className="h-4 w-4 text-blue-500" /> : null}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>,
               document.body
             )

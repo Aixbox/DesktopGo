@@ -1,4 +1,4 @@
-﻿import { SEARCH_SORT_OPTIONS, getSearchSortLabel } from '@/lib/search/sorts'
+import { SEARCH_SORT_OPTIONS, getSearchSortLabel } from '@/lib/search/sorts'
 import type { SearchSort } from '@/lib/search/types'
 import { ArrowUpDown, Check, Eye, EyeOff, Settings2 } from 'lucide-react'
 import {
@@ -44,6 +44,7 @@ const SORT_GROUP_LABELS = {
 const FLOATING_MENU_GAP = 8
 const FLOATING_MENU_MARGIN = 12
 const FLOATING_MENU_Z_INDEX = 90
+const FLOATING_MENU_VERTICAL_INSET = '1rem'
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
@@ -88,6 +89,18 @@ function getFloatingMenuStyle(
   }
 }
 
+function getViewportMaxHeight(maxHeight: CSSProperties['maxHeight'], verticalInset: string) {
+  if (typeof maxHeight === 'number') {
+    return `calc(${maxHeight}px - ${verticalInset})`
+  }
+
+  if (typeof maxHeight === 'string' && maxHeight.length > 0) {
+    return `calc(${maxHeight} - ${verticalInset})`
+  }
+
+  return undefined
+}
+
 function FloatingMenu({
   open,
   triggerRef,
@@ -106,6 +119,22 @@ function FloatingMenu({
   children: ReactNode
 }) {
   const [style, setStyle] = useState<CSSProperties | null>(null)
+  const resolvedStyle =
+    style ?? {
+      position: 'fixed',
+      top: FLOATING_MENU_MARGIN,
+      left: FLOATING_MENU_MARGIN,
+      width:
+        typeof window === 'undefined'
+          ? width
+          : Math.min(width, window.innerWidth - FLOATING_MENU_MARGIN * 2),
+      visibility: 'hidden',
+      zIndex: FLOATING_MENU_Z_INDEX,
+    }
+  const viewportMaxHeight = getViewportMaxHeight(
+    resolvedStyle.maxHeight,
+    FLOATING_MENU_VERTICAL_INSET
+  )
 
   const updatePosition = useCallback(() => {
     const triggerElement = triggerRef.current
@@ -148,21 +177,14 @@ function FloatingMenu({
       ref={menuRef}
       data-search-floating-menu="true"
       className={className}
-      style={
-        style ?? {
-          position: 'fixed',
-          top: FLOATING_MENU_MARGIN,
-          left: FLOATING_MENU_MARGIN,
-          width:
-            typeof window === 'undefined'
-              ? width
-              : Math.min(width, window.innerWidth - FLOATING_MENU_MARGIN * 2),
-          visibility: 'hidden',
-          zIndex: FLOATING_MENU_Z_INDEX,
-        }
-      }
+      style={{
+        ...resolvedStyle,
+        ['--search-floating-menu-viewport-max-height' as string]: viewportMaxHeight,
+      }}
     >
-      {children}
+      <div className="max-h-[var(--search-floating-menu-viewport-max-height)] overflow-y-auto overflow-x-hidden">
+        <div className="p-2">{children}</div>
+      </div>
     </div>,
     document.body
   )
@@ -305,7 +327,7 @@ export function SearchToolbar({
           menuRef={sortMenuRef}
           width={256}
           align="start"
-          className="search-floating-menu overflow-y-auto rounded-xl p-2"
+          className="search-floating-menu rounded-xl"
         >
           <div className="space-y-0.5">
             {(['common', 'metadata', 'history'] as const).map(group => {
@@ -388,7 +410,7 @@ export function SearchToolbar({
           menuRef={matcherMenuRef}
           width={224}
           align="start"
-          className="search-floating-menu rounded-xl p-2"
+          className="search-floating-menu rounded-xl"
         >
           <div>
             <div className="px-3 pb-2 pt-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -440,4 +462,3 @@ export function SearchToolbar({
     </div>
   )
 }
-
