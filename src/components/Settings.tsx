@@ -2076,11 +2076,25 @@ export function Settings() {
     }
   }, [closeSettingsWindow, syncWindowState])
 
-  const handleWindowDragStart = (event: React.PointerEvent<HTMLDivElement>) => {
+  const isTitlebarInteractiveTarget = (target: EventTarget | null) =>
+    target instanceof HTMLElement &&
+    Boolean(
+      target.closest(
+        'button, a, input, textarea, select, [role="button"], [data-no-window-drag="true"]'
+      )
+    )
+
+  const handleWindowDragStart = (event: React.PointerEvent<HTMLElement>) => {
     if (event.button !== 0) return
+    if (isTitlebarInteractiveTarget(event.target)) return
     void getCurrentWindow()
       .startDragging()
       .catch(e => console.error('Failed to start dragging settings window:', e))
+  }
+
+  const handleTitlebarDoubleClick = (event: React.MouseEvent<HTMLElement>) => {
+    if (isTitlebarInteractiveTarget(event.target)) return
+    handleToggleMaximizeWindow()
   }
 
   const handleMinimizeWindow = () => {
@@ -2098,18 +2112,20 @@ export function Settings() {
 
   return (
     <div className="settings-shell flex h-screen w-screen flex-col bg-background text-foreground">
-      <header className="flex h-12 items-center gap-3 border-b border-border/90 bg-card px-4 shadow-sm">
+      <header
+        onPointerDown={handleWindowDragStart}
+        onDoubleClick={handleTitlebarDoubleClick}
+        className="flex h-12 items-center gap-3 border-b border-border/90 bg-card px-4 shadow-sm cursor-grab active:cursor-grabbing"
+      >
         <div
-          onPointerDown={handleWindowDragStart}
-          onDoubleClick={handleToggleMaximizeWindow}
-          className="flex min-w-0 flex-1 items-center gap-3 cursor-grab active:cursor-grabbing"
+          className="flex min-w-0 flex-1 items-center gap-3 h-full"
         >
           <Logo iconSize={20} textSize="sm" className="shrink-0" />
           <span className="h-1 w-1 shrink-0 rounded-full bg-muted-foreground/60" />
           <p className="truncate text-sm text-muted-foreground">设置 / {activeNavItem.label}</p>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div data-no-window-drag="true" className="flex items-center gap-1">
           <WindowControlButton label="最小化" onClick={handleMinimizeWindow}>
             <Minus className="h-4 w-4" />
           </WindowControlButton>
