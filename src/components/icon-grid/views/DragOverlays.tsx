@@ -1,15 +1,15 @@
-﻿import { AppWindow } from 'lucide-react'
+import { AppWindow } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from 'react'
 import type { DesktopIcon } from '../../../types'
-import {
-  ICON_GRID_TILE_PADDING_Y,
-  ICON_GRID_TITLE_GAP,
-  ICON_GRID_TITLE_HEIGHT,
-} from '../../../types'
+import { useIconStore } from '../../../stores/iconStore'
 import type { FolderItem, GridItem } from '../model'
 import { getGridItemSpan } from '../model'
 import type { FolderDropFlight, MultiDropFlightItem } from '../state/types'
-import { DESKTOP_FOLDER_SURFACE_CLASS, FolderIconVisual } from './FolderVisuals'
+import {
+  DESKTOP_FOLDER_SURFACE_CLASS,
+  FolderIconVisual,
+  getDesktopFolderTileMetrics,
+} from './FolderVisuals'
 
 interface DragGhostPointer {
   pointerX: number
@@ -156,37 +156,24 @@ function FolderGhost({
   slotWidth,
   slotHeight,
   gridGap,
+  titleLineCount,
 }: {
   folder: FolderItem
   slotWidth: number
   slotHeight: number
   gridGap: number
+  titleLineCount: 'one' | 'two'
 }) {
   const span = getGridItemSpan(folder)
-  const footprintWidth = span.cols * slotWidth + Math.max(0, span.cols - 1) * gridGap
-  const footprintHeight = span.rows * slotHeight + Math.max(0, span.rows - 1) * gridGap
-  const bodyWidth = Math.max(40, footprintWidth - ICON_GRID_TILE_PADDING_Y * 2)
-  const bodyHeight = Math.max(
-    32,
-    footprintHeight - ICON_GRID_TILE_PADDING_Y * 2 - ICON_GRID_TITLE_HEIGHT - ICON_GRID_TITLE_GAP
-  )
-  const singleSlotBodyExtent = Math.max(
-    32,
-    slotHeight - ICON_GRID_TILE_PADDING_Y * 2 - ICON_GRID_TITLE_HEIGHT - ICON_GRID_TITLE_GAP
-  )
-  const shapeWidth =
-    folder.size === '1x2'
-      ? Math.min(bodyWidth, singleSlotBodyExtent)
-      : folder.size === '2x2' || folder.size === '1x1'
-        ? Math.min(bodyWidth, bodyHeight)
-        : bodyWidth
-  const shapeHeight =
-    folder.size === '2x1'
-      ? Math.min(bodyHeight, singleSlotBodyExtent)
-      : folder.size === '2x2' || folder.size === '1x1'
-        ? shapeWidth
-        : bodyHeight
-  const panelBase = Math.max(32, Math.min(shapeWidth, shapeHeight))
+  const { bodyWidth, bodyHeight, shapeWidth, shapeHeight, panelBase } = getDesktopFolderTileMetrics({
+    span,
+    slotWidth,
+    slotHeight,
+    gridGap,
+    folderSize: folder.size,
+    titleLineCount,
+    surfaceTitleLineCount: 'two',
+  })
   const surfaceRadius = getGhostFolderSurfaceRadius(panelBase)
   const innerPadding = Math.min(GHOST_FOLDER_INNER_PADDING, Math.max(4, Math.floor(panelBase / 8)))
   const innerGap = Math.min(GHOST_FOLDER_INNER_GAP, Math.max(4, Math.floor(panelBase / 16)))
@@ -287,6 +274,7 @@ export function DragOverlays({
   reorderAnimationMs,
   folderPreviewEasing,
 }: DragOverlaysProps) {
+  const titleLineCount = useIconStore(state => state.titleLineCount)
   const pointerAnimationFrameRef = useRef<number | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const leaderNodeRef = useRef<HTMLDivElement | null>(null)
@@ -584,6 +572,7 @@ export function DragOverlays({
                   slotWidth={slotWidth}
                   slotHeight={slotHeight}
                   gridGap={gridGap}
+                  titleLineCount={titleLineCount}
                 />
               )}
             </div>

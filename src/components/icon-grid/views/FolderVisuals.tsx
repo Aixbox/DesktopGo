@@ -1,10 +1,12 @@
-﻿import { AppWindow } from 'lucide-react'
+import { AppWindow } from 'lucide-react'
+import type { DesktopIcon, TitleLineCount } from '../../../types'
 import {
+  getIconGridTitleHeight,
   ICON_GRID_TILE_PADDING_Y,
   ICON_GRID_TITLE_GAP,
-  ICON_GRID_TITLE_HEIGHT,
 } from '../../../types'
-import type { DesktopIcon } from '../../../types'
+import { useIconStore } from '../../../stores/iconStore'
+import type { FolderSize, GridSpan } from '../model'
 
 export const FOLDER_PREVIEW_PADDING = 4
 export const FOLDER_PREVIEW_GAP = 2
@@ -39,6 +41,18 @@ const getDesktopSingleSlotPreviewInset = (panelBase: number) =>
 
 export const getFolderSharedLayoutId = (folderId: string) => `folder-shell-${folderId}`
 
+export interface DesktopFolderTileMetrics {
+  footprintWidth: number
+  footprintHeight: number
+  bodyWidth: number
+  bodyHeight: number
+  singleSlotBodyExtent: number
+  shapeWidth: number
+  shapeHeight: number
+  panelBase: number
+  surfaceRadius: number
+}
+
 export interface DesktopSingleSlotFolderMetrics {
   bodyWidth: number
   bodyHeight: number
@@ -49,29 +63,102 @@ export interface DesktopSingleSlotFolderMetrics {
   surfaceTop: number
 }
 
-export const getDesktopSingleSlotFolderMetrics = (
-  tileWidth: number,
-  tileHeight: number
-): DesktopSingleSlotFolderMetrics => {
-  const bodyWidth = Math.max(40, tileWidth - ICON_GRID_TILE_PADDING_Y * 2)
+export const getDesktopFolderTileMetrics = ({
+  span,
+  slotWidth,
+  slotHeight,
+  gridGap,
+  folderSize,
+  titleLineCount = 'two',
+  surfaceTitleLineCount = titleLineCount,
+}: {
+  span: GridSpan
+  slotWidth: number
+  slotHeight: number
+  gridGap: number
+  folderSize: FolderSize
+  titleLineCount?: TitleLineCount
+  surfaceTitleLineCount?: TitleLineCount
+}): DesktopFolderTileMetrics => {
+  const titleHeight = getIconGridTitleHeight(titleLineCount)
+  const surfaceTitleHeight = getIconGridTitleHeight(surfaceTitleLineCount)
+  const footprintWidth = span.cols * slotWidth + Math.max(0, span.cols - 1) * gridGap
+  const footprintHeight = span.rows * slotHeight + Math.max(0, span.rows - 1) * gridGap
+  const bodyWidth = Math.max(40, footprintWidth - ICON_GRID_TILE_PADDING_Y * 2)
   const bodyHeight = Math.max(
     32,
-    tileHeight - ICON_GRID_TILE_PADDING_Y * 2 - ICON_GRID_TITLE_HEIGHT - ICON_GRID_TITLE_GAP
+    footprintHeight -
+      ICON_GRID_TILE_PADDING_Y * 2 -
+      titleHeight -
+      ICON_GRID_TITLE_GAP
   )
-  const surfaceSize = Math.min(bodyWidth, bodyHeight)
-  const panelBase = Math.max(32, surfaceSize)
-  const surfaceRadius = getDesktopFolderSurfaceRadius(panelBase)
-  const previewInset = getDesktopSingleSlotPreviewInset(panelBase)
-  const previewSize = Math.max(24, surfaceSize - previewInset * 2)
+  const singleSlotBodyExtent = Math.max(
+    32,
+    slotHeight - ICON_GRID_TILE_PADDING_Y * 2 - titleHeight - ICON_GRID_TITLE_GAP
+  )
+  const surfaceBodyHeight = Math.max(
+    32,
+    footprintHeight -
+      ICON_GRID_TILE_PADDING_Y * 2 -
+      surfaceTitleHeight -
+      ICON_GRID_TITLE_GAP
+  )
+  const surfaceSingleSlotBodyExtent = Math.max(
+    32,
+    slotHeight - ICON_GRID_TILE_PADDING_Y * 2 - surfaceTitleHeight - ICON_GRID_TITLE_GAP
+  )
+  const shapeWidth =
+    folderSize === '1x2'
+      ? Math.min(bodyWidth, surfaceSingleSlotBodyExtent)
+      : folderSize === '2x2' || folderSize === '1x1'
+        ? Math.min(bodyWidth, surfaceBodyHeight)
+        : bodyWidth
+  const shapeHeight =
+    folderSize === '2x1'
+      ? Math.min(surfaceBodyHeight, surfaceSingleSlotBodyExtent)
+      : folderSize === '2x2' || folderSize === '1x1'
+        ? shapeWidth
+        : surfaceBodyHeight
+  const panelBase = Math.max(32, Math.min(shapeWidth, shapeHeight))
 
   return {
+    footprintWidth,
+    footprintHeight,
     bodyWidth,
     bodyHeight,
-    surfaceSize,
-    surfaceRadius,
+    singleSlotBodyExtent,
+    shapeWidth,
+    shapeHeight,
+    panelBase,
+    surfaceRadius: getDesktopFolderSurfaceRadius(panelBase),
+  }
+}
+
+export const getDesktopSingleSlotFolderMetrics = (
+  tileWidth: number,
+  tileHeight: number,
+  titleLineCount: TitleLineCount = 'two'
+): DesktopSingleSlotFolderMetrics => {
+  const metrics = getDesktopFolderTileMetrics({
+    span: { cols: 1, rows: 1 },
+    slotWidth: tileWidth,
+    slotHeight: tileHeight,
+    gridGap: 0,
+    folderSize: '1x1',
+    titleLineCount,
+    surfaceTitleLineCount: 'two',
+  })
+  const previewInset = getDesktopSingleSlotPreviewInset(metrics.panelBase)
+  const previewSize = Math.max(24, metrics.shapeWidth - previewInset * 2)
+
+  return {
+    bodyWidth: metrics.bodyWidth,
+    bodyHeight: metrics.bodyHeight,
+    surfaceSize: metrics.shapeWidth,
+    surfaceRadius: metrics.surfaceRadius,
     previewSize,
-    surfaceLeft: (tileWidth - surfaceSize) / 2,
-    surfaceTop: ICON_GRID_TILE_PADDING_Y + Math.max(0, (bodyHeight - surfaceSize) / 2),
+    surfaceLeft: (tileWidth - metrics.shapeWidth) / 2,
+    surfaceTop: ICON_GRID_TILE_PADDING_Y + Math.max(0, (metrics.bodyHeight - metrics.shapeHeight) / 2),
   }
 }
 
@@ -99,8 +186,10 @@ export function FolderCreatePreview({
   tileHeight,
   surfaceClassName = FOLDER_SURFACE_CLASS,
 }: FolderCreatePreviewProps) {
+  const titleLineCount = useIconStore(state => state.titleLineCount)
+
   if (tileWidth !== undefined && tileHeight !== undefined) {
-    const metrics = getDesktopSingleSlotFolderMetrics(tileWidth, tileHeight)
+    const metrics = getDesktopSingleSlotFolderMetrics(tileWidth, tileHeight, titleLineCount)
 
     return (
       <div className="pointer-events-none absolute inset-0 z-30" aria-hidden="true">

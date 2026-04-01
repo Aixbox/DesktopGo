@@ -6,7 +6,10 @@
       "Bash(npx tsc:*)",
       "Bash(find D:ProjectselfDesktopGo -name *.toml -o -name *electron*)",
       "Bash(find node_modules/tailwindcss -name preflight* -o -name normalize* -o -name base*)",
-      "Bash(echo \"2. 删除图标缓存: del /A /Q \"\"%localappdata%\\\\IconCache.db\"\"\")"
+      "Bash(echo \"2. 删除图标缓存: del /A /Q \"\"%localappdata%\\\\IconCache.db\"\"\")",
+      "Bash(git:*)",
+      "Bash(npm run:*)",
+      "Bash(npm:*)"
     ]
   }
 }

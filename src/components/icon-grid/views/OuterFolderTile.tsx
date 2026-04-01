@@ -1,11 +1,12 @@
-﻿import { AppWindow } from 'lucide-react'
+import { AppWindow } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import {
+  getIconGridTitleMetrics,
   ICON_GRID_TILE_PADDING_Y,
   ICON_GRID_TITLE_GAP,
-  ICON_GRID_TITLE_HEIGHT,
 } from '../../../types'
+import { useIconStore } from '../../../stores/iconStore'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -21,6 +22,7 @@ import {
   DESKTOP_FOLDER_SURFACE_CLASS,
   FOLDER_SHARED_LAYOUT_TRANSITION,
   FolderIconVisual,
+  getDesktopFolderTileMetrics,
   getFolderSharedLayoutId,
 } from './FolderVisuals'
 
@@ -50,7 +52,6 @@ const FOLDER_SIZES: Array<{ value: FolderSize; label: string; span: GridSpan }> 
 const MENU_OPEN_LABEL = 'Open Folder'
 const MENU_SIZE_LABEL = 'Folder Size'
 
-const TITLE_HEIGHT = ICON_GRID_TITLE_HEIGHT
 const TILE_PADDING = ICON_GRID_TILE_PADDING_Y
 const BODY_TITLE_GAP = ICON_GRID_TITLE_GAP
 const INNER_PADDING = 8
@@ -59,9 +60,6 @@ const PREVIEW_ICON_SCALE = 0.84
 const PREVIEW_ICON_FALLBACK_SCALE = 0.68
 
 const clampNumber = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
-
-const getFolderSurfaceRadius = (panelBase: number) =>
-  Math.round(clampNumber(panelBase * 0.2, 16, 24))
 
 const getSingleSlotPreviewInset = (panelBase: number) =>
   Math.round(clampNumber(panelBase * 0.06, 3, 5))
@@ -187,7 +185,10 @@ interface FolderBodyProps {
   folder: FolderItem
   bodyWidth: number
   bodyHeight: number
-  singleSlotBodyExtent: number
+  shapeWidth: number
+  shapeHeight: number
+  panelBase: number
+  surfaceRadius: number
   folderPreview: boolean
   folderOpen: boolean
   sharedLayoutActive: boolean
@@ -200,7 +201,10 @@ function FolderBody({
   folder,
   bodyWidth,
   bodyHeight,
-  singleSlotBodyExtent,
+  shapeWidth,
+  shapeHeight,
+  panelBase,
+  surfaceRadius,
   folderPreview,
   folderOpen,
   sharedLayoutActive,
@@ -208,20 +212,6 @@ function FolderBody({
   onOpenFolder,
   onLaunchIcon,
 }: FolderBodyProps) {
-  const shapeWidth =
-    folder.size === '1x2'
-      ? Math.min(bodyWidth, singleSlotBodyExtent)
-      : folder.size === '2x2' || folder.size === '1x1'
-        ? Math.min(bodyWidth, bodyHeight)
-        : bodyWidth
-  const shapeHeight =
-    folder.size === '2x1'
-      ? Math.min(bodyHeight, singleSlotBodyExtent)
-      : folder.size === '2x2' || folder.size === '1x1'
-        ? shapeWidth
-        : bodyHeight
-  const panelBase = Math.max(32, Math.min(shapeWidth, shapeHeight))
-  const surfaceRadius = getFolderSurfaceRadius(panelBase)
   const innerPadding = Math.min(INNER_PADDING, Math.max(4, Math.floor(panelBase / 8)))
   const innerGap = Math.min(INNER_GAP, Math.max(4, Math.floor(panelBase / 16)))
   const highlightSurface = folderPreview || folderOpen
@@ -358,17 +348,25 @@ export function OuterFolderTile({
   onLaunchIcon,
   onResizeFolder,
 }: OuterFolderTileProps) {
-  const footprintWidth = span.cols * slotWidth + Math.max(0, span.cols - 1) * gridGap
-  const footprintHeight = span.rows * slotHeight + Math.max(0, span.rows - 1) * gridGap
-  const bodyWidth = Math.max(40, footprintWidth - TILE_PADDING * 2)
-  const bodyHeight = Math.max(
-    32,
-    footprintHeight - TILE_PADDING * 2 - TITLE_HEIGHT - BODY_TITLE_GAP
-  )
-  const singleSlotBodyExtent = Math.max(
-    32,
-    slotHeight - TILE_PADDING * 2 - TITLE_HEIGHT - BODY_TITLE_GAP
-  )
+  const titleLineCount = useIconStore(state => state.titleLineCount)
+  const titleMetrics = getIconGridTitleMetrics(titleLineCount)
+  const {
+    footprintWidth,
+    bodyWidth,
+    bodyHeight,
+    shapeWidth,
+    shapeHeight,
+    panelBase,
+    surfaceRadius,
+  } = getDesktopFolderTileMetrics({
+    span,
+    slotWidth,
+    slotHeight,
+    gridGap,
+    folderSize: folder.size,
+    titleLineCount,
+    surfaceTitleLineCount: 'two',
+  })
 
   return (
     <ContextMenu>
@@ -380,14 +378,17 @@ export function OuterFolderTile({
           onClickCapture={onClickCapture}
         >
           <div
-            className="flex h-full w-full flex-col items-center gap-1"
-            style={{ padding: `${TILE_PADDING}px 0` }}
+            className="flex h-full w-full flex-col items-center"
+            style={{ padding: `${TILE_PADDING}px 0`, rowGap: `${BODY_TITLE_GAP}px` }}
           >
             <FolderBody
               folder={folder}
               bodyWidth={bodyWidth}
               bodyHeight={bodyHeight}
-              singleSlotBodyExtent={singleSlotBodyExtent}
+              shapeWidth={shapeWidth}
+              shapeHeight={shapeHeight}
+              panelBase={panelBase}
+              surfaceRadius={surfaceRadius}
               folderPreview={folderPreview}
               folderOpen={folderOpen}
               sharedLayoutActive={sharedLayoutActive}
@@ -397,10 +398,10 @@ export function OuterFolderTile({
             />
             <button
               type="button"
-              className="flex max-w-full items-start justify-center overflow-hidden px-2 text-center text-[11px] leading-[1.05] text-foreground transition hover:text-foreground/90"
+              className="flex max-w-full items-start justify-center overflow-hidden text-center text-[11px] text-foreground transition hover:text-foreground/90"
               style={{
                 width: `${Math.min(footprintWidth, bodyWidth)}px`,
-                minHeight: `${TITLE_HEIGHT}px`,
+                height: `${titleMetrics.height}px`,
               }}
               title={folder.name}
               onClick={event => {
@@ -408,7 +409,22 @@ export function OuterFolderTile({
                 onOpenFolder(folder.id)
               }}
             >
-              <span className="block w-full truncate">{folder.name}</span>
+              <span
+                className="block w-full"
+                style={{
+                  height: `${titleMetrics.height}px`,
+                  lineHeight: `${titleMetrics.lineHeight}px`,
+                  display: titleMetrics.singleLine ? 'block' : '-webkit-box',
+                  WebkitLineClamp: titleMetrics.lineClamp,
+                  WebkitBoxOrient: titleMetrics.singleLine ? undefined : 'vertical',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: titleMetrics.singleLine ? 'nowrap' : 'normal',
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {folder.name}
+              </span>
             </button>
           </div>
         </div>

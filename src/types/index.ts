@@ -20,6 +20,7 @@ export interface IconMutationTarget {
 }
 
 export type IconSize = 'large' | 'medium' | 'small'
+export type TitleLineCount = 'one' | 'two'
 
 export const ICON_SIZE_CONFIG = {
   large: { logicalSize: 72, columnWidth: 100, imgSize: 72, containerWidth: 100 },
@@ -34,7 +35,19 @@ export const ICON_GRID_LAYOUT_ROW_HEIGHT = {
 } as const
 export const ICON_GRID_TILE_PADDING_Y = 4
 export const ICON_GRID_TITLE_GAP = 4
-export const ICON_GRID_TITLE_HEIGHT = 26
+export const ICON_GRID_TITLE_LINE_HEIGHT = 13
+export const ICON_GRID_TITLE_MAX_LINES = 2
+export const ICON_GRID_TITLE_HEIGHT = ICON_GRID_TITLE_LINE_HEIGHT * ICON_GRID_TITLE_MAX_LINES
+
+export const getIconGridTitleHeight = (titleLineCount: TitleLineCount): number =>
+  titleLineCount === 'one' ? ICON_GRID_TITLE_LINE_HEIGHT : ICON_GRID_TITLE_HEIGHT
+
+export const getIconGridTitleMetrics = (titleLineCount: TitleLineCount) => ({
+  singleLine: titleLineCount === 'one',
+  height: getIconGridTitleHeight(titleLineCount),
+  lineHeight: ICON_GRID_TITLE_LINE_HEIGHT,
+  lineClamp: titleLineCount === 'one' ? 1 : ICON_GRID_TITLE_MAX_LINES,
+})
 
 export const getIconGridLayoutRowHeight = (iconSize: IconSize): number =>
   ICON_GRID_LAYOUT_ROW_HEIGHT[iconSize]
@@ -53,8 +66,6 @@ export const WINDOW_SIZE_CONFIG: Record<
   medium: { width: 1280, height: 720 },
   small: { width: 800, height: 600 },
 }
-
-export type TitleLineCount = 'one' | 'two'
 
 export type ThemeMode = 'system' | 'dark' | 'light'
 
