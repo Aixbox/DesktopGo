@@ -10,6 +10,7 @@ import {
   PointerEvent as ReactPointerEvent,
   WheelEvent as ReactWheelEvent,
 } from 'react'
+import type { DesktopIcon } from '../../../types'
 import type { GridItem } from '../model'
 import {
   ContextMenu,
@@ -21,9 +22,9 @@ import { DOCK_GAP } from '../domain/dock'
 import {
   DOCK_FOLDER_SURFACE_ACTIVE_CLASS,
   DOCK_FOLDER_SURFACE_CLASS,
-  FolderCreatePreview,
   FolderIconVisual,
   FOLDER_SHARED_LAYOUT_TRANSITION,
+  type DesktopSingleSlotFolderMetrics,
   getDesktopSingleSlotFolderMetrics,
   getFolderSharedLayoutId,
 } from './FolderVisuals'
@@ -80,6 +81,42 @@ interface IndicatorDragState {
   thumbGrabOffset: number
   trackLeft: number
   trackWidth: number
+}
+
+interface DockFolderCreatePreviewProps {
+  active: boolean
+  icon: DesktopIcon
+  metrics: DesktopSingleSlotFolderMetrics
+  reorderAnimationMs: number
+}
+
+function DockFolderCreatePreview({
+  active,
+  icon,
+  metrics,
+  reorderAnimationMs,
+}: DockFolderCreatePreviewProps) {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-30" aria-hidden="true">
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div
+          className={`${DOCK_FOLDER_SURFACE_CLASS} flex items-center justify-center transition-all duration-200 ${
+            active
+              ? `${DOCK_FOLDER_SURFACE_ACTIVE_CLASS} scale-100 opacity-100`
+              : 'scale-[0.94] opacity-0'
+          }`}
+          style={{
+            width: `${metrics.surfaceSize}px`,
+            height: `${metrics.surfaceSize}px`,
+            borderRadius: `${metrics.surfaceRadius}px`,
+            transitionDuration: `${reorderAnimationMs}ms`,
+          }}
+        >
+          <FolderIconVisual icons={[icon]} imgSize={metrics.previewSize} withSurface={false} />
+        </div>
+      </div>
+    </div>
+  )
 }
 
 const resolveDockContentWidth = (slotCount: number, buttonSize: number) => {
@@ -654,12 +691,11 @@ export function DockBar({
                                     />
                                   )}
                                 </div>
-                                <FolderCreatePreview
+                                <DockFolderCreatePreview
                                   active={folderPreview}
                                   icon={item.icon}
-                                  imgSize={iconImageSize}
+                                  metrics={singleSlotFolderMetrics}
                                   reorderAnimationMs={220}
-                                  surfaceClassName={DOCK_FOLDER_SURFACE_CLASS}
                                 />
                               </>
                             ) : (
@@ -675,7 +711,9 @@ export function DockBar({
                                   }
                                   transition={FOLDER_SHARED_LAYOUT_TRANSITION}
                                   className={`${DOCK_FOLDER_SURFACE_CLASS} flex items-center justify-center transition-all duration-150 ${
-                                    folderPreview || folderOpen ? DOCK_FOLDER_SURFACE_ACTIVE_CLASS : ''
+                                    folderPreview || folderOpen
+                                      ? DOCK_FOLDER_SURFACE_ACTIVE_CLASS
+                                      : ''
                                   }`}
                                   style={{
                                     width: `${singleSlotFolderMetrics.surfaceSize}px`,

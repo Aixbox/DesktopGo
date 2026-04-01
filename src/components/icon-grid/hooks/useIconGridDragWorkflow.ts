@@ -12,7 +12,7 @@ import { getGridItemSpan, getId } from '../model'
 import { DRAG_HOLE_ID, areSlotsEqual } from '../domain/slots'
 import { moveDragHoleToIndex } from '../domain/evasionPolicy'
 import { getFolderChildSelectionsByIds, getFolderChildrenById } from '../domain/folderPolicy'
-import { clampNumber, classifyZone } from '../domain/geometry'
+import { clampNumber, classifyZone, getRectArea, getRectIntersection } from '../domain/geometry'
 import {
   applyOuterEvasionPolicy,
   findHitByMetrics,
@@ -26,6 +26,12 @@ import {
   normalizeOuterSlots,
 } from '../domain/topLevelLayout'
 import { getDockItemKeys, resolveOuterItemIds } from '../domain/dock'
+import {
+  buildDockOccupiedSlotEntries,
+  resolveDockInsertIndexByDisplayIndex,
+  resolveDockInsertIndexFromCenters,
+  selectDockOverlapCandidate,
+} from '../domain/dockDragPolicy'
 import { OUTER_DRAG_RULES } from '../constants'
 import { usePointerDragController } from './usePointerDragController'
 import { useEdgeAutoPaging } from './useEdgeAutoPaging'
@@ -533,7 +539,6 @@ export function useIconGridDragWorkflow({
           Math.max(1, columns)
         )
 
-
   const buildDockLinearPreviewOrder = (
     order: Array<string | null>,
     targetId: string,
@@ -546,10 +551,146 @@ export function useIconGridDragWorkflow({
     const targetCompactIndex = compact.indexOf(targetId)
     if (targetCompactIndex < 0) return order
 
-    const insertIndex = clampNumber(placeAfter ? targetCompactIndex + 1 : targetCompactIndex, 0, compact.length)
+    const insertIndex = clampNumber(
+      placeAfter ? targetCompactIndex + 1 : targetCompactIndex,
+      0,
+      compact.length
+    )
     const next: Array<string | null> = [...compact]
     next.splice(insertIndex, 0, null)
     return next
+  }
+
+  const resolveDockSlotEntries = () =>
+    Array.from(dockSlotRefs.current.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([index, node]) => ({
+        index,
+        node,
+        rect: node.getBoundingClientRect(),
+        targetId: node.querySelector<HTMLElement>('[data-dock-key]')?.dataset.dockKey ?? null,
+      }))
+
+  const isPointerWithinDockBounds = (x: number, y: number) => {
+    const container = dockContainerRef.current
+    if (!container) return false
+    const rect = container.getBoundingClientRect()
+    const dockBuffer = 16
+    const withinHorizontal = x >= rect.left - dockBuffer && x <= rect.right + dockBuffer
+    const withinVertical = y >= rect.top - dockBuffer && y <= rect.bottom + dockBuffer
+    return withinHorizontal && withinVertical
+  }
+
+  const resolveDockStableTargetRect = (slotRect: DOMRect, node: HTMLDivElement | undefined) => {
+    // Dock 命中框以稳定槽位为锚点，再叠加图标在按钮内的相对偏移，避免把动画中的 transform 位置带回命中计算。
+    if (!node) return slotRect
+
+    const nodeRect = node.getBoundingClientRect()
+    const iconImage = node.querySelector<HTMLElement>('.icon-image')
+    const folderHitbox = node.querySelector<HTMLElement>('[data-folder-icon-hitbox]')
+    const folderVisual = node.querySelector<HTMLElement>('[data-folder-icon-visual]')
+    const visualRect =
+      iconImage?.getBoundingClientRect() ??
+      folderHitbox?.getBoundingClientRect() ??
+      folderVisual?.getBoundingClientRect() ??
+      nodeRect
+
+    return new DOMRect(
+      slotRect.left + (visualRect.left - nodeRect.left),
+      slotRect.top + (visualRect.top - nodeRect.top),
+      visualRect.width,
+      visualRect.height
+    )
+  }
+
+  const resolveDockOccupiedSlots = () => {
+    const slotEntries = resolveDockSlotEntries()
+    const entryByDisplayIndex = new Map(slotEntries.map(entry => [entry.index, entry] as const))
+
+    return buildDockOccupiedSlotEntries(slotEntries.map(entry => entry.targetId)).flatMap(entry => {
+      const slotEntry = entryByDisplayIndex.get(entry.displayIndex)
+      if (!slotEntry) return []
+
+      return [
+        {
+          ...slotEntry,
+          targetId: entry.targetId,
+          targetIndex: entry.targetIndex,
+        },
+      ]
+    })
+  }
+
+  const resolveDockNearestSlotIndex = (
+    state: DragState,
+    options?: { allowOutside?: boolean }
+  ): number | null => {
+    if (!options?.allowOutside && !isPointerWithinDockBounds(state.pointerX, state.pointerY)) {
+      return null
+    }
+
+    const slotEntries = resolveDockSlotEntries()
+    if (slotEntries.length === 0) return 0
+    const displaySlots = slotEntries.map(entry => entry.targetId)
+    const hoveredEntry = slotEntries.find(
+      entry =>
+        state.pointerX >= entry.rect.left &&
+        state.pointerX <= entry.rect.right &&
+        state.pointerY >= entry.rect.top &&
+        state.pointerY <= entry.rect.bottom
+    )
+    if (hoveredEntry && hoveredEntry.targetId === null) {
+      return resolveDockInsertIndexByDisplayIndex(displaySlots, hoveredEntry.index)
+    }
+
+    const occupiedSlots = resolveDockOccupiedSlots()
+    if (occupiedSlots.length === 0) return 0
+
+    // Dock 插位只认槽位中心，不再读取被避让图标的实时 DOMRect，从根上消除左右抖动。
+    return resolveDockInsertIndexFromCenters(
+      state.pointerX,
+      occupiedSlots.map(entry => entry.rect.left + entry.rect.width / 2)
+    )
+  }
+
+  const findDockMaxOverlapHit = (state: DragState): OuterOverlapHit | null => {
+    const dragRect = new DOMRect(
+      state.pointerX - iconConfig.imgSize / 2,
+      state.pointerY - iconConfig.imgSize / 2,
+      iconConfig.imgSize,
+      iconConfig.imgSize
+    )
+    const dragArea = getRectArea(dragRect)
+    if (dragArea <= 0) return null
+
+    const candidates: OuterOverlapHit[] = []
+    resolveDockOccupiedSlots().forEach(entry => {
+      const targetRect = resolveDockStableTargetRect(
+        entry.rect,
+        dockItemRefs.current.get(entry.targetId)
+      )
+      const overlapRect = getRectIntersection(dragRect, targetRect)
+      if (!overlapRect) return
+
+      const intersectionArea = getRectArea(overlapRect)
+      const targetArea = getRectArea(targetRect)
+      if (intersectionArea <= 0 || targetArea <= 0) return
+
+      candidates.push({
+        targetId: entry.targetId,
+        targetIndex: entry.index,
+        targetRect,
+        overlapRect,
+        iou: intersectionArea / dragArea,
+        intersectionArea,
+        centerManhattanDistance:
+          Math.abs(state.pointerX - (targetRect.left + targetRect.width / 2)) +
+          Math.abs(state.pointerY - (targetRect.top + targetRect.height / 2)),
+        zone: classifyZone(targetRect, state.pointerX, state.pointerY),
+      })
+    })
+
+    return selectDockOverlapCandidate(candidates, state.hoverTargetId, iconConfig.imgSize)
   }
 
   const resolveTopLevelContextAtPoint = (x: number, y: number): 'outer' | 'dock' => {
@@ -699,42 +840,7 @@ export function useIconGridDragWorkflow({
     }
 
     if (state.context === 'dock') {
-      const container = dockContainerRef.current
-      const slotEntries = Array.from(dockSlotRefs.current.entries()).sort(([a], [b]) => a - b)
-      if (!options?.allowOutside && container) {
-        const rect = container.getBoundingClientRect()
-        const dockBuffer = 16
-        const withinHorizontal =
-          state.pointerX >= rect.left - dockBuffer && state.pointerX <= rect.right + dockBuffer
-        const withinVertical =
-          state.pointerY >= rect.top - dockBuffer && state.pointerY <= rect.bottom + dockBuffer
-        if (!withinHorizontal || !withinVertical) return null
-      }
-
-      const itemRects = resolveDockItemOrder(state.draggingIds)
-        .map((id, index) => ({
-          index,
-          rect: dockItemRefs.current.get(id)?.getBoundingClientRect() ?? null,
-        }))
-        .filter((entry): entry is { index: number; rect: DOMRect } => entry.rect !== null)
-
-      if (itemRects.length === 0) {
-        return slotEntries.length > 0 ? 0 : null
-      }
-
-      const pointerX = state.pointerX
-      const firstCenter = itemRects[0].rect.left + itemRects[0].rect.width / 2
-      if (pointerX <= firstCenter) return 0
-
-      for (let index = 0; index < itemRects.length - 1; index += 1) {
-        const currentCenter = itemRects[index].rect.left + itemRects[index].rect.width / 2
-        const nextCenter = itemRects[index + 1].rect.left + itemRects[index + 1].rect.width / 2
-        if (pointerX < (currentCenter + nextCenter) / 2) {
-          return index + 1
-        }
-      }
-
-      return itemRects.length
+      return resolveDockNearestSlotIndex(state, options)
     }
 
     return resolveNearestSlotIndexByMetrics(
@@ -772,22 +878,7 @@ export function useIconGridDragWorkflow({
     if (state.context === 'folder') return null
 
     if (state.context === 'dock') {
-      const metrics = resolveGridMetrics('dock')
-      const dockPageSize = Math.max(1, state.workingOrder.length)
-      return findOuterMaxOverlapHitByMetrics({
-        state,
-        gridElement: metrics.gridElement,
-        columns: metrics.columns,
-        rows: metrics.rows,
-        itemWidth: metrics.itemWidth,
-        itemHeight: metrics.itemHeight,
-        gridGap: config.gridGap,
-        dragWidth: iconConfig.imgSize,
-        dragHeight: iconConfig.imgSize,
-        pageSize: dockPageSize,
-        currentPage: 0,
-        tileRefs: dockItemRefs.current,
-      })
+      return findDockMaxOverlapHit(state)
     }
 
     const metrics = resolveGridMetrics('outer')
@@ -1205,7 +1296,8 @@ export function useIconGridDragWorkflow({
       const folderCenters = collectCenters(folderTileRefs.current)
       selectedFolderChildrenByFolderId.forEach((children, folderId) => {
         const folderTileNode =
-          tileRefs.current.get(`folder:${folderId}`) ?? dockItemRefs.current.get(`folder:${folderId}`)
+          tileRefs.current.get(`folder:${folderId}`) ??
+          dockItemRefs.current.get(`folder:${folderId}`)
         const folderTileRect = folderTileNode?.getBoundingClientRect() ?? null
         const collapsedFolderCenter = folderTileRect
           ? {
