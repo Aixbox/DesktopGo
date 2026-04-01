@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DesktopGo - Windows 桌面启动器</title>
+<meta name="description" content="DesktopGo 是一款现代化的 Windows 桌面启动器，集快速启动、图标管理和文件搜索于一体。" />
+
+<!-- Open Graph -->
+<meta property="og:type" content="website" />
+<meta property="og:title" content="DesktopGo - Windows 桌面启动器" />
+<meta property="og:description" content="现代化的 Windows 桌面启动器，集快速启动、图标管理和文件搜索于一体，灵感源自 macOS Launchpad。" />
+<meta property="og:image" content="assets/images/icon-grid.png" />
+<meta property="og:url" content="https://github.com/aixbox/DesktopGo" />
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="DesktopGo - Windows 桌面启动器" />
+<meta name="twitter:description" content="现代化的 Windows 桌面启动器，集快速启动、图标管理和文件搜索于一体。" />
+<meta name="twitter:image" content="assets/images/icon-grid.png" />
+
+<!-- Favicon -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'><rect width='80' height='80' rx='20' fill='%231a1a2e'/><rect x='16' y='16' width='20' height='20' rx='6' fill='%23a78bfa'/><rect x='44' y='16' width='20' height='20' rx='6' fill='none' stroke='%23fff' stroke-width='2'/><rect x='16' y='44' width='20' height='20' rx='6' fill='none' stroke='%23fff' stroke-width='2'/><rect x='44' y='44' width='20' height='20' rx='6' fill='none' stroke='%23fff' stroke-width='2'/></svg>" />
+
+<!-- Theme color -->
+<meta name="theme-color" content="#0a0e1a" />
+<style>
+/* ==================== Reset & Base ==================== */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; font-size: 16px; }
+body {
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  color: #e2e8f0;
+  background: #0a0e1a;
+  overflow-x: hidden;
+  line-height: 1.6;
+}
+a { color: inherit; text-decoration: none; }
+img, svg { display: block; max-width: 100%; }
+
+/* ==================== Header ==================== */
+.header {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  padding: 0 48px; height: 72px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(10, 14, 26, 0.6);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid transparent;
+  transition: background 0.4s, border-color 0.4s, backdrop-filter 0.4s;
+}
+.header.scrolled {
+  background: rgba(10, 14, 26, 0.92);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+}
+.header-logo { display: flex; align-items: center; gap: 12px; }
+.header-logo svg { width: 36px; height: 36px; }
+.header-logo span {
+  font-size: 20px; font-weight: 700;
+  background: linear-gradient(135deg, #a78bfa, #60a5fa);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text; color: transparent;
+}
+.header-nav { display: flex; align-items: center; gap: 36px; }
+.header-nav a:not(.btn-download) {
+  position: relative;
+  font-family: "Inter", "SF Pro Display", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 15px; font-weight: 600; color: #94a3b8;
+  letter-spacing: 0.01em;
+  padding-bottom: 4px;
+  transition: color 0.3s;
+}
+.header-nav a:not(.btn-download)::after {
+  content: "";
+  position: absolute; left: 0; bottom: 0;
+  width: 0; height: 2.5px; border-radius: 2px;
+  background: linear-gradient(135deg, #a78bfa, #60a5fa);
+  transition: width 0.3s ease;
+}
+.header-nav a:not(.btn-download):hover { color: #e2e8f0; }
+.header-nav a:not(.btn-download):hover::after {
+  width: 100%;
+}
+.btn-download {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 28px; border-radius: 10px; border: none; cursor: pointer;
+  font-size: 15px; font-weight: 600; color: #fff;
+  background: linear-gradient(135deg, #7c5cff 0%, #3b82f6 100%);
+  box-shadow: 0 4px 24px rgba(124, 92, 255, 0.35);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.btn-download:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(124, 92, 255, 0.5);
+}
+.btn-download svg { width: 18px; height: 18px; }
+.header-mobile-download {
+  display: none; align-items: center; gap: 6px;
+  padding: 8px 20px; border-radius: 10px; border: none; cursor: pointer;
+  font-size: 14px; font-weight: 600; color: #fff;
+  background: linear-gradient(135deg, #7c5cff 0%, #3b82f6 100%);
+  box-shadow: 0 4px 16px rgba(124, 92, 255, 0.3);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.header-mobile-download:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(124, 92, 255, 0.45);
+}
+.header-mobile-download svg { width: 16px; height: 16px; }
+
+/* ==================== Hero ==================== */
+.hero {
+  position: relative; min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 120px 24px 80px;
+  overflow: hidden;
+}
+.hero::before {
+  content: ""; position: absolute; inset: -50%;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(124, 92, 255, 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 70% 60%, rgba(59, 130, 246, 0.1) 0%, transparent 40%);
+  animation: bg-drift 15s ease-in-out infinite alternate;
+  pointer-events: none; z-index: -1;
+}
+@keyframes bg-drift {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(-5%, 5%) scale(1.1); }
+}
+.hero-grid {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 60px 60px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 20%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 20%, transparent 80%);
+}
+.hero-badge {
+  position: relative;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 18px 6px 8px; border-radius: 100px;
+  background: rgba(124, 92, 255, 0.1);
+  border: 1px solid rgba(124, 92, 255, 0.25);
+  font-size: 13px; color: #c4b5fd; margin-bottom: 32px;
+}
+.hero-badge .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #a78bfa; animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.hero-logo {
+  position: relative; width: 96px; height: 96px; margin-bottom: 40px;
+  animation: float 6s ease-in-out infinite;
+}
+.hero-logo::after {
+  content: ""; position: absolute; bottom: -16px; left: 50%; transform: translateX(-50%);
+  width: 64px; height: 8px; border-radius: 50%;
+  background: rgba(124, 92, 255, 0.3); filter: blur(6px);
+  animation: shadow-float 6s ease-in-out infinite;
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+@keyframes shadow-float {
+  0%, 100% { opacity: 1; transform: scaleX(1); }
+  50% { opacity: 0.5; transform: scaleX(0.75); }
+}
+.hero h1 {
+  position: relative;
+  font-size: clamp(42px, 6vw, 72px); font-weight: 800;
+  line-height: 1.1; letter-spacing: -0.02em;
+  margin-bottom: 24px;
+}
+.hero h1 .gradient {
+  background: linear-gradient(135deg, #e2e8f0 0%, #a78bfa 50%, #60a5fa 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text; color: transparent;
+}
+.hero-desc {
+  position: relative;
+  font-size: clamp(17px, 2vw, 22px); color: #94a3b8;
+  max-width: 600px; line-height: 1.7; margin-bottom: 48px;
+}
+.hero-actions { position: relative; display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+@keyframes btn-glow {
+  0%, 100% { box-shadow: 0 8px 40px rgba(124, 92, 255, 0.4); }
+  50% { box-shadow: 0 8px 60px rgba(124, 92, 255, 0.65), 0 0 20px rgba(124, 92, 255, 0.3); }
+}
+.btn-hero-download {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 16px 40px; border-radius: 14px; border: none; cursor: pointer;
+  font-size: 17px; font-weight: 700; color: #fff;
+  background: linear-gradient(135deg, #7c5cff 0%, #3b82f6 100%);
+  box-shadow: 0 8px 40px rgba(124, 92, 255, 0.4);
+  animation: btn-glow 3s ease-in-out infinite;
+  transition: transform 0.25s, box-shadow 0.25s;
+}
+.btn-hero-download:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 48px rgba(124, 92, 255, 0.55);
+}
+.btn-hero-download svg { width: 20px; height: 20px; }
+.btn-github {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 16px 32px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer; font-size: 17px; font-weight: 600; color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.04);
+  transition: background 0.25s, border-color 0.25s, color 0.25s;
+}
+.btn-github:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+.btn-github svg { width: 20px; height: 20px; }
+.hero-meta {
+  position: relative;
+  display: flex; gap: 32px; margin-top: 48px;
+  font-size: 13px; color: #7c8da5;
+}
+.hero-meta span { display: flex; align-items: center; gap: 6px; }
+
+.hero-screenshot {
+  position: relative; margin-top: 72px; max-width: 960px; width: 100%;
+  border-radius: 20px; overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 32px 80px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: transform 0.4s ease-out, box-shadow 0.4s ease-out;
+  transform-style: preserve-3d; perspective: 1000px;
+}
+.hero-screenshot::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(circle at 50% 50%, rgba(124, 92, 255, 0.25) 0%, transparent 60%);
+  filter: blur(100px);
+  z-index: -1;
+  pointer-events: none;
+}
+.hero-screenshot img, .hero-screenshot svg { width: 100%; height: auto; }
+
+/* ==================== Features Section ==================== */
+.section { padding: 120px 24px; }
+.section-header {
+  text-align: center; max-width: 640px; margin: 0 auto 80px;
+}
+.section-tag {
+  display: inline-flex; padding: 6px 16px; border-radius: 100px;
+  font-size: 13px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; margin-bottom: 20px;
+}
+.section-header h2 {
+  font-size: clamp(32px, 4vw, 48px); font-weight: 800;
+  line-height: 1.2; margin-bottom: 16px;
+}
+.section-header p {
+  font-size: 18px; color: #94a3b8; line-height: 1.7;
+}
+
+/* Feature Row */
+.feature-row {
+  display: flex; align-items: center; gap: 80px;
+  max-width: 1120px; margin: 0 auto 120px;
+}
+.feature-row:last-child { margin-bottom: 0; }
+.feature-row.reverse { flex-direction: row-reverse; }
+.feature-info { flex: 1; min-width: 0; }
+.feature-visual { flex: 1.2; min-width: 0; }
+.feature-icon {
+  width: 56px; height: 56px; border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 24px;
+}
+.feature-icon svg { width: 28px; height: 28px; }
+.feature-info h3 {
+  font-size: 32px; font-weight: 700; line-height: 1.2;
+  margin-bottom: 16px;
+}
+.feature-info p {
+  font-size: 17px; color: #94a3b8; line-height: 1.8;
+  margin-bottom: 24px;
+}
+.feature-list {
+  list-style: none; display: flex; flex-direction: column; gap: 12px;
+}
+.feature-list li {
+  display: flex; align-items: flex-start; gap: 12px;
+  font-size: 15px; color: #cbd5e1;
+}
+.feature-list li .check {
+  flex-shrink: 0; width: 20px; height: 20px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  margin-top: 2px;
+}
+.feature-list li .check svg { width: 12px; height: 12px; }
+.feature-visual .screenshot-frame {
+  border-radius: 16px; overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+  transition: transform 0.4s ease-out, box-shadow 0.4s ease-out;
+  transform-style: preserve-3d;
+}
+.feature-visual .screenshot-frame img,
+.feature-visual .screenshot-frame svg { width: 100%; height: auto; }
+
+/* Color variants */
+.tag-purple { background: rgba(124, 92, 255, 0.12); color: #a78bfa; }
+.tag-blue   { background: rgba(59, 130, 246, 0.12); color: #60a5fa; }
+.tag-cyan   { background: rgba(6, 182, 212, 0.12); color: #22d3ee; }
+.icon-purple { background: rgba(124, 92, 255, 0.15); }
+.icon-blue   { background: rgba(59, 130, 246, 0.15); }
+.icon-cyan   { background: rgba(6, 182, 212, 0.15); }
+.check-purple { background: rgba(124, 92, 255, 0.2); }
+.check-blue   { background: rgba(59, 130, 246, 0.2); }
+.check-cyan   { background: rgba(6, 182, 212, 0.2); }
+
+/* ==================== Highlights Strip ==================== */
+.highlights {
+  padding: 80px 24px;
+  background: linear-gradient(180deg, transparent 0%, rgba(124, 92, 255, 0.03) 50%, transparent 100%);
+}
+.highlights-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;
+  max-width: 1120px; margin: 0 auto;
+}
+.highlight-card {
+  padding: 36px 28px; border-radius: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  text-align: center;
+  transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s;
+}
+.highlight-card:hover {
+  transform: translateY(-8px);
+  border-color: rgba(124, 92, 255, 0.4);
+  box-shadow: 0 20px 48px rgba(124, 92, 255, 0.15), 0 0 0 1px rgba(124, 92, 255, 0.1);
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.06) 0%, rgba(59, 130, 246, 0.04) 100%);
+}
+.highlight-card .number {
+  font-size: 40px; font-weight: 800;
+  background: linear-gradient(135deg, #a78bfa, #60a5fa);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text; color: transparent;
+  margin-bottom: 8px;
+}
+.highlight-card .label {
+  font-size: 15px; color: #94a3b8;
+}
+
+/* ==================== Tech Stack ==================== */
+.tech-section {
+  padding: 100px 24px; text-align: center;
+}
+.tech-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+  max-width: 800px; margin: 0 auto;
+}
+.tech-item {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 24px 32px; border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s;
+}
+.tech-item:hover {
+  transform: translateY(-6px);
+  border-color: rgba(124, 92, 255, 0.35);
+  box-shadow: 0 16px 40px rgba(124, 92, 255, 0.12), 0 0 0 1px rgba(124, 92, 255, 0.08);
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.05) 0%, rgba(59, 130, 246, 0.03) 100%);
+}
+.tech-item .tech-icon {
+  width: 48px; height: 48px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; font-weight: 700;
+}
+.tech-item .tech-name { font-size: 15px; font-weight: 600; color: #cbd5e1; }
+.tech-item .tech-desc { font-size: 13px; color: #64748b; }
+
+/* ==================== CTA ==================== */
+.cta {
+  position: relative; padding: 120px 24px; text-align: center;
+  overflow: hidden;
+}
+.cta::before {
+  content: ""; position: absolute; inset: 0;
+  background: radial-gradient(ellipse 80% 60% at 50% 50%, rgba(124, 92, 255, 0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+.cta h2 {
+  position: relative;
+  font-size: clamp(32px, 4vw, 48px); font-weight: 800;
+  margin-bottom: 16px;
+}
+.cta p {
+  position: relative;
+  font-size: 18px; color: #94a3b8; margin-bottom: 40px;
+}
+.cta .btn-hero-download { position: relative; }
+
+/* ==================== Footer ==================== */
+.footer {
+  padding: 40px 48px; text-align: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.footer p { font-size: 14px; color: #64748b; }
+.footer a { color: #7c8da5; transition: color 0.2s; }
+.footer a:hover { color: #a78bfa; }
+
+/* ==================== Responsive ==================== */
+@media (max-width: 900px) {
+  .header { padding: 0 24px; }
+  .header-nav { display: none; }
+  .header-mobile-download { display: inline-flex; }
+  .feature-row, .feature-row.reverse {
+    flex-direction: column; gap: 40px;
+  }
+  .highlights-grid { grid-template-columns: repeat(2, 1fr); }
+  .highlight-card .number { font-size: 28px; }
+  .tech-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+}
+@media (max-width: 540px) {
+  .highlights-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .highlight-card .number { font-size: 22px; }
+  .hero-actions { flex-direction: column; align-items: center; }
+  .hero-meta { gap: 16px; flex-wrap: wrap; justify-content: center; }
+  .tech-grid { grid-template-columns: 1fr 1fr; }
+  .feature-visual .screenshot-frame { max-height: 360px; }
+  .feature-visual .screenshot-frame img { object-fit: cover; object-position: top; }
+}
+
+/* ==================== Section Divider ==================== */
+.section-divider {
+  width: 100%; max-width: 800px; margin: 0 auto;
+  height: 1px; border: none;
+  background: linear-gradient(90deg, transparent 0%, rgba(124, 92, 255, 0.3) 30%, rgba(59, 130, 246, 0.3) 70%, transparent 100%);
+  position: relative;
+}
+.section-divider::after {
+  content: "";
+  position: absolute; inset: -20px 10%; height: 40px;
+  background: radial-gradient(ellipse at 50% 50%, rgba(124, 92, 255, 0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* ==================== Hero Entrance Animation ==================== */
+@keyframes hero-in {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.hero-anim {
+  opacity: 0;
+  animation: hero-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.hero-anim-1 { animation-delay: 0.1s; }
+.hero-anim-2 { animation-delay: 0.25s; }
+.hero-anim-3 { animation-delay: 0.4s; }
+.hero-anim-4 { animation-delay: 0.55s; }
+.hero-anim-5 { animation-delay: 0.7s; }
+.hero-anim-6 { animation-delay: 0.85s; }
+
+/* ==================== Scroll Animations ==================== */
+.fade-up {
+  opacity: 0; transform: translateY(32px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.fade-up.visible { opacity: 1; transform: translateY(0); }
+
+/* ==================== Accessibility ==================== */
+/* Focus styles for keyboard navigation */
+a:focus-visible, button:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.btn-download:focus-visible,
+.btn-hero-download:focus-visible,
+.btn-github:focus-visible,
+.header-mobile-download:focus-visible {
+  outline-offset: 4px;
+  border-radius: 14px;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .fade-up { opacity: 1; transform: none; }
+  .hero-anim { opacity: 1; animation: none; }
+  html { scroll-behavior: auto; }
+}
+</style>
+</head>
+<body>
+
+<!-- ======================== Header ======================== -->
+<header class="header">
+  <a href="#" class="header-logo">
+    <svg viewBox="0 0 80 80" width="36" height="36">
+      <defs><linearGradient id="hbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="rgba(255,255,255,0.12)"/><stop offset="100%" stop-color="rgba(255,255,255,0.04)"/></linearGradient></defs>
+      <rect width="80" height="80" rx="20" fill="#1a1a2e"/><rect width="80" height="80" rx="20" fill="url(#hbg)"/>
+      <rect x="16" y="16" width="20" height="20" rx="6" fill="rgba(167,139,250,0.6)" stroke="#a78bfa" stroke-width="2"/>
+      <rect x="44" y="16" width="20" height="20" rx="6" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2"/>
+      <rect x="16" y="44" width="20" height="20" rx="6" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2"/>
+      <rect x="44" y="44" width="20" height="20" rx="6" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2"/>
+    </svg>
+    <span>DesktopGo</span>
+  </a>
+  <nav class="header-nav">
+    <a href="#features">功能</a>
+    <a href="#search">搜索</a>
+    <a href="#settings">设置</a>
+    <a href="https://github.com/aixbox/DesktopGo" target="_blank">GitHub</a>
+    <a href="https://github.com/aixbox/DesktopGo/releases/latest" target="_blank" class="btn-download">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      免费下载
+    </a>
+  </nav>
+  <a href="https://github.com/aixbox/DesktopGo/releases/latest" target="_blank" class="header-mobile-download">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    下载
+  </a>
+</header>
+
+<!-- ======================== Hero ======================== -->
+<section class="hero">
+  <div class="hero-grid"></div>
+
+  <div class="hero-badge hero-anim hero-anim-1">
+    <span class="dot"></span>
+    v0.1.0 正式发布
+  </div>
+
+  <div class="hero-logo hero-anim hero-anim-2">
+    <svg viewBox="0 0 80 80" width="96" height="96">
+      <defs><linearGradient id="lbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="rgba(255,255,255,0.12)"/><stop offset="100%" stop-color="rgba(255,255,255,0.04)"/></linearGradient></defs>
+      <rect width="80" height="80" rx="20" fill="#1a1a2e"/><rect width="80" height="80" rx="20" fill="url(#lbg)"/>
+      <rect x="16" y="16" width="20" height="20" rx="6" fill="rgba(167,139,250,0.6)" stroke="#a78bfa" stroke-width="2"/>
+      <rect x="44" y="16" width="20" height="20" rx="6" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2"/>
+      <rect x="16" y="44" width="20" height="20" rx="6" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2"/>
+      <rect x="44" y="44" width="20" height="20" rx="6" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2"/>
+    </svg>
+  </div>
+
+  <h1 class="hero-anim hero-anim-3"><span class="gradient">让桌面触手可及</span></h1>
+  <p class="hero-desc hero-anim hero-anim-4">
+    DesktopGo 是一款现代化的 Windows 桌面启动器，集快速启动、图标管理和文件搜索于一体，灵感源自 macOS Launchpad，为 Windows 而生。
+  </p>
+
+  <div class="hero-actions hero-anim hero-anim-5">
+    <a href="https://github.com/aixbox/DesktopGo/releases/latest" target="_blank" class="btn-hero-download">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      免费下载 Windows 版
+    </a>
+    <a href="https://github.com/aixbox/DesktopGo" target="_blank" class="btn-github">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      查看源码
+    </a>
+  </div>
+
+  <div class="hero-meta hero-anim hero-anim-6">
+    <span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg>
+      Windows 10 / 11
+    </span>
+    <span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      MIT 开源
+    </span>
+    <span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      轻量极速
+    </span>
+    <span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      完全免费
+    </span>
+  </div>
+
+  <div class="hero-screenshot fade-up">
+    <img src="assets/images/icon-grid.png" alt="DesktopGo 主界面" />
+  </div>
+</section>
+
+<hr class="section-divider" />
+
+<!-- ======================== Highlights ======================== -->
+<div class="highlights">
+  <div class="highlights-grid">
+    <div class="highlight-card fade-up" data-delay="0">
+      <div class="number">Ctrl+Space</div>
+      <div class="label">全局快捷键，一键呼出</div>
+    </div>
+    <div class="highlight-card fade-up" data-delay="100">
+      <div class="number">&lt;100MB</div>
+      <div class="label">安装包极致轻量</div>
+    </div>
+    <div class="highlight-card fade-up" data-delay="200">
+      <div class="number">Everything</div>
+      <div class="label">毫秒级文件搜索</div>
+    </div>
+    <div class="highlight-card fade-up" data-delay="300">
+      <div class="number">Tauri 2</div>
+      <div class="label">现代化技术栈驱动</div>
+    </div>
+  </div>
+</div>
+
+<hr class="section-divider" />
+
+<!-- ======================== Feature 1: Launchpad ======================== -->
+<section class="section" id="features">
+  <div class="section-header fade-up">
+    <span class="section-tag tag-purple">快速启动</span>
+    <h2>你的桌面，从未如此整洁</h2>
+    <p>像 macOS Launchpad 一样管理你的 Windows 桌面图标，拖拽排序、分页浏览、文件夹管理，一切尽在掌控。</p>
+  </div>
+
+  <div class="feature-row fade-up">
+    <div class="feature-info">
+      <div class="feature-icon icon-purple">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      </div>
+      <h3>图标网格管理</h3>
+      <p>自动扫描桌面图标并以精美网格展示，支持拖拽排序和跨页移动，告别桌面图标杂乱。</p>
+      <ul class="feature-list">
+        <li><span class="check check-purple"><svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>拖拽排序，自由排列应用</li>
+        <li><span class="check check-purple"><svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>文件夹创建与管理</li>
+        <li><span class="check check-purple"><svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Dock 栏快速访问常用应用</li>
+        <li><span class="check check-purple"><svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>多页面分页与自定义应用</li>
+      </ul>
+    </div>
+    <div class="feature-visual">
+      <div class="screenshot-frame">
+        <img src="assets/images/icon-grid.png" alt="Launchpad 界面" loading="lazy" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-divider" />
+
+<!-- ======================== Feature 2: Search ======================== -->
+<section class="section" id="search" style="background: linear-gradient(180deg, transparent, rgba(59, 130, 246, 0.03), transparent);">
+  <div class="feature-row reverse fade-up">
+    <div class="feature-info">
+      <div class="feature-icon icon-blue">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </div>
+      <h3>极速文件搜索</h3>
+      <p>集成 Everything 搜索引擎，毫秒级响应，在海量文件中瞬间找到目标，配合预览面板一目了然。</p>
+      <ul class="feature-list">
+        <li><span class="check check-blue"><svg viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Everything 驱动，实时搜索</li>
+        <li><span class="check check-blue"><svg viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>文件预览与详情查看</li>
+        <li><span class="check check-blue"><svg viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>搜索历史与智能过滤</li>
+        <li><span class="check check-blue"><svg viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>键盘导航，效率至上</li>
+      </ul>
+    </div>
+    <div class="feature-visual">
+      <div class="screenshot-frame">
+        <img src="assets/images/search-panel.png" alt="搜索面板" loading="lazy" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-divider" />
+
+<!-- ======================== Feature 3: Settings ======================== -->
+<section class="section" id="settings">
+  <div class="feature-row fade-up">
+    <div class="feature-info">
+      <div class="feature-icon icon-cyan">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </div>
+      <h3>灵活个性设置</h3>
+      <p>从主题切换到快捷键配置，从图标尺寸到自动更新，一切细节都可以按你的方式定制。</p>
+      <ul class="feature-list">
+        <li><span class="check check-cyan"><svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>深色 / 浅色 / 跟随系统主题</li>
+        <li><span class="check check-cyan"><svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>自定义全局快捷键</li>
+        <li><span class="check check-cyan"><svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>图标大小与标题行数调节</li>
+        <li><span class="check check-cyan"><svg viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>GitHub Releases 自动更新</li>
+      </ul>
+    </div>
+    <div class="feature-visual">
+      <div class="screenshot-frame">
+        <img src="assets/images/settings.png" alt="设置页面" loading="lazy" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-divider" />
+
+<!-- ======================== Tech Stack ======================== -->
+<section class="tech-section">
+  <div class="section-header fade-up">
+    <span class="section-tag tag-blue">技术栈</span>
+    <h2>现代技术，可靠底座</h2>
+    <p>基于 Tauri 2 构建，前端 React + TypeScript，后端 Rust，兼具性能与开发效率。</p>
+  </div>
+  <div class="tech-grid fade-up">
+    <div class="tech-item fade-up" data-delay="0">
+      <div class="tech-icon" style="background: rgba(255, 193, 49, 0.12);">
+        <svg viewBox="0 0 1024 1024" width="28" height="28"><path d="M660.36 396.732a80.612 80.612 0 0 1-137.604 57 80.608 80.608 0 1 1 137.6-57z" fill="#FFCA28"/><path d="M444.16 546.96c-44.52 0-80.608 36.088-80.608 80.604 0 44.52 36.088 80.608 80.608 80.608 44.516 0 80.608-36.088 80.608-80.608 0-44.516-36.092-80.6-80.608-80.6z" fill="#26C6DA"/><path d="M746.8 655.04a307.808 307.808 0 0 1-106.256 43.24 216.168 216.168 0 0 0 10.628-97.464 216.2 216.2 0 0 0 135.424-140.984 216.16 216.16 0 0 0-110.92-256.84 216.176 216.176 0 0 0-271.452 67.708 359.064 359.064 0 0 0-117.98 34.44 307.756 307.756 0 0 1 345.96-212.232 307.76 307.76 0 0 1 255.552 315.316 307.744 307.744 0 0 1-140.96 246.824zM289.92 361.192l75.476 9.16a216.2 216.2 0 0 1 9.524-42.868 307.812 307.812 0 0 0-85 33.708z" fill="#FFCA28"/><path d="M276.728 369.256a307.748 307.748 0 0 1 106.988-43.6 215.804 215.804 0 0 0-12.092 97.828 216.2 216.2 0 0 0-134.56 141.432 216.16 216.16 0 0 0 209.416 278.4 216.176 216.176 0 0 0 173.192-90.08 358.988 358.988 0 0 0 117.98-34.072 307.744 307.744 0 0 1-200.008 201.692 307.752 307.752 0 0 1-279.968-47.968A307.776 307.776 0 0 1 276.72 369.26z m456.88 293.848l-1.464 0.732z" fill="#26C6DA"/></svg>
+      </div>
+      <span class="tech-name">Tauri 2</span>
+      <span class="tech-desc">桌面框架</span>
+    </div>
+    <div class="tech-item fade-up" data-delay="100">
+      <div class="tech-icon" style="background: rgba(97, 218, 251, 0.12);">
+        <svg viewBox="0 0 1024 1024" width="28" height="28"><path d="M512 511.8m-80 0a80 80 0 1 0 160 0 80 80 0 1 0-160 0Z" fill="#61DAFB"/><path d="M960.5 511.8c0-62.8-73.8-117.2-188.5-150.1 28.9-115.8 18.7-206.9-35.7-238.3-54.5-31.4-138.5 5.3-224.3 88.2-85.8-82.9-169.8-119.6-224.3-88.2-54.4 31.4-64.6 122.6-35.7 238.3C137.3 394.6 63.5 449 63.5 511.8S137.3 629 252 661.9c-28.9 115.7-18.7 206.9 35.7 238.3 13.4 7.8 28.6 11.6 45.2 11.6 39.7 0 87.8-21.8 140-64.2 13-10.6 26.1-22.6 39.1-35.2 13 12.6 26.1 24.6 39.1 35.2 52.2 42.4 100.2 64.2 140 64.2 16.6 0 31.8-3.8 45.2-11.6 54.4-31.4 64.6-122.5 35.7-238.3 114.7-32.9 188.5-87.3 188.5-150.1zM716.8 157.2c35.3 20.4 42.7 94.3 17.6 194.8-36.7-8.4-76.7-14.7-119.3-18.6-24.7-34.9-50.2-66.4-75.8-94 59.2-57.3 114.2-88.4 152-88.4 9.6-0.1 18.2 2 25.5 6.2zM637 584c-13.8 24-28.4 47-43.3 69-26.1 2-53.3 3.1-81.7 3.1-28.3 0-55.5-1.1-81.6-3.1-15-22-29.5-45.1-43.3-69-14.1-24.5-26.7-48.6-38.1-72.2 11.4-23.6 24-47.7 38.1-72.2 14.1-24.5 28.7-47.4 43.4-69.1 26.1-2 53.3-3.1 81.6-3.1 28.3 0 55.5 1.1 81.6 3.1 14.7 21.6 29.3 44.6 43.4 69 14.1 24.5 26.7 48.6 38.1 72.2-11.5 23.7-24.1 47.8-38.2 72.3z m58.8-26.4c11.2 26.6 20.4 52.1 28 76.5-24.9 5.6-51.7 10.4-80.3 14 9.3-14.5 18.4-29.3 27.3-44.6 8.8-15.4 17.1-30.7 25-45.9zM512 756.5c-17.7-19.2-35.1-40.1-52.2-62.6 17.1 0.8 34.5 1.3 52.2 1.3 17.7 0 35.1-0.5 52.2-1.3-17.1 22.5-34.5 43.4-52.2 62.6zM380.5 648.1c-28.6-3.6-55.3-8.4-80.3-14 7.6-24.4 16.8-49.9 28-76.5 7.9 15.2 16.1 30.5 25 45.9 8.9 15.2 18 30 27.3 44.6zM328.2 466c-11.2-26.6-20.4-52.1-28-76.5 24.9-5.6 51.6-10.4 80.2-14-9.2 14.4-18.4 29.2-27.2 44.6-8.8 15.4-17.1 30.7-25 45.9zM512 267.1c17.3 18.7 34.8 39.8 52.1 62.7-17.1-0.8-34.4-1.3-52.1-1.3-17.7 0-35 0.5-52.1 1.3 17.3-22.9 34.8-44 52.1-62.7z m158.7 153c-8.9-15.3-18-30.1-27.2-44.6 28.6 3.6 55.3 8.4 80.2 14-7.6 24.4-16.8 49.9-28 76.5-7.8-15.2-16.1-30.5-25-45.9zM307.2 157.2c7.2-4.2 15.8-6.2 25.6-6.2 37.8 0 92.7 31.1 151.9 88.4-25.6 27.6-51.1 59.2-75.8 94-42.5 3.9-82.6 10.2-119.3 18.6-25.1-100.6-17.6-174.5 17.6-194.8zM102.5 511.8c0-40.8 60.3-84.2 160-112.6 11.1 36 25.6 73.8 43.5 112.6-17.8 38.8-32.4 76.6-43.5 112.6-99.7-28.4-160-71.9-160-112.6z m345.8 305.5c-59.7 48.5-111.1 66.4-141.1 49.2-35.3-20.4-42.7-94.3-17.6-194.8 36.7 8.4 76.7 14.7 119.3 18.6 24.4 34.5 49.9 66.1 75.8 94.2-12.1 11.7-24.2 22.9-36.4 32.8z m268.5 49.2c-29.9 17.3-81.4-0.6-141.1-49.2-12.1-9.9-24.3-21.1-36.5-32.8 26-28.1 51.4-59.7 75.8-94.2 42.5-3.9 82.6-10.2 119.3-18.7 25.2 100.6 17.7 174.5-17.5 194.9z m44.8-242.1c-11.1-36-25.6-73.8-43.5-112.6 17.8-38.8 32.4-76.6 43.5-112.6 99.7 28.5 160 71.9 160 112.6-0.1 40.7-60.4 84.2-160 112.6z" fill="#61DAFB"/></svg>
+      </div>
+      <span class="tech-name">React 19</span>
+      <span class="tech-desc">UI 框架</span>
+    </div>
+    <div class="tech-item fade-up" data-delay="200">
+      <div class="tech-icon" style="background: rgba(49, 120, 198, 0.12);">
+        <svg viewBox="0 0 1024 1024" width="28" height="28"><path d="M0 512v512h1024V0H0z m825.216-40.8c26.016 6.5 45.824 18.048 64.032 36.9 9.44 10.08 23.424 28.416 24.544 32.864 0.352 1.28-44.192 31.136-71.168 47.9-0.992 0.64-4.9-3.584-9.248-10.08-13.216-19.2-27.008-27.488-48.128-28.928-31.072-2.144-51.04 14.112-50.848 41.248-0.032 0.48-0.032 1.024-0.032 1.6a37.655 37.655 0 0 0 4.48 17.824l-0.1-0.192c6.816 14.112 19.552 22.624 59.3 39.808 73.344 31.584 104.7 52.352 124.192 81.92C944 765.056 948.9 817.728 934.112 856.9c-16.224 42.592-56.544 71.52-113.28 81.056-17.536 3.1-59.136 2.656-77.984-0.768-41.12-7.328-80.128-27.648-104.192-54.3-9.44-10.368-27.808-37.536-26.656-39.456 0.48-0.672 4.7-3.3 9.376-6.016 4.608-2.592 21.792-12.544 38.048-21.984l29.44-17.056 6.176 9.12c8.608 13.152 27.424 31.2 38.816 37.216 32.672 17.248 77.536 14.816 99.616-5.024a37.589 37.589 0 0 0 13.408-28.8c0-0.672-0.032-1.344-0.064-1.984v0.1c0-11.872-1.5-17.056-7.68-26.016-7.936-11.36-24.192-20.9-70.368-40.96-52.832-22.752-75.552-36.864-96.384-59.3a134.88 134.88 0 0 1-27.872-50.24l-0.256-0.96c-3.872-14.464-4.864-50.72-1.792-65.312 10.88-51.072 49.408-86.624 104.992-97.184 18.048-3.424 60-2.144 77.7 2.272z m-240.384 42.752l0.352 41.952H451.84v378.72h-94.3V555.9H224.32v-41.12c0-22.784 0.48-41.824 1.12-42.24 0.512-0.672 81.632-1.024 179.936-0.864l178.976 0.512z" fill="#007ACC"/></svg>
+      </div>
+      <span class="tech-name">TypeScript</span>
+      <span class="tech-desc">类型安全</span>
+    </div>
+    <div class="tech-item fade-up" data-delay="300">
+      <div class="tech-icon" style="background: rgba(222, 120, 53, 0.12);">
+        <svg viewBox="0 0 1024 1024" width="28" height="28"><path d="M485.347556 186.360889a25.322667 25.322667 0 0 1 50.652444 0 25.322667 25.322667 0 0 1-50.652444 0M183.224889 415.658667a25.322667 25.322667 0 0 1 50.652444 0 25.322667 25.322667 0 0 1-50.652444 0m604.231111 1.180444a25.322667 25.322667 0 0 1 50.652444 0 25.322667 25.322667 0 0 1-50.652444 0m-530.922667 34.702222a23.125333 23.125333 0 0 0 11.740445-30.506666l-11.235556-25.415111h44.188445v199.182222H212.074667a311.800889 311.800889 0 0 1-10.097778-119.025778z m184.846223 4.892445V397.724444h105.230222c5.432889 0 38.378667 6.279111 38.378666 30.912 0 20.458667-25.265778 27.790222-46.044444 27.790223z m-143.665778 316.103111a25.322667 25.322667 0 0 1 50.652444 0 25.322667 25.322667 0 0 1-50.652444 0m375.246222 1.180444a25.322667 25.322667 0 0 1 50.652444 0 25.322667 25.322667 0 0 1-50.652444 0m7.829333-57.429333a23.082667 23.082667 0 0 0-27.420444 17.763556l-12.707556 59.320888a311.800889 311.800889 0 0 1-260.024889-1.244444l-12.707555-59.320889a23.082667 23.082667 0 0 0-27.406222-17.756444l-52.373334 11.242666a311.800889 311.800889 0 0 1-27.079111-31.914666h254.819556c2.887111 0 4.807111-0.526222 4.807111-3.150223V601.088c0-2.624-1.92-3.143111-4.807111-3.143111h-74.524445v-57.137778h80.604445c7.36 0 39.338667 2.104889 49.564444 42.986667 3.2 12.572444 10.24 53.468444 15.047111 66.56 4.792889 14.684444 24.298667 44.017778 45.084445 44.017778h131.562666a311.800889 311.800889 0 0 1-28.871111 33.422222z m141.496889-237.994667a311.800889 311.800889 0 0 1 0.661334 54.129778h-31.992889c-3.2 0-4.487111 2.104889-4.487111 5.240889v14.691556c0 34.581333-19.498667 42.097778-36.586667 44.017777-16.270222 1.834667-34.311111-6.812444-36.536889-16.768-9.6-53.994667-25.6-65.521778-50.858667-85.447111 31.352889-19.911111 63.971556-49.28 63.971556-88.583111 0-42.453333-29.098667-69.184-48.931556-82.289778-27.832889-18.346667-58.638222-22.016-66.951111-22.016H279.722667A311.800889 311.800889 0 0 1 454.165333 202.808889l38.997334 40.910222a23.061333 23.061333 0 0 0 32.64 0.746667l43.640889-41.735111a311.800889 311.800889 0 0 1 213.454222 152.035555l-29.873778 67.463111a23.153778 23.153778 0 0 0 11.747556 30.506667z m74.503111 1.095111l-1.016889-10.432 30.769778-28.700444c6.257778-5.831111 3.911111-17.578667-4.081778-20.558222l-39.338666-14.705778-3.079111-10.154667 24.533333-34.076444c5.006222-6.926222 0.412444-17.991111-8.014222-19.370667l-41.479111-6.748444-4.977778-9.315556 17.422222-38.257778c3.569778-7.786667-3.057778-17.749333-11.633778-17.422222l-42.097777 1.464889-6.648889-8.071111 9.671111-41.002667c1.955556-8.32-6.492444-16.782222-14.819556-14.826666l-40.995555 9.664-8.078223-6.648889 1.472-42.097778c0.327111-8.519111-9.649778-15.182222-17.422222-11.640889l-38.250666 17.436445-9.315556-4.999112-6.755556-41.479111c-1.372444-8.412444-12.444444-13.013333-19.363555-8.021333l-34.104889 24.533333-10.133333-3.072-14.705778-39.338666c-2.986667-8.014222-14.734222-10.325333-20.551111-4.096l-28.700445 30.791111-10.432-1.016889-22.165333-35.811556c-4.48-7.253333-16.483556-7.253333-20.949333 0l-22.165334 35.811556-10.432 1.016889-28.707555-30.791111c-5.824-6.229333-17.564444-3.918222-20.551111 4.096l-14.712889 39.338666-10.140445 3.072-34.097777-24.533333c-6.926222-4.999111-17.991111-0.391111-19.363556 8.021333l-6.762667 41.479111-9.315555 4.999112-38.250667-17.436445c-7.772444-3.555556-17.749333 3.121778-17.422222 11.640889l1.464889 42.097778-8.078222 6.648889-40.995556-9.671111c-8.327111-1.934222-16.782222 6.506667-14.833778 14.833777l9.656889 41.002667-6.634667 8.071111-42.097777-1.464889c-8.483556-0.248889-15.175111 9.635556-11.640889 17.422222l17.443555 38.257778-4.999111 9.315556-41.472 6.748444c-8.426667 1.365333-12.992 12.444444-8.021333 19.370667l24.533333 34.076444-3.079111 10.154667-39.338667 14.705778c-7.985778 2.986667-10.325333 14.72-4.081777 20.558222l30.776889 28.700444-1.016889 10.432-35.804445 22.158223c-7.253333 4.48-7.253333 16.483556 0 20.949333l35.804445 22.165333 1.016889 10.432-30.776889 28.707556c-6.243556 5.816889-3.904 17.550222 4.081777 20.551111l39.338667 14.705778 3.079111 10.154666-24.533333 34.083556c-4.984889 6.940444-0.398222 18.005333 8.028444 19.363556l41.464889 6.741333 4.999111 9.329778-17.443555 38.243555c-3.555556 7.772444 3.157333 17.777778 11.648 17.429334l42.076444-1.472 6.648889 8.078222-9.656889 41.016889c-1.955556 8.305778 6.506667 16.746667 14.833778 14.791111l40.995556-9.649778 8.085333 6.627556-1.472 42.104888c-0.327111 8.526222 9.649778 15.189333 17.422222 11.633778l38.250667-17.422222 9.315555 4.992 6.755556 41.457778c1.372444 8.440889 12.444444 13.006222 19.377778 8.035555l34.076444-24.554666 10.147556 3.093333 14.712889 39.324444c2.986667 7.985778 14.734222 10.339556 20.551111 4.081778l28.707555-30.776889 10.432 1.038223 22.165334 35.804444c4.465778 7.224889 16.469333 7.239111 20.949333 0l22.165333-35.804444 10.432-1.038223 28.700445 30.776889c5.816889 6.257778 17.564444 3.904 20.551111-4.081778l14.705778-39.324444 10.154666-3.093333 34.083556 24.554666c6.926222 4.970667 17.991111 0.391111 19.356444-8.035555l6.769778-41.457778 9.315556-4.999111 38.243555 17.429333c7.772444 3.555556 17.728-3.093333 17.422222-11.633778l-1.464889-42.097777 8.071112-6.634667 40.995555 9.649778c8.327111 1.955556 16.782222-6.485333 14.826667-14.791111l-9.656889-41.016889 6.627555-8.078222 42.097778 1.472c8.490667 0.341333 15.203556-9.656889 11.633778-17.429334l-17.422222-38.243555 4.977778-9.329778 41.479111-6.741333c8.440889-1.351111 13.020444-12.423111 8.014222-19.363556l-24.533333-34.083556 3.079111-10.154666 39.338666-14.705778c8-3.000889 10.339556-14.734222 4.081778-20.551111l-30.769778-28.707556 1.016889-10.432 35.804445-22.165333c7.253333-4.465778 7.260444-16.462222 0.007111-20.949333z" fill="#FF7043"/></svg>
+      </div>
+      <span class="tech-name">Rust</span>
+      <span class="tech-desc">后端运行时</span>
+    </div>
+    <div class="tech-item fade-up" data-delay="400">
+      <div class="tech-icon" style="background: rgba(56, 189, 248, 0.12);">
+        <svg viewBox="0 0 1685 1024" width="28" height="17"><path d="M842.884129 0C618.099613 0 477.646452 111.715097 421.425548 335.14529c84.298323-111.715097 182.635355-153.6 295.011097-125.687742 64.115613 15.921548 109.964387 62.16671 160.668903 113.36671 82.64671 83.373419 178.308129 179.860645 387.204129 179.860645 224.751484 0 365.237677-111.715097 421.425549-335.112258-84.26529 111.715097-182.602323 153.6-294.978065 125.65471-64.148645-15.921548-109.997419-62.16671-160.701935-113.333678C1147.408516 96.454194 1051.780129 0 842.884129 0zM421.425548 502.684903C196.674065 502.684903 56.187871 614.4 0 837.830194c84.298323-111.715097 182.635355-153.6 294.978065-125.687742 64.148645 15.921548 109.997419 62.16671 160.701935 113.366709 82.64671 83.373419 178.275097 179.860645 387.204129 179.860645 224.751484 0 365.237677-111.682065 421.425548-335.112258-84.298323 111.715097-182.635355 153.6-295.011096 125.687742-64.115613-15.954581-109.964387-62.199742-160.668904-113.366709-82.64671-83.373419-178.308129-179.893677-387.204129-179.893678z" fill="#06B6D4"/></svg>
+      </div>
+      <span class="tech-name">Tailwind CSS</span>
+      <span class="tech-desc">样式方案</span>
+    </div>
+    <div class="tech-item fade-up" data-delay="500">
+      <div class="tech-icon" style="background: rgba(124, 92, 255, 0.12); color: #7c5cff;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </div>
+      <span class="tech-name">Everything</span>
+      <span class="tech-desc">文件搜索</span>
+    </div>
+  </div>
+</section>
+
+<hr class="section-divider" />
+
+<!-- ======================== CTA ======================== -->
+<section class="cta">
+  <h2 class="fade-up">准备好重新定义你的桌面了吗？</h2>
+  <p class="fade-up">免费、开源、轻量。立即下载体验 DesktopGo。</p>
+  <a href="https://github.com/aixbox/DesktopGo/releases/latest" target="_blank" class="btn-hero-download fade-up">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    立即下载
+  </a>
+</section>
+
+<!-- ======================== Footer ======================== -->
+<footer class="footer">
+  <p>
+    &copy; 2025 DesktopGo &nbsp;&middot;&nbsp;
+    <a href="https://github.com/aixbox/DesktopGo" target="_blank">GitHub</a> &nbsp;&middot;&nbsp;
+    <a href="https://github.com/aixbox/DesktopGo/releases" target="_blank">Releases</a> &nbsp;&middot;&nbsp;
+    MIT License
+  </p>
+</footer>
+
+<!-- ======================== Scroll Animation ======================== -->
+<script>
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const delay = entry.target.dataset.delay || 0;
+      setTimeout(() => {
+        entry.target.classList.add('visible');
+      }, delay);
+      observer.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+// Header scrolled state
+const header = document.querySelector('.header');
+window.addEventListener('scroll', () => {
+  header.classList.toggle('scrolled', window.scrollY > 50);
+}, { passive: true });
+
+// 3D tilt effect on screenshot frames
+document.querySelectorAll('.hero-screenshot, .screenshot-frame').forEach(el => {
+  el.addEventListener('mousemove', e => {
+    const rect = el.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    el.style.transform = `perspective(1000px) rotateY(${x * 8}deg) rotateX(${-y * 8}deg)`;
+  });
+  el.addEventListener('mouseleave', () => {
+    el.style.transform = '';
+  });
+});
+</script>
+
+</body>
+</html>

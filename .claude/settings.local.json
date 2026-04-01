@@ -9,7 +9,9 @@
       "Bash(echo \"2. 删除图标缓存: del /A /Q \"\"%localappdata%\\\\IconCache.db\"\"\")",
       "Bash(git:*)",
       "Bash(npm run:*)",
-      "Bash(npm:*)"
+      "Bash(npm:*)",
+      "WebFetch(domain:guanjia.qq.com)",
+      "WebFetch(domain:qclaw.qq.com)"
     ]
   }
 }
