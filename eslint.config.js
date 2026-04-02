@@ -9,7 +9,7 @@ import prettierConfig from 'eslint-config-prettier'
 
 export default [
   {
-    ignores: ['dist', 'src-tauri'],
+    ignores: ['dist', 'src-tauri', '.claude', '.agents'],
   },
   {
     files: ['**/*.{ts,tsx}'],
