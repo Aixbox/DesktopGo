@@ -24,6 +24,8 @@ use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, RunEvent};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tauri_plugin_store::StoreExt;
+#[cfg(target_os = "windows")]
+use window_vibrancy::apply_acrylic;
 
 #[cfg(windows)]
 static WINDOWS_CONSOLE_APP_HANDLE: OnceCell<tauri::AppHandle> = OnceCell::new();
@@ -380,7 +382,13 @@ fn create_main_window(app: &tauri::AppHandle) {
             .center();
 
     match builder.build() {
-        Ok(_) => {
+        Ok(window) => {
+            #[cfg(target_os = "windows")]
+            // Apply native Windows acrylic effect with a very light neutral tint (matches accent vibes).
+            // Transparency and blur can be adjusted by changing the last value (tint alpha) and CSS blur.
+            if let Err(e) = apply_acrylic(&window, Some((250, 250, 250, 4))) {
+                eprintln!("Failed to apply acrylic: {}", e);
+            }
             attach_blur_handler(app);
         }
         Err(e) => {
