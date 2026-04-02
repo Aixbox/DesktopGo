@@ -13,7 +13,7 @@ import {
 import {
   CheckCircle2,
   Download,
-  Globe,
+
   LoaderCircle,
   RefreshCw,
   ShieldAlert,
@@ -336,33 +336,6 @@ export function UpdatePanel() {
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
-            <div className="flex items-start gap-3">
-              <Globe className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-foreground">更新源</p>
-                {configStatus?.configured && configStatus.endpoints.length > 0 ? (
-                  <div className="space-y-2">
-                    {configStatus.endpoints.map(endpoint => (
-                      <div
-                        key={endpoint}
-                        className="rounded-md border border-border/85 bg-background px-3 py-2 text-xs text-muted-foreground shadow-sm"
-                      >
-                        {endpoint}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
-                    建议直接指向静态
-                    <span className="mx-1 font-medium text-foreground">latest.json</span>
-                    地址。这个项目的第一版适合用 GitHub Releases 托管。
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-
           {updateInfo ? (
             <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
               <div className="flex items-start gap-3">

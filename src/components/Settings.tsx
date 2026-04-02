@@ -1778,33 +1778,6 @@ function AboutPanel() {
     }
   }, [appInfo])
 
-  const infoCards = [
-    {
-      label: '当前版本',
-      value: `v${appInfo.version}`,
-      hint: '用于定位发布说明与更新状态。',
-      mono: true,
-    },
-    {
-      label: '应用标识',
-      value: appInfo.identifier,
-      hint: '排查安装、权限或 updater 配置时会用到。',
-      mono: true,
-    },
-    {
-      label: '运行时',
-      value: `Tauri ${appInfo.tauriVersion}`,
-      hint: '当前桌面容器与应用壳版本。',
-      mono: false,
-    },
-    {
-      label: '技术栈',
-      value: 'React 19 · Vite 7 · Rust',
-      hint: '界面、构建与本地能力运行在同一桌面应用里。',
-      mono: false,
-    },
-  ]
-
   const featureCards = [
     {
       title: '启动台',
@@ -1874,27 +1847,6 @@ function AboutPanel() {
             </div>
           </div>
         </div>
-      </section>
-
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {infoCards.map(card => (
-          <article
-            key={card.label}
-            className="rounded-2xl border border-border/85 bg-card p-4 shadow-sm transition-colors hover:bg-accent"
-          >
-            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-              {card.label}
-            </p>
-            <p
-              className={`mt-3 text-base font-semibold text-foreground ${
-                card.mono ? 'break-all font-mono text-sm' : ''
-              }`}
-            >
-              {card.value}
-            </p>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">{card.hint}</p>
-          </article>
-        ))}
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
