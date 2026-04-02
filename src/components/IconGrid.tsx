@@ -67,6 +67,13 @@ const fitCount = (container: number, item: number) => {
   if (item <= 0 || container <= item) return 1
   return Math.floor((container - item) / (item + GRID_GAP)) + 1
 }
+const getFolderModalMaxAvailableWidth = () => {
+  const maxWidth =
+    typeof window === 'undefined' ? FOLDER_MODAL_MAX_WIDTH : Math.min(FOLDER_MODAL_MAX_WIDTH, window.innerWidth * 0.92)
+  return Math.max(0, maxWidth - 40)
+}
+const getDefaultFolderColumnCount = (tileWidth: number) =>
+  fitCount(getFolderModalMaxAvailableWidth(), tileWidth)
 
 const filterItemsByIds = (items: GridItem[], ids: string[]): GridItem[] => {
   const idSet = new Set(ids)
@@ -152,7 +159,9 @@ export function IconGrid({ icons }: IconGridProps) {
   const [activeFolderSharedLayoutId, setActiveFolderSharedLayoutId] = useState<string | null>(null)
   const [folderItemWidth, setFolderItemWidth] = useState<number>(columnWidth)
   const [folderItemHeight, setFolderItemHeight] = useState<number>(rowHeight)
-  const [folderColumns, setFolderColumns] = useState<number>(1)
+  const [folderColumns, setFolderColumns] = useState<number>(() =>
+    getDefaultFolderColumnCount(columnWidth)
+  )
 
   dockEnabledRef.current = dockEnabled
 
@@ -176,8 +185,15 @@ export function IconGrid({ icons }: IconGridProps) {
     }, FOLDER_SHARED_LAYOUT_WINDOW_MS)
   }
 
+  const primeFolderLayoutDefaults = () => {
+    setFolderItemWidth(columnWidth)
+    setFolderItemHeight(rowHeight)
+    setFolderColumns(getDefaultFolderColumnCount(columnWidth))
+  }
+
   const openFolderWithAnimation = (folderId: string) => {
     cancelPendingFolderClose()
+    primeFolderLayoutDefaults()
     setActiveFolderSharedLayoutId(folderId)
     setOpenFolderId(folderId)
     scheduleFolderSharedLayoutRelease(folderId)
@@ -537,8 +553,7 @@ export function IconGrid({ icons }: IconGridProps) {
       setFolderItemHeight(tileHeight)
       // Use max available width (panel max minus padding) to calculate columns,
       // so panel can then shrink to fit the actual column count.
-      const maxAvailable = Math.min(FOLDER_MODAL_MAX_WIDTH, window.innerWidth * 0.92) - 40 // 40 = padding left+right
-      setFolderColumns(fitCount(maxAvailable, tileWidth))
+      setFolderColumns(getDefaultFolderColumnCount(tileWidth))
     }
     const schedule = () => {
       cancelAnimationFrame(raf)
