@@ -18,23 +18,27 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      deployments: write
 
     steps:
       - name: checkout
         uses: actions/checkout@v4
 
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: prepare website entrypoint
         run: cp website/landing.html website/index.html
 
+      - name: install wrangler
+        run: npm install --global wrangler@4.79.0
+
       - name: deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          packageManager: npm
-          command: >-
-            pages deploy website
-            --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
-            --branch=${{ github.ref_name }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: >-
+          wrangler pages deploy website
+          --project-name="${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}"
+          --branch="${{ github.ref_name }}"
