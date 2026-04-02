@@ -109,4 +109,7 @@ FunctionEnd
 
 !macro NSIS_HOOK_POSTINSTALL
   Call MaybeInstallEverything
+  ; 写入标记文件，让应用启动后自动显示启动台窗口
+  FileOpen $0 "$INSTDIR\.show_on_launch" w
+  FileClose $0
 !macroend

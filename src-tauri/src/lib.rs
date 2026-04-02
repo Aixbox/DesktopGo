@@ -109,6 +109,13 @@ pub fn run() {
             create_main_window(app.handle());
             install_windows_console_exit_handler(app.handle());
             initialize_launchpad_shortcut(app.handle());
+
+            // 安装/更新后首次启动时，自动显示启动台窗口。
+            // 判断依据：安装器在安装目录写入的 .show_on_launch 标记文件。
+            if should_show_on_launch(app.handle()) {
+                request_main_window_show(app.handle());
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -150,6 +157,21 @@ pub fn run() {
             everything::shutdown_search_runtime(app_handle);
         }
     });
+}
+
+fn should_show_on_launch(_app: &tauri::AppHandle) -> bool {
+    let exe = std::env::current_exe().ok();
+    let marker = exe
+        .as_ref()
+        .and_then(|p| p.parent())
+        .map(|dir| dir.join(".show_on_launch"));
+    match marker {
+        Some(path) if path.exists() => {
+            let _ = std::fs::remove_file(&path);
+            true
+        }
+        _ => false,
+    }
 }
 
 fn normalize_launchpad_shortcut(shortcut: &str) -> Result<String, String> {

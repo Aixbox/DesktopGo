@@ -11,7 +11,9 @@
       "Bash(npm run:*)",
       "Bash(npm:*)",
       "WebFetch(domain:guanjia.qq.com)",
-      "WebFetch(domain:qclaw.qq.com)"
+      "WebFetch(domain:qclaw.qq.com)",
+      "WebSearch",
+      "Bash(cargo check:*)"
     ]
   }
 }
