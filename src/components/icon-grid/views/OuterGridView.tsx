@@ -1,14 +1,19 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import type {
-  MouseEvent as ReactMouseEvent,
-  PointerEvent as ReactPointerEvent,
-  RefObject,
+import {
+  useLayoutEffect,
+  useRef,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
 } from 'react'
 import { Icon } from '../../Icon'
 import type { FolderSize, GridSpan } from '../model'
 import type { PageAnchorEntry } from '../domain/topLevelLayout'
 import { FolderCreatePreview } from './FolderVisuals'
 import { OuterFolderTile } from './OuterFolderTile'
+
+const PAGE_SLIDE_MS = 280
+const PAGE_SLIDE_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
 
 interface IconConfigLike {
   imgSize: number
@@ -108,6 +113,84 @@ export function OuterGridView({
   onHoverPage,
   onSwitchPage,
 }: OuterGridViewProps) {
+  const prevPageRef = useRef(currentPage)
+  const slideTimerRef = useRef<number | null>(null)
+  const snapshotCloneRef = useRef<HTMLDivElement | null>(null)
+  const prevGridSnapshotRef = useRef<string>('')
+  const gridClipRef = useRef<HTMLDivElement | null>(null)
+
+  // Capture grid innerHTML after every render for use as the "old page" snapshot
+  useLayoutEffect(() => {
+    const grid = gridRef.current
+    if (grid && prevPageRef.current === currentPage) {
+      prevGridSnapshotRef.current = grid.innerHTML
+    }
+  })
+
+  useLayoutEffect(() => {
+    const prevPage = prevPageRef.current
+    prevPageRef.current = currentPage
+    if (prevPage === currentPage) return
+
+    const grid = gridRef.current
+    const clipContainer = gridClipRef.current
+    if (!grid || !clipContainer) return
+
+    // Clean up any in-flight animation
+    if (slideTimerRef.current !== null) {
+      window.clearTimeout(slideTimerRef.current)
+      slideTimerRef.current = null
+      grid.style.transition = ''
+      grid.style.transform = ''
+    }
+    if (snapshotCloneRef.current) {
+      snapshotCloneRef.current.remove()
+      snapshotCloneRef.current = null
+    }
+
+    const direction = currentPage > prevPage ? 1 : -1
+
+    // Create snapshot clone of the old page
+    const clone = document.createElement('div')
+    clone.className = grid.className
+    clone.style.cssText = grid.style.cssText
+    clone.style.position = 'absolute'
+    clone.style.inset = '0'
+    clone.style.pointerEvents = 'none'
+    clone.innerHTML = prevGridSnapshotRef.current
+    clipContainer.appendChild(clone)
+    snapshotCloneRef.current = clone
+
+    // Animate: old page slides out, new page slides in from opposite side
+    const slideDistance = gridWidth
+
+    // Old page: starts at 0, slides out
+    clone.style.transition = 'none'
+    clone.style.transform = 'translate3d(0, 0, 0)'
+    void clone.offsetWidth
+    clone.style.transition = `transform ${PAGE_SLIDE_MS}ms ${PAGE_SLIDE_EASING}, opacity ${PAGE_SLIDE_MS}ms ${PAGE_SLIDE_EASING}`
+    clone.style.transform = `translate3d(${-direction * slideDistance}px, 0, 0)`
+    clone.style.opacity = '0'
+
+    // New page: starts offset, slides in
+    grid.style.transition = 'none'
+    grid.style.transform = `translate3d(${direction * slideDistance}px, 0, 0)`
+    void grid.offsetWidth
+    grid.style.transition = `transform ${PAGE_SLIDE_MS}ms ${PAGE_SLIDE_EASING}`
+    grid.style.transform = 'translate3d(0, 0, 0)'
+
+    // Save new page snapshot after animation content is ready
+    prevGridSnapshotRef.current = grid.innerHTML
+
+    slideTimerRef.current = window.setTimeout(() => {
+      grid.style.transition = ''
+      grid.style.transform = ''
+      clone.remove()
+      snapshotCloneRef.current = null
+      slideTimerRef.current = null
+    }, PAGE_SLIDE_MS + 40)
+  }, [currentPage, gridWidth, gridRef])
+
   return (
     <div
       className="relative"
@@ -118,9 +201,10 @@ export function OuterGridView({
         maxHeight: '100%',
       }}
     >
-      <div
-        ref={gridRef}
-        className="grid h-full w-full content-start"
+      <div ref={gridClipRef} className="relative h-full w-full overflow-hidden">
+        <div
+          ref={gridRef}
+          className="grid h-full w-full content-start"
         style={{
           gridTemplateColumns: `repeat(${columns}, ${itemWidth}px)`,
           gridTemplateRows: `repeat(${rows}, ${itemHeight}px)`,
@@ -222,6 +306,7 @@ export function OuterGridView({
             </div>
           )
         })}
+      </div>
       </div>
 
       {canGoLeft ? (
