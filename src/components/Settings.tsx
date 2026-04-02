@@ -112,7 +112,7 @@ type AboutAppInfo = {
 const ABOUT_APP_INFO_FALLBACK: AboutAppInfo = {
   name: 'DesktopGo',
   version: '0.1.0',
-  identifier: 'com.binuo.desktopgo',
+  identifier: 'com.aixbox.desktopgo',
   tauriVersion: '2',
 }
 
