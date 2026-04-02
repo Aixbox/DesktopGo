@@ -120,6 +120,7 @@ interface UseIconGridDragWorkflowResult {
   clearEdgeSwitchTimer: () => void
   clearOuterDragInteractionForPageSwitch: () => void
   syncDockDragPreview: () => void
+  dragEdgeDirection: import('./useEdgeAutoPaging').DragEdgeDirection
 }
 
 export function useIconGridDragWorkflow({
@@ -188,7 +189,7 @@ export function useIconGridDragWorkflow({
     renderedDragStateRef.current = dragState
   }, [dragState])
 
-  const { clearEdgeSwitchTimer, maybeHandleOuterEdgeSwitch } = useEdgeAutoPaging({
+  const { clearEdgeSwitchTimer, maybeHandleOuterEdgeSwitch, dragEdgeDirection } = useEdgeAutoPaging({
     dragEdgeSwitchZone: config.dragEdgeSwitchZone,
     dragEdgeSwitchMs: config.dragEdgeSwitchMs,
     containerRef,
@@ -1901,5 +1902,6 @@ export function useIconGridDragWorkflow({
     clearEdgeSwitchTimer,
     clearOuterDragInteractionForPageSwitch,
     syncDockDragPreview,
+    dragEdgeDirection,
   }
 }

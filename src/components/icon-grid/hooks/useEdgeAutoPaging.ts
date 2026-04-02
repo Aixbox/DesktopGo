@@ -1,4 +1,4 @@
-import { useRef, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
+import { useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import { clampNumber } from '../domain/geometry'
 import { getPageCountBySlots, hasTrailingEmptyPage } from '../domain/slots'
 import type { DragState } from '../state/types'
@@ -14,9 +14,12 @@ interface UseEdgeAutoPagingParams {
   pageSizeRef: MutableRefObject<number>
 }
 
+export type DragEdgeDirection = 'left' | 'right' | null
+
 interface UseEdgeAutoPagingResult {
   clearEdgeSwitchTimer: () => void
   maybeHandleOuterEdgeSwitch: (state: DragState, x: number, y: number) => void
+  dragEdgeDirection: DragEdgeDirection
 }
 
 export function useEdgeAutoPaging({
@@ -31,6 +34,7 @@ export function useEdgeAutoPaging({
 }: UseEdgeAutoPagingParams): UseEdgeAutoPagingResult {
   const edgeSwitchTimerRef = useRef<number | null>(null)
   const edgeSwitchSignatureRef = useRef<string | null>(null)
+  const [dragEdgeDirection, setDragEdgeDirection] = useState<DragEdgeDirection>(null)
 
   const clearEdgeSwitchTimer = () => {
     if (edgeSwitchTimerRef.current !== null) {
@@ -38,6 +42,7 @@ export function useEdgeAutoPaging({
       edgeSwitchTimerRef.current = null
     }
     edgeSwitchSignatureRef.current = null
+    setDragEdgeDirection(null)
   }
 
   const scheduleEdgeSwitch = (signature: string, action: () => void) => {
@@ -74,6 +79,8 @@ export function useEdgeAutoPaging({
       clearEdgeSwitchTimer()
       return
     }
+
+    setDragEdgeDirection(nearLeft ? 'left' : 'right')
 
     const safePageSize = Math.max(1, pageSizeRef.current)
     const currentPageValue = currentPageRef.current
@@ -149,5 +156,6 @@ export function useEdgeAutoPaging({
   return {
     clearEdgeSwitchTimer,
     maybeHandleOuterEdgeSwitch,
+    dragEdgeDirection,
   }
 }

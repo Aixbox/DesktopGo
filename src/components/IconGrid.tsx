@@ -38,6 +38,7 @@ import {
 } from './icon-grid/domain/topLevelLayout'
 import { DragOverlays } from './icon-grid/views/DragOverlays'
 import { OuterGridView } from './icon-grid/views/OuterGridView'
+import { EdgeGlow } from './icon-grid/views/EdgeGlow'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
 import { DockBar } from './icon-grid/views/DockBar'
 import { getFolderChildSelectionsByIds } from './icon-grid/domain/folderPolicy'
@@ -360,6 +361,7 @@ export function IconGrid({ icons }: IconGridProps) {
     clearEdgeSwitchTimer,
     clearOuterDragInteractionForPageSwitch,
     syncDockDragPreview,
+    dragEdgeDirection,
   } = useIconGridDragWorkflow({
     config: {
       gridGap: GRID_GAP,
@@ -1082,6 +1084,8 @@ export function IconGrid({ icons }: IconGridProps) {
         className={`relative h-full w-full px-16 pt-24 ${dockEnabled ? 'pb-32' : 'pb-12'}`}
         onWheel={handleWheelPageSwitch}
       >
+        <EdgeGlow direction="left" active={dragEdgeDirection === 'left'} />
+        <EdgeGlow direction="right" active={dragEdgeDirection === 'right'} />
         <div ref={containerRef} className="flex h-full w-full items-center justify-center">
           <OuterGridView
             gridRef={gridRef}
