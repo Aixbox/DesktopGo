@@ -53,18 +53,21 @@ DesktopGo 是一个使用 Tauri 2 + React 19 + Rust 构建的 Windows 桌面启�
 <table>
   <tr>
     <td colspan="2" align="center">
-      <img src="./docs/screenshots/launchpad-main.svg" width="960" alt="DesktopGo 启动台主界面预览占位图" />
+      <img src="./website/assets/images/icon-grid.png" width="960" alt="DesktopGo 启动台主界面预览占位图" />
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="./docs/screenshots/search-panel.svg" width="470" alt="DesktopGo 搜索面板预览占位图" />
+      <img src="./website/assets/images/search-panel.png" width="470" alt="DesktopGo 搜索面板预览占位图" />
     </td>
     <td align="center">
-      <img src="./docs/screenshots/settings-overview.svg" width="470" alt="DesktopGo 设置页预览占位图" />
+      <img src="./website/assets/images/settings.png" width="470" alt="DesktopGo 设置页预览占位图" />
     </td>
   </tr>
 </table>
+
+
+
 ## ✨ 核心特性
 
 ### ⌨️ 启动台入口

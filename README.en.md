@@ -50,25 +50,24 @@ Install flow:
 
 ## 🖼 Screenshots
 
-The repository does not include final product captures yet, so the README currently uses renderable SVG placeholders from the repo. Later you can replace those files with real screenshots and keep the README layout unchanged.
-
 <table>
   <tr>
     <td colspan="2" align="center">
-      <img src="./docs/screenshots/launchpad-main.svg" width="960" alt="DesktopGo launchpad preview placeholder" />
+      <img src="./website/assets/images/icon-grid.png" width="960" alt="DesktopGo launchpad preview placeholder" />
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="./docs/screenshots/search-panel.svg" width="470" alt="DesktopGo search panel preview placeholder" />
+      <img src="./website/assets/images/search-panel.png" width="470" alt="DesktopGo search panel preview placeholder" />
     </td>
     <td align="center">
-      <img src="./docs/screenshots/settings-overview.svg" width="470" alt="DesktopGo settings preview placeholder" />
+      <img src="./website/assets/images/settings.png" width="470" alt="DesktopGo settings preview placeholder" />
     </td>
   </tr>
 </table>
 
-See [`docs/screenshots/README.md`](docs/screenshots/README.md) for screenshot file conventions.
+
+
 
 ## ✨ Highlights
 
@@ -125,11 +124,6 @@ See [`docs/screenshots/README.md`](docs/screenshots/README.md) for screenshot fi
 - [x] Settings page, icon management page, and GitHub Releases update flow
 
 ### 🔜 Next
-
-- [ ] Add real screenshots and demo animations
-- [ ] Support more entry sources beyond desktop and `customapp`
-- [ ] Improve `customapp` organization and sync ergonomics
-- [ ] Keep refining installation, update flow, and error-state documentation
 
 ## ⚠️ Current Limits
 
