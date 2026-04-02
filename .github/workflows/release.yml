@@ -35,6 +35,39 @@ jobs:
       - name: install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: prepare release metadata
+        id: release_meta
+        shell: pwsh
+        run: |
+          $packageVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tauriVersion = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $cargoToml = Get-Content src-tauri/Cargo.toml -Raw
+          $cargoVersionMatch = [regex]::Match($cargoToml, '(?m)^version\s*=\s*"([^"]+)"$')
+
+          if (-not $cargoVersionMatch.Success) {
+            throw '无法从 src-tauri/Cargo.toml 读取版本号。'
+          }
+
+          $cargoVersion = $cargoVersionMatch.Groups[1].Value
+
+          if ($packageVersion -ne $tauriVersion -or $packageVersion -ne $cargoVersion) {
+            throw "版本号不一致：package.json=$packageVersion, tauri.conf.json=$tauriVersion, Cargo.toml=$cargoVersion"
+          }
+
+          $releaseNotesPath = "docs/RELEASE_NOTES/v$packageVersion.md"
+          if (-not (Test-Path -LiteralPath $releaseNotesPath)) {
+            throw "未找到发布说明文件：$releaseNotesPath"
+          }
+
+          $releaseBody = Get-Content -LiteralPath $releaseNotesPath -Raw -Encoding UTF8
+          $delimiter = [guid]::NewGuid().Guid
+
+          "version=$packageVersion" >> $env:GITHUB_OUTPUT
+          "release_notes_path=$releaseNotesPath" >> $env:GITHUB_OUTPUT
+          "release_body<<$delimiter" >> $env:GITHUB_OUTPUT
+          $releaseBody >> $env:GITHUB_OUTPUT
+          $delimiter >> $env:GITHUB_OUTPUT
+
       - name: build and publish release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -42,8 +75,11 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v__VERSION__
-          releaseName: DesktopGo v__VERSION__
-          releaseBody: See the attached assets for this DesktopGo release.
+          tagName: v${{ steps.release_meta.outputs.version }}
+          releaseName: DesktopGo v${{ steps.release_meta.outputs.version }}
+          releaseBody: ${{ steps.release_meta.outputs.release_body }}
           releaseDraft: true
           prerelease: false
+          generateReleaseNotes: false
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
