@@ -1,4 +1,4 @@
-﻿import {
+import {
   useCallback,
   useEffect,
   useMemo,
@@ -15,6 +15,7 @@ import { translate, useI18n } from '@/lib/i18n'
 import { applyTheme, getSavedTheme } from '@/lib/theme'
 import { getSearchPreview, recordSearchResultRun } from '@/lib/search/api'
 import { getSearchFilterLabel, getSearchFilterOptions } from '@/lib/search/filters'
+import { SearchFloatingMenu } from '@/components/search/SearchFloatingMenu'
 import { useSearch } from '@/lib/search/useSearch'
 import { SearchPanel } from '@/components/search/SearchPanel'
 import { LAUNCHPAD_LAYOUT_RESET_EVENT } from '@/components/icon-grid/services/layoutStore'
@@ -56,6 +57,7 @@ const LONG_PRESS_MS = 420
 const ICON_SEARCH_LIMIT = 48
 const SETTINGS_WINDOW_WIDTH = 800
 const SETTINGS_WINDOW_HEIGHT = 600
+const SEARCH_FLOATING_MENU_SELECTOR = '[data-search-floating-menu="true"]'
 
 async function ensureSettingsWindowMinSize(settingsWindow: WebviewWindow) {
   const minSize = new LogicalSize(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
@@ -148,6 +150,7 @@ export function Launchpad() {
   const longPressTriggeredRef = useRef(false)
   const backgroundPointerStartedRef = useRef(false)
   const filterMenuRef = useRef<HTMLDivElement | null>(null)
+  const filterButtonRef = useRef<HTMLButtonElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const [isSearchPanelOpen, setIsSearchPanelOpen] = useState(false)
   const [isSearchPreviewVisible, setIsSearchPreviewVisible] = useState(true)
@@ -252,7 +255,10 @@ export function Launchpad() {
     if (!isFilterMenuOpen) return
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (!filterMenuRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node
+      const clickedFilterButton = filterButtonRef.current?.contains(target) ?? false
+
+      if (!filterMenuRef.current?.contains(target) && !clickedFilterButton) {
         setIsFilterMenuOpen(false)
       }
     }
@@ -354,7 +360,7 @@ export function Launchpad() {
     !target.closest('[data-dock]') &&
     !target.closest('[data-dock-menu="true"]') &&
     !target.closest('[data-search-placeholder]') &&
-    !target.closest('[data-search-floating-menu="true"]') &&
+    !target.closest(SEARCH_FLOATING_MENU_SELECTOR) &&
     !target.closest('[data-pagination]') &&
     !target.closest('[data-selection-toolbar]')
 
@@ -543,7 +549,7 @@ export function Launchpad() {
       if (isSearchInput) {
         return
       }
-      if (target?.closest('[data-search-floating-menu="true"]')) {
+      if (target?.closest(SEARCH_FLOATING_MENU_SELECTOR)) {
         return
       }
       if (isEditable) {
@@ -571,7 +577,7 @@ export function Launchpad() {
 
       if (isEditable) return
       if (target?.closest('[data-search-placeholder]')) return
-      if (target?.closest('[data-search-floating-menu="true"]')) return
+      if (target?.closest(SEARCH_FLOATING_MENU_SELECTOR)) return
       if (target?.closest('[data-dock-menu="true"]')) return
       if (document.querySelector('[data-folder-modal="true"]')) return
       if (isSearchPanelVisible || hasSearchKeyword) return
@@ -598,7 +604,7 @@ export function Launchpad() {
     backgroundPointerStartedRef.current = false
     const clickedOutsideSearch =
       !target.closest('[data-search-placeholder]') &&
-      !target.closest('[data-search-floating-menu="true"]') &&
+      !target.closest(SEARCH_FLOATING_MENU_SELECTOR) &&
       !target.closest('[data-dock-menu="true"]')
 
     if (isSearchPanelOpen && clickedOutsideSearch && isTrueBackgroundClick) {
@@ -683,7 +689,7 @@ export function Launchpad() {
             data-search-placeholder
             className="absolute inset-x-0 top-6 z-40 mx-auto w-full max-w-2xl px-6"
           >
-            <div className="relative min-w-0" ref={filterMenuRef}>
+            <div className="relative min-w-0">
               <input
                 ref={searchInputRef}
                 data-search-placeholder
@@ -717,6 +723,7 @@ export function Launchpad() {
               {searchSource === 'everything' ? (
                 <div className="absolute right-2 top-1/2 -translate-y-1/2">
                   <button
+                    ref={filterButtonRef}
                     data-search-placeholder
                     type="button"
                     className="launchpad-glass-button inline-flex h-8 items-center gap-1 rounded-full px-3 text-xs transition-colors"
@@ -726,33 +733,36 @@ export function Launchpad() {
                     <ChevronDown className="h-3.5 w-3.5" />
                   </button>
 
-                  {isFilterMenuOpen ? (
-                    <div
-                      data-search-floating-menu="true"
-                      className="launchpad-glass-panel-strong absolute left-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-2xl p-1.5 shadow-2xl"
-                    >
-                      {searchFilterOptions.map(entry => (
-                        <button
-                          key={entry.value}
-                          type="button"
-                          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
-                            searchFilter === entry.value
-                              ? 'bg-accent text-foreground'
-                              : 'text-foreground/70 hover:bg-accent hover:text-foreground'
-                          }`}
-                          onClick={() => {
-                            setSearchFilter(entry.value)
-                            setIsFilterMenuOpen(false)
-                          }}
-                        >
-                          <span>{entry.label}</span>
-                          {searchFilter === entry.value ? (
-                            <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
-                          ) : null}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
+                  <SearchFloatingMenu
+                    open={isFilterMenuOpen}
+                    triggerRef={filterButtonRef}
+                    menuRef={filterMenuRef}
+                    width={192}
+                    align="start"
+                    className="launchpad-glass-panel-strong overflow-hidden rounded-2xl shadow-2xl"
+                    contentClassName="p-1.5"
+                  >
+                    {searchFilterOptions.map(entry => (
+                      <button
+                        key={entry.value}
+                        type="button"
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
+                          searchFilter === entry.value
+                            ? 'bg-accent text-foreground'
+                            : 'text-foreground/70 hover:bg-accent hover:text-foreground'
+                        }`}
+                        onClick={() => {
+                          setSearchFilter(entry.value)
+                          setIsFilterMenuOpen(false)
+                        }}
+                      >
+                        <span>{entry.label}</span>
+                        {searchFilter === entry.value ? (
+                          <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
+                        ) : null}
+                      </button>
+                    ))}
+                  </SearchFloatingMenu>
                 </div>
               ) : null}
             </div>
