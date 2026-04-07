@@ -113,4 +113,5 @@ jobs:
           prerelease: false
           fail_on_unmatched_files: true
           files: |
+            src-tauri/target/release/bundle/nsis/DesktopGo_${{ steps.release_meta.outputs.version }}_x64-setup-zh-CN.exe
             src-tauri/target/release/bundle/nsis/DesktopGo_${{ steps.release_meta.outputs.version }}_x64-setup-en-US.exe
