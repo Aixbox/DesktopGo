@@ -341,8 +341,7 @@ export function Launchpad() {
   }
 
   const requestCloseLaunchpad = useCallback(() => {
-    void getCurrentWindow()
-      .hide()
+    void invoke('toggle_window')
       .catch(error => {
         console.error('Failed to hide launchpad window:', error)
       })
@@ -499,6 +498,10 @@ export function Launchpad() {
 
       if (key === 'Escape') {
         preventDefault()
+        if (isSearchPanelVisible && !hasSearchKeyword) {
+          requestCloseLaunchpad()
+          return
+        }
         if (isSearchPanelVisible) {
           setIsSearchPanelOpen(false)
           return
