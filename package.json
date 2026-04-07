@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:installer:zh": "pnpm tauri build --bundles nsis --ci --config src-tauri/tauri.nsis.zh.conf.json",
+    "build:installer:en": "pnpm tauri build --bundles nsis --ci --config src-tauri/tauri.nsis.en.conf.json",
+    "build:installers": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-installers.ps1",
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "node --experimental-strip-types src/lib/iconManager.test.js",

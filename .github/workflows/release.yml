@@ -69,6 +69,7 @@ jobs:
           $delimiter >> $env:GITHUB_OUTPUT
 
       - name: build and publish release
+        id: tauri_release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -83,3 +84,18 @@ jobs:
           generateReleaseNotes: false
           uploadUpdaterJson: true
           uploadUpdaterSignatures: true
+          releaseAssetNamePattern: "[name]_[version]_[arch][setup]-zh-CN[ext]"
+
+      - name: build localized installers
+        shell: pwsh
+        run: pnpm run build:installers
+
+      - name: upload localized installers
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.release_meta.outputs.version }}
+          draft: true
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: |
+            src-tauri/target/release/bundle/nsis/DesktopGo_${{ steps.release_meta.outputs.version }}_x64-setup-en-US.exe

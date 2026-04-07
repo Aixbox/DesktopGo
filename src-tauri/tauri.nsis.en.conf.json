@@ -1,0 +1,18 @@
+{
+  "build": {
+    "beforeBuildCommand": ""
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false,
+    "shortDescription": "Desktop launcher for Windows with app launching, icon management, and file search.",
+    "longDescription": "DesktopGo is a desktop launcher for Windows that brings app launching, icon management, and Everything-powered file search into a single entry point, with fullscreen presentation, global shortcut activation, and in-app updates.",
+    "windows": {
+      "nsis": {
+        "languages": ["English"],
+        "customLanguageFiles": {
+          "English": "nsis/English.nsh"
+        }
+      }
+    }
+  }
+}

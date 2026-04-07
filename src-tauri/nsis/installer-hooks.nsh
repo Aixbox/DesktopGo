@@ -3,8 +3,10 @@ Var EverythingInstallerPath
 Var InstallEverythingCheckbox
 Var InstallEverythingCheckboxState
 
+!define MUI_UNICON "${__FILEDIR__}\..\icons\icon.ico"
+
 ; Override the default NSIS welcome copy so it doesn't tell users to close all apps.
-!define MUI_WELCOMEPAGE_TEXT "此程序将引导你完成 $(^NameDA) 的安装。$\r$\n$\r$\n安装前，建议先关闭正在运行的相关程序，以避免文件被占用，并减少安装后需要重新启动计算机的可能性。$\r$\n$\r$\n$_CLICK"
+!define MUI_WELCOMEPAGE_TEXT "$(muiWelcomePageText)"
 Page custom PageEverythingInstall PageLeaveEverythingInstall
 
 Function DetectEverythingInstalled
@@ -54,7 +56,7 @@ Function MaybeInstallEverything
   Goto done
 
 installer_missing:
-  MessageBox MB_OK|MB_ICONEXCLAMATION "未找到随 DesktopGo 打包的 Everything 安装程序。$\r$\n搜索功能在安装 Everything 前不可用。"
+  MessageBox MB_OK|MB_ICONEXCLAMATION "$(everythingInstallerMissing)"
 
 done:
 FunctionEnd
@@ -62,7 +64,7 @@ FunctionEnd
 Function PageEverythingInstall
   Call DetectEverythingInstalled
 
-  !insertmacro MUI_HEADER_TEXT "搜索组件" "选择是否安装 Everything"
+  !insertmacro MUI_HEADER_TEXT "$(everythingPageTitle)" "$(everythingPageSubtitle)"
 
   nsDialogs::Create 1018
   Pop $0
@@ -70,28 +72,28 @@ Function PageEverythingInstall
     Abort
   ${EndIf}
 
-  ${NSD_CreateLabel} 0 0 100% 24u "DesktopGo 的文件搜索仅支持安装版 Everything。"
+  ${NSD_CreateLabel} 0 0 100% 24u "$(everythingPageDescription)"
   Pop $0
 
   ${If} $EverythingDetected == "1"
-    ${NSD_CreateLabel} 0 24u 100% 24u "已检测到安装版 Everything，本次安装将自动跳过该步骤。"
+    ${NSD_CreateLabel} 0 24u 100% 24u "$(everythingDetectedDescription)"
     Pop $0
 
-    ${NSD_CreateCheckbox} 0 58u 100% 12u "安装 Everything"
+    ${NSD_CreateCheckbox} 0 58u 100% 12u "$(everythingInstallCheckbox)"
     Pop $InstallEverythingCheckbox
     SendMessage $InstallEverythingCheckbox ${BM_SETCHECK} ${BST_CHECKED} 0
     EnableWindow $InstallEverythingCheckbox 0
     StrCpy $InstallEverythingCheckboxState ${BST_UNCHECKED}
   ${Else}
-    ${NSD_CreateLabel} 0 24u 100% 24u "未检测到安装版 Everything。你可以在安装 DesktopGo 时一并安装。"
+    ${NSD_CreateLabel} 0 24u 100% 24u "$(everythingNotDetectedDescription)"
     Pop $0
 
-    ${NSD_CreateCheckbox} 0 58u 100% 12u "安装 Everything（推荐）"
+    ${NSD_CreateCheckbox} 0 58u 100% 12u "$(everythingInstallRecommendedCheckbox)"
     Pop $InstallEverythingCheckbox
     SendMessage $InstallEverythingCheckbox ${BM_SETCHECK} ${BST_CHECKED} 0
     StrCpy $InstallEverythingCheckboxState ${BST_CHECKED}
 
-    ${NSD_CreateLabel} 0 80u 100% 24u "如果取消勾选，DesktopGo 安装后搜索功能将不可用。"
+    ${NSD_CreateLabel} 0 80u 100% 24u "$(everythingSearchUnavailableNotice)"
     Pop $0
   ${EndIf}
 
@@ -109,6 +111,10 @@ FunctionEnd
 
 !macro NSIS_HOOK_POSTINSTALL
   Call MaybeInstallEverything
+  WriteRegStr HKCU "${MANUPRODUCTKEY}" "Installer Language" $LANGUAGE
+  FileOpen $1 "$INSTDIR\.install_language" w
+  FileWrite $1 "$(installLanguageCode)"
+  FileClose $1
   ; 写入标记文件，让应用启动后自动显示启动台窗口
   FileOpen $0 "$INSTDIR\.show_on_launch" w
   FileClose $0

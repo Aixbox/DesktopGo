@@ -40,7 +40,10 @@ const MAIN_WINDOW_FOCUS_RETRY_DELAY_MS: u64 = 40;
 pub(crate) const DEFAULT_LAUNCHPAD_SHORTCUT: &str = "Ctrl+Space";
 const DEFAULT_LAUNCH_ON_STARTUP: bool = true;
 const LAUNCH_ON_STARTUP_SETTING_KEY: &str = "launchOnStartup";
+const LANGUAGE_SETTING_KEY: &str = "language";
 const WINDOWS_RUN_VALUE_NAME: &str = "DesktopGo";
+const INSTALL_LANGUAGE_MARKER_FILE_NAME: &str = ".install_language";
+const SHOW_ON_LAUNCH_MARKER_FILE_NAME: &str = ".show_on_launch";
 
 struct MainWindowState {
     ready: AtomicBool,
@@ -89,8 +92,14 @@ pub fn run() {
 
     let app = builder
         .setup(|app| {
-            let show_item = MenuItem::with_id(app, "show", "显示启动台", true, None::<&str>)?;
-            let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+            let initial_language = initialize_app_language(app.handle());
+            let (show_label, quit_label) = match initial_language {
+                "en" => ("Show Launchpad", "Quit"),
+                _ => ("显示启动台", "退出"),
+            };
+
+            let show_item = MenuItem::with_id(app, "show", show_label, true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", quit_label, true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
@@ -175,7 +184,7 @@ fn should_show_on_launch(_app: &tauri::AppHandle) -> bool {
     let marker = exe
         .as_ref()
         .and_then(|p| p.parent())
-        .map(|dir| dir.join(".show_on_launch"));
+        .map(|dir| dir.join(SHOW_ON_LAUNCH_MARKER_FILE_NAME));
     match marker {
         Some(path) if path.exists() => {
             let _ = std::fs::remove_file(&path);
@@ -183,6 +192,72 @@ fn should_show_on_launch(_app: &tauri::AppHandle) -> bool {
         }
         _ => false,
     }
+}
+
+fn normalize_app_language(value: &str) -> Option<&'static str> {
+    match value.trim() {
+        "zh" => Some("zh"),
+        "en" => Some("en"),
+        _ => None,
+    }
+}
+
+fn read_saved_language(app: &tauri::AppHandle) -> Option<&'static str> {
+    app.store("settings.json").ok().and_then(|store| {
+        store
+            .get(LANGUAGE_SETTING_KEY)
+            .and_then(|value| value.as_str().and_then(normalize_app_language))
+    })
+}
+
+fn save_language_setting(app: &tauri::AppHandle, language: &str) -> Result<(), String> {
+    let store = app
+        .store("settings.json")
+        .map_err(|error| format!("无法打开本地语言设置存储：{}", error))?;
+    store.set(LANGUAGE_SETTING_KEY, language.to_string());
+    store
+        .save()
+        .map_err(|error| format!("无法保存界面语言设置：{}", error))
+}
+
+fn consume_install_language_marker() -> Option<&'static str> {
+    let marker = std::env::current_exe()
+        .ok()
+        .as_ref()
+        .and_then(|path| path.parent())
+        .map(|dir| dir.join(INSTALL_LANGUAGE_MARKER_FILE_NAME));
+
+    let Some(path) = marker else {
+        return None;
+    };
+
+    let language = std::fs::read_to_string(&path)
+        .ok()
+        .as_deref()
+        .and_then(normalize_app_language);
+    let _ = std::fs::remove_file(&path);
+    language
+}
+
+fn initialize_app_language(app: &tauri::AppHandle) -> &'static str {
+    let saved_language = read_saved_language(app);
+    let install_language = consume_install_language_marker();
+
+    if let Some(language) = saved_language {
+        return language;
+    }
+
+    if let Some(language) = install_language {
+        if let Err(error) = save_language_setting(app, language) {
+            eprintln!(
+                "Warning: Failed to persist installer language setting `{}`: {}",
+                language, error
+            );
+        }
+        return language;
+    }
+
+    "zh"
 }
 
 fn read_saved_launch_on_startup(app: &tauri::AppHandle) -> Option<bool> {
