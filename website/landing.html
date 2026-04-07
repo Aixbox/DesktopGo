@@ -65,6 +65,7 @@
       html {
         scroll-behavior: smooth;
         font-size: 16px;
+        overflow-x: clip;
       }
       body {
         font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
@@ -81,7 +82,7 @@
           100% 100%,
           100% 100%;
         background-attachment: fixed;
-        overflow-x: hidden;
+        overflow-x: clip;
         line-height: 1.6;
       }
       a {
@@ -134,12 +135,15 @@
         top: 0;
         left: 0;
         right: 0;
+        width: 100%;
+        max-width: 100vw;
         z-index: 100;
         padding: 0 48px;
         height: 72px;
         display: flex;
         align-items: center;
         justify-content: space-between;
+        overflow-x: clip;
         background: transparent;
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
@@ -534,7 +538,8 @@
       .section {
         padding: 120px 24px;
         position: relative;
-        overflow: visible;
+        overflow-x: clip;
+        overflow-y: visible;
       }
       .section::before {
         content: '';
@@ -711,7 +716,8 @@
       .highlights {
         padding: 80px 24px;
         position: relative;
-        overflow: visible;
+        overflow-x: clip;
+        overflow-y: visible;
         background: linear-gradient(
           180deg,
           transparent 0%,
@@ -796,7 +802,8 @@
         padding: 100px 24px;
         text-align: center;
         position: relative;
-        overflow: visible;
+        overflow-x: clip;
+        overflow-y: visible;
       }
       .tech-section::before {
         content: '';
@@ -880,7 +887,8 @@
         position: relative;
         padding: 120px 24px;
         text-align: center;
-        overflow: visible;
+        overflow-x: clip;
+        overflow-y: visible;
       }
       .cta::before {
         content: '';
@@ -934,15 +942,25 @@
       @media (max-width: 900px) {
         .header {
           padding: 0 24px;
+          justify-content: flex-start;
+        }
+        .header-logo {
+          flex: 1 1 auto;
+          min-width: 0;
         }
         .header-nav {
           display: none;
         }
         .header-mobile-actions {
           display: flex;
+          flex: 0 0 auto;
+          margin-left: auto;
+          justify-content: flex-end;
+          white-space: nowrap;
         }
         .header-mobile-download {
           display: inline-flex;
+          white-space: nowrap;
         }
         .feature-row,
         .feature-row.reverse {
@@ -979,6 +997,31 @@
         }
       }
       @media (max-width: 540px) {
+        .header {
+          padding: 0 16px;
+        }
+        .header-logo {
+          gap: 10px;
+          overflow: hidden;
+        }
+        .header-logo span {
+          font-size: 18px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .header-mobile-actions {
+          gap: 8px;
+        }
+        .header-mobile-actions .lang-switch {
+          padding: 3px;
+        }
+        .header-mobile-actions .lang-switch button {
+          padding: 4px 8px;
+        }
+        .header-mobile-download {
+          padding: 8px 14px;
+        }
         .section {
           padding: 48px 16px;
         }
@@ -1009,6 +1052,50 @@
         }
         .footer {
           padding: 24px 16px;
+        }
+      }
+      @media (max-width: 360px) {
+        .header {
+          padding: 0 12px;
+        }
+        .header-logo {
+          gap: 8px;
+        }
+        .header-logo svg {
+          width: 32px;
+          height: 32px;
+          flex-shrink: 0;
+        }
+        .header-logo span {
+          font-size: 16px;
+        }
+        .header-mobile-actions {
+          gap: 6px;
+        }
+        .header-mobile-actions .lang-switch {
+          font-size: 12px;
+          padding: 2px;
+        }
+        .header-mobile-actions .lang-switch button {
+          padding: 3px 7px;
+        }
+        .header-mobile-download {
+          position: relative;
+          min-width: 40px;
+          justify-content: center;
+          gap: 0;
+          padding: 8px 0;
+        }
+        .header-mobile-download span {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
         }
       }
 
