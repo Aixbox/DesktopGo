@@ -1,5 +1,6 @@
 ﻿import { invoke } from '@tauri-apps/api/core'
 import type { SearchSort } from './types'
+import { translate } from '@/lib/i18n'
 
 export type SearchDefaultFilter =
   | 'all'
@@ -317,16 +318,18 @@ export const saveLastFilter = async (filter: SearchDefaultFilter): Promise<void>
 
 export const describeSearchRuntimeError = (message: string) => {
   if (message.startsWith('EverythingNotFound')) {
-    return '未找到已安装的 Everything。请通过 DesktopGo 安装程序完成安装。'
+    return translate('未找到已安装的 Everything。请通过 DesktopGo 安装程序完成安装。')
   }
   if (message.startsWith('EverythingIpcUnavailable')) {
-    return 'DesktopGo 无法连接正在运行的 Everything。请确认 Everything 已启动，并且两个应用使用相同的权限级别。'
+    return translate(
+      'DesktopGo 无法连接正在运行的 Everything。请确认 Everything 已启动，并且两个应用使用相同的权限级别。'
+    )
   }
   if (message.startsWith('EverythingBusy')) {
-    return 'DesktopGo 正在等待上一个 Everything IPC 请求完成。'
+    return translate('DesktopGo 正在等待上一个 Everything IPC 请求完成。')
   }
   if (message === 'Everything runtime startup timed out.') {
-    return 'DesktopGo 在准备 Everything 时超时，请重试搜索。'
+    return translate('DesktopGo 在准备 Everything 时超时，请重试搜索。')
   }
   return message
 }

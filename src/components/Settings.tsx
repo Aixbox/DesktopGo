@@ -24,6 +24,7 @@ import {
 } from '@/lib/iconManager'
 import { cn } from '@/lib/utils'
 import { useIconStore } from '@/stores/iconStore'
+import { translate, useI18n } from '@/lib/i18n'
 import { applyTheme, saveTheme } from '@/lib/theme'
 import { DEFAULT_LAUNCHPAD_SHORTCUT, getSetting, setSetting } from '@/lib/settingsStore'
 import {
@@ -47,6 +48,7 @@ import type {
   IconManagerViewMode,
   IconMutationTarget,
   IconSize,
+  AppLanguage,
   ThemeMode,
   TitleLineCount,
   WindowMode,
@@ -112,6 +114,11 @@ const THEME_OPTIONS: { label: string; value: ThemeMode }[] = [
   { label: '跟随系统', value: 'system' },
   { label: '深色模式', value: 'dark' },
   { label: '浅色模式', value: 'light' },
+]
+
+const LANGUAGE_OPTIONS: { label: string; value: AppLanguage }[] = [
+  { label: '简体中文', value: 'zh' },
+  { label: 'English', value: 'en' },
 ]
 
 type AboutAppInfo = {
@@ -363,7 +370,7 @@ function formatShortcutForDisplay(shortcut: string) {
     .filter(Boolean)
 
   if (tokens.length === 0) {
-    return '未设置'
+    return translate('未设置')
   }
 
   return tokens.map(formatShortcutToken).join(' + ')
@@ -394,13 +401,13 @@ function buildShortcutFromKeyDown(event: KeyboardEvent<HTMLInputElement>) {
 
   if (!hasModifier) {
     return {
-      error: '快捷键至少需要一个修饰键，例如 Ctrl + Space。',
+      error: translate('快捷键至少需要一个修饰键，例如 Ctrl + Space。'),
     }
   }
 
   if (!event.code || event.code === 'Unidentified' || SHORTCUT_MODIFIER_CODES.has(event.code)) {
     return {
-      error: '请在按住修饰键后，再按一个主键，例如 Space、K 或 F1。',
+      error: translate('请在按住修饰键后，再按一个主键，例如 Space、K 或 F1。'),
     }
   }
 
@@ -453,6 +460,7 @@ function WindowControlButton({
 }
 
 function SettingsPanel() {
+  const { language, setLanguage } = useI18n()
   const { iconSize, windowMode, titleLineCount, dockEnabled, setDockEnabled } = useIconStore()
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark')
   const [launchOnStartupEnabled, setLaunchOnStartupEnabled] = useState(true)
@@ -499,9 +507,9 @@ function SettingsPanel() {
           }
         } catch (error) {
           console.error('Failed to load launch on startup state:', error)
-          toast.error('读取系统开机自启状态失败，已回退到本地设置。', {
+          toast.error(translate('读取系统开机自启状态失败，已回退到本地设置。'), {
             key: 'settings-launch-on-startup',
-            title: '开机自启',
+            title: translate('开机自启'),
           })
         }
 
@@ -517,9 +525,9 @@ function SettingsPanel() {
         setLaunchpadShortcutDraft(formatShortcutForInput(savedLaunchpadShortcut))
       } catch (e) {
         console.error('Failed to load settings:', e)
-        toast.error(`加载设置失败：${String(e)}`, {
+        toast.error(translate('加载设置失败：{error}', { error: String(e) }), {
           key: 'settings-general',
-          title: '设置',
+          title: translate('设置'),
         })
       } finally {
         void getCurrentWindow().show()
@@ -573,18 +581,18 @@ function SettingsPanel() {
       setLaunchOnStartupEnabled(nextEnabled)
       toast.success(
         nextEnabled
-          ? '已开启开机自启，Windows 登录后会自动启动 DesktopGo。'
-          : '已关闭开机自启，Windows 登录后不会自动启动 DesktopGo。',
+          ? translate('已开启开机自启，Windows 登录后会自动启动 DesktopGo。')
+          : translate('已关闭开机自启，Windows 登录后不会自动启动 DesktopGo。'),
         {
           key: 'settings-launch-on-startup',
-          title: '开机自启',
+          title: translate('开机自启'),
         }
       )
     } catch (error) {
       console.error('Failed to update launch on startup state:', error)
-      toast.error(`更新开机自启失败：${String(error)}`, {
+      toast.error(translate('更新开机自启失败：{error}', { error: String(error) }), {
         key: 'settings-launch-on-startup',
-        title: '开机自启',
+        title: translate('开机自启'),
       })
     } finally {
       setIsSavingLaunchOnStartup(false)
@@ -598,9 +606,9 @@ function SettingsPanel() {
     }
 
     setIsRecordingShortcut(true)
-    toast.info('开始录制快捷键，请按下新的组合键。', {
+    toast.info(translate('开始录制快捷键，请按下新的组合键。'), {
       key: 'settings-shortcut',
-      title: '启动台快捷键',
+      title: translate('启动台快捷键'),
     })
     window.setTimeout(() => {
       shortcutInputRef.current?.focus()
@@ -640,19 +648,24 @@ function SettingsPanel() {
 
     const result = buildShortcutFromKeyDown(event)
     if (!result.shortcut) {
-      toast.error(result.error ?? '未能识别该快捷键。', {
+      toast.error(result.error ?? translate('未能识别该快捷键。'), {
         key: 'settings-shortcut',
-        title: '启动台快捷键',
+        title: translate('启动台快捷键'),
       })
       return
     }
 
     setLaunchpadShortcutDraft(result.shortcut)
     setIsRecordingShortcut(false)
-    toast.success(`已捕获 ${formatShortcutForDisplay(result.shortcut)}，点击“保存快捷键”后生效。`, {
-      key: 'settings-shortcut',
-      title: '启动台快捷键',
-    })
+    toast.success(
+      translate('已捕获 {shortcut}，点击“保存快捷键”后生效。', {
+        shortcut: formatShortcutForDisplay(result.shortcut),
+      }),
+      {
+        key: 'settings-shortcut',
+        title: translate('启动台快捷键'),
+      }
+    )
   }
 
   const handleShortcutInputBlur = () => {
@@ -668,11 +681,15 @@ function SettingsPanel() {
     setLaunchpadShortcutDraft(formatShortcutForInput(DEFAULT_LAUNCHPAD_SHORTCUT))
     toast.info(
       launchpadShortcut === DEFAULT_LAUNCHPAD_SHORTCUT
-        ? `当前已经是默认快捷键：${formatShortcutForDisplay(DEFAULT_LAUNCHPAD_SHORTCUT)}。`
-        : `已恢复默认值 ${formatShortcutForDisplay(DEFAULT_LAUNCHPAD_SHORTCUT)}，点击“保存快捷键”后生效。`,
+        ? translate('当前已经是默认快捷键：{shortcut}。', {
+            shortcut: formatShortcutForDisplay(DEFAULT_LAUNCHPAD_SHORTCUT),
+          })
+        : translate('已恢复默认值 {shortcut}，点击“保存快捷键”后生效。', {
+            shortcut: formatShortcutForDisplay(DEFAULT_LAUNCHPAD_SHORTCUT),
+          }),
       {
         key: 'settings-shortcut',
-        title: '启动台快捷键',
+        title: translate('启动台快捷键'),
       }
     )
   }
@@ -686,9 +703,9 @@ function SettingsPanel() {
     const draftShortcut = normalizeShortcutDraftText(launchpadShortcutDraft)
 
     if (!draftShortcut) {
-      toast.error('请输入快捷键，例如 Ctrl+Space 或 Ctrl+Alt+K。', {
+      toast.error(translate('请输入快捷键，例如 Ctrl+Space 或 Ctrl+Alt+K。'), {
         key: 'settings-shortcut',
-        title: '启动台快捷键',
+        title: translate('启动台快捷键'),
       })
       return
     }
@@ -720,15 +737,20 @@ function SettingsPanel() {
 
       setLaunchpadShortcut(normalizedShortcut)
       setLaunchpadShortcutDraft(formatShortcutForInput(normalizedShortcut))
-      toast.success(`启动台快捷键已更新为 ${formatShortcutForDisplay(normalizedShortcut)}。`, {
-        key: 'settings-shortcut',
-        title: '启动台快捷键',
-      })
+      toast.success(
+        translate('启动台快捷键已更新为 {shortcut}。', {
+          shortcut: formatShortcutForDisplay(normalizedShortcut),
+        }),
+        {
+          key: 'settings-shortcut',
+          title: translate('启动台快捷键'),
+        }
+      )
     } catch (error) {
       console.error('Failed to save launchpad shortcut:', error)
-      toast.error(`保存快捷键失败：${String(error)}`, {
+      toast.error(translate('保存快捷键失败：{error}', { error: String(error) }), {
         key: 'settings-shortcut',
-        title: '启动台快捷键',
+        title: translate('启动台快捷键'),
       })
     } finally {
       setIsSavingShortcut(false)
@@ -739,48 +761,63 @@ function SettingsPanel() {
   const currentShortcutInputValue = formatShortcutForInput(launchpadShortcut)
   const shortcutDraftChanged =
     normalizedDraftShortcut !== normalizeShortcutDraftText(currentShortcutInputValue)
-  const shortcutDisplayValue = isRecordingShortcut ? '请按下新的组合键' : launchpadShortcutDraft
+  const shortcutDisplayValue = isRecordingShortcut
+    ? translate('请按下新的组合键')
+    : launchpadShortcutDraft
 
   return (
     <>
-      <SettingGroup title="主题模式">
+      <SettingGroup title={translate('界面语言')}>
+        {LANGUAGE_OPTIONS.map(option => (
+          <OptionButton
+            key={option.value}
+            label={translate(option.label)}
+            selected={language === option.value}
+            onClick={() => {
+              void setLanguage(option.value)
+            }}
+          />
+        ))}
+      </SettingGroup>
+
+      <SettingGroup title={translate('主题模式')}>
         {THEME_OPTIONS.map(opt => (
           <OptionButton
             key={opt.value}
-            label={opt.label}
+            label={translate(opt.label)}
             selected={themeMode === opt.value}
             onClick={() => handleThemeMode(opt.value)}
           />
         ))}
       </SettingGroup>
 
-      <SettingGroup title="图标大小">
+      <SettingGroup title={translate('图标大小')}>
         {ICON_SIZE_OPTIONS.map(opt => (
           <OptionButton
             key={opt.value}
-            label={opt.label}
+            label={translate(opt.label)}
             selected={iconSize === opt.value}
             onClick={() => handleIconSize(opt.value)}
           />
         ))}
       </SettingGroup>
 
-      <SettingGroup title="窗口大小">
+      <SettingGroup title={translate('窗口大小')}>
         {WINDOW_MODE_OPTIONS.map(opt => (
           <OptionButton
             key={opt.value}
-            label={opt.label}
+            label={translate(opt.label)}
             selected={windowMode === opt.value}
             onClick={() => handleWindowMode(opt.value)}
           />
         ))}
       </SettingGroup>
 
-      <SettingGroup title="标题行数">
+      <SettingGroup title={translate('标题行数')}>
         {TITLE_LINE_OPTIONS.map(opt => (
           <OptionButton
             key={opt.value}
-            label={opt.label}
+            label={translate(opt.label)}
             selected={titleLineCount === opt.value}
             onClick={() => handleTitleLineCount(opt.value)}
           />
@@ -789,11 +826,11 @@ function SettingsPanel() {
 
       <div className="mb-6">
         <ToggleRow
-          title="显示 Dock 栏"
+          title={translate('显示 Dock 栏')}
           description={
             dockEnabled
-              ? '当前已开启，Dock 会在启动台底部显示。'
-              : '当前已关闭，Dock 中的图标会回到图标网格。'
+              ? translate('当前已开启，Dock 会在启动台底部显示。')
+              : translate('当前已关闭，Dock 中的图标会回到图标网格。')
           }
           checked={dockEnabled}
           onChange={handleDockEnabled}
@@ -802,11 +839,11 @@ function SettingsPanel() {
 
       <div className="mb-6">
         <ToggleRow
-          title="开机自启"
+          title={translate('开机自启')}
           description={
             launchOnStartupEnabled
-              ? '当前已开启，登录 Windows 后会自动启动 DesktopGo 并保持后台待命。'
-              : '当前已关闭，登录 Windows 后需要手动启动 DesktopGo。'
+              ? translate('当前已开启，登录 Windows 后会自动启动 DesktopGo 并保持后台待命。')
+              : translate('当前已关闭，登录 Windows 后需要手动启动 DesktopGo。')
           }
           checked={launchOnStartupEnabled}
           onChange={handleLaunchOnStartup}
@@ -816,21 +853,27 @@ function SettingsPanel() {
 
       <div className="mb-6">
         <SettingCard
-          label="打开启动台快捷键"
-          desc="修改唤起启动台的全局快捷键。录制支持 Ctrl、Alt、Shift；像 Ctrl+Space 这种可能被系统或输入法拦截的组合，可以直接手动输入。"
+          label={translate('打开启动台快捷键')}
+          desc={translate(
+            '修改唤起启动台的全局快捷键。录制支持 Ctrl、Alt、Shift；像 Ctrl+Space 这种可能被系统或输入法拦截的组合，可以直接手动输入。'
+          )}
         >
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span className="rounded-full border border-border/80 bg-background px-2.5 py-1">
-              当前生效：{formatShortcutForDisplay(launchpadShortcut)}
+              {translate('当前生效：{shortcut}', {
+                shortcut: formatShortcutForDisplay(launchpadShortcut),
+              })}
             </span>
             {shortcutDraftChanged ? (
               <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-amber-700 dark:text-amber-300">
-                待保存：{formatShortcutForDisplay(launchpadShortcutDraft)}
+                {translate('待保存：{shortcut}', {
+                  shortcut: formatShortcutForDisplay(launchpadShortcutDraft),
+                })}
               </span>
             ) : null}
             {isRecordingShortcut ? (
               <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-blue-600 dark:text-blue-300">
-                录制中
+                {translate('录制中')}
               </span>
             ) : null}
           </div>
@@ -839,8 +882,8 @@ function SettingsPanel() {
             <Input
               ref={shortcutInputRef}
               value={shortcutDisplayValue}
-              aria-label="启动台快捷键"
-              placeholder="可手动输入，例如 Ctrl+Space"
+              aria-label={translate('启动台快捷键')}
+              placeholder={translate('可手动输入，例如 Ctrl+Space')}
               spellCheck={false}
               autoCorrect="off"
               autoCapitalize="off"
@@ -860,14 +903,14 @@ function SettingsPanel() {
                 onClick={handleToggleShortcutRecording}
                 disabled={isSavingShortcut}
               >
-                {isRecordingShortcut ? '取消录制' : '录制快捷键'}
+                {isRecordingShortcut ? translate('取消录制') : translate('录制快捷键')}
               </Button>
               <Button
                 type="button"
                 onClick={() => void handleSaveLaunchpadShortcut()}
                 disabled={isSavingShortcut || isRecordingShortcut || !shortcutDraftChanged}
               >
-                {isSavingShortcut ? '保存中...' : '保存快捷键'}
+                {isSavingShortcut ? translate('保存中...') : translate('保存快捷键')}
               </Button>
               <Button
                 type="button"
@@ -875,14 +918,15 @@ function SettingsPanel() {
                 onClick={handleResetLaunchpadShortcut}
                 disabled={isSavingShortcut}
               >
-                恢复默认
+                {translate('恢复默认')}
               </Button>
             </div>
           </div>
 
           <p className="text-xs leading-5 text-muted-foreground">
-            支持手动输入 `Ctrl+Space`、`Ctrl+Alt+K`、`Alt+Shift+P`。录制模式只识别 `Ctrl / Alt /
-            Shift`。
+            {translate(
+              '支持手动输入 `Ctrl+Space`、`Ctrl+Alt+K`、`Alt+Shift+P`。录制模式只识别 `Ctrl / Alt / Shift`。'
+            )}
           </p>
         </SettingCard>
       </div>
@@ -891,6 +935,8 @@ function SettingsPanel() {
 }
 
 function IconManagerPanel() {
+  useI18n()
+
   const [pendingAction, setPendingAction] = useState<IconSyncAction | null>(null)
   const [activeSyncAction, setActiveSyncAction] = useState<IconSyncAction | null>(null)
   const [pendingMutation, setPendingMutation] = useState<{
@@ -1006,12 +1052,21 @@ function IconManagerPanel() {
         result = await invoke<IconSyncResult>(action.command)
       }
 
-      const modeText = action.mode === 'full' ? '全量对账' : '导入新增项'
+      const modeText = action.mode === 'full' ? translate('全量对账') : translate('导入新增项')
       toast.success(
-        `${action.sourceLabel}${modeText}完成：扫描 ${result.scanned_count} 项，新增 ${result.added_count} 项，当前快照共 ${result.total_count} 项。`,
+        translate(
+          '{source}{mode}完成：扫描 {scanned} 项，新增 {added} 项，当前快照共 {total} 项。',
+          {
+            source: translate(action.sourceLabel),
+            mode: modeText,
+            scanned: result.scanned_count,
+            added: result.added_count,
+            total: result.total_count,
+          }
+        ),
         {
           key: 'icon-manager-sync',
-          title: '图标管理',
+          title: translate('图标管理'),
           duration: 3600,
         }
       )
@@ -1019,11 +1074,18 @@ function IconManagerPanel() {
       await refreshIconManagerList()
     } catch (e) {
       const action = ICON_SYNC_ACTIONS[actionKey]
-      const modeText = action.mode === 'full' ? '全量对账' : '导入新增项'
-      toast.error(`${action.sourceLabel}${modeText}失败：${String(e)}`, {
+      const modeText = action.mode === 'full' ? translate('全量对账') : translate('导入新增项')
+      toast.error(
+        translate('{source}{mode}失败：{error}', {
+          source: translate(action.sourceLabel),
+          mode: modeText,
+          error: String(e),
+        }),
+        {
         key: 'icon-manager-sync',
-        title: '图标管理',
-      })
+          title: translate('图标管理'),
+        }
+      )
     } finally {
       setSyncing(false)
       setActiveSyncAction(null)
@@ -1068,16 +1130,24 @@ function IconManagerPanel() {
       }
 
       const affected = await invoke<number>(command, { targets })
-      const sourceText = pendingMutation.icon.source === 'desktop' ? '桌面' : '自定义应用'
-      toast.success(`${actionLabel}完成：${sourceText} 图标影响 ${affected} 项。`, {
+      const sourceText =
+        pendingMutation.icon.source === 'desktop' ? translate('桌面') : translate('自定义应用')
+      toast.success(
+        translate('{action}完成：{source} 图标影响 {count} 项。', {
+          action: translate(actionLabel),
+          source: sourceText,
+          count: affected,
+        }),
+        {
         key: 'icon-manager-action',
-        title: '图标管理',
-      })
+          title: translate('图标管理'),
+        }
+      )
       await refreshIconManagerList()
     } catch (e) {
-      toast.error(`操作失败：${String(e)}`, {
+      toast.error(translate('操作失败：{error}', { error: String(e) }), {
         key: 'icon-manager-action',
-        title: '图标管理',
+        title: translate('图标管理'),
       })
     } finally {
       setMutating(false)
@@ -1096,15 +1166,15 @@ function IconManagerPanel() {
 
       if (typeof selected === 'string') {
         setCustomAppDirInput(selected)
-        toast.info('已选择文件夹，请点击“保存路径”后生效。', {
+        toast.info(translate('已选择文件夹，请点击“保存路径”后生效。'), {
           key: 'icon-manager-path',
-          title: '自定义图标文件夹',
+          title: translate('自定义图标文件夹'),
         })
       }
     } catch (e) {
-      toast.error(`选择文件夹失败：${String(e)}`, {
+      toast.error(translate('选择文件夹失败：{error}', { error: String(e) }), {
         key: 'icon-manager-path',
-        title: '自定义图标文件夹',
+        title: translate('自定义图标文件夹'),
       })
     }
   }
@@ -1112,24 +1182,24 @@ function IconManagerPanel() {
   const handleOpenCustomAppDir = async () => {
     const targetDir = customAppDirInput.trim() || effectiveCustomAppDir || defaultCustomAppDir
     if (!targetDir) {
-      toast.error('没有可打开的目录，请先选择或输入自定义应用目录。', {
+      toast.error(translate('没有可打开的目录，请先选择或输入自定义应用目录。'), {
         key: 'icon-manager-path',
-        title: '自定义图标文件夹',
+        title: translate('自定义图标文件夹'),
       })
       return
     }
 
     try {
       await invoke('launch_app', { path: targetDir })
-      toast.info(`已打开目录：${targetDir}`, {
+      toast.info(translate('已打开目录：{dir}', { dir: targetDir }), {
         key: 'icon-manager-path',
-        title: '自定义图标文件夹',
+        title: translate('自定义图标文件夹'),
         duration: 3200,
       })
     } catch (e) {
-      toast.error(`打开目录失败：${String(e)}`, {
+      toast.error(translate('打开目录失败：{error}', { error: String(e) }), {
         key: 'icon-manager-path',
-        title: '自定义图标文件夹',
+        title: translate('自定义图标文件夹'),
       })
     }
   }
@@ -1142,18 +1212,18 @@ function IconManagerPanel() {
       setEffectiveCustomAppDir(nextEffectiveCustomAppDir)
       toast.success(
         nextCustomAppDir
-          ? '路径已保存，后续自定义应用同步将使用该目录。'
-          : '已恢复使用默认自定义应用目录。',
+          ? translate('路径已保存，后续自定义应用同步将使用该目录。')
+          : translate('已恢复使用默认自定义应用目录。'),
         {
           key: 'icon-manager-path',
-          title: '自定义图标文件夹',
+          title: translate('自定义图标文件夹'),
         }
       )
       await refreshIconManagerList()
     } catch (e) {
-      toast.error(`保存失败：${String(e)}`, {
+      toast.error(translate('保存失败：{error}', { error: String(e) }), {
         key: 'icon-manager-path',
-        title: '自定义图标文件夹',
+        title: translate('自定义图标文件夹'),
       })
     }
   }
@@ -1163,15 +1233,15 @@ function IconManagerPanel() {
       await setSetting('customAppDir', '')
       setCustomAppDirInput(defaultCustomAppDir)
       setEffectiveCustomAppDir(defaultCustomAppDir)
-      toast.success('已恢复默认自定义应用目录。', {
+      toast.success(translate('已恢复默认自定义应用目录。'), {
         key: 'icon-manager-path',
-        title: '自定义图标文件夹',
+        title: translate('自定义图标文件夹'),
       })
       await refreshIconManagerList()
     } catch (e) {
-      toast.error(`恢复默认失败：${String(e)}`, {
+      toast.error(translate('恢复默认失败：{error}', { error: String(e) }), {
         key: 'icon-manager-path',
-        title: '自定义图标文件夹',
+        title: translate('自定义图标文件夹'),
       })
     }
   }
@@ -1179,7 +1249,9 @@ function IconManagerPanel() {
   const handleResetLaunchpadIcons = async () => {
     if (layoutResetting) return
     const confirmed = window.confirm(
-      '确定要重置图标布局吗？这会清空当前宫格排序、文件夹和 Dock 排布，但不会删除图标记录。'
+      translate(
+        '确定要重置图标布局吗？这会清空当前宫格排序、文件夹和 Dock 排布，但不会删除图标记录。'
+      )
     )
     if (!confirmed) return
 
@@ -1190,20 +1262,20 @@ function IconManagerPanel() {
       const mainWindow = await WebviewWindow.getByLabel('main')
       if (mainWindow) {
         await mainWindow.emit(LAUNCHPAD_LAYOUT_RESET_EVENT)
-        toast.success('图标布局已重置，主窗口已刷新。', {
+        toast.success(translate('图标布局已重置，主窗口已刷新。'), {
           key: 'icon-manager-layout',
-          title: '图标布局重置',
+          title: translate('图标布局重置'),
         })
       } else {
-        toast.success('图标布局已重置，主窗口下次同步时会应用。', {
+        toast.success(translate('图标布局已重置，主窗口下次同步时会应用。'), {
           key: 'icon-manager-layout',
-          title: '图标布局重置',
+          title: translate('图标布局重置'),
         })
       }
     } catch (e) {
-      toast.error(`重置图标失败：${String(e)}`, {
+      toast.error(translate('重置图标失败：{error}', { error: String(e) }), {
         key: 'icon-manager-layout',
-        title: '图标布局重置',
+        title: translate('图标布局重置'),
       })
     } finally {
       setLayoutResetting(false)
@@ -1213,22 +1285,28 @@ function IconManagerPanel() {
   const mutationDialogText = pendingMutation
     ? pendingMutation.type === 'hide'
       ? {
-          title: '确认隐藏图标',
-          desc: `将隐藏图标”${pendingMutation.icon.name}”。隐藏后不会在主页面显示。`,
-          confirmLabel: '确认隐藏',
+          title: translate('确认隐藏图标'),
+          desc: translate('将隐藏图标”{name}”。隐藏后不会在主页面显示。', {
+            name: pendingMutation.icon.name,
+          }),
+          confirmLabel: translate('确认隐藏'),
           confirmVariant: 'default' as const,
         }
       : pendingMutation.type === 'unhide'
         ? {
-            title: '确认取消隐藏图标',
-            desc: `将取消隐藏图标”${pendingMutation.icon.name}”。取消后图标会重新显示。`,
-            confirmLabel: '确认取消隐藏',
+            title: translate('确认取消隐藏图标'),
+            desc: translate('将取消隐藏图标”{name}”。取消后图标会重新显示。', {
+              name: pendingMutation.icon.name,
+            }),
+            confirmLabel: translate('确认取消隐藏'),
             confirmVariant: 'default' as const,
           }
         : {
-            title: '确认删除图标记录',
-            desc: `将删除图标”${pendingMutation.icon.name}”在应用内的记录，不会删除磁盘文件。`,
-            confirmLabel: '确认删除',
+            title: translate('确认删除图标记录'),
+            desc: translate('将删除图标”{name}”在应用内的记录，不会删除磁盘文件。', {
+              name: pendingMutation.icon.name,
+            }),
+            confirmLabel: translate('确认删除'),
             confirmVariant: 'destructive' as const,
           }
     : null
@@ -1237,31 +1315,37 @@ function IconManagerPanel() {
     <>
       <div className="min-w-0 space-y-6">
         <div className="max-w-3xl space-y-2">
-          <h2 className="text-lg font-semibold">图标管理</h2>
+          <h2 className="text-lg font-semibold">{translate('图标管理')}</h2>
           <p className="text-sm text-muted-foreground">
-            首次进入主页面会自动建立桌面和自定义应用快照，后续由你在这里手动同步和整理。
+            {translate('首次进入主页面会自动建立桌面和自定义应用快照，后续由你在这里手动同步和整理。')}
           </p>
           <p className="text-xs text-muted-foreground">
-            日常优先使用“导入新增项”；只有需要清理失效记录时，再执行“全量对账”。
+            {translate('日常优先使用“导入新增项”；只有需要清理失效记录时，再执行“全量对账”。')}
           </p>
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)] xl:items-start">
           <div className="min-w-0 space-y-4">
             <SettingCard
-              label="自定义图标文件夹"
-              desc="自定义应用目录只扫描一级目录。这里修改后，图标列表和后续同步都会使用新目录。"
+              label={translate('自定义图标文件夹')}
+              desc={translate(
+                '自定义应用目录只扫描一级目录。这里修改后，图标列表和后续同步都会使用新目录。'
+              )}
             >
               <p className="break-all text-xs text-muted-foreground">
-                默认目录：{defaultCustomAppDir || '加载中...'}
+                {translate('默认目录：{path}', {
+                  path: defaultCustomAppDir || translate('加载中...'),
+                })}
               </p>
               <p className="break-all text-xs text-muted-foreground">
-                当前生效目录：{effectiveCustomAppDir || '加载中...'}
+                {translate('当前生效目录：{path}', {
+                  path: effectiveCustomAppDir || translate('加载中...'),
+                })}
               </p>
               <Input
                 value={customAppDirInput}
                 onChange={e => setCustomAppDirInput(e.target.value)}
-                placeholder="输入自定义应用文件夹绝对路径"
+                placeholder={translate('输入自定义应用文件夹绝对路径')}
                 className="w-full"
                 disabled={syncing || mutating || listLoading}
               />
@@ -1272,7 +1356,7 @@ function IconManagerPanel() {
                   onClick={handlePickCustomAppDir}
                   disabled={syncing || mutating || listLoading}
                 >
-                  选择文件夹
+                  {translate('选择文件夹')}
                 </Button>
                 <Button
                   variant="outline"
@@ -1280,14 +1364,14 @@ function IconManagerPanel() {
                   onClick={handleOpenCustomAppDir}
                   disabled={syncing || mutating}
                 >
-                  打开文件夹
+                  {translate('打开文件夹')}
                 </Button>
                 <Button
                   size="sm"
                   onClick={handleSaveCustomAppDir}
                   disabled={syncing || mutating || listLoading}
                 >
-                  保存路径
+                  {translate('保存路径')}
                 </Button>
                 <Button
                   variant="outline"
@@ -1295,7 +1379,7 @@ function IconManagerPanel() {
                   onClick={handleResetCustomAppDir}
                   disabled={syncing || mutating || listLoading}
                 >
-                  恢复默认路径
+                  {translate('恢复默认路径')}
                 </Button>
               </div>
             </SettingCard>
@@ -1308,12 +1392,18 @@ function IconManagerPanel() {
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-medium text-foreground">{group.title}</h3>
+                      <h3 className="text-sm font-medium text-foreground">
+                        {translate(group.title)}
+                      </h3>
                       <span className="rounded-full border border-border/70 bg-muted px-2 py-0.5 text-[11px] text-foreground/75">
-                        {group.source === 'desktop' ? '桌面来源' : '目录来源'}
+                        {group.source === 'desktop'
+                          ? translate('桌面来源')
+                          : translate('目录来源')}
                       </span>
                     </div>
-                    <p className="text-xs leading-5 text-muted-foreground">{group.desc}</p>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      {translate(group.desc)}
+                    </p>
                   </div>
 
                   <div className="space-y-3">
@@ -1335,7 +1425,7 @@ function IconManagerPanel() {
                             <div className="min-w-0 flex-1 space-y-1.5">
                               <div className="flex flex-wrap items-center gap-2">
                                 <p className="text-sm font-medium text-foreground">
-                                  {action.title}
+                                  {translate(action.title)}
                                 </p>
                                 <span
                                   className={`rounded-full px-2 py-0.5 text-[11px] ${
@@ -1344,14 +1434,14 @@ function IconManagerPanel() {
                                       : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
                                   }`}
                                 >
-                                  {action.toneLabel}
+                                  {translate(action.toneLabel)}
                                 </span>
                               </div>
                               <p className="text-xs leading-5 text-muted-foreground">
-                                {action.desc}
+                                {translate(action.desc)}
                               </p>
                               <p className="text-[11px] leading-5 text-muted-foreground/90">
-                                {action.impact}
+                                {translate(action.impact)}
                               </p>
                             </div>
                             <div className="flex shrink-0 items-center gap-2 self-center">
@@ -1365,12 +1455,12 @@ function IconManagerPanel() {
                                 {isActive ? (
                                   <>
                                     <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                                    处理中
+                                    {translate('处理中')}
                                   </>
                                 ) : isIncremental ? (
-                                  '直接执行'
+                                  translate('直接执行')
                                 ) : (
-                                  '需确认'
+                                  translate('需确认')
                                 )}
                               </span>
                             </div>
@@ -1388,10 +1478,10 @@ function IconManagerPanel() {
                               {isActive ? (
                                 <>
                                   <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                                  {`${action.buttonLabel}中...`}
+                                  {translate('{label}中...', { label: action.buttonLabel })}
                                 </>
                               ) : (
-                                action.buttonLabel
+                                translate(action.buttonLabel)
                               )}
                             </Button>
                           </div>
@@ -1404,8 +1494,10 @@ function IconManagerPanel() {
             })}
 
             <SettingCard
-              label="图标布局重置"
-              desc="重置后会恢复默认图标布局，并清空当前创建的文件夹和 Dock 排布，不会删除图标快照记录。"
+              label={translate('图标布局重置')}
+              desc={translate(
+                '重置后会恢复默认图标布局，并清空当前创建的文件夹和 Dock 排布，不会删除图标快照记录。'
+              )}
             >
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -1414,7 +1506,7 @@ function IconManagerPanel() {
                   onClick={handleResetLaunchpadIcons}
                   disabled={layoutResetting || syncing || mutating}
                 >
-                  {layoutResetting ? '重置中...' : '重置图标'}
+                  {layoutResetting ? translate('重置中...') : translate('重置图标')}
                 </Button>
               </div>
             </SettingCard>
@@ -1426,7 +1518,7 @@ function IconManagerPanel() {
                 <Input
                   value={searchInput}
                   onChange={e => setSearchInput(e.target.value)}
-                  placeholder="搜索图标名称或路径"
+                  placeholder={translate('搜索图标名称或路径')}
                   className="w-full md:min-w-[220px] md:flex-1 xl:max-w-md"
                 />
                 <div className="inline-flex h-10 shrink-0 self-start rounded-lg border border-border/90 bg-background p-1 shadow-sm">
@@ -1436,8 +1528,8 @@ function IconManagerPanel() {
                       <button
                         key={option.value}
                         type="button"
-                        aria-label={option.label}
-                        title={option.label}
+                        aria-label={translate(option.label)}
+                        title={translate(option.label)}
                         aria-pressed={selected}
                         onClick={() => handleViewModeChange(option.value)}
                         className={cn(
@@ -1459,7 +1551,7 @@ function IconManagerPanel() {
               {ICON_VISIBILITY_FILTER_OPTIONS.map(opt => (
                 <OptionButton
                   key={opt.value}
-                  label={opt.label}
+                  label={translate(opt.label)}
                   selected={visibilityFilter === opt.value}
                   onClick={() => setVisibilityFilter(opt.value)}
                 />
@@ -1470,7 +1562,7 @@ function IconManagerPanel() {
               {ICON_SOURCE_FILTER_OPTIONS.map(opt => (
                 <OptionButton
                   key={opt.value}
-                  label={opt.label}
+                  label={translate(opt.label)}
                   selected={sourceFilter === opt.value}
                   onClick={() => setSourceFilter(opt.value)}
                 />
@@ -1478,8 +1570,11 @@ function IconManagerPanel() {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              图标总数 {allIcons.length} 项，当前筛选结果 {filteredIcons.length} 项，当前为
-              {viewMode === 'list' ? '列表' : '宫格'}展示。
+              {translate('图标总数 {total} 项，当前筛选结果 {filtered} 项，当前为{viewMode}展示。', {
+                total: allIcons.length,
+                filtered: filteredIcons.length,
+                viewMode: viewMode === 'list' ? translate('列表') : translate('宫格'),
+              })}
             </p>
 
             <div
@@ -1490,12 +1585,15 @@ function IconManagerPanel() {
               }
             >
               {listLoading ? (
-                <p className="text-sm text-muted-foreground">图标列表加载中...</p>
+                <p className="text-sm text-muted-foreground">{translate('图标列表加载中...')}</p>
               ) : filteredIcons.length === 0 ? (
-                <p className="text-sm text-muted-foreground">当前筛选条件下没有图标。</p>
+                <p className="text-sm text-muted-foreground">
+                  {translate('当前筛选条件下没有图标。')}
+                </p>
               ) : (
                 filteredIcons.map(icon => {
-                  const sourceLabel = icon.source === 'desktop' ? '桌面' : '自定义应用'
+                  const sourceLabel =
+                    icon.source === 'desktop' ? translate('桌面') : translate('自定义应用')
                   const compactPathLabel = getPathLeaf(icon.target_path || icon.path) || '-'
                   const sourceBadgeClass =
                     icon.source === 'desktop'
@@ -1508,7 +1606,9 @@ function IconManagerPanel() {
                     return (
                       <div
                         key={`${icon.source}:${icon.id}`}
-                        title={`路径：${icon.path}\n目标：${icon.target_path || '-'}`}
+                        title={`${translate('路径：{path}', { path: icon.path })}\n${translate('目标：{path}', {
+                          path: icon.target_path || '-',
+                        })}`}
                         className="min-w-0 self-start rounded-md border border-border/85 bg-background p-2.5 shadow-sm"
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -1522,7 +1622,7 @@ function IconManagerPanel() {
                               />
                             ) : (
                               <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                                无图标
+                                {translate('无图标')}
                               </div>
                             )}
                           </div>
@@ -1536,7 +1636,7 @@ function IconManagerPanel() {
                             <span
                               className={`rounded border px-1.5 py-0.5 text-[10px] leading-none ${visibilityBadgeClass}`}
                             >
-                              {icon.hidden ? '隐藏' : '未隐藏'}
+                              {icon.hidden ? translate('隐藏') : translate('未隐藏')}
                             </span>
                           </div>
                         </div>
@@ -1544,9 +1644,9 @@ function IconManagerPanel() {
                         <div className="mt-2 min-w-0 space-y-1">
                           <p
                             className="min-w-0 overflow-hidden text-left text-sm font-medium leading-4 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] [overflow-wrap:anywhere]"
-                            title={icon.name || '未命名'}
+                            title={icon.name || translate('未命名')}
                           >
-                            {icon.name || '未命名'}
+                            {icon.name || translate('未命名')}
                           </p>
                           <p
                             className="min-w-0 truncate text-left text-[11px] text-muted-foreground"
@@ -1565,7 +1665,7 @@ function IconManagerPanel() {
                               disabled={syncing || mutating}
                               className="h-7 min-w-0 overflow-hidden px-2 text-[11px]"
                             >
-                              显示
+                              {translate('显示')}
                             </Button>
                           ) : (
                             <Button
@@ -1575,7 +1675,7 @@ function IconManagerPanel() {
                               disabled={syncing || mutating}
                               className="h-7 min-w-0 overflow-hidden px-2 text-[11px]"
                             >
-                              隐藏
+                              {translate('隐藏')}
                             </Button>
                           )}
                           <Button
@@ -1585,7 +1685,7 @@ function IconManagerPanel() {
                             disabled={syncing || mutating}
                             className="h-7 min-w-0 overflow-hidden px-2 text-[11px]"
                           >
-                            删除
+                            {translate('删除')}
                           </Button>
                         </div>
                       </div>
@@ -1595,7 +1695,9 @@ function IconManagerPanel() {
                   return (
                     <div
                       key={`${icon.source}:${icon.id}`}
-                      title={`路径：${icon.path}\n目标：${icon.target_path || '-'}`}
+                      title={`${translate('路径：{path}', { path: icon.path })}\n${translate('目标：{path}', {
+                        path: icon.target_path || '-',
+                      })}`}
                       className="rounded-md border border-border/85 bg-background p-3 shadow-sm"
                     >
                       <div className="flex flex-col gap-3 md:flex-row md:items-start">
@@ -1613,7 +1715,7 @@ function IconManagerPanel() {
                             />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                              无图标
+                              {translate('无图标')}
                             </div>
                           )}
                         </div>
@@ -1621,7 +1723,7 @@ function IconManagerPanel() {
                         <div className="min-w-0 flex-1 space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className={cn('truncate text-sm font-medium')}>
-                              {icon.name || '未命名'}
+                              {icon.name || translate('未命名')}
                             </p>
                             <span
                               className={`rounded border px-2 py-0.5 text-[11px] ${sourceBadgeClass}`}
@@ -1631,15 +1733,15 @@ function IconManagerPanel() {
                             <span
                               className={`rounded border px-2 py-0.5 text-[11px] ${visibilityBadgeClass}`}
                             >
-                              {icon.hidden ? '隐藏' : '未隐藏'}
+                              {icon.hidden ? translate('隐藏') : translate('未隐藏')}
                             </span>
                           </div>
                           <div className="space-y-1">
                             <p className="break-all text-xs text-muted-foreground md:truncate">
-                              路径：{icon.path}
+                              {translate('路径：{path}', { path: icon.path })}
                             </p>
                             <p className="break-all text-xs text-muted-foreground md:truncate">
-                              目标：{icon.target_path || '-'}
+                              {translate('目标：{path}', { path: icon.target_path || '-' })}
                             </p>
                           </div>
                         </div>
@@ -1653,7 +1755,7 @@ function IconManagerPanel() {
                               disabled={syncing || mutating}
                               className="flex-1 md:flex-none"
                             >
-                              取消隐藏
+                              {translate('取消隐藏')}
                             </Button>
                           ) : (
                             <Button
@@ -1663,7 +1765,7 @@ function IconManagerPanel() {
                               disabled={syncing || mutating}
                               className="flex-1 md:flex-none"
                             >
-                              隐藏
+                              {translate('隐藏')}
                             </Button>
                           )}
                           <Button
@@ -1673,7 +1775,7 @@ function IconManagerPanel() {
                             disabled={syncing || mutating}
                             className="flex-1 md:flex-none"
                           >
-                            删除
+                            {translate('删除')}
                           </Button>
                         </div>
                       </div>
@@ -1690,10 +1792,10 @@ function IconManagerPanel() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/22 p-4 backdrop-blur-[1px] dark:bg-black/45">
           <div className="w-full max-w-md rounded-xl border border-border bg-background p-5 shadow-xl">
             <h3 className="text-base font-semibold">
-              {ICON_SYNC_ACTIONS[pendingAction].confirmTitle}
+              {translate(ICON_SYNC_ACTIONS[pendingAction].confirmTitle ?? '')}
             </h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              {ICON_SYNC_ACTIONS[pendingAction].confirmDesc}
+              {translate(ICON_SYNC_ACTIONS[pendingAction].confirmDesc ?? '')}
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <Button
@@ -1702,12 +1804,14 @@ function IconManagerPanel() {
                 onClick={() => setPendingAction(null)}
                 disabled={syncing}
               >
-                取消
+                {translate('取消')}
               </Button>
               <Button size="sm" onClick={handleConfirmSync} disabled={syncing}>
                 {syncing
-                  ? `${ICON_SYNC_ACTIONS[pendingAction].buttonLabel}中...`
-                  : ICON_SYNC_ACTIONS[pendingAction].confirmLabel}
+                  ? translate('{label}中...', {
+                      label: ICON_SYNC_ACTIONS[pendingAction].buttonLabel,
+                    })
+                  : translate(ICON_SYNC_ACTIONS[pendingAction].confirmLabel ?? '')}
               </Button>
             </div>
           </div>
@@ -1726,7 +1830,7 @@ function IconManagerPanel() {
                 onClick={() => setPendingMutation(null)}
                 disabled={mutating}
               >
-                取消
+                {translate('取消')}
               </Button>
               <Button
                 variant={mutationDialogText.confirmVariant}
@@ -1734,7 +1838,7 @@ function IconManagerPanel() {
                 onClick={handleConfirmMutation}
                 disabled={mutating}
               >
-                {mutating ? '处理中...' : mutationDialogText.confirmLabel}
+                {mutating ? translate('处理中...') : translate(mutationDialogText.confirmLabel)}
               </Button>
             </div>
           </div>
@@ -1745,10 +1849,14 @@ function IconManagerPanel() {
 }
 
 function AboutPanel() {
+  const { language } = useI18n()
+
   const [appInfo, setAppInfo] = useState<AboutAppInfo>(ABOUT_APP_INFO_FALLBACK)
   const [copied, setCopied] = useState(false)
   const [launchpadShortcutMeta, setLaunchpadShortcutMeta] = useState(
-    `全局快捷键 ${formatShortcutForDisplay(DEFAULT_LAUNCHPAD_SHORTCUT)}`
+    translate('全局快捷键 {shortcut}', {
+      shortcut: formatShortcutForDisplay(DEFAULT_LAUNCHPAD_SHORTCUT),
+    })
   )
   const toast = useToast()
 
@@ -1785,35 +1893,37 @@ function AboutPanel() {
         ].filter(result => result.status === 'rejected').length
 
         if (failedCount > 0) {
-          toast.error('部分应用信息未能读取，已使用当前项目的回退值。', {
+          toast.error(translate('部分应用信息未能读取，已使用当前项目的回退值。'), {
             key: 'about-panel',
-            title: '关于',
+            title: translate('关于'),
           })
         }
       })
       .catch(error => {
         if (disposed) return
-        toast.error(`读取应用信息失败：${String(error)}`, {
+        toast.error(translate('读取应用信息失败：{error}', { error: String(error) }), {
           key: 'about-panel',
-          title: '关于',
+          title: translate('关于'),
         })
       })
 
     void getSetting('launchpadShortcut')
       .then(shortcut => {
         if (disposed) return
-        setLaunchpadShortcutMeta(`全局快捷键 ${formatShortcutForDisplay(shortcut)}`)
+        setLaunchpadShortcutMeta(
+          translate('全局快捷键 {shortcut}', { shortcut: formatShortcutForDisplay(shortcut) })
+        )
       })
       .catch(error => {
         if (disposed) return
         console.error('Failed to load launchpad shortcut for about panel:', error)
-        setLaunchpadShortcutMeta('全局快捷键可自定义')
+        setLaunchpadShortcutMeta(translate('全局快捷键可自定义'))
       })
 
     return () => {
       disposed = true
     }
-  }, [toast])
+  }, [language, toast])
 
   useEffect(() => {
     if (!copied) return
@@ -1831,15 +1941,18 @@ function AboutPanel() {
     async (url: string, label: string) => {
       try {
         await openUrl(url)
-        toast.info(`已打开${label}。`, {
+        toast.info(translate('已打开{label}。', { label }), {
           key: 'about-panel',
-          title: '关于',
+          title: translate('关于'),
         })
       } catch (error) {
-        toast.error(`打开${label}失败：${String(error)}`, {
-          key: 'about-panel',
-          title: '关于',
-        })
+        toast.error(
+          translate('打开{label}失败：{error}', { label, error: String(error) }),
+          {
+            key: 'about-panel',
+            title: translate('关于'),
+          }
+        )
       }
     },
     [toast]
@@ -1847,56 +1960,58 @@ function AboutPanel() {
 
   const handleCopyDiagnostic = useCallback(async () => {
     if (!navigator.clipboard?.writeText) {
-      toast.error('当前环境不支持复制诊断信息。', {
+      toast.error(translate('当前环境不支持复制诊断信息。'), {
         key: 'about-panel',
-        title: '关于',
+        title: translate('关于'),
       })
       return
     }
 
     const diagnosticText = [
       `${appInfo.name} v${appInfo.version}`,
-      `Identifier: ${appInfo.identifier}`,
-      `Runtime: Tauri ${appInfo.tauriVersion}`,
-      'Search dependency: Installed Everything',
-      'Update channel: GitHub Releases latest.json',
+      translate('Identifier: {identifier}', { identifier: appInfo.identifier }),
+      translate('Runtime: Tauri {version}', { version: appInfo.tauriVersion }),
+      translate('Search dependency: Installed Everything'),
+      translate('Update channel: GitHub Releases latest.json'),
     ].join('\n')
 
     try {
       await navigator.clipboard.writeText(diagnosticText)
       setCopied(true)
-      toast.success('已复制版本与诊断信息。', {
+      toast.success(translate('已复制版本与诊断信息。'), {
         key: 'about-panel',
-        title: '关于',
+        title: translate('关于'),
       })
     } catch (error) {
-      toast.error(`复制诊断信息失败：${String(error)}`, {
+      toast.error(translate('复制诊断信息失败：{error}', { error: String(error) }), {
         key: 'about-panel',
-        title: '关于',
+        title: translate('关于'),
       })
     }
   }, [appInfo, toast])
 
   const featureCards = [
     {
-      title: '启动台',
-      description: '用统一入口承接桌面常用应用，适合键盘优先和快速唤起场景。',
+      title: translate('启动台'),
+      description: translate('用统一入口承接桌面常用应用，适合键盘优先和快速唤起场景。'),
       meta: launchpadShortcutMeta,
     },
     {
-      title: '文件搜索',
-      description: '搜索能力依赖已安装的 Everything，状态异常时会在设置页明确提示。',
-      meta: 'Installed Everything only',
+      title: translate('文件搜索'),
+      description: translate('搜索能力依赖已安装的 Everything，状态异常时会在设置页明确提示。'),
+      meta: translate('Installed Everything only'),
     },
     {
-      title: '图标管理',
-      description: '支持桌面与自定义应用两套来源的增量与全量同步，并保留隐藏与整理能力。',
-      meta: '桌面 + 自定义应用',
+      title: translate('图标管理'),
+      description: translate(
+        '支持桌面与自定义应用两套来源的增量与全量同步，并保留隐藏与整理能力。'
+      ),
+      meta: translate('桌面 + 自定义应用'),
     },
     {
-      title: '应用更新',
-      description: '更新页读取 GitHub Releases 的 updater 清单，下载与安装过程可见。',
-      meta: 'GitHub Releases latest.json',
+      title: translate('应用更新'),
+      description: translate('更新页读取 GitHub Releases 的 updater 清单，下载与安装过程可见。'),
+      meta: translate('GitHub Releases latest.json'),
     },
   ]
 
@@ -1912,7 +2027,7 @@ function AboutPanel() {
           <div className="max-w-2xl space-y-4">
             <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-card px-3 py-1 text-xs font-medium text-foreground/75 shadow-sm">
               <Info className="h-3.5 w-3.5" />
-              桌面启动、搜索与整理工具
+              {translate('桌面启动、搜索与整理工具')}
             </div>
 
             <div className="space-y-3">
@@ -1923,8 +2038,9 @@ function AboutPanel() {
                 </span>
               </div>
               <p className="max-w-xl text-sm leading-6 text-muted-foreground">
-                DesktopGo 把桌面启动、文件搜索、图标整理和应用更新收进一个统一入口里。
-                关于页现在直接暴露版本、运行时和项目入口，方便你确认当前构建、提交反馈，或跳转查看发布记录。
+                {translate(
+                  'DesktopGo 把桌面启动、文件搜索、图标整理和应用更新收进一个统一入口里。关于页现在直接暴露版本、运行时和项目入口，方便你确认当前构建、提交反馈，或跳转查看发布记录。'
+                )}
               </p>
             </div>
           </div>
@@ -1932,16 +2048,22 @@ function AboutPanel() {
           <div className="grid gap-3 sm:grid-cols-2 xl:w-[24rem]">
             <div className="rounded-2xl border border-border/85 bg-card p-4 shadow-sm">
               <LogoText size="sm" />
-              <p className="mt-2 text-base font-medium text-foreground">本地优先</p>
+              <p className="mt-2 text-base font-medium text-foreground">
+                {translate('本地优先')}
+              </p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                没有账号系统；主要设置、布局和搜索配置都保存在本地环境。
+                {translate('没有账号系统；主要设置、布局和搜索配置都保存在本地环境。')}
               </p>
             </div>
             <div className="rounded-2xl border border-border/85 bg-card p-4 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">支持入口</p>
-              <p className="mt-2 text-base font-medium text-foreground">反馈直达项目</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                {translate('支持入口')}
+              </p>
+              <p className="mt-2 text-base font-medium text-foreground">
+                {translate('反馈直达项目')}
+              </p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                仓库、Issue 和 Release 入口都放在这里，定位问题时不需要再找路径。
+                {translate('仓库、Issue 和 Release 入口都放在这里，定位问题时不需要再找路径。')}
               </p>
             </div>
           </div>
@@ -1951,8 +2073,12 @@ function AboutPanel() {
       <section className="grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
         <div className="space-y-4 rounded-3xl border border-border/90 bg-card p-5 shadow-sm">
           <div className="space-y-1">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">功能概览</p>
-            <h3 className="text-lg font-semibold text-foreground">当前构建包含的核心能力</h3>
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              {translate('功能概览')}
+            </p>
+            <h3 className="text-lg font-semibold text-foreground">
+              {translate('当前构建包含的核心能力')}
+            </h3>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -1973,32 +2099,40 @@ function AboutPanel() {
 
         <div className="space-y-4 rounded-3xl border border-border/90 bg-card p-5 shadow-sm">
           <div className="space-y-1">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">项目入口</p>
-            <h3 className="text-lg font-semibold text-foreground">仓库、发布和反馈入口</h3>
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              {translate('项目入口')}
+            </p>
+            <h3 className="text-lg font-semibold text-foreground">
+              {translate('仓库、发布和反馈入口')}
+            </h3>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => void openExternalLink(ABOUT_REPOSITORY_URL, 'GitHub 仓库')}>
+            <Button
+              onClick={() =>
+                void openExternalLink(ABOUT_REPOSITORY_URL, translate('GitHub 仓库'))
+              }
+            >
               <Github className="h-4 w-4" />
-              GitHub 仓库
+              {translate('GitHub 仓库')}
             </Button>
             <Button
               variant="secondary"
-              onClick={() => void openExternalLink(ABOUT_ISSUES_URL, '问题反馈')}
+              onClick={() => void openExternalLink(ABOUT_ISSUES_URL, translate('问题反馈'))}
             >
               <Bug className="h-4 w-4" />
-              提交问题
+              {translate('提交问题')}
             </Button>
             <Button
               variant="outline"
-              onClick={() => void openExternalLink(ABOUT_RELEASES_URL, '发布说明')}
+              onClick={() => void openExternalLink(ABOUT_RELEASES_URL, translate('发布说明'))}
             >
               <FileText className="h-4 w-4" />
-              发布说明
+              {translate('发布说明')}
             </Button>
             <Button variant="outline" onClick={() => void handleCopyDiagnostic()}>
               {copied ? <CopyCheck className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              {copied ? '已复制' : '复制诊断'}
+              {copied ? translate('已复制') : translate('复制诊断')}
             </Button>
           </div>
 
@@ -2006,10 +2140,11 @@ function AboutPanel() {
             <div className="flex items-start gap-3">
               <Package2 className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
               <div>
-                <p className="text-sm font-medium text-foreground">更新通道</p>
+                <p className="text-sm font-medium text-foreground">{translate('更新通道')}</p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  当前 updater 设计为从 GitHub Releases 读取{' '}
-                  <span className="font-mono">latest.json</span> 并完成签名校验与安装流程。
+                  {translate(
+                    '当前 updater 设计为从 GitHub Releases 读取 latest.json 并完成签名校验与安装流程。'
+                  )}
                 </p>
               </div>
             </div>
@@ -2019,9 +2154,11 @@ function AboutPanel() {
             <div className="flex items-start gap-3">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
               <div>
-                <p className="text-sm font-medium text-foreground">诊断建议</p>
+                <p className="text-sm font-medium text-foreground">{translate('诊断建议')}</p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  提交问题前先复制上面的诊断信息，至少带上版本号、应用标识符和 Tauri 运行时版本。
+                  {translate(
+                    '提交问题前先复制上面的诊断信息，至少带上版本号、应用标识符和 Tauri 运行时版本。'
+                  )}
                 </p>
               </div>
             </div>
@@ -2029,11 +2166,11 @@ function AboutPanel() {
 
           <button
             type="button"
-            onClick={() => void openExternalLink(ABOUT_REPOSITORY_URL, '项目主页')}
+            onClick={() => void openExternalLink(ABOUT_REPOSITORY_URL, translate('项目主页'))}
             className="group flex w-full items-center justify-between rounded-2xl border border-border/85 bg-background px-4 py-3 text-left shadow-sm transition-colors hover:bg-accent"
           >
             <div>
-              <p className="text-sm font-medium text-foreground">项目主页</p>
+              <p className="text-sm font-medium text-foreground">{translate('项目主页')}</p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 {ABOUT_REPOSITORY_URL.replace('https://', '')}
               </p>
@@ -2047,11 +2184,20 @@ function AboutPanel() {
 }
 
 export function Settings() {
+  const { language } = useI18n()
   const [activeNav, setActiveNav] = useState<NavItem>('settings')
   const [isMaximized, setIsMaximized] = useState(false)
   const isClosingRef = useRef(false)
+  const navItems = useMemo(
+    () =>
+      NAV_ITEMS.map(item => ({
+        ...item,
+        label: translate(item.label),
+      })),
+    [language]
+  )
 
-  const activeNavItem = NAV_ITEMS.find(item => item.key === activeNav) ?? NAV_ITEMS[0]
+  const activeNavItem = navItems.find(item => item.key === activeNav) ?? navItems[0]
 
   const syncWindowState = useCallback(async () => {
     try {
@@ -2161,21 +2307,23 @@ export function Settings() {
         <div className="flex min-w-0 flex-1 items-center gap-3 h-full">
           <Logo iconSize={20} textSize="sm" className="shrink-0" />
           <span className="h-1 w-1 shrink-0 rounded-full bg-muted-foreground/60" />
-          <p className="truncate text-sm text-muted-foreground">设置 / {activeNavItem.label}</p>
+          <p className="truncate text-sm text-muted-foreground">
+            {translate('设置 / {label}', { label: activeNavItem.label })}
+          </p>
         </div>
 
         <div data-no-window-drag="true" className="flex items-center gap-1">
-          <WindowControlButton label="最小化" onClick={handleMinimizeWindow}>
+          <WindowControlButton label={translate('最小化')} onClick={handleMinimizeWindow}>
             <Minus className="h-4 w-4" />
           </WindowControlButton>
           <WindowControlButton
-            label={isMaximized ? '还原窗口' : '最大化'}
+            label={isMaximized ? translate('还原窗口') : translate('最大化')}
             onClick={handleToggleMaximizeWindow}
           >
             {isMaximized ? <Copy className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
           </WindowControlButton>
           <WindowControlButton
-            label="关闭"
+            label={translate('关闭')}
             tone="danger"
             onClick={() => void closeSettingsWindow()}
           >
@@ -2187,7 +2335,7 @@ export function Settings() {
       <div className="flex min-h-0 flex-1">
         <nav className="flex w-48 flex-col border-r border-border/90 bg-card px-4 py-3 shadow-sm">
           <ul className="flex flex-col gap-1">
-            {NAV_ITEMS.map(item => (
+            {navItems.map(item => (
               <li key={item.key}>
                 <button
                   onClick={() => setActiveNav(item.key)}

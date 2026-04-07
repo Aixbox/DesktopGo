@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react'
+import { translate, useI18n } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type ToastTone = 'info' | 'success' | 'error'
@@ -54,6 +55,8 @@ function ToastViewport({
   toasts: ToastItem[]
   onDismiss: (id: string) => void
 }) {
+  useI18n()
+
   return (
     <div className="pointer-events-none fixed bottom-4 right-4 z-[120] flex w-[min(calc(100vw-2rem),24rem)] flex-col gap-2 sm:bottom-5 sm:right-5">
       {toasts.map(toast => {
@@ -87,7 +90,7 @@ function ToastViewport({
               </div>
               <button
                 type="button"
-                aria-label="关闭提示"
+                aria-label={translate('关闭提示')}
                 onClick={() => onDismiss(toast.id)}
                 className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >

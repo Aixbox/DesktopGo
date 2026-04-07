@@ -1,6 +1,7 @@
 import type { SearchHistoryEntry } from '@/lib/search/history'
 import { getSearchFilterLabel } from '@/lib/search/filters'
 import { getSearchSortLabel } from '@/lib/search/sorts'
+import { getIntlLocale, translate, useI18n } from '@/lib/i18n'
 
 interface SearchHistoryPanelProps {
   entries: SearchHistoryEntry[]
@@ -11,7 +12,7 @@ interface SearchHistoryPanelProps {
 
 const formatHistoryTime = (usedAt: number) => {
   try {
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat(getIntlLocale(), {
       month: 'numeric',
       day: 'numeric',
       hour: '2-digit',
@@ -28,10 +29,12 @@ export function SearchHistoryPanel({
   onRemove,
   onClear,
 }: SearchHistoryPanelProps) {
+  useI18n()
+
   if (entries.length === 0) {
     return (
       <div className="px-4 py-4 text-sm text-muted-foreground">
-        开始输入即可搜索，最近搜索会显示在这里。
+        {translate('开始输入即可搜索，最近搜索会显示在这里。')}
       </div>
     )
   }
@@ -40,9 +43,11 @@ export function SearchHistoryPanel({
     <div className="px-3 py-3">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">最近搜索</div>
+          <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+            {translate('最近搜索')}
+          </div>
           <div className="mt-1 text-sm text-muted-foreground">
-            可恢复之前搜索的关键词、筛选器、匹配选项和排序方式。
+            {translate('可恢复之前搜索的关键词、筛选器、匹配选项和排序方式。')}
           </div>
         </div>
         <button
@@ -50,7 +55,7 @@ export function SearchHistoryPanel({
           className="launchpad-glass-button rounded-md px-2.5 py-1 text-xs transition-colors hover:text-foreground"
           onClick={onClear}
         >
-          清空
+          {translate('清空')}
         </button>
       </div>
 
@@ -69,10 +74,10 @@ export function SearchHistoryPanel({
               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <span>{getSearchFilterLabel(entry.filter)}</span>
                 <span>{getSearchSortLabel(entry.sort)}</span>
-                {entry.matchCase ? <span>区分大小写</span> : null}
-                {entry.wholeWord ? <span>全字匹配</span> : null}
-                {entry.matchPath ? <span>匹配路径</span> : null}
-                {entry.regex ? <span>正则</span> : null}
+                {entry.matchCase ? <span>{translate('区分大小写')}</span> : null}
+                {entry.wholeWord ? <span>{translate('全字匹配')}</span> : null}
+                {entry.matchPath ? <span>{translate('匹配路径')}</span> : null}
+                {entry.regex ? <span>{translate('正则')}</span> : null}
                 <span>{formatHistoryTime(entry.usedAt)}</span>
               </div>
             </button>
@@ -82,7 +87,7 @@ export function SearchHistoryPanel({
               className="launchpad-glass-button rounded-md px-2 py-1 text-[11px] transition-colors hover:text-foreground"
               onClick={() => onRemove(entry.id)}
             >
-              删除
+              {translate('删除')}
             </button>
           </div>
         ))}

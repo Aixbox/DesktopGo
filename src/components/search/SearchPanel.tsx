@@ -6,6 +6,7 @@ import type { SearchHit, SearchPreview, SearchSort } from '@/lib/search/types'
 import { useIconStore } from '@/stores/iconStore'
 import { ICON_SIZE_CONFIG, type DesktopIcon } from '@/types'
 import { AppWindow, File, Folder } from 'lucide-react'
+import { translate, useI18n } from '@/lib/i18n'
 import { SearchHistoryPanel } from './SearchHistoryPanel'
 import { SearchPreviewPane } from './SearchPreviewPane'
 import { SearchSourceTabs } from './SearchSourceTabs'
@@ -212,6 +213,8 @@ export function SearchPanel({
   allowDoubleClickOpen,
   onActivate,
 }: SearchPanelProps) {
+  useI18n()
+
   const { iconSize, titleLineCount } = useIconStore()
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const bodyContentRef = useRef<HTMLDivElement | null>(null)
@@ -471,8 +474,11 @@ export function SearchPanel({
 
   const showHistoryState = isEverything && !hasCommittedQuery && !error && virtualCount === 0
   const panelTransition = prefersReducedMotion ? { duration: 0 } : PANEL_TRANSITION
-  const iconEmptyText = trimmedKeyword ? '没有匹配的图标。' : '输入关键词以搜索桌面图标。'
-  const everythingEmptyText = searchPending && virtualCount === 0 ? '搜索中...' : '没有结果'
+  const iconEmptyText = trimmedKeyword
+    ? translate('没有匹配的图标。')
+    : translate('输入关键词以搜索桌面图标。')
+  const everythingEmptyText =
+    searchPending && virtualCount === 0 ? translate('搜索中...') : translate('没有结果')
   const bodyStateKey = isEverything
     ? error
       ? `everything-error-${error}`
@@ -624,7 +630,7 @@ export function SearchPanel({
 
         {loadingMore ? (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-border/70 bg-background/82 px-4 py-2 text-xs text-muted-foreground backdrop-blur-md">
-            正在加载更多...
+            {translate('正在加载更多...')}
           </div>
         ) : null}
       </div>
@@ -633,7 +639,7 @@ export function SearchPanel({
         <>
           <button
             type="button"
-            aria-label="调整预览宽度"
+            aria-label={translate('调整预览宽度')}
             className={`relative z-10 shrink-0 border-l border-r border-border/70 bg-background/12 transition hover:bg-accent/45 ${
               isResizingSplit ? 'bg-accent/70' : ''
             }`}

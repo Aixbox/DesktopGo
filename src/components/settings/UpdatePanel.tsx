@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
+import { getIntlLocale, translate, useI18n } from '@/lib/i18n'
 import {
   APP_UPDATER_PROGRESS_EVENT,
   checkForAppUpdate,
@@ -24,7 +25,7 @@ type InstallStage = 'idle' | 'downloading' | 'installing' | 'finished'
 
 function formatBytes(value: number | null): string {
   if (!value || value <= 0) {
-    return '未知大小'
+    return translate('未知大小')
   }
 
   const units = ['B', 'KB', 'MB', 'GB']
@@ -48,13 +49,15 @@ function formatReleaseDate(value: string | null): string | null {
     return value
   }
 
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(getIntlLocale(), {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(date)
 }
 
 export function UpdatePanel() {
+  useI18n()
+
   const [configStatus, setConfigStatus] = useState<UpdaterConfigurationStatus | null>(null)
   const [checkResult, setCheckResult] = useState<AppUpdateCheckResult | null>(null)
   const [loadingConfig, setLoadingConfig] = useState(true)
@@ -76,18 +79,18 @@ export function UpdatePanel() {
           setCheckResult(null)
         }
         if (options?.notifySuccess) {
-          toast.info(nextStatus.message ?? '更新配置已刷新。', {
+          toast.info(nextStatus.message ?? translate('更新配置已刷新。'), {
             key: 'update-panel',
-            title: '应用更新',
+            title: translate('应用更新'),
           })
         }
       } catch (error) {
-        const message = `读取更新配置失败：${String(error)}`
+        const message = translate('读取更新配置失败：{error}', { error: String(error) })
         setConfigStatus(null)
         setCheckResult(null)
         toast.error(message, {
           key: 'update-panel',
-          title: '应用更新',
+          title: translate('应用更新'),
         })
       } finally {
         setLoadingConfig(false)
@@ -134,18 +137,18 @@ export function UpdatePanel() {
             setInstallStage('installing')
             break
           case 'beforeExit':
-            toast.info('安装程序即将接管，应用会自动退出。', {
+            toast.info(translate('安装程序即将接管，应用会自动退出。'), {
               key: 'update-install',
-              title: '应用更新',
+              title: translate('应用更新'),
               duration: 3200,
             })
             break
           case 'finished':
             setInstalling(false)
             setInstallStage('finished')
-            toast.success('更新安装流程已完成。请重新打开应用确认版本。', {
+            toast.success(translate('更新安装流程已完成。请重新打开应用确认版本。'), {
               key: 'update-install',
-              title: '应用更新',
+              title: translate('应用更新'),
               duration: 4200,
             })
             void refreshConfiguration()
@@ -153,9 +156,9 @@ export function UpdatePanel() {
           case 'error':
             setInstalling(false)
             setInstallStage('idle')
-            toast.error(payload.data?.message ?? '更新安装失败。', {
+            toast.error(payload.data?.message ?? translate('更新安装失败。'), {
               key: 'update-install',
-              title: '应用更新',
+              title: translate('应用更新'),
             })
             break
         }
@@ -197,18 +200,20 @@ export function UpdatePanel() {
       setCheckResult(result)
       toast[result.available ? 'success' : 'info'](
         result.available
-          ? `发现新版本 v${result.update?.version ?? ''}，可以开始下载安装。`
-          : (result.message ?? '当前已是最新版本。'),
+          ? translate('发现新版本 v{version}，可以开始下载安装。', {
+              version: result.update?.version ?? '',
+            })
+          : (result.message ?? translate('当前已是最新版本。')),
         {
           key: 'update-panel',
-          title: '应用更新',
+          title: translate('应用更新'),
         }
       )
     } catch (error) {
       setCheckResult(null)
-      toast.error(`检查更新失败：${String(error)}`, {
+      toast.error(translate('检查更新失败：{error}', { error: String(error) }), {
         key: 'update-panel',
-        title: '应用更新',
+        title: translate('应用更新'),
       })
     } finally {
       setChecking(false)
@@ -230,9 +235,9 @@ export function UpdatePanel() {
     } catch (error) {
       setInstalling(false)
       setInstallStage('idle')
-      toast.error(`下载安装更新失败：${String(error)}`, {
+      toast.error(translate('下载安装更新失败：{error}', { error: String(error) }), {
         key: 'update-install',
-        title: '应用更新',
+        title: translate('应用更新'),
       })
     }
   }
@@ -244,13 +249,16 @@ export function UpdatePanel() {
           <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">应用更新</p>
+                <p className="text-sm font-medium text-foreground">{translate('应用更新')}</p>
                 <p className="text-xs text-muted-foreground">
-                  当前版本 v{currentVersion}，当前目标 {currentTarget}
+                  {translate('当前版本 v{version}，当前目标 {target}', {
+                    version: currentVersion,
+                    target: currentTarget,
+                  })}
                 </p>
               </div>
               <div className="rounded-full border border-border/80 bg-muted px-3 py-1 text-xs text-foreground/75">
-                {configStatus?.configured ? '更新已接入' : '等待配置'}
+                {configStatus?.configured ? translate('更新已接入') : translate('等待配置')}
               </div>
             </div>
 
@@ -264,7 +272,7 @@ export function UpdatePanel() {
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
-                检查更新
+                {translate('检查更新')}
               </Button>
               <Button
                 variant="secondary"
@@ -276,14 +284,14 @@ export function UpdatePanel() {
                 ) : (
                   <Download className="h-4 w-4" />
                 )}
-                下载并安装
+                {translate('下载并安装')}
               </Button>
               <Button
                 variant="outline"
                 onClick={() => void refreshConfiguration({ notifySuccess: true })}
                 disabled={loadingConfig || checking || installing}
               >
-                刷新配置
+                {translate('刷新配置')}
               </Button>
             </div>
           </div>
@@ -296,22 +304,19 @@ export function UpdatePanel() {
                 <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" />
               )}
               <div className="space-y-2">
-                <p className="text-sm font-medium text-foreground">当前状态</p>
+                <p className="text-sm font-medium text-foreground">{translate('当前状态')}</p>
                 <p className="max-w-md text-xs leading-5 text-muted-foreground">
                   {configStatus?.configured
-                    ? '更新能力已接入。检查结果会显示在右下角，下载安装时会在下方展示进度。'
-                    : '当前尚未接入 updater 配置，检查更新与安装功能暂时不可用。'}
+                    ? translate(
+                        '更新能力已接入。检查结果会显示在右下角，下载安装时会在下方展示进度。'
+                      )
+                    : translate('当前尚未接入 updater 配置，检查更新与安装功能暂时不可用。')}
                 </p>
                 {!configStatus?.configured ? (
                   <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-900/80 dark:text-foreground/80">
-                    还缺少 updater 配置。请在
-                    <span className="font-medium text-foreground"> src-tauri/tauri.conf.json </span>
-                    中设置
-                    <span className="font-medium text-foreground"> plugins.updater.pubkey </span>和
-                    <span className="font-medium text-foreground"> plugins.updater.endpoints </span>
-                    。正式发布时还需要
-                    <span className="font-medium text-foreground"> TAURI_SIGNING_PRIVATE_KEY </span>
-                    用于生成签名更新包。
+                    {translate(
+                      '还缺少 updater 配置。请在 src-tauri/tauri.conf.json 中设置 plugins.updater.pubkey 和 plugins.updater.endpoints。正式发布时还需要 TAURI_SIGNING_PRIVATE_KEY 用于生成签名更新包。'
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -328,11 +333,11 @@ export function UpdatePanel() {
                 )}
                 <div className="w-full space-y-3">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-foreground">安装进度</p>
+                    <p className="text-sm font-medium text-foreground">{translate('安装进度')}</p>
                     <p className="text-xs text-muted-foreground">
-                      {installStage === 'downloading' && '正在下载更新包'}
-                      {installStage === 'installing' && '正在启动安装程序'}
-                      {installStage === 'finished' && '更新安装流程已完成'}
+                      {installStage === 'downloading' && translate('正在下载更新包')}
+                      {installStage === 'installing' && translate('正在启动安装程序')}
+                      {installStage === 'finished' && translate('更新安装流程已完成')}
                     </p>
                   </div>
 
@@ -350,9 +355,15 @@ export function UpdatePanel() {
                     <p className="text-xs text-muted-foreground">
                       {progressPercent === null
                         ? contentLength
-                          ? `已准备下载 ${formatBytes(contentLength)}`
-                          : '正在等待安装程序返回下载信息...'
-                        : `已下载 ${formatBytes(downloadedBytes)} / ${formatBytes(contentLength)} (${progressPercent.toFixed(1)}%)`}
+                          ? translate('已准备下载 {size}', {
+                              size: formatBytes(contentLength),
+                            })
+                          : translate('正在等待安装程序返回下载信息...')
+                        : translate('已下载 {downloaded} / {total} ({percent}%)', {
+                            downloaded: formatBytes(downloadedBytes),
+                            total: formatBytes(contentLength),
+                            percent: progressPercent.toFixed(1),
+                          })}
                     </p>
                   </div>
                 </div>
@@ -369,18 +380,22 @@ export function UpdatePanel() {
                 <div className="space-y-3">
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-foreground">
-                      检测到新版本 v{updateInfo.version}
+                      {translate('检测到新版本 v{version}', { version: updateInfo.version })}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      基于目标 {updateInfo.target}
-                      {releaseDate ? `，发布时间 ${releaseDate}` : ''}
+                      {translate('基于目标 {target}{dateSuffix}', {
+                        target: updateInfo.target,
+                        dateSuffix: releaseDate
+                          ? translate('，发布时间 {date}', { date: releaseDate })
+                          : '',
+                      })}
                     </p>
                   </div>
                   <div className="rounded-md border border-border/85 bg-background px-3 py-2 text-xs leading-5 text-muted-foreground shadow-sm">
                     {updateInfo.body?.trim() ? (
                       <p className="whitespace-pre-wrap">{updateInfo.body}</p>
                     ) : (
-                      <p>当前更新没有附带发布说明。</p>
+                      <p>{translate('当前更新没有附带发布说明。')}</p>
                     )}
                   </div>
                 </div>

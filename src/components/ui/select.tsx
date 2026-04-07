@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import { createPortal } from 'react-dom'
 
+import { translate, useI18n } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 const MENU_GAP = 8
@@ -116,11 +117,11 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
       value,
       onValueChange,
       options,
-      placeholder = '请选择',
+      placeholder = translate('请选择'),
       className,
       contentClassName,
       optionClassName,
-      emptyText = '暂无可选项',
+      emptyText = translate('暂无可选项'),
       disabled,
       id,
       onClick,
@@ -129,6 +130,8 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
     },
     ref
   ) => {
+    useI18n()
+
     const triggerRef = React.useRef<HTMLButtonElement | null>(null)
     const menuRef = React.useRef<HTMLDivElement | null>(null)
     const optionRefs = React.useRef<Array<HTMLButtonElement | null>>([])

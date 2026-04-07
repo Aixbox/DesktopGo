@@ -1,4 +1,4 @@
-import { SEARCH_SORT_OPTIONS, getSearchSortLabel } from '@/lib/search/sorts'
+import { getSearchSortLabel, getSearchSortOptions } from '@/lib/search/sorts'
 import type { SearchSort } from '@/lib/search/types'
 import { ArrowUpDown, Check, Eye, EyeOff, Settings2 } from 'lucide-react'
 import {
@@ -13,6 +13,7 @@ import {
   type RefObject,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { translate, useI18n } from '@/lib/i18n'
 
 interface SearchToolbarProps {
   matchPath: boolean
@@ -191,6 +192,8 @@ function FloatingMenu({
 }
 
 function MatcherToggleRow({ active, label, onClick }: MatcherToggleRowProps) {
+  useI18n()
+
   return (
     <button
       type="button"
@@ -209,7 +212,7 @@ function MatcherToggleRow({ active, label, onClick }: MatcherToggleRowProps) {
             : 'border-border/70 text-muted-foreground'
         }`}
       >
-        {active ? '开' : '关'}
+        {active ? translate('开') : translate('关')}
       </span>
     </button>
   )
@@ -229,6 +232,7 @@ export function SearchToolbar({
   previewVisible,
   onPreviewToggle,
 }: SearchToolbarProps) {
+  const { language } = useI18n()
   const [sortMenuOpen, setSortMenuOpen] = useState(false)
   const [matcherMenuOpen, setMatcherMenuOpen] = useState(false)
   const sortMenuRef = useRef<HTMLDivElement | null>(null)
@@ -237,20 +241,21 @@ export function SearchToolbar({
   const matcherButtonRef = useRef<HTMLButtonElement | null>(null)
   const hasActiveMatcher = matchCase || wholeWord || matchPath || regex
   const selectedSortLabel = getSearchSortLabel(sort)
+  const sortOptions = useMemo(() => getSearchSortOptions(), [language])
   const groupedSortOptions = useMemo(
     () =>
-      SEARCH_SORT_OPTIONS.reduce(
+      sortOptions.reduce(
         (groups, option) => {
           groups[option.group].push(option)
           return groups
         },
         {
-          common: [] as typeof SEARCH_SORT_OPTIONS,
-          metadata: [] as typeof SEARCH_SORT_OPTIONS,
-          history: [] as typeof SEARCH_SORT_OPTIONS,
+          common: [] as typeof sortOptions,
+          metadata: [] as typeof sortOptions,
+          history: [] as typeof sortOptions,
         }
       ),
-    []
+    [sortOptions]
   )
 
   useEffect(() => {
@@ -298,7 +303,7 @@ export function SearchToolbar({
         <button
           ref={sortButtonRef}
           type="button"
-          aria-label="搜索排序"
+          aria-label={translate('搜索排序')}
           aria-expanded={sortMenuOpen}
           className={`group relative inline-flex h-full max-w-[10rem] items-center justify-center rounded-md px-3 text-xs font-medium transition-colors duration-200 ${
             sortMenuOpen ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
@@ -337,7 +342,7 @@ export function SearchToolbar({
               return (
                 <div key={group} className="mb-2 last:mb-0">
                   <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                    {SORT_GROUP_LABELS[group]}
+                    {translate(SORT_GROUP_LABELS[group])}
                   </div>
                   <div className="space-y-1">
                     {options.map(option => (
@@ -375,7 +380,7 @@ export function SearchToolbar({
         <button
           ref={matcherButtonRef}
           type="button"
-          aria-label="搜索选项"
+          aria-label={translate('搜索选项')}
           aria-expanded={matcherMenuOpen}
           className={`relative inline-flex h-full w-8 items-center justify-center rounded-md transition-colors duration-200 ${
             matcherMenuOpen || hasActiveMatcher
@@ -414,27 +419,27 @@ export function SearchToolbar({
         >
           <div>
             <div className="px-3 pb-2 pt-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-              匹配选项
+              {translate('匹配选项')}
             </div>
             <div className="space-y-1">
               <MatcherToggleRow
                 active={matchCase}
-                label="区分大小写"
+                label={translate('区分大小写')}
                 onClick={() => onMatchCaseChange(!matchCase)}
               />
               <MatcherToggleRow
                 active={wholeWord}
-                label="全字匹配"
+                label={translate('全字匹配')}
                 onClick={() => onWholeWordChange(!wholeWord)}
               />
               <MatcherToggleRow
                 active={matchPath}
-                label="匹配路径"
+                label={translate('匹配路径')}
                 onClick={() => onMatchPathChange(!matchPath)}
               />
               <MatcherToggleRow
                 active={regex}
-                label="正则表达式"
+                label={translate('正则表达式')}
                 onClick={() => onRegexChange(!regex)}
               />
             </div>
@@ -447,8 +452,8 @@ export function SearchToolbar({
       {/* 3. 预览开关按钮 */}
       <button
         type="button"
-        title={previewVisible ? '隐藏预览' : '显示预览'}
-        aria-label={previewVisible ? '隐藏预览' : '显示预览'}
+        title={previewVisible ? translate('隐藏预览') : translate('显示预览')}
+        aria-label={previewVisible ? translate('隐藏预览') : translate('显示预览')}
         className={`relative inline-flex h-full w-8 items-center justify-center rounded-md transition-colors duration-200 ${
           previewVisible ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
         }`}

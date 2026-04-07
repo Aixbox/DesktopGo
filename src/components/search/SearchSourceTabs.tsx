@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { HardDrive, LayoutGrid } from 'lucide-react'
+import { translate, useI18n } from '@/lib/i18n'
 
 type SearchSource = 'icons' | 'everything'
 
@@ -14,6 +15,8 @@ const TABS = [
 ] as const
 
 export function SearchSourceTabs({ source, onChange }: SearchSourceTabsProps) {
+  useI18n()
+
   return (
     <div className="search-control-group inline-flex h-8 items-center gap-1 rounded-lg p-1">
       {TABS.map(tab => {
@@ -39,7 +42,7 @@ export function SearchSourceTabs({ source, onChange }: SearchSourceTabsProps) {
 
             <span className="relative z-10 flex items-center gap-1.5">
               <Icon className="h-3.5 w-3.5" />
-              <span>{tab.label}</span>
+              <span>{translate(tab.label)}</span>
             </span>
           </button>
         )

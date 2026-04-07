@@ -1,4 +1,5 @@
 import type { SearchSort } from './types'
+import { translate } from '@/lib/i18n'
 
 export interface SearchSortOption {
   value: SearchSort
@@ -36,4 +37,10 @@ export const SEARCH_SORT_OPTIONS: SearchSortOption[] = [
 ]
 
 export const getSearchSortLabel = (sort: SearchSort) =>
-  SEARCH_SORT_OPTIONS.find(option => option.value === sort)?.label ?? sort
+  translate(SEARCH_SORT_OPTIONS.find(option => option.value === sort)?.label ?? sort)
+
+export const getSearchSortOptions = () =>
+  SEARCH_SORT_OPTIONS.map(option => ({
+    ...option,
+    label: translate(option.label),
+  }))

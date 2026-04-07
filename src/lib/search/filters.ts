@@ -1,4 +1,5 @@
 import type { SearchDefaultFilter } from './settings'
+import { translate } from '@/lib/i18n'
 
 export interface SearchFilterDefinition {
   value: SearchDefaultFilter
@@ -19,7 +20,13 @@ export const SEARCH_FILTERS: SearchFilterDefinition[] = [
 ]
 
 export const getSearchFilterLabel = (filter: SearchDefaultFilter) =>
-  SEARCH_FILTERS.find(entry => entry.value === filter)?.label ?? filter
+  translate(SEARCH_FILTERS.find(entry => entry.value === filter)?.label ?? filter)
+
+export const getSearchFilterOptions = () =>
+  SEARCH_FILTERS.map(entry => ({
+    ...entry,
+    label: translate(entry.label),
+  }))
 
 export const buildSearchKeyword = (keyword: string, filter: SearchDefaultFilter) => {
   const trimmedKeyword = keyword.trim()

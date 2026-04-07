@@ -11,6 +11,7 @@ import {
   WheelEvent as ReactWheelEvent,
 } from 'react'
 import type { DesktopIcon } from '../../../types'
+import { translate, useI18n } from '@/lib/i18n'
 import type { GridItem } from '../model'
 import {
   ContextMenu,
@@ -179,6 +180,8 @@ export function DockBar({
   onOpenFolder,
   onRemoveItem,
 }: DockBarProps) {
+  useI18n()
+
   const panelRef = useRef<HTMLDivElement | null>(null)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const gridRef = useRef<HTMLDivElement | null>(null)
@@ -748,7 +751,7 @@ export function DockBar({
                               onOpenFolder(item.id)
                             }}
                           >
-                            {MENU_OPEN_LABEL}
+                            {translate(MENU_OPEN_LABEL)}
                           </ContextMenuItem>
                           <ContextMenuItem
                             className="rounded-xl px-3 py-2 text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/20 dark:focus:text-red-100"
@@ -756,7 +759,7 @@ export function DockBar({
                               onRemoveItem(id)
                             }}
                           >
-                            {MENU_REMOVE_LABEL}
+                            {translate(MENU_REMOVE_LABEL)}
                           </ContextMenuItem>
                         </ContextMenuContent>
                       ) : null}

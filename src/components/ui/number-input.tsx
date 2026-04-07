@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 
+import { translate, useI18n } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { inputBaseClassName } from '@/components/ui/input'
 
@@ -44,6 +45,8 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
     },
     ref
   ) => {
+    useI18n()
+
     const inputRef = React.useRef<HTMLInputElement>(null)
 
     React.useImperativeHandle(ref, () => inputRef.current as HTMLInputElement, [])
@@ -104,7 +107,7 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
           {/* 不直接定制原生 spinner：WebKit 伪元素是非标准实现，这里统一隐藏后用项目按钮替代。 */}
           <button
             type="button"
-            aria-label="增加数值"
+            aria-label={translate('增加数值')}
             onClick={() => adjustValue(1)}
             disabled={!canIncrease}
             className="flex h-1/2 items-center justify-center border-b border-border/75 text-foreground/75 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
@@ -113,7 +116,7 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
           </button>
           <button
             type="button"
-            aria-label="减少数值"
+            aria-label={translate('减少数值')}
             onClick={() => adjustValue(-1)}
             disabled={!canDecrease}
             className="flex h-1/2 items-center justify-center text-foreground/75 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:bg-accent disabled:cursor-not-allowed disabled:opacity-40"

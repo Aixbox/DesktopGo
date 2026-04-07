@@ -11,9 +11,10 @@ import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import { Check, ChevronDown } from 'lucide-react'
+import { translate, useI18n } from '@/lib/i18n'
 import { applyTheme, getSavedTheme } from '@/lib/theme'
 import { getSearchPreview, recordSearchResultRun } from '@/lib/search/api'
-import { SEARCH_FILTERS } from '@/lib/search/filters'
+import { getSearchFilterLabel, getSearchFilterOptions } from '@/lib/search/filters'
 import { useSearch } from '@/lib/search/useSearch'
 import { SearchPanel } from '@/components/search/SearchPanel'
 import { LAUNCHPAD_LAYOUT_RESET_EVENT } from '@/components/icon-grid/services/layoutStore'
@@ -80,6 +81,7 @@ async function waitForSettingsWindowDisposed() {
 type SearchSource = 'icons' | 'everything'
 
 export function Launchpad() {
+  const { language } = useI18n()
   const {
     icons,
     loading,
@@ -156,6 +158,7 @@ export function Launchpad() {
   const [searchPreview, setSearchPreview] = useState<Awaited<
     ReturnType<typeof getSearchPreview>
   > | null>(null)
+  const searchFilterOptions = useMemo(() => getSearchFilterOptions(), [language])
   const hasSearchKeyword = keyword.trim().length > 0
   const normalizedKeyword = keyword.trim().toLocaleLowerCase()
   const iconSearchResults = useMemo(() => {
@@ -287,8 +290,7 @@ export function Launchpad() {
 
   const selectedSearchItem = selectedIndex >= 0 ? getSearchItemAt(selectedIndex) : null
   const selectedSearchPath = selectedSearchItem?.path ?? ''
-  const selectedFilterLabel =
-    SEARCH_FILTERS.find(entry => entry.value === searchFilter)?.label ?? '全部'
+  const selectedFilterLabel = getSearchFilterLabel(searchFilter)
 
   useEffect(() => {
     if (!isSearchPanelVisible || !isSearchPreviewVisible || !selectedSearchPath) {
@@ -626,7 +628,9 @@ export function Launchpad() {
   const handleDeleteSelected = () => {
     if (selectedIconKeys.length === 0) return
     const confirmed = window.confirm(
-      `确定要删除已选中的 ${selectedIconKeys.length} 个图标吗？此操作无法撤销。`
+      translate('确定要删除已选中的 {count} 个图标吗？此操作无法撤销。', {
+        count: selectedIconKeys.length,
+      })
     )
     if (!confirmed) return
     void deleteSelectedIcons()
@@ -643,7 +647,7 @@ export function Launchpad() {
 
     const settingsWindow = new WebviewWindow('settings', {
       url: 'index.html?page=settings',
-      title: '设置',
+      title: translate('设置'),
       // 设置窗口允许放大，但默认尺寸同时作为最小尺寸，避免布局继续被压缩。
       width: SETTINGS_WINDOW_WIDTH,
       height: SETTINGS_WINDOW_HEIGHT,
@@ -696,9 +700,15 @@ export function Launchpad() {
                 }}
                 onKeyDown={handleSearchInputKeyDown}
                 placeholder={
-                  searchSource === 'everything' ? '搜索文件、文件夹和应用...' : '搜索桌面图标...'
+                  searchSource === 'everything'
+                    ? translate('搜索文件、文件夹和应用...')
+                    : translate('搜索桌面图标...')
                 }
-                aria-label={searchSource === 'everything' ? '搜索文件' : '搜索桌面图标'}
+                aria-label={
+                  searchSource === 'everything'
+                    ? translate('搜索文件')
+                    : translate('搜索桌面图标')
+                }
                 className={`launchpad-glass-panel h-11 w-full rounded-full px-4 text-sm text-foreground/90 shadow-lg outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 ${
                   searchSource === 'everything' ? 'pr-32' : ''
                 }`}
@@ -721,7 +731,7 @@ export function Launchpad() {
                       data-search-floating-menu="true"
                       className="launchpad-glass-panel-strong absolute left-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-2xl p-1.5 shadow-2xl"
                     >
-                      {SEARCH_FILTERS.map(entry => (
+                      {searchFilterOptions.map(entry => (
                         <button
                           key={entry.value}
                           type="button"
@@ -808,27 +818,29 @@ export function Launchpad() {
               data-selection-toolbar
               className="launchpad-glass-panel-strong absolute left-1/2 top-20 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full px-3 py-2 text-sm text-foreground/90"
             >
-              <span className="px-2">已选择：{selectedIconKeys.length}</span>
+              <span className="px-2">
+                {translate('已选择：{count}', { count: selectedIconKeys.length })}
+              </span>
               <button
                 type="button"
                 onClick={handleHideSelected}
                 className="launchpad-glass-button rounded-full px-3 py-1 text-xs transition-colors"
               >
-                隐藏
+                {translate('隐藏')}
               </button>
               <button
                 type="button"
                 onClick={handleDeleteSelected}
                 className="rounded-full border border-red-500/30 px-3 py-1 text-xs text-red-700 transition-colors hover:bg-red-500/12 hover:text-red-800 dark:text-red-200 dark:hover:bg-red-500/25 dark:hover:text-red-100"
               >
-                删除
+                {translate('删除')}
               </button>
               <button
                 type="button"
                 onClick={clearSelection}
                 className="launchpad-glass-button rounded-full px-3 py-1 text-xs transition-colors"
               >
-                取消
+                {translate('取消')}
               </button>
             </div>
           ) : null}
@@ -836,10 +848,12 @@ export function Launchpad() {
           {loading ? (
             <div className="flex items-center gap-3">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/40 border-t-foreground" />
-              <span className="text-lg text-foreground/70">Loading...</span>
+              <span className="text-lg text-foreground/70">{translate('Loading...')}</span>
             </div>
           ) : icons.length === 0 ? (
-            <div className="text-lg text-foreground/50">No desktop shortcuts found</div>
+            <div className="text-lg text-foreground/50">
+              {translate('No desktop shortcuts found')}
+            </div>
           ) : (
             <IconGrid icons={icons} />
           )}
@@ -848,7 +862,7 @@ export function Launchpad() {
 
       <ContextMenuContent className="w-44">
         <ContextMenuSub>
-          <ContextMenuSubTrigger>图标大小</ContextMenuSubTrigger>
+          <ContextMenuSubTrigger>{translate('图标大小')}</ContextMenuSubTrigger>
           <ContextMenuSubContent className="w-44">
             <ContextMenuRadioGroup
               value={iconSize}
@@ -856,7 +870,7 @@ export function Launchpad() {
             >
               {ICON_SIZE_OPTIONS.map(option => (
                 <ContextMenuRadioItem key={option.value} value={option.value}>
-                  {option.label}
+                  {translate(option.label)}
                 </ContextMenuRadioItem>
               ))}
             </ContextMenuRadioGroup>
@@ -864,7 +878,7 @@ export function Launchpad() {
         </ContextMenuSub>
 
         <ContextMenuSub>
-          <ContextMenuSubTrigger>窗口大小</ContextMenuSubTrigger>
+          <ContextMenuSubTrigger>{translate('窗口大小')}</ContextMenuSubTrigger>
           <ContextMenuSubContent className="w-44">
             <ContextMenuRadioGroup
               value={windowMode}
@@ -872,7 +886,7 @@ export function Launchpad() {
             >
               {WINDOW_MODE_OPTIONS.map(option => (
                 <ContextMenuRadioItem key={option.value} value={option.value}>
-                  {option.label}
+                  {translate(option.label)}
                 </ContextMenuRadioItem>
               ))}
             </ContextMenuRadioGroup>
@@ -880,7 +894,7 @@ export function Launchpad() {
         </ContextMenuSub>
 
         <ContextMenuSub>
-          <ContextMenuSubTrigger>标题行数</ContextMenuSubTrigger>
+          <ContextMenuSubTrigger>{translate('标题行数')}</ContextMenuSubTrigger>
           <ContextMenuSubContent className="w-44">
             <ContextMenuRadioGroup
               value={titleLineCount}
@@ -888,7 +902,7 @@ export function Launchpad() {
             >
               {TITLE_LINE_OPTIONS.map(option => (
                 <ContextMenuRadioItem key={option.value} value={option.value}>
-                  {option.label}
+                  {translate(option.label)}
                 </ContextMenuRadioItem>
               ))}
             </ContextMenuRadioGroup>
@@ -896,9 +910,11 @@ export function Launchpad() {
         </ContextMenuSub>
 
         <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => enterSelectionMode()}>编辑图标</ContextMenuItem>
+        <ContextMenuItem onSelect={() => enterSelectionMode()}>
+          {translate('编辑图标')}
+        </ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem onSelect={openSettings}>设置</ContextMenuItem>
+        <ContextMenuItem onSelect={openSettings}>{translate('设置')}</ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   )

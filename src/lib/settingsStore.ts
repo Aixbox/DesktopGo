@@ -1,5 +1,12 @@
 import { LazyStore } from '@tauri-apps/plugin-store'
-import type { IconManagerViewMode, IconSize, ThemeMode, TitleLineCount, WindowMode } from '@/types'
+import type {
+  AppLanguage,
+  IconManagerViewMode,
+  IconSize,
+  ThemeMode,
+  TitleLineCount,
+  WindowMode,
+} from '@/types'
 import { isIconManagerViewMode } from './iconManager'
 
 export const DEFAULT_LAUNCHPAD_SHORTCUT = 'Ctrl+Space'
@@ -9,6 +16,7 @@ type SettingKey =
   | 'windowMode'
   | 'titleLineCount'
   | 'themeMode'
+  | 'language'
   | 'dockEnabled'
   | 'launchOnStartup'
   | 'launchpadShortcut'
@@ -20,6 +28,7 @@ type SettingValueMap = {
   windowMode: WindowMode
   titleLineCount: TitleLineCount
   themeMode: ThemeMode
+  language: AppLanguage
   dockEnabled: boolean
   launchOnStartup: boolean
   launchpadShortcut: string
@@ -27,13 +36,14 @@ type SettingValueMap = {
   customAppDir: string
 }
 
-const SETTINGS_STORE_VERSION = 4
+const SETTINGS_STORE_VERSION = 5
 const SETTINGS_VERSION_KEY = 'settingsVersion'
 const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'iconSize',
   'windowMode',
   'titleLineCount',
   'themeMode',
+  'language',
   'dockEnabled',
   'launchOnStartup',
   'launchpadShortcut',
@@ -46,6 +56,7 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   windowMode: 'fullscreen',
   titleLineCount: 'two',
   themeMode: 'dark',
+  language: 'zh',
   dockEnabled: true,
   launchOnStartup: true,
   launchpadShortcut: DEFAULT_LAUNCHPAD_SHORTCUT,
@@ -69,6 +80,8 @@ const isTitleLineCount = (value: unknown): value is TitleLineCount =>
 const isThemeMode = (value: unknown): value is ThemeMode =>
   value === 'system' || value === 'dark' || value === 'light'
 
+const isAppLanguage = (value: unknown): value is AppLanguage => value === 'zh' || value === 'en'
+
 const isDockEnabled = (value: unknown): value is boolean => typeof value === 'boolean'
 const isLaunchOnStartup = (value: unknown): value is boolean => typeof value === 'boolean'
 
@@ -83,6 +96,7 @@ const validators: {
   windowMode: isWindowMode,
   titleLineCount: isTitleLineCount,
   themeMode: isThemeMode,
+  language: isAppLanguage,
   dockEnabled: isDockEnabled,
   launchOnStartup: isLaunchOnStartup,
   launchpadShortcut: isLaunchpadShortcut,

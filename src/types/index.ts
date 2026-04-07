@@ -70,3 +70,5 @@ export const WINDOW_SIZE_CONFIG: Record<
 export type ThemeMode = 'system' | 'dark' | 'light'
 
 export type IconManagerViewMode = 'list' | 'grid'
+
+export type AppLanguage = 'zh' | 'en'
