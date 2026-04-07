@@ -41,6 +41,8 @@ If you only want to use DesktopGo, you do not need Node.js or Rust locally. Just
 - Latest release: <https://github.com/Aixbox/DesktopGo/releases/latest>
 - All releases: <https://github.com/Aixbox/DesktopGo/releases>
 - Release notes for `v1.0.0`: [`docs/RELEASE_NOTES/v1.0.0.md`](docs/RELEASE_NOTES/v1.0.0.md)
+- User Guide (English): [`docs/USER_GUIDE.en.md`](docs/USER_GUIDE.en.md)
+- 使用说明（中文）: [`docs/USER_GUIDE.zh-CN.md`](docs/USER_GUIDE.zh-CN.md)
 
 Install flow:
 
