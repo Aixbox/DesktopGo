@@ -35,6 +35,19 @@ pub fn update_launchpad_shortcut(
 }
 
 #[tauri::command]
+pub fn get_launch_on_startup_enabled(app_handle: tauri::AppHandle) -> Result<bool, String> {
+    crate::read_launch_on_startup_enabled(&app_handle)
+}
+
+#[tauri::command]
+pub fn update_launch_on_startup_enabled(
+    app_handle: tauri::AppHandle,
+    enabled: bool,
+) -> Result<bool, String> {
+    crate::set_launch_on_startup_enabled(&app_handle, enabled)
+}
+
+#[tauri::command]
 pub fn activate_settings_window(app_handle: tauri::AppHandle) -> Result<(), String> {
     let main_window = app_handle.get_webview_window("main");
 

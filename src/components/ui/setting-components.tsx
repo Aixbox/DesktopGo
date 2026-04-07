@@ -33,17 +33,27 @@ export function SettingCard({ label, desc, children }: SettingCardProps) {
 interface SwitchButtonProps {
   checked: boolean
   onChange: (next: boolean) => void
+  disabled?: boolean
 }
 
-export function SwitchButton({ checked, onChange }: SwitchButtonProps) {
+export function SwitchButton({ checked, onChange, disabled = false }: SwitchButtonProps) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 ${
+      aria-disabled={disabled}
+      disabled={disabled}
+      onClick={() => {
+        if (disabled) return
+        onChange(!checked)
+      }}
+      className={`relative inline-flex h-7 w-12 shrink-0 rounded-full border transition-colors duration-200 ${
         checked ? 'border-blue-500 bg-blue-500/90' : 'border-border bg-zinc-500/30'
+      } ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} ${
+        disabled
+          ? ''
+          : 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/25'
       }`}
     >
       <span
@@ -60,9 +70,16 @@ interface ToggleRowProps {
   description: string
   checked: boolean
   onChange: (checked: boolean) => void
+  disabled?: boolean
 }
 
-export function ToggleRow({ title, description, checked, onChange }: ToggleRowProps) {
+export function ToggleRow({
+  title,
+  description,
+  checked,
+  onChange,
+  disabled = false,
+}: ToggleRowProps) {
   return (
     <div className="flex items-center justify-between gap-4 rounded-lg border border-border/90 bg-card p-4 shadow-sm">
       <div className="min-w-0 space-y-1">
@@ -70,7 +87,7 @@ export function ToggleRow({ title, description, checked, onChange }: ToggleRowPr
         <p className="text-xs leading-5 text-muted-foreground">{description}</p>
       </div>
       <div className="shrink-0">
-        <SwitchButton checked={checked} onChange={onChange} />
+        <SwitchButton checked={checked} onChange={onChange} disabled={disabled} />
       </div>
     </div>
   )

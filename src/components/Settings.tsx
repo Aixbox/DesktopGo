@@ -258,7 +258,7 @@ const ICON_SYNC_GROUPS: {
   },
 ]
 
-type ShortcutStatusTone = 'default' | 'success' | 'error'
+type StatusTone = 'default' | 'success' | 'error'
 
 const SHORTCUT_MODIFIER_CODES = new Set([
   'ControlLeft',
@@ -451,12 +451,16 @@ function WindowControlButton({
 function SettingsPanel() {
   const { iconSize, windowMode, titleLineCount, dockEnabled, setDockEnabled } = useIconStore()
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark')
+  const [launchOnStartupEnabled, setLaunchOnStartupEnabled] = useState(true)
+  const [launchOnStartupStatusText, setLaunchOnStartupStatusText] = useState('')
+  const [launchOnStartupStatusTone, setLaunchOnStartupStatusTone] = useState<StatusTone>('default')
+  const [isSavingLaunchOnStartup, setIsSavingLaunchOnStartup] = useState(false)
   const [launchpadShortcut, setLaunchpadShortcut] = useState(DEFAULT_LAUNCHPAD_SHORTCUT)
   const [launchpadShortcutDraft, setLaunchpadShortcutDraft] = useState(
     formatShortcutForInput(DEFAULT_LAUNCHPAD_SHORTCUT)
   )
   const [shortcutStatusText, setShortcutStatusText] = useState('')
-  const [shortcutStatusTone, setShortcutStatusTone] = useState<ShortcutStatusTone>('default')
+  const [shortcutStatusTone, setShortcutStatusTone] = useState<StatusTone>('default')
   const [isRecordingShortcut, setIsRecordingShortcut] = useState(false)
   const [isSavingShortcut, setIsSavingShortcut] = useState(false)
   const shortcutInputRef = useRef<HTMLInputElement | null>(null)
@@ -470,6 +474,7 @@ function SettingsPanel() {
           savedTitleLineCount,
           savedDockEnabled,
           savedThemeMode,
+          savedLaunchOnStartup,
           savedLaunchpadShortcut,
         ] = await Promise.all([
           getSetting('iconSize'),
@@ -477,8 +482,25 @@ function SettingsPanel() {
           getSetting('titleLineCount'),
           getSetting('dockEnabled'),
           getSetting('themeMode'),
+          getSetting('launchOnStartup'),
           getSetting('launchpadShortcut'),
         ])
+
+        let resolvedLaunchOnStartup = savedLaunchOnStartup
+        try {
+          const actualLaunchOnStartup = await invoke<boolean>('get_launch_on_startup_enabled')
+          resolvedLaunchOnStartup = actualLaunchOnStartup
+
+          if (actualLaunchOnStartup !== savedLaunchOnStartup) {
+            void setSetting('launchOnStartup', actualLaunchOnStartup).catch(error =>
+              console.error('Failed to sync launch on startup setting:', error)
+            )
+          }
+        } catch (error) {
+          console.error('Failed to load launch on startup state:', error)
+          setLaunchOnStartupStatusTone('error')
+          setLaunchOnStartupStatusText('读取系统开机自启状态失败，已回退到本地设置。')
+        }
 
         useIconStore.setState({
           iconSize: savedIconSize,
@@ -487,6 +509,7 @@ function SettingsPanel() {
           dockEnabled: savedDockEnabled,
         })
         setThemeMode(savedThemeMode)
+        setLaunchOnStartupEnabled(resolvedLaunchOnStartup)
         setLaunchpadShortcut(savedLaunchpadShortcut)
         setLaunchpadShortcutDraft(formatShortcutForInput(savedLaunchpadShortcut))
         setShortcutStatusText(
@@ -529,6 +552,36 @@ function SettingsPanel() {
     void saveTheme(value).catch(e => console.error('Failed to save theme mode:', e))
     setThemeMode(value)
     applyTheme(value)
+  }
+
+  const handleLaunchOnStartup = async (value: boolean) => {
+    if (isSavingLaunchOnStartup) {
+      return
+    }
+
+    setIsSavingLaunchOnStartup(true)
+    setLaunchOnStartupStatusTone('default')
+    setLaunchOnStartupStatusText(value ? '正在开启开机自启...' : '正在关闭开机自启...')
+
+    try {
+      const nextEnabled = await invoke<boolean>('update_launch_on_startup_enabled', {
+        enabled: value,
+      })
+
+      setLaunchOnStartupEnabled(nextEnabled)
+      setLaunchOnStartupStatusTone('success')
+      setLaunchOnStartupStatusText(
+        nextEnabled
+          ? '已开启开机自启，Windows 登录后会自动启动 DesktopGo。'
+          : '已关闭开机自启，Windows 登录后不会自动启动 DesktopGo。'
+      )
+    } catch (error) {
+      console.error('Failed to update launch on startup state:', error)
+      setLaunchOnStartupStatusTone('error')
+      setLaunchOnStartupStatusText(`更新开机自启失败：${String(error)}`)
+    } finally {
+      setIsSavingLaunchOnStartup(false)
+    }
   }
 
   const handleToggleShortcutRecording = () => {
@@ -683,6 +736,12 @@ function SettingsPanel() {
   const shortcutDraftChanged =
     normalizedDraftShortcut !== normalizeShortcutDraftText(currentShortcutInputValue)
   const shortcutDisplayValue = isRecordingShortcut ? '请按下新的组合键' : launchpadShortcutDraft
+  const launchOnStartupStatusClassName =
+    launchOnStartupStatusTone === 'error'
+      ? 'text-red-500 dark:text-red-300'
+      : launchOnStartupStatusTone === 'success'
+        ? 'text-emerald-600 dark:text-emerald-300'
+        : 'text-muted-foreground'
   const shortcutStatusClassName =
     shortcutStatusTone === 'error'
       ? 'text-red-500 dark:text-red-300'
@@ -747,6 +806,23 @@ function SettingsPanel() {
           checked={dockEnabled}
           onChange={handleDockEnabled}
         />
+      </div>
+
+      <div className="mb-6">
+        <ToggleRow
+          title="开机自启"
+          description={
+            launchOnStartupEnabled
+              ? '当前已开启，登录 Windows 后会自动启动 DesktopGo 并保持后台待命。'
+              : '当前已关闭，登录 Windows 后需要手动启动 DesktopGo。'
+          }
+          checked={launchOnStartupEnabled}
+          onChange={handleLaunchOnStartup}
+          disabled={isSavingLaunchOnStartup}
+        />
+        <p className={cn('mt-2 px-1 text-xs leading-5', launchOnStartupStatusClassName)}>
+          {launchOnStartupStatusText || '默认开启，关闭后仅影响后续 Windows 登录时是否自动启动。'}
+        </p>
       </div>
 
       <div className="mb-6">
@@ -2019,11 +2095,7 @@ export function Settings() {
 
   const isTitlebarInteractiveTarget = (target: EventTarget | null) => {
     const element =
-      target instanceof Element
-        ? target
-        : target instanceof Node
-          ? target.parentElement
-          : null
+      target instanceof Element ? target : target instanceof Node ? target.parentElement : null
 
     return Boolean(
       element?.closest(

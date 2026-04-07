@@ -10,6 +10,7 @@ type SettingKey =
   | 'titleLineCount'
   | 'themeMode'
   | 'dockEnabled'
+  | 'launchOnStartup'
   | 'launchpadShortcut'
   | 'iconManagerViewMode'
 type ExtendedSettingKey = SettingKey | 'customAppDir'
@@ -20,12 +21,13 @@ type SettingValueMap = {
   titleLineCount: TitleLineCount
   themeMode: ThemeMode
   dockEnabled: boolean
+  launchOnStartup: boolean
   launchpadShortcut: string
   iconManagerViewMode: IconManagerViewMode
   customAppDir: string
 }
 
-const SETTINGS_STORE_VERSION = 3
+const SETTINGS_STORE_VERSION = 4
 const SETTINGS_VERSION_KEY = 'settingsVersion'
 const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'iconSize',
@@ -33,6 +35,7 @@ const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'titleLineCount',
   'themeMode',
   'dockEnabled',
+  'launchOnStartup',
   'launchpadShortcut',
   'iconManagerViewMode',
   'customAppDir',
@@ -44,6 +47,7 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   titleLineCount: 'two',
   themeMode: 'dark',
   dockEnabled: true,
+  launchOnStartup: true,
   launchpadShortcut: DEFAULT_LAUNCHPAD_SHORTCUT,
   iconManagerViewMode: 'list',
   customAppDir: '',
@@ -66,6 +70,7 @@ const isThemeMode = (value: unknown): value is ThemeMode =>
   value === 'system' || value === 'dark' || value === 'light'
 
 const isDockEnabled = (value: unknown): value is boolean => typeof value === 'boolean'
+const isLaunchOnStartup = (value: unknown): value is boolean => typeof value === 'boolean'
 
 const isLaunchpadShortcut = (value: unknown): value is string => typeof value === 'string'
 
@@ -79,6 +84,7 @@ const validators: {
   titleLineCount: isTitleLineCount,
   themeMode: isThemeMode,
   dockEnabled: isDockEnabled,
+  launchOnStartup: isLaunchOnStartup,
   launchpadShortcut: isLaunchpadShortcut,
   iconManagerViewMode: isIconManagerViewMode,
   customAppDir: isCustomAppDir,

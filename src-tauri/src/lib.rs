@@ -1,3 +1,4 @@
+mod autostart;
 mod commands;
 mod everything;
 mod icons;
@@ -7,17 +8,21 @@ mod updater;
 
 use commands::{
     activate_main_window, activate_settings_window, check_for_app_update, delete_desktop_icons,
-    get_default_customapp_dir, get_desktop_icons, get_icon_manager_items, get_layout_payload,
-    get_layout_payloads, get_search_preview, get_search_runtime_status,
-    get_updater_configuration_status, hide_desktop_icons, install_app_update, launch_app,
-    notify_main_window_ready, record_search_result_run, search_files, set_layout_payload,
-    set_layout_payloads, set_window_mode, start_search_runtime, sync_full_customapp_icons,
-    sync_full_desktop_icons, sync_new_customapp_icons, sync_new_desktop_icons, toggle_window,
-    unhide_desktop_icons, update_launchpad_shortcut,
+    get_default_customapp_dir, get_desktop_icons, get_icon_manager_items,
+    get_launch_on_startup_enabled, get_layout_payload, get_layout_payloads, get_search_preview,
+    get_search_runtime_status, get_updater_configuration_status, hide_desktop_icons,
+    install_app_update, launch_app, notify_main_window_ready, record_search_result_run,
+    search_files, set_layout_payload, set_layout_payloads, set_window_mode, start_search_runtime,
+    sync_full_customapp_icons, sync_full_desktop_icons, sync_new_customapp_icons,
+    sync_new_desktop_icons, toggle_window, unhide_desktop_icons, update_launch_on_startup_enabled,
+    update_launchpad_shortcut,
 };
 #[cfg(windows)]
 use once_cell::sync::OnceCell;
-use std::sync::{Mutex, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex,
+};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
@@ -33,6 +38,9 @@ static WINDOWS_CONSOLE_EXIT_REQUESTED: AtomicBool = AtomicBool::new(false);
 const MAIN_WINDOW_FOCUS_RETRY_COUNT: usize = 8;
 const MAIN_WINDOW_FOCUS_RETRY_DELAY_MS: u64 = 40;
 pub(crate) const DEFAULT_LAUNCHPAD_SHORTCUT: &str = "Ctrl+Space";
+const DEFAULT_LAUNCH_ON_STARTUP: bool = true;
+const LAUNCH_ON_STARTUP_SETTING_KEY: &str = "launchOnStartup";
+const WINDOWS_RUN_VALUE_NAME: &str = "DesktopGo";
 
 struct MainWindowState {
     ready: AtomicBool,
@@ -108,6 +116,7 @@ pub fn run() {
 
             create_main_window(app.handle());
             install_windows_console_exit_handler(app.handle());
+            initialize_launch_on_startup(app.handle());
             initialize_launchpad_shortcut(app.handle());
 
             // 安装/更新后首次启动时，自动显示启动台窗口。
@@ -147,7 +156,9 @@ pub fn run() {
             get_updater_configuration_status,
             check_for_app_update,
             install_app_update,
-            update_launchpad_shortcut
+            update_launchpad_shortcut,
+            get_launch_on_startup_enabled,
+            update_launch_on_startup_enabled
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
@@ -172,6 +183,81 @@ fn should_show_on_launch(_app: &tauri::AppHandle) -> bool {
         }
         _ => false,
     }
+}
+
+fn read_saved_launch_on_startup(app: &tauri::AppHandle) -> Option<bool> {
+    app.store("settings.json").ok().and_then(|store| {
+        store
+            .get(LAUNCH_ON_STARTUP_SETTING_KEY)
+            .and_then(|value| value.as_bool())
+    })
+}
+
+fn save_launch_on_startup_setting(app: &tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    let store = app
+        .store("settings.json")
+        .map_err(|error| format!("无法打开本地设置存储：{}", error))?;
+    store.set(LAUNCH_ON_STARTUP_SETTING_KEY, enabled);
+    store
+        .save()
+        .map_err(|error| format!("无法保存开机自启设置：{}", error))
+}
+
+fn initialize_launch_on_startup(app: &tauri::AppHandle) {
+    let saved_launch_on_startup = read_saved_launch_on_startup(app);
+    let enabled = saved_launch_on_startup.unwrap_or(DEFAULT_LAUNCH_ON_STARTUP);
+
+    match autostart::set_enabled(WINDOWS_RUN_VALUE_NAME, enabled) {
+        Ok(()) => {
+            if saved_launch_on_startup.is_none() {
+                if let Err(error) = save_launch_on_startup_setting(app, enabled) {
+                    eprintln!(
+                        "Warning: Failed to persist default launch on startup setting `{}`: {}",
+                        enabled, error
+                    );
+                }
+            }
+        }
+        Err(error) => eprintln!(
+            "Warning: Failed to update launch on startup state `{}`: {}",
+            enabled, error
+        ),
+    }
+}
+
+pub(crate) fn read_launch_on_startup_enabled(app: &tauri::AppHandle) -> Result<bool, String> {
+    let enabled = autostart::is_enabled(WINDOWS_RUN_VALUE_NAME)?;
+
+    if read_saved_launch_on_startup(app) != Some(enabled) {
+        if let Err(error) = save_launch_on_startup_setting(app, enabled) {
+            eprintln!(
+                "Warning: Failed to synchronize launch on startup setting `{}`: {}",
+                enabled, error
+            );
+        }
+    }
+
+    Ok(enabled)
+}
+
+pub(crate) fn set_launch_on_startup_enabled(
+    app: &tauri::AppHandle,
+    enabled: bool,
+) -> Result<bool, String> {
+    let previous_enabled = autostart::is_enabled(WINDOWS_RUN_VALUE_NAME)?;
+    autostart::set_enabled(WINDOWS_RUN_VALUE_NAME, enabled)?;
+
+    if let Err(error) = save_launch_on_startup_setting(app, enabled) {
+        let rollback_message =
+            match autostart::set_enabled(WINDOWS_RUN_VALUE_NAME, previous_enabled) {
+                Ok(()) => "已回滚系统开机自启状态。".to_string(),
+                Err(rollback_error) => format!("回滚系统开机自启状态也失败了：{}", rollback_error),
+            };
+
+        return Err(format!("{} {}", error, rollback_message));
+    }
+
+    Ok(enabled)
 }
 
 fn normalize_launchpad_shortcut(shortcut: &str) -> Result<String, String> {
