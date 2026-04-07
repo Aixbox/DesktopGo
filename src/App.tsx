@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Launchpad } from './components/Launchpad'
 import { Settings } from './components/Settings'
+import { ToastProvider } from './components/ui/toast'
 
 function App() {
   const params = new URLSearchParams(window.location.search)
@@ -22,11 +23,7 @@ function App() {
     }
   }, [])
 
-  return (
-    <>
-      {page === 'settings' ? <Settings /> : <Launchpad />}
-    </>
-  )
+  return <ToastProvider>{page === 'settings' ? <Settings /> : <Launchpad />}</ToastProvider>
 }
 
 export default App

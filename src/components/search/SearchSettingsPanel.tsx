@@ -13,11 +13,13 @@ import { Button } from '@/components/ui/button'
 import { NumberInput } from '@/components/ui/number-input'
 import { Select } from '@/components/ui/select'
 import { SettingCard, ToggleRow } from '@/components/ui/setting-components'
+import { useToast } from '@/components/ui/toast'
 
 export function SearchSettingsPanel() {
   const [settings, setSettings] = useState<SearchSettings>(DEFAULT_SEARCH_SETTINGS)
   const [loading, setLoading] = useState(true)
-  const [statusText, setStatusText] = useState('')
+  const [resetting, setResetting] = useState(false)
+  const toast = useToast()
 
   useEffect(() => {
     void (async () => {
@@ -25,35 +27,69 @@ export function SearchSettingsPanel() {
         const next = await loadSearchSettings()
         setSettings(next)
       } catch (error) {
-        setStatusText(`加载搜索设置失败：${String(error)}`)
+        toast.error(`加载搜索设置失败：${String(error)}`, {
+          key: 'search-settings',
+          title: '搜索设置',
+        })
       } finally {
         setLoading(false)
       }
     })()
-  }, [])
+  }, [toast])
+
+  const persistSetting = async <K extends keyof SearchSettings>(
+    key: K,
+    value: SearchSettings[K]
+  ): Promise<SearchSettings[K]> => {
+    const normalized = await saveSearchSetting(key, value)
+    setSettings(prev => ({ ...prev, [key]: normalized }) as SearchSettings)
+    return normalized
+  }
 
   const updateSetting = async <K extends keyof SearchSettings>(
     key: K,
     value: SearchSettings[K]
   ) => {
     try {
-      const normalized = await saveSearchSetting(key, value)
-      setSettings(prev => ({ ...prev, [key]: normalized }) as SearchSettings)
-      setStatusText('已保存')
+      await persistSetting(key, value)
+      toast.success('搜索设置已保存。', {
+        key: 'search-settings',
+        title: '搜索设置',
+        duration: 1800,
+      })
     } catch (error) {
-      setStatusText(`保存设置失败：${String(error)}`)
+      toast.error(`保存设置失败：${String(error)}`, {
+        key: 'search-settings',
+        title: '搜索设置',
+      })
     }
   }
 
   const resetDefaults = async () => {
-    setStatusText('正在恢复默认设置...')
-    for (const [key, value] of Object.entries(DEFAULT_SEARCH_SETTINGS) as Array<
-      [keyof SearchSettings, SearchSettings[keyof SearchSettings]]
-    >) {
-      // eslint-disable-next-line no-await-in-loop
-      await updateSetting(key, value)
+    if (resetting) {
+      return
     }
-    setStatusText('默认设置已恢复')
+
+    setResetting(true)
+    try {
+      for (const [key, value] of Object.entries(DEFAULT_SEARCH_SETTINGS) as Array<
+        [keyof SearchSettings, SearchSettings[keyof SearchSettings]]
+      >) {
+        // eslint-disable-next-line no-await-in-loop
+        await persistSetting(key, value)
+      }
+      toast.success('默认设置已恢复。', {
+        key: 'search-settings',
+        title: '搜索设置',
+      })
+    } catch (error) {
+      toast.error(`恢复默认设置失败：${String(error)}`, {
+        key: 'search-settings',
+        title: '搜索设置',
+      })
+    } finally {
+      setResetting(false)
+    }
   }
 
   if (loading) {
@@ -69,8 +105,13 @@ export function SearchSettingsPanel() {
             设置会保存到 SQLite，并在下次搜索时生效。
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void resetDefaults()}>
-          恢复默认
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void resetDefaults()}
+          disabled={resetting}
+        >
+          {resetting ? '恢复中...' : '恢复默认'}
         </Button>
       </div>
 
@@ -206,8 +247,6 @@ export function SearchSettingsPanel() {
           </section>
         </div>
       </div>
-
-      {statusText ? <p className="text-xs text-muted-foreground">{statusText}</p> : null}
     </div>
   )
 }

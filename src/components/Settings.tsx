@@ -1,4 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react'
 import { getIdentifier, getName, getTauriVersion, getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
@@ -30,6 +41,7 @@ import {
   OptionButton,
   ToggleRow,
 } from '@/components/ui/setting-components'
+import { useToast } from '@/components/ui/toast'
 import type {
   IconManagerItem,
   IconManagerViewMode,
@@ -62,7 +74,7 @@ import {
 
 type NavItem = 'settings' | 'search' | 'iconManager' | 'update' | 'about'
 
-const NAV_ITEMS: { key: NavItem; label: string; icon: React.ReactNode }[] = [
+const NAV_ITEMS: { key: NavItem; label: string; icon: ReactNode }[] = [
   { key: 'settings', label: '设置', icon: <SettingsIcon className="w-4 h-4" /> },
   { key: 'search', label: '搜索', icon: <Search className="w-4 h-4" /> },
   { key: 'iconManager', label: '图标管理', icon: <Images className="w-4 h-4" /> },
@@ -141,12 +153,6 @@ type IconSyncResult = {
   total_count: number
 }
 
-type IconSyncFeedback = {
-  source: 'desktop' | 'customapp'
-  tone: 'success' | 'error'
-  text: string
-}
-
 const ICON_VISIBILITY_FILTER_OPTIONS: { label: string; value: IconVisibilityFilter }[] = [
   { label: '全部', value: 'all' },
   { label: '未隐藏', value: 'visible' },
@@ -162,7 +168,7 @@ const ICON_SOURCE_FILTER_OPTIONS: { label: string; value: IconSourceFilter }[] =
 const ICON_MANAGER_VIEW_MODE_OPTIONS: {
   label: string
   value: IconManagerViewMode
-  icon: React.ReactNode
+  icon: ReactNode
 }[] = [
   { label: '列表', value: 'list', icon: <List className="h-3.5 w-3.5" /> },
   { label: '宫格', value: 'grid', icon: <LayoutGrid className="h-3.5 w-3.5" /> },
@@ -257,8 +263,6 @@ const ICON_SYNC_GROUPS: {
     actions: ['customappIncremental', 'customappFull'],
   },
 ]
-
-type StatusTone = 'default' | 'success' | 'error'
 
 const SHORTCUT_MODIFIER_CODES = new Set([
   'ControlLeft',
@@ -385,7 +389,7 @@ function normalizeShortcutDraftText(shortcut: string) {
     .replace(/\s+/g, ' ')
 }
 
-function buildShortcutFromKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+function buildShortcutFromKeyDown(event: KeyboardEvent<HTMLInputElement>) {
   const hasModifier = event.ctrlKey || event.altKey || event.shiftKey
 
   if (!hasModifier) {
@@ -426,7 +430,7 @@ function WindowControlButton({
   label: string
   onClick: () => void
   tone?: 'default' | 'danger'
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
     <button
@@ -452,18 +456,15 @@ function SettingsPanel() {
   const { iconSize, windowMode, titleLineCount, dockEnabled, setDockEnabled } = useIconStore()
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark')
   const [launchOnStartupEnabled, setLaunchOnStartupEnabled] = useState(true)
-  const [launchOnStartupStatusText, setLaunchOnStartupStatusText] = useState('')
-  const [launchOnStartupStatusTone, setLaunchOnStartupStatusTone] = useState<StatusTone>('default')
   const [isSavingLaunchOnStartup, setIsSavingLaunchOnStartup] = useState(false)
   const [launchpadShortcut, setLaunchpadShortcut] = useState(DEFAULT_LAUNCHPAD_SHORTCUT)
   const [launchpadShortcutDraft, setLaunchpadShortcutDraft] = useState(
     formatShortcutForInput(DEFAULT_LAUNCHPAD_SHORTCUT)
   )
-  const [shortcutStatusText, setShortcutStatusText] = useState('')
-  const [shortcutStatusTone, setShortcutStatusTone] = useState<StatusTone>('default')
   const [isRecordingShortcut, setIsRecordingShortcut] = useState(false)
   const [isSavingShortcut, setIsSavingShortcut] = useState(false)
   const shortcutInputRef = useRef<HTMLInputElement | null>(null)
+  const toast = useToast()
 
   useEffect(() => {
     void (async () => {
@@ -498,8 +499,10 @@ function SettingsPanel() {
           }
         } catch (error) {
           console.error('Failed to load launch on startup state:', error)
-          setLaunchOnStartupStatusTone('error')
-          setLaunchOnStartupStatusText('读取系统开机自启状态失败，已回退到本地设置。')
+          toast.error('读取系统开机自启状态失败，已回退到本地设置。', {
+            key: 'settings-launch-on-startup',
+            title: '开机自启',
+          })
         }
 
         useIconStore.setState({
@@ -512,16 +515,17 @@ function SettingsPanel() {
         setLaunchOnStartupEnabled(resolvedLaunchOnStartup)
         setLaunchpadShortcut(savedLaunchpadShortcut)
         setLaunchpadShortcutDraft(formatShortcutForInput(savedLaunchpadShortcut))
-        setShortcutStatusText(
-          `当前生效快捷键：${formatShortcutForDisplay(savedLaunchpadShortcut)}。`
-        )
       } catch (e) {
         console.error('Failed to load settings:', e)
+        toast.error(`加载设置失败：${String(e)}`, {
+          key: 'settings-general',
+          title: '设置',
+        })
       } finally {
         void getCurrentWindow().show()
       }
     })()
-  }, [])
+  }, [toast])
 
   const handleIconSize = (value: IconSize) => {
     void setSetting('iconSize', value).catch(e => console.error('Failed to save icon size:', e))
@@ -560,8 +564,6 @@ function SettingsPanel() {
     }
 
     setIsSavingLaunchOnStartup(true)
-    setLaunchOnStartupStatusTone('default')
-    setLaunchOnStartupStatusText(value ? '正在开启开机自启...' : '正在关闭开机自启...')
 
     try {
       const nextEnabled = await invoke<boolean>('update_launch_on_startup_enabled', {
@@ -569,16 +571,21 @@ function SettingsPanel() {
       })
 
       setLaunchOnStartupEnabled(nextEnabled)
-      setLaunchOnStartupStatusTone('success')
-      setLaunchOnStartupStatusText(
+      toast.success(
         nextEnabled
           ? '已开启开机自启，Windows 登录后会自动启动 DesktopGo。'
-          : '已关闭开机自启，Windows 登录后不会自动启动 DesktopGo。'
+          : '已关闭开机自启，Windows 登录后不会自动启动 DesktopGo。',
+        {
+          key: 'settings-launch-on-startup',
+          title: '开机自启',
+        }
       )
     } catch (error) {
       console.error('Failed to update launch on startup state:', error)
-      setLaunchOnStartupStatusTone('error')
-      setLaunchOnStartupStatusText(`更新开机自启失败：${String(error)}`)
+      toast.error(`更新开机自启失败：${String(error)}`, {
+        key: 'settings-launch-on-startup',
+        title: '开机自启',
+      })
     } finally {
       setIsSavingLaunchOnStartup(false)
     }
@@ -587,34 +594,28 @@ function SettingsPanel() {
   const handleToggleShortcutRecording = () => {
     if (isRecordingShortcut) {
       setIsRecordingShortcut(false)
-      setShortcutStatusTone('default')
-      setShortcutStatusText('已取消录制，当前快捷键未变化。')
       return
     }
 
     setIsRecordingShortcut(true)
-    setShortcutStatusTone('default')
-    setShortcutStatusText(
-      '请按下新的组合键。录制仅识别 Ctrl、Alt、Shift；像 Ctrl+Space 这种组合可以直接手动输入。'
-    )
+    toast.info('开始录制快捷键，请按下新的组合键。', {
+      key: 'settings-shortcut',
+      title: '启动台快捷键',
+    })
     window.setTimeout(() => {
       shortcutInputRef.current?.focus()
     }, 0)
   }
 
-  const handleShortcutInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleShortcutInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (isRecordingShortcut) {
       return
     }
 
     setLaunchpadShortcutDraft(event.target.value)
-    setShortcutStatusTone('default')
-    setShortcutStatusText(
-      '已更新待保存的快捷键文本。像 Ctrl+Space 这种录制不到的组合，可以直接手动输入后保存。'
-    )
   }
 
-  const handleShortcutInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleShortcutInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (!isRecordingShortcut) {
       return
     }
@@ -634,24 +635,24 @@ function SettingsPanel() {
       !event.metaKey
     ) {
       setIsRecordingShortcut(false)
-      setShortcutStatusTone('default')
-      setShortcutStatusText('已取消录制，当前快捷键未变化。')
       return
     }
 
     const result = buildShortcutFromKeyDown(event)
     if (!result.shortcut) {
-      setShortcutStatusTone('error')
-      setShortcutStatusText(result.error ?? '未能识别该快捷键。')
+      toast.error(result.error ?? '未能识别该快捷键。', {
+        key: 'settings-shortcut',
+        title: '启动台快捷键',
+      })
       return
     }
 
     setLaunchpadShortcutDraft(result.shortcut)
     setIsRecordingShortcut(false)
-    setShortcutStatusTone('default')
-    setShortcutStatusText(
-      `已捕获 ${formatShortcutForDisplay(result.shortcut)}，点击“保存快捷键”后生效。`
-    )
+    toast.success(`已捕获 ${formatShortcutForDisplay(result.shortcut)}，点击“保存快捷键”后生效。`, {
+      key: 'settings-shortcut',
+      title: '启动台快捷键',
+    })
   }
 
   const handleShortcutInputBlur = () => {
@@ -660,18 +661,19 @@ function SettingsPanel() {
     }
 
     setIsRecordingShortcut(false)
-    setShortcutStatusTone('default')
-    setShortcutStatusText('录制已结束，当前快捷键未变化。')
   }
 
   const handleResetLaunchpadShortcut = () => {
     setIsRecordingShortcut(false)
     setLaunchpadShortcutDraft(formatShortcutForInput(DEFAULT_LAUNCHPAD_SHORTCUT))
-    setShortcutStatusTone('default')
-    setShortcutStatusText(
+    toast.info(
       launchpadShortcut === DEFAULT_LAUNCHPAD_SHORTCUT
         ? `当前已经是默认快捷键：${formatShortcutForDisplay(DEFAULT_LAUNCHPAD_SHORTCUT)}。`
-        : `已恢复默认值 ${formatShortcutForDisplay(DEFAULT_LAUNCHPAD_SHORTCUT)}，点击“保存快捷键”后生效。`
+        : `已恢复默认值 ${formatShortcutForDisplay(DEFAULT_LAUNCHPAD_SHORTCUT)}，点击“保存快捷键”后生效。`,
+      {
+        key: 'settings-shortcut',
+        title: '启动台快捷键',
+      }
     )
   }
 
@@ -684,15 +686,15 @@ function SettingsPanel() {
     const draftShortcut = normalizeShortcutDraftText(launchpadShortcutDraft)
 
     if (!draftShortcut) {
-      setShortcutStatusTone('error')
-      setShortcutStatusText('请输入快捷键，例如 Ctrl+Space 或 Ctrl+Alt+K。')
+      toast.error('请输入快捷键，例如 Ctrl+Space 或 Ctrl+Alt+K。', {
+        key: 'settings-shortcut',
+        title: '启动台快捷键',
+      })
       return
     }
 
     setIsRecordingShortcut(false)
     setIsSavingShortcut(true)
-    setShortcutStatusTone('default')
-    setShortcutStatusText('正在更新启动台快捷键...')
 
     try {
       const normalizedShortcut = await invoke<string>('update_launchpad_shortcut', {
@@ -718,14 +720,16 @@ function SettingsPanel() {
 
       setLaunchpadShortcut(normalizedShortcut)
       setLaunchpadShortcutDraft(formatShortcutForInput(normalizedShortcut))
-      setShortcutStatusTone('success')
-      setShortcutStatusText(
-        `启动台快捷键已更新为 ${formatShortcutForDisplay(normalizedShortcut)}。`
-      )
+      toast.success(`启动台快捷键已更新为 ${formatShortcutForDisplay(normalizedShortcut)}。`, {
+        key: 'settings-shortcut',
+        title: '启动台快捷键',
+      })
     } catch (error) {
       console.error('Failed to save launchpad shortcut:', error)
-      setShortcutStatusTone('error')
-      setShortcutStatusText(`保存快捷键失败：${String(error)}`)
+      toast.error(`保存快捷键失败：${String(error)}`, {
+        key: 'settings-shortcut',
+        title: '启动台快捷键',
+      })
     } finally {
       setIsSavingShortcut(false)
     }
@@ -736,18 +740,6 @@ function SettingsPanel() {
   const shortcutDraftChanged =
     normalizedDraftShortcut !== normalizeShortcutDraftText(currentShortcutInputValue)
   const shortcutDisplayValue = isRecordingShortcut ? '请按下新的组合键' : launchpadShortcutDraft
-  const launchOnStartupStatusClassName =
-    launchOnStartupStatusTone === 'error'
-      ? 'text-red-500 dark:text-red-300'
-      : launchOnStartupStatusTone === 'success'
-        ? 'text-emerald-600 dark:text-emerald-300'
-        : 'text-muted-foreground'
-  const shortcutStatusClassName =
-    shortcutStatusTone === 'error'
-      ? 'text-red-500 dark:text-red-300'
-      : shortcutStatusTone === 'success'
-        ? 'text-emerald-600 dark:text-emerald-300'
-        : 'text-muted-foreground'
 
   return (
     <>
@@ -820,9 +812,6 @@ function SettingsPanel() {
           onChange={handleLaunchOnStartup}
           disabled={isSavingLaunchOnStartup}
         />
-        <p className={cn('mt-2 px-1 text-xs leading-5', launchOnStartupStatusClassName)}>
-          {launchOnStartupStatusText || '默认开启，关闭后仅影响后续 Windows 登录时是否自动启动。'}
-        </p>
       </div>
 
       <div className="mb-6">
@@ -895,10 +884,6 @@ function SettingsPanel() {
             支持手动输入 `Ctrl+Space`、`Ctrl+Alt+K`、`Alt+Shift+P`。录制模式只识别 `Ctrl / Alt /
             Shift`。
           </p>
-
-          <p className={cn('text-xs leading-5', shortcutStatusClassName)}>
-            {shortcutStatusText || '录制后按下组合键，保存成功后会立即生效。'}
-          </p>
         </SettingCard>
       </div>
     </>
@@ -916,13 +901,8 @@ function IconManagerPanel() {
   const [mutating, setMutating] = useState(false)
   const [listLoading, setListLoading] = useState(false)
   const [layoutResetting, setLayoutResetting] = useState(false)
-  const [syncFeedback, setSyncFeedback] = useState<IconSyncFeedback | null>(null)
-  const [managerResultText, setManagerResultText] = useState<string>('')
-  const [managerErrorText, setManagerErrorText] = useState<string>('')
-  const [layoutResetText, setLayoutResetText] = useState('')
   const [defaultCustomAppDir, setDefaultCustomAppDir] = useState('')
   const [customAppDirInput, setCustomAppDirInput] = useState('')
-  const [customAppDirText, setCustomAppDirText] = useState('')
   const [effectiveCustomAppDir, setEffectiveCustomAppDir] = useState('')
   const [allIcons, setAllIcons] = useState<IconManagerItem[]>([])
   const [viewMode, setViewMode] = useState<IconManagerViewMode>('list')
@@ -930,6 +910,7 @@ function IconManagerPanel() {
   const [searchKeyword, setSearchKeyword] = useState('')
   const [visibilityFilter, setVisibilityFilter] = useState<IconVisibilityFilter>('all')
   const [sourceFilter, setSourceFilter] = useState<IconSourceFilter>('all')
+  const toast = useToast()
 
   const refreshCustomAppDirDisplay = async (options?: { syncInput?: boolean }) => {
     try {
@@ -946,12 +927,15 @@ function IconManagerPanel() {
       }
     } catch (e) {
       console.error('Failed to load customapp dir:', e)
+      toast.error(`加载自定义应用目录失败：${String(e)}`, {
+        key: 'icon-manager-path',
+        title: '图标管理',
+      })
     }
   }
 
   const refreshIconManagerList = async () => {
     setListLoading(true)
-    setManagerErrorText('')
     try {
       const savedCustomAppDir = (await getSetting('customAppDir')).trim()
       const icons = await invoke<IconManagerItem[]>('get_icon_manager_items', {
@@ -960,7 +944,10 @@ function IconManagerPanel() {
       })
       setAllIcons(icons)
     } catch (e) {
-      setManagerErrorText(`加载图标列表失败：${String(e)}`)
+      toast.error(`加载图标列表失败：${String(e)}`, {
+        key: 'icon-manager-list',
+        title: '图标管理',
+      })
     } finally {
       setListLoading(false)
     }
@@ -1005,7 +992,6 @@ function IconManagerPanel() {
   const runSyncAction = async (actionKey: IconSyncAction) => {
     setSyncing(true)
     setActiveSyncAction(actionKey)
-    setSyncFeedback(null)
 
     try {
       const action = ICON_SYNC_ACTIONS[actionKey]
@@ -1021,20 +1007,22 @@ function IconManagerPanel() {
       }
 
       const modeText = action.mode === 'full' ? '全量对账' : '导入新增项'
-      setSyncFeedback({
-        source: action.source,
-        tone: 'success',
-        text: `${action.sourceLabel}${modeText}完成：扫描 ${result.scanned_count} 项，新增 ${result.added_count} 项，当前快照共 ${result.total_count} 项。`,
-      })
+      toast.success(
+        `${action.sourceLabel}${modeText}完成：扫描 ${result.scanned_count} 项，新增 ${result.added_count} 项，当前快照共 ${result.total_count} 项。`,
+        {
+          key: 'icon-manager-sync',
+          title: '图标管理',
+          duration: 3600,
+        }
+      )
       await refreshCustomAppDirDisplay()
       await refreshIconManagerList()
     } catch (e) {
       const action = ICON_SYNC_ACTIONS[actionKey]
       const modeText = action.mode === 'full' ? '全量对账' : '导入新增项'
-      setSyncFeedback({
-        source: action.source,
-        tone: 'error',
-        text: `${action.sourceLabel}${modeText}失败：${String(e)}`,
+      toast.error(`${action.sourceLabel}${modeText}失败：${String(e)}`, {
+        key: 'icon-manager-sync',
+        title: '图标管理',
       })
     } finally {
       setSyncing(false)
@@ -1061,7 +1049,6 @@ function IconManagerPanel() {
   const handleConfirmMutation = async () => {
     if (!pendingMutation) return
     setMutating(true)
-    setManagerResultText('')
     try {
       const targets: IconMutationTarget[] = [
         {
@@ -1082,10 +1069,16 @@ function IconManagerPanel() {
 
       const affected = await invoke<number>(command, { targets })
       const sourceText = pendingMutation.icon.source === 'desktop' ? '桌面' : '自定义应用'
-      setManagerResultText(`${actionLabel}完成：${sourceText} 图标影响 ${affected} 项。`)
+      toast.success(`${actionLabel}完成：${sourceText} 图标影响 ${affected} 项。`, {
+        key: 'icon-manager-action',
+        title: '图标管理',
+      })
       await refreshIconManagerList()
     } catch (e) {
-      setManagerResultText(`操作失败：${String(e)}`)
+      toast.error(`操作失败：${String(e)}`, {
+        key: 'icon-manager-action',
+        title: '图标管理',
+      })
     } finally {
       setMutating(false)
       setPendingMutation(null)
@@ -1103,25 +1096,41 @@ function IconManagerPanel() {
 
       if (typeof selected === 'string') {
         setCustomAppDirInput(selected)
-        setCustomAppDirText('已选择文件夹，请点击“保存路径”后生效。')
+        toast.info('已选择文件夹，请点击“保存路径”后生效。', {
+          key: 'icon-manager-path',
+          title: '自定义图标文件夹',
+        })
       }
     } catch (e) {
-      setCustomAppDirText(`选择文件夹失败：${String(e)}`)
+      toast.error(`选择文件夹失败：${String(e)}`, {
+        key: 'icon-manager-path',
+        title: '自定义图标文件夹',
+      })
     }
   }
 
   const handleOpenCustomAppDir = async () => {
     const targetDir = customAppDirInput.trim() || effectiveCustomAppDir || defaultCustomAppDir
     if (!targetDir) {
-      setCustomAppDirText('没有可打开的目录，请先选择或输入自定义应用目录。')
+      toast.error('没有可打开的目录，请先选择或输入自定义应用目录。', {
+        key: 'icon-manager-path',
+        title: '自定义图标文件夹',
+      })
       return
     }
 
     try {
       await invoke('launch_app', { path: targetDir })
-      setCustomAppDirText(`已打开目录：${targetDir}`)
+      toast.info(`已打开目录：${targetDir}`, {
+        key: 'icon-manager-path',
+        title: '自定义图标文件夹',
+        duration: 3200,
+      })
     } catch (e) {
-      setCustomAppDirText(`打开目录失败：${String(e)}`)
+      toast.error(`打开目录失败：${String(e)}`, {
+        key: 'icon-manager-path',
+        title: '自定义图标文件夹',
+      })
     }
   }
 
@@ -1131,14 +1140,21 @@ function IconManagerPanel() {
       await setSetting('customAppDir', nextCustomAppDir)
       const nextEffectiveCustomAppDir = nextCustomAppDir || defaultCustomAppDir
       setEffectiveCustomAppDir(nextEffectiveCustomAppDir)
-      setCustomAppDirText(
+      toast.success(
         nextCustomAppDir
           ? '路径已保存，后续自定义应用同步将使用该目录。'
-          : '已恢复使用默认自定义应用目录。'
+          : '已恢复使用默认自定义应用目录。',
+        {
+          key: 'icon-manager-path',
+          title: '自定义图标文件夹',
+        }
       )
       await refreshIconManagerList()
     } catch (e) {
-      setCustomAppDirText(`保存失败：${String(e)}`)
+      toast.error(`保存失败：${String(e)}`, {
+        key: 'icon-manager-path',
+        title: '自定义图标文件夹',
+      })
     }
   }
 
@@ -1147,10 +1163,16 @@ function IconManagerPanel() {
       await setSetting('customAppDir', '')
       setCustomAppDirInput(defaultCustomAppDir)
       setEffectiveCustomAppDir(defaultCustomAppDir)
-      setCustomAppDirText('已恢复默认自定义应用目录。')
+      toast.success('已恢复默认自定义应用目录。', {
+        key: 'icon-manager-path',
+        title: '自定义图标文件夹',
+      })
       await refreshIconManagerList()
     } catch (e) {
-      setCustomAppDirText(`恢复默认失败：${String(e)}`)
+      toast.error(`恢复默认失败：${String(e)}`, {
+        key: 'icon-manager-path',
+        title: '自定义图标文件夹',
+      })
     }
   }
 
@@ -1162,19 +1184,27 @@ function IconManagerPanel() {
     if (!confirmed) return
 
     setLayoutResetting(true)
-    setLayoutResetText('正在重置图标布局...')
 
     try {
       await resetLaunchpadLayout()
       const mainWindow = await WebviewWindow.getByLabel('main')
       if (mainWindow) {
         await mainWindow.emit(LAUNCHPAD_LAYOUT_RESET_EVENT)
-        setLayoutResetText('图标布局已重置，主窗口已刷新。')
+        toast.success('图标布局已重置，主窗口已刷新。', {
+          key: 'icon-manager-layout',
+          title: '图标布局重置',
+        })
       } else {
-        setLayoutResetText('图标布局已重置，主窗口下次同步时会应用。')
+        toast.success('图标布局已重置，主窗口下次同步时会应用。', {
+          key: 'icon-manager-layout',
+          title: '图标布局重置',
+        })
       }
     } catch (e) {
-      setLayoutResetText(`重置图标失败：${String(e)}`)
+      toast.error(`重置图标失败：${String(e)}`, {
+        key: 'icon-manager-layout',
+        title: '图标布局重置',
+      })
     } finally {
       setLayoutResetting(false)
     }
@@ -1268,9 +1298,6 @@ function IconManagerPanel() {
                   恢复默认路径
                 </Button>
               </div>
-              {customAppDirText ? (
-                <p className="break-all text-xs text-muted-foreground">{customAppDirText}</p>
-              ) : null}
             </SettingCard>
 
             {ICON_SYNC_GROUPS.map(group => {
@@ -1372,20 +1399,6 @@ function IconManagerPanel() {
                       )
                     })}
                   </div>
-
-                  {syncFeedback?.source === group.source ? (
-                    <div
-                      className={`break-all rounded-lg border px-3 py-2 text-xs leading-5 ${
-                        syncFeedback.tone === 'error'
-                          ? 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300'
-                          : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                      }`}
-                      role={syncFeedback.tone === 'error' ? 'alert' : 'status'}
-                      aria-live="polite"
-                    >
-                      {syncFeedback.text}
-                    </div>
-                  ) : null}
                 </div>
               )
             })}
@@ -1404,9 +1417,6 @@ function IconManagerPanel() {
                   {layoutResetting ? '重置中...' : '重置图标'}
                 </Button>
               </div>
-              {layoutResetText ? (
-                <p className="break-all text-xs text-muted-foreground">{layoutResetText}</p>
-              ) : null}
             </SettingCard>
           </div>
 
@@ -1471,15 +1481,6 @@ function IconManagerPanel() {
               图标总数 {allIcons.length} 项，当前筛选结果 {filteredIcons.length} 项，当前为
               {viewMode === 'list' ? '列表' : '宫格'}展示。
             </p>
-
-            {managerErrorText ? (
-              <p className="break-all text-sm text-red-600 dark:text-red-300">{managerErrorText}</p>
-            ) : null}
-            {managerResultText ? (
-              <p className="max-w-3xl break-all text-sm text-muted-foreground" aria-live="polite">
-                {managerResultText}
-              </p>
-            ) : null}
 
             <div
               className={
@@ -1745,11 +1746,11 @@ function IconManagerPanel() {
 
 function AboutPanel() {
   const [appInfo, setAppInfo] = useState<AboutAppInfo>(ABOUT_APP_INFO_FALLBACK)
-  const [statusText, setStatusText] = useState('正在读取应用信息...')
   const [copied, setCopied] = useState(false)
   const [launchpadShortcutMeta, setLaunchpadShortcutMeta] = useState(
     `全局快捷键 ${formatShortcutForDisplay(DEFAULT_LAUNCHPAD_SHORTCUT)}`
   )
+  const toast = useToast()
 
   useEffect(() => {
     let disposed = false
@@ -1783,15 +1784,19 @@ function AboutPanel() {
           tauriVersionResult,
         ].filter(result => result.status === 'rejected').length
 
-        setStatusText(
-          failedCount === 0
-            ? '版本、运行时与支持入口已准备好。'
-            : '部分应用信息未能读取，已使用当前项目的回退值。'
-        )
+        if (failedCount > 0) {
+          toast.error('部分应用信息未能读取，已使用当前项目的回退值。', {
+            key: 'about-panel',
+            title: '关于',
+          })
+        }
       })
       .catch(error => {
         if (disposed) return
-        setStatusText(`读取应用信息失败：${String(error)}`)
+        toast.error(`读取应用信息失败：${String(error)}`, {
+          key: 'about-panel',
+          title: '关于',
+        })
       })
 
     void getSetting('launchpadShortcut')
@@ -1808,7 +1813,7 @@ function AboutPanel() {
     return () => {
       disposed = true
     }
-  }, [])
+  }, [toast])
 
   useEffect(() => {
     if (!copied) return
@@ -1822,18 +1827,30 @@ function AboutPanel() {
     }
   }, [copied])
 
-  const openExternalLink = useCallback(async (url: string, label: string) => {
-    try {
-      await openUrl(url)
-      setStatusText(`已打开${label}。`)
-    } catch (error) {
-      setStatusText(`打开${label}失败：${String(error)}`)
-    }
-  }, [])
+  const openExternalLink = useCallback(
+    async (url: string, label: string) => {
+      try {
+        await openUrl(url)
+        toast.info(`已打开${label}。`, {
+          key: 'about-panel',
+          title: '关于',
+        })
+      } catch (error) {
+        toast.error(`打开${label}失败：${String(error)}`, {
+          key: 'about-panel',
+          title: '关于',
+        })
+      }
+    },
+    [toast]
+  )
 
   const handleCopyDiagnostic = useCallback(async () => {
     if (!navigator.clipboard?.writeText) {
-      setStatusText('当前环境不支持复制诊断信息。')
+      toast.error('当前环境不支持复制诊断信息。', {
+        key: 'about-panel',
+        title: '关于',
+      })
       return
     }
 
@@ -1848,11 +1865,17 @@ function AboutPanel() {
     try {
       await navigator.clipboard.writeText(diagnosticText)
       setCopied(true)
-      setStatusText('已复制版本与诊断信息。')
+      toast.success('已复制版本与诊断信息。', {
+        key: 'about-panel',
+        title: '关于',
+      })
     } catch (error) {
-      setStatusText(`复制诊断信息失败：${String(error)}`)
+      toast.error(`复制诊断信息失败：${String(error)}`, {
+        key: 'about-panel',
+        title: '关于',
+      })
     }
-  }, [appInfo])
+  }, [appInfo, toast])
 
   const featureCards = [
     {
@@ -2019,8 +2042,6 @@ function AboutPanel() {
           </button>
         </div>
       </section>
-
-      <p className="text-sm text-muted-foreground">{statusText}</p>
     </div>
   )
 }
@@ -2104,7 +2125,7 @@ export function Settings() {
     )
   }
 
-  const handleWindowDragStart = (event: React.PointerEvent<HTMLElement>) => {
+  const handleWindowDragStart = (event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return
     if (isTitlebarInteractiveTarget(event.target)) return
     void getCurrentWindow()
@@ -2112,7 +2133,7 @@ export function Settings() {
       .catch(e => console.error('Failed to start dragging settings window:', e))
   }
 
-  const handleTitlebarDoubleClick = (event: React.MouseEvent<HTMLElement>) => {
+  const handleTitlebarDoubleClick = (event: ReactMouseEvent<HTMLElement>) => {
     if (isTitlebarInteractiveTarget(event.target)) return
     handleToggleMaximizeWindow()
   }

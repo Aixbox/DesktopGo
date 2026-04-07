@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/ui/toast'
 import {
   APP_UPDATER_PROGRESS_EVENT,
   checkForAppUpdate,
@@ -13,7 +14,6 @@ import {
 import {
   CheckCircle2,
   Download,
-
   LoaderCircle,
   RefreshCw,
   ShieldAlert,
@@ -57,38 +57,48 @@ function formatReleaseDate(value: string | null): string | null {
 export function UpdatePanel() {
   const [configStatus, setConfigStatus] = useState<UpdaterConfigurationStatus | null>(null)
   const [checkResult, setCheckResult] = useState<AppUpdateCheckResult | null>(null)
-  const [statusText, setStatusText] = useState('正在读取更新配置...')
   const [loadingConfig, setLoadingConfig] = useState(true)
   const [checking, setChecking] = useState(false)
   const [installing, setInstalling] = useState(false)
   const [installStage, setInstallStage] = useState<InstallStage>('idle')
   const [downloadedBytes, setDownloadedBytes] = useState(0)
   const [contentLength, setContentLength] = useState<number | null>(null)
+  const toast = useToast()
 
-  const refreshConfiguration = async () => {
-    setLoadingConfig(true)
-    try {
-      const nextStatus = await getUpdaterConfigurationStatus()
-      setConfigStatus(nextStatus)
+  const refreshConfiguration = useCallback(
+    async (options?: { notifySuccess?: boolean }) => {
+      setLoadingConfig(true)
+      try {
+        const nextStatus = await getUpdaterConfigurationStatus()
+        setConfigStatus(nextStatus)
 
-      if (!nextStatus.configured) {
+        if (!nextStatus.configured) {
+          setCheckResult(null)
+        }
+        if (options?.notifySuccess) {
+          toast.info(nextStatus.message ?? '更新配置已刷新。', {
+            key: 'update-panel',
+            title: '应用更新',
+          })
+        }
+      } catch (error) {
+        const message = `读取更新配置失败：${String(error)}`
+        setConfigStatus(null)
         setCheckResult(null)
+        toast.error(message, {
+          key: 'update-panel',
+          title: '应用更新',
+        })
+      } finally {
+        setLoadingConfig(false)
       }
-
-      setStatusText(nextStatus.message ?? '更新配置已刷新。')
-    } catch (error) {
-      const message = `读取更新配置失败：${String(error)}`
-      setConfigStatus(null)
-      setCheckResult(null)
-      setStatusText(message)
-    } finally {
-      setLoadingConfig(false)
-    }
-  }
+    },
+    [toast]
+  )
 
   useEffect(() => {
     void refreshConfiguration()
-  }, [])
+  }, [refreshConfiguration])
 
   useEffect(() => {
     let disposed = false
@@ -106,7 +116,6 @@ export function UpdatePanel() {
             setInstallStage('downloading')
             setDownloadedBytes(0)
             setContentLength(nextContentLength)
-            setStatusText('正在下载更新包...')
             break
           }
           case 'progress': {
@@ -118,31 +127,36 @@ export function UpdatePanel() {
             setInstallStage('downloading')
             setDownloadedBytes(nextDownloadedBytes)
             setContentLength(nextContentLength)
-            setStatusText(
-              nextContentLength
-                ? `正在下载更新包（${formatBytes(nextDownloadedBytes)} / ${formatBytes(nextContentLength)}）...`
-                : `正在下载更新包（已下载 ${formatBytes(nextDownloadedBytes)}）...`
-            )
             break
           }
           case 'installing':
             setInstalling(true)
             setInstallStage('installing')
-            setStatusText('下载完成，正在启动安装程序...')
             break
           case 'beforeExit':
-            setStatusText('安装程序即将接管，应用会自动退出。')
+            toast.info('安装程序即将接管，应用会自动退出。', {
+              key: 'update-install',
+              title: '应用更新',
+              duration: 3200,
+            })
             break
           case 'finished':
             setInstalling(false)
             setInstallStage('finished')
-            setStatusText('更新安装流程已完成。请重新打开应用确认版本。')
+            toast.success('更新安装流程已完成。请重新打开应用确认版本。', {
+              key: 'update-install',
+              title: '应用更新',
+              duration: 4200,
+            })
             void refreshConfiguration()
             break
           case 'error':
             setInstalling(false)
             setInstallStage('idle')
-            setStatusText(payload.data?.message ?? '更新安装失败。')
+            toast.error(payload.data?.message ?? '更新安装失败。', {
+              key: 'update-install',
+              title: '应用更新',
+            })
             break
         }
       })
@@ -158,7 +172,7 @@ export function UpdatePanel() {
       disposed = true
       unlisten?.()
     }
-  }, [])
+  }, [refreshConfiguration, toast])
 
   const progressPercent = useMemo(() => {
     if (!contentLength || contentLength <= 0) {
@@ -181,14 +195,21 @@ export function UpdatePanel() {
     try {
       const result = await checkForAppUpdate()
       setCheckResult(result)
-      setStatusText(
+      toast[result.available ? 'success' : 'info'](
         result.available
           ? `发现新版本 v${result.update?.version ?? ''}，可以开始下载安装。`
-          : (result.message ?? '当前已是最新版本。')
+          : (result.message ?? '当前已是最新版本。'),
+        {
+          key: 'update-panel',
+          title: '应用更新',
+        }
       )
     } catch (error) {
       setCheckResult(null)
-      setStatusText(`检查更新失败：${String(error)}`)
+      toast.error(`检查更新失败：${String(error)}`, {
+        key: 'update-panel',
+        title: '应用更新',
+      })
     } finally {
       setChecking(false)
     }
@@ -201,17 +222,18 @@ export function UpdatePanel() {
     setInstallStage('downloading')
     setDownloadedBytes(0)
     setContentLength(null)
-    setStatusText('正在准备下载安装更新...')
 
     try {
       await installAppUpdate()
       setInstalling(false)
       setInstallStage('finished')
-      setStatusText('更新安装流程已完成。')
     } catch (error) {
       setInstalling(false)
       setInstallStage('idle')
-      setStatusText(`下载安装更新失败：${String(error)}`)
+      toast.error(`下载安装更新失败：${String(error)}`, {
+        key: 'update-install',
+        title: '应用更新',
+      })
     }
   }
 
@@ -258,7 +280,7 @@ export function UpdatePanel() {
               </Button>
               <Button
                 variant="outline"
-                onClick={() => void refreshConfiguration()}
+                onClick={() => void refreshConfiguration({ notifySuccess: true })}
                 disabled={loadingConfig || checking || installing}
               >
                 刷新配置
@@ -275,7 +297,11 @@ export function UpdatePanel() {
               )}
               <div className="space-y-2">
                 <p className="text-sm font-medium text-foreground">当前状态</p>
-                <p className="max-w-md text-xs leading-5 text-muted-foreground">{statusText}</p>
+                <p className="max-w-md text-xs leading-5 text-muted-foreground">
+                  {configStatus?.configured
+                    ? '更新能力已接入。检查结果会显示在右下角，下载安装时会在下方展示进度。'
+                    : '当前尚未接入 updater 配置，检查更新与安装功能暂时不可用。'}
+                </p>
                 {!configStatus?.configured ? (
                   <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-900/80 dark:text-foreground/80">
                     还缺少 updater 配置。请在
