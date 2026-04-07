@@ -462,7 +462,7 @@ function WindowControlButton({
 function SettingsPanel() {
   const { language, setLanguage } = useI18n()
   const { iconSize, windowMode, titleLineCount, dockEnabled, setDockEnabled } = useIconStore()
-  const [themeMode, setThemeMode] = useState<ThemeMode>('dark')
+  const [themeMode, setThemeMode] = useState<ThemeMode>('system')
   const [launchOnStartupEnabled, setLaunchOnStartupEnabled] = useState(true)
   const [isSavingLaunchOnStartup, setIsSavingLaunchOnStartup] = useState(false)
   const [launchpadShortcut, setLaunchpadShortcut] = useState(DEFAULT_LAUNCHPAD_SHORTCUT)

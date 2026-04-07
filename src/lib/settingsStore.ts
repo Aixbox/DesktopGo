@@ -53,9 +53,9 @@ const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
 
 const DEFAULT_SETTINGS: SettingValueMap = {
   iconSize: 'medium',
-  windowMode: 'fullscreen',
+  windowMode: 'medium',
   titleLineCount: 'two',
-  themeMode: 'dark',
+  themeMode: 'system',
   language: 'zh',
   dockEnabled: true,
   launchOnStartup: true,

@@ -47,7 +47,7 @@ export const useIconStore = create<IconStore>((set, get) => ({
   loading: false,
   error: null,
   iconSize: 'medium',
-  windowMode: 'fullscreen',
+  windowMode: 'medium',
   titleLineCount: 'two',
   dockEnabled: true,
   selectionMode: false,
