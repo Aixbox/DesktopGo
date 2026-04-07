@@ -10,9 +10,29 @@
       data-i18n-attr="content"
       content="DesktopGo 是一款现代化的 Windows 桌面启动器，集快速启动、图标管理和文件搜索于一体。"
     />
+    <meta
+      name="keywords"
+      data-i18n="meta.keywords"
+      data-i18n-attr="content"
+      content="DesktopGo, Windows 桌面启动器, Windows launcher, Launchpad for Windows, 桌面图标管理, 文件搜索, Everything 搜索"
+    />
+
+    <meta
+      name="robots"
+      content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
+    />
+    <meta name="author" content="Aixbox" />
+    <meta name="creator" content="Aixbox" />
+    <meta name="publisher" content="Aixbox" />
+    <meta name="application-name" content="DesktopGo" />
+    <meta name="apple-mobile-web-app-title" content="DesktopGo" />
+    <link rel="canonical" id="canonicalLink" href="/" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="DesktopGo" />
+    <meta property="og:locale" id="ogLocale" content="zh_CN" />
+    <meta property="og:locale:alternate" content="en_US" />
     <meta
       property="og:title"
       data-i18n="meta.ogTitle"
@@ -25,11 +45,19 @@
       data-i18n-attr="content"
       content="现代化的 Windows 桌面启动器，集快速启动、图标管理和文件搜索于一体，灵感源自 macOS Launchpad。"
     />
-    <meta property="og:image" content="assets/images/icon-grid.png" />
-    <meta property="og:url" content="https://github.com/aixbox/DesktopGo" />
+    <meta property="og:image" id="ogImage" content="assets/images/icon-grid.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta
+      property="og:image:alt"
+      data-i18n="meta.ogImageAlt"
+      data-i18n-attr="content"
+      content="DesktopGo launchpad preview"
+    />
+    <meta property="og:url" id="ogUrl" content="/" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" id="twitterUrl" content="/" />
     <meta
       name="twitter:title"
       data-i18n="meta.twitterTitle"
@@ -42,7 +70,13 @@
       data-i18n-attr="content"
       content="现代化的 Windows 桌面启动器，集快速启动、图标管理和文件搜索于一体。"
     />
-    <meta name="twitter:image" content="assets/images/icon-grid.png" />
+    <meta name="twitter:image" id="twitterImage" content="assets/images/icon-grid.png" />
+    <meta
+      name="twitter:image:alt"
+      data-i18n="meta.ogImageAlt"
+      data-i18n-attr="content"
+      content="DesktopGo launchpad preview"
+    />
 
     <!-- Favicon -->
     <link
@@ -53,6 +87,59 @@
 
     <!-- Theme color -->
     <meta name="theme-color" content="#0a0e1a" />
+    <script type="application/ld+json" id="structuredData">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "@id": "/#software",
+        "name": "DesktopGo",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Windows 10, Windows 11",
+        "inLanguage": "zh-CN",
+        "description": "DesktopGo 是一款现代化的 Windows 桌面启动器，集快速启动、图标管理和文件搜索于一体。",
+        "url": "/",
+        "mainEntityOfPage": "/",
+        "image": "assets/images/icon-grid.png",
+        "screenshot": [
+          "assets/images/icon-grid.png",
+          "assets/images/search-panel.png",
+          "assets/images/settings.png"
+        ],
+        "downloadUrl": "https://github.com/Aixbox/DesktopGo/releases/latest",
+        "softwareVersion": "1.0.0",
+        "isAccessibleForFree": true,
+        "softwareRequirements": "Windows 10 or Windows 11",
+        "keywords": [
+          "DesktopGo",
+          "Windows 桌面启动器",
+          "Launchpad for Windows",
+          "桌面图标管理",
+          "Everything 搜索"
+        ],
+        "featureList": [
+          "图标网格管理",
+          "极速文件搜索",
+          "个性化主题与快捷键设置"
+        ],
+        "author": {
+          "@type": "Organization",
+          "name": "Aixbox",
+          "url": "https://github.com/Aixbox/DesktopGo"
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "Aixbox",
+          "url": "https://github.com/Aixbox/DesktopGo"
+        },
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD",
+          "availability": "https://schema.org/InStock"
+        },
+        "sameAs": ["https://github.com/Aixbox/DesktopGo"]
+      }
+    </script>
     <style>
       /* ==================== Reset & Base ==================== */
       *,
@@ -1940,9 +2027,12 @@
           'meta.title': 'DesktopGo - Windows 桌面启动器',
           'meta.description':
             'DesktopGo 是一款现代化的 Windows 桌面启动器，集快速启动、图标管理和文件搜索于一体。',
+          'meta.keywords':
+            'DesktopGo, Windows 桌面启动器, Windows launcher, Launchpad for Windows, 桌面图标管理, 文件搜索, Everything 搜索',
           'meta.ogTitle': 'DesktopGo - Windows 桌面启动器',
           'meta.ogDescription':
             '现代化的 Windows 桌面启动器，集快速启动、图标管理和文件搜索于一体，灵感源自 macOS Launchpad。',
+          'meta.ogImageAlt': 'DesktopGo Launchpad 预览图',
           'meta.twitterTitle': 'DesktopGo - Windows 桌面启动器',
           'meta.twitterDescription':
             '现代化的 Windows 桌面启动器，集快速启动、图标管理和文件搜索于一体。',
@@ -2013,9 +2103,12 @@
           'meta.title': 'DesktopGo - Windows Desktop Launcher',
           'meta.description':
             'DesktopGo is a modern Windows desktop launcher that combines quick launch, icon management, and file search.',
+          'meta.keywords':
+            'DesktopGo, Windows desktop launcher, Windows launcher, Launchpad for Windows, desktop icon organizer, file search, Everything search',
           'meta.ogTitle': 'DesktopGo - Windows Desktop Launcher',
           'meta.ogDescription':
             'A modern Windows desktop launcher for quick launch, icon management, and file search, inspired by macOS Launchpad.',
+          'meta.ogImageAlt': 'DesktopGo launchpad preview',
           'meta.twitterTitle': 'DesktopGo - Windows Desktop Launcher',
           'meta.twitterDescription':
             'A modern Windows desktop launcher for quick launch, icon management, and file search.',
@@ -2088,6 +2181,15 @@
 
       const languageStorageKey = 'desktopgo:landing-language'
       const fallbackLanguage = 'zh'
+      const repositoryUrl = 'https://github.com/Aixbox/DesktopGo'
+      const latestReleaseUrl = 'https://github.com/Aixbox/DesktopGo/releases/latest'
+      const currentVersion = '1.0.0'
+      const socialImagePath = 'assets/images/icon-grid.png'
+      const screenshotPaths = [
+        'assets/images/icon-grid.png',
+        'assets/images/search-panel.png',
+        'assets/images/settings.png',
+      ]
       const languageButtons = document.querySelectorAll('.lang-switch [data-lang]')
 
       function readStoredLanguage() {
@@ -2124,6 +2226,110 @@
         })
       }
 
+      function resolvePublicPageUrl() {
+        const isHttpPage =
+          window.location.protocol === 'http:' || window.location.protocol === 'https:'
+
+        if (!isHttpPage) {
+          return '/'
+        }
+
+        return new URL(window.location.pathname, window.location.origin).toString()
+      }
+
+      function resolveAssetUrl(assetPath) {
+        const isHttpPage =
+          window.location.protocol === 'http:' || window.location.protocol === 'https:'
+
+        if (!isHttpPage) {
+          return assetPath
+        }
+
+        return new URL(assetPath, window.location.href).toString()
+      }
+
+      function setMetaContent(selector, value) {
+        const element = document.querySelector(selector)
+        if (element && value) {
+          element.setAttribute('content', value)
+        }
+      }
+
+      function syncSeoMetadata(language, dictionary) {
+        const pageUrl = resolvePublicPageUrl()
+        const imageUrl = resolveAssetUrl(socialImagePath)
+        const screenshotUrls = screenshotPaths.map(resolveAssetUrl)
+        const languageTag = language === 'zh' ? 'zh-CN' : 'en'
+        const locale = language === 'zh' ? 'zh_CN' : 'en_US'
+        const keywords = (dictionary['meta.keywords'] || '')
+          .split(',')
+          .map(keyword => keyword.trim())
+          .filter(Boolean)
+        const featureList = [dictionary['f1.h3'], dictionary['f2.h3'], dictionary['f3.h3']].filter(
+          Boolean
+        )
+
+        document.documentElement.lang = languageTag
+
+        const canonicalLink = document.getElementById('canonicalLink')
+        if (canonicalLink) {
+          canonicalLink.setAttribute('href', pageUrl)
+        }
+
+        setMetaContent('#ogLocale', locale)
+        setMetaContent('#ogUrl', pageUrl)
+        setMetaContent('#twitterUrl', pageUrl)
+        setMetaContent('#ogImage', imageUrl)
+        setMetaContent('#twitterImage', imageUrl)
+
+        const structuredData = document.getElementById('structuredData')
+        if (!structuredData) {
+          return
+        }
+
+        structuredData.textContent = JSON.stringify(
+          {
+            '@context': 'https://schema.org',
+            '@type': 'SoftwareApplication',
+            '@id': `${pageUrl}#software`,
+            name: 'DesktopGo',
+            applicationCategory: 'UtilitiesApplication',
+            operatingSystem: 'Windows 10, Windows 11',
+            inLanguage: languageTag,
+            description: dictionary['meta.description'],
+            url: pageUrl,
+            mainEntityOfPage: pageUrl,
+            image: imageUrl,
+            screenshot: screenshotUrls,
+            downloadUrl: latestReleaseUrl,
+            softwareVersion: currentVersion,
+            isAccessibleForFree: true,
+            softwareRequirements: 'Windows 10 or Windows 11',
+            keywords,
+            featureList,
+            author: {
+              '@type': 'Organization',
+              name: 'Aixbox',
+              url: repositoryUrl,
+            },
+            publisher: {
+              '@type': 'Organization',
+              name: 'Aixbox',
+              url: repositoryUrl,
+            },
+            offers: {
+              '@type': 'Offer',
+              price: '0',
+              priceCurrency: 'USD',
+              availability: 'https://schema.org/InStock',
+            },
+            sameAs: [repositoryUrl],
+          },
+          null,
+          2
+        )
+      }
+
       function applyTranslations(language) {
         const dictionary = translations[language] || translations[fallbackLanguage]
 
@@ -2149,7 +2355,7 @@
           element.textContent = text
         })
 
-        document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en'
+        syncSeoMetadata(language, dictionary)
         updateLanguageSwitcher(language)
       }
 
