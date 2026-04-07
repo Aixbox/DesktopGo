@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { translate } from '../../../lib/i18n'
 import { normalizeDockKeys } from '../domain/dock'
 import type { GridItem, IconItem, PersistedItem, PersistedLayout } from '../model'
 import { makeFolderId } from '../model'
@@ -127,7 +128,7 @@ export const hydrateItems = (
         result.push({
           kind: 'folder',
           id: item.id || makeFolderId(),
-          name: item.name || 'New Folder',
+          name: item.name || translate('New Folder'),
           size: item.size ?? '1x1',
           children,
         })

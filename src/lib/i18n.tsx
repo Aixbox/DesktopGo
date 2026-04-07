@@ -36,6 +36,7 @@ const ZH_MESSAGES: Record<string, string> = {
   'KB': 'KB',
   'MB': 'MB',
   'GB': 'GB',
+  'New Folder': '新文件夹',
 }
 
 const EN_MESSAGES: Record<string, string> = {

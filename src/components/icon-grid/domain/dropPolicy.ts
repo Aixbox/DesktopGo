@@ -1,5 +1,6 @@
 import type { FolderItem, GridItem } from '../model'
 import { getGridItemSpan, getId, makeFolderId } from '../model'
+import { translate } from '../../../lib/i18n'
 import { clampNumber } from './geometry'
 import { DRAG_HOLE_ID, getManhattanDistanceBySlotIndex } from './slots'
 import type { DragState } from '../state/types'
@@ -26,7 +27,7 @@ export const applyFolderCreateFromSession = (
   const folder: FolderItem = {
     kind: 'folder',
     id: makeFolderId(),
-    name: 'New Folder',
+    name: translate('New Folder'),
     size: '1x1',
     children: [targetItem, sourceItem],
   }
