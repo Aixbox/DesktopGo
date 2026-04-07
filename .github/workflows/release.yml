@@ -39,24 +39,39 @@ jobs:
         id: release_meta
         shell: pwsh
         run: |
-          $packageVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          $tauriVersion = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
-          $cargoToml = Get-Content src-tauri/Cargo.toml -Raw
-          $cargoVersionMatch = [regex]::Match($cargoToml, '(?m)^version\s*=\s*"([^"]+)"$')
+          $packageVersion = (Get-Content -LiteralPath package.json -Raw -Encoding UTF8 | ConvertFrom-Json).version
+          $tauriVersion = (Get-Content -LiteralPath src-tauri/tauri.conf.json -Raw -Encoding UTF8 | ConvertFrom-Json).version
+          $cargoTomlLines = Get-Content -LiteralPath src-tauri/Cargo.toml -Encoding UTF8
+          $inPackageSection = $false
+          $cargoVersion = $null
 
-          if (-not $cargoVersionMatch.Success) {
-            throw '无法从 src-tauri/Cargo.toml 读取版本号。'
+          foreach ($line in $cargoTomlLines) {
+            if ($line -match '^\s*\[package\]\s*$') {
+              $inPackageSection = $true
+              continue
+            }
+
+            if ($inPackageSection -and $line -match '^\s*\[') {
+              break
+            }
+
+            if ($inPackageSection -and $line -match '^\s*version\s*=\s*"([^"]+)"\s*$') {
+              $cargoVersion = $Matches[1]
+              break
+            }
           }
 
-          $cargoVersion = $cargoVersionMatch.Groups[1].Value
+          if (-not $cargoVersion) {
+            throw 'Unable to read version from the [package] section of src-tauri/Cargo.toml.'
+          }
 
           if ($packageVersion -ne $tauriVersion -or $packageVersion -ne $cargoVersion) {
-            throw "版本号不一致：package.json=$packageVersion, tauri.conf.json=$tauriVersion, Cargo.toml=$cargoVersion"
+            throw "Version mismatch: package.json=$packageVersion, tauri.conf.json=$tauriVersion, Cargo.toml=$cargoVersion"
           }
 
           $releaseNotesPath = "docs/RELEASE_NOTES/v$packageVersion.md"
           if (-not (Test-Path -LiteralPath $releaseNotesPath)) {
-            throw "未找到发布说明文件：$releaseNotesPath"
+            throw "Release notes not found: $releaseNotesPath"
           }
 
           $releaseBody = Get-Content -LiteralPath $releaseNotesPath -Raw -Encoding UTF8
