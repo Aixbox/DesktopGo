@@ -243,6 +243,14 @@ export function SearchPanel({
     return Math.min(Math.max(nextWidth, minListWidth), maxListWidth)
   }, [])
 
+  const syncViewportMetrics = useCallback(() => {
+    const element = viewportRef.current
+    if (!element) return
+
+    setViewportHeight(element.clientHeight)
+    setScrollTop(element.scrollTop)
+  }, [])
+
   const virtualCount = totalResults > 0 ? totalResults : loadedCount
   const loadAheadRows = Math.max(MIN_LOAD_AHEAD_ROWS, pageSize)
   const visibleRowCount = Math.ceil(viewportHeight / ROW_HEIGHT) + OVERSCAN_ROWS * 2
@@ -317,27 +325,37 @@ export function SearchPanel({
     const element = viewportRef.current
     if (!element) return
 
-    const updateViewportHeight = () => {
-      setViewportHeight(element.clientHeight)
-    }
-
-    updateViewportHeight()
+    syncViewportMetrics()
 
     const resizeObserver =
       typeof ResizeObserver === 'undefined'
         ? null
         : new ResizeObserver(() => {
-            updateViewportHeight()
+            syncViewportMetrics()
           })
 
     resizeObserver?.observe(element)
-    window.addEventListener('resize', updateViewportHeight)
+    window.addEventListener('resize', syncViewportMetrics)
 
     return () => {
       resizeObserver?.disconnect()
-      window.removeEventListener('resize', updateViewportHeight)
+      window.removeEventListener('resize', syncViewportMetrics)
     }
-  }, [isEverything, visible])
+  }, [isEverything, syncViewportMetrics, visible])
+
+  useLayoutEffect(() => {
+    if (!visible || !isEverything) return
+
+    syncViewportMetrics()
+
+    const frame = window.requestAnimationFrame(() => {
+      syncViewportMetrics()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [isEverything, syncViewportMetrics, visible])
 
   useEffect(() => {
     if (!visible || !isEverything || !previewVisible) return
@@ -403,7 +421,7 @@ export function SearchPanel({
   }, [clampListPaneWidth, isResizingSplit])
 
   useEffect(() => {
-    if (!isEverything) return
+    if (!visible || !isEverything) return
 
     const element = viewportRef.current
     if (!element || selectedIndex < 0) return
@@ -415,18 +433,20 @@ export function SearchPanel({
 
     if (rowTop < viewportTop) {
       element.scrollTop = rowTop
+      syncViewportMetrics()
     } else if (rowBottom > viewportBottom) {
       element.scrollTop = rowBottom - element.clientHeight
+      syncViewportMetrics()
     }
-  }, [isEverything, selectedIndex])
+  }, [isEverything, selectedIndex, syncViewportMetrics, visible])
 
   useEffect(() => {
     if (!isEverything || !loading || loadingMore) return
     const element = viewportRef.current
     if (!element) return
     element.scrollTop = 0
-    setScrollTop(0)
-  }, [isEverything, loading, loadingMore])
+    syncViewportMetrics()
+  }, [isEverything, loading, loadingMore, syncViewportMetrics])
 
   useEffect(() => {
     if (!visible || !isEverything || viewportHeight <= 0) return
