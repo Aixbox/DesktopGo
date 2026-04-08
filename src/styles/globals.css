@@ -303,6 +303,31 @@ body {
   -webkit-backdrop-filter: blur(20px) saturate(165%);
 }
 
+.search-panel-surface {
+  border: 1px solid color-mix(in oklch, var(--foreground) 15%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--background) 90%, transparent) 0%,
+      color-mix(in oklch, var(--background) 84%, transparent) 100%
+    );
+  box-shadow:
+    0 24px 56px rgba(15, 23, 42, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.52);
+  backdrop-filter: blur(24px) saturate(145%);
+  -webkit-backdrop-filter: blur(24px) saturate(145%);
+}
+
+.dark .search-panel-surface {
+  border: 1px solid color-mix(in oklch, var(--foreground) 16%, transparent);
+  background: color-mix(in oklch, var(--background) 84%, transparent);
+  box-shadow:
+    0 24px 56px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(20px) saturate(165%);
+  -webkit-backdrop-filter: blur(20px) saturate(165%);
+}
+
 .launchpad-glass-button {
   border: 1px solid color-mix(in oklch, var(--foreground) 15%, transparent);
   background: color-mix(in oklch, var(--background) 64%, transparent);

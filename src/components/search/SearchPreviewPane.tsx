@@ -53,13 +53,13 @@ export function SearchPreviewPane({
   useI18n()
 
   const shellClassName = stacked
-    ? 'flex h-[18rem] flex-col overflow-hidden border-t border-border/60 bg-background/12'
-    : 'flex h-full flex-col overflow-hidden border-l border-border/60 bg-background/12'
+    ? 'flex h-[18rem] flex-col overflow-hidden border-t border-border/60 bg-background/40 dark:bg-background/12'
+    : 'flex h-full flex-col overflow-hidden border-l border-border/60 bg-background/40 dark:bg-background/12'
 
   if (!item) {
     return (
       <div
-        className={`${stacked ? 'h-36 border-t border-border/60 bg-background/12' : 'h-full'} flex items-center justify-center px-6 text-center text-sm text-muted-foreground`}
+        className={`${stacked ? 'h-36 border-t border-border/60 bg-background/40 dark:bg-background/12' : 'h-full bg-background/40 dark:bg-background/12'} flex items-center justify-center px-6 text-center text-sm text-muted-foreground`}
       >
         {translate('选择一个结果后，可在这里查看预览。')}
       </div>
@@ -83,7 +83,7 @@ export function SearchPreviewPane({
             <img
               src={preview.imageDataUrl}
               alt={preview.name}
-              className="max-h-72 w-full rounded-lg border border-border/60 bg-background/40 object-contain"
+              className="max-h-72 w-full rounded-lg border border-border/60 bg-background/56 object-contain dark:bg-background/40"
               draggable={false}
             />
             <div className="search-surface-card rounded-lg p-3">

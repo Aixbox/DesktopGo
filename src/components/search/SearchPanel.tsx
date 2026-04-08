@@ -591,7 +591,7 @@ export function SearchPanel({
                     className="absolute left-0 right-0 px-4 py-2"
                     style={{ top, height: ROW_HEIGHT }}
                   >
-                    <div className="flex h-full animate-pulse items-center gap-3 rounded-xl border border-border/50 bg-background/45 px-4 backdrop-blur-sm">
+                    <div className="flex h-full animate-pulse items-center gap-3 rounded-xl border border-border/50 bg-background/58 px-4 backdrop-blur-sm dark:bg-background/45">
                       <span className="h-8 w-8 rounded-md bg-foreground/10" />
                       <span className="min-w-0 flex-1">
                         <span className="mb-2 block h-3 w-1/3 rounded bg-foreground/10" />
@@ -660,7 +660,7 @@ export function SearchPanel({
         </div>
 
         {loadingMore ? (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-border/70 bg-background/82 px-4 py-2 text-xs text-muted-foreground backdrop-blur-md">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-border/70 bg-background/78 px-4 py-2 text-xs text-muted-foreground backdrop-blur-md dark:bg-background/82">
             {translate('正在加载更多...')}
           </div>
         ) : null}
@@ -671,7 +671,7 @@ export function SearchPanel({
           <button
             type="button"
             aria-label={translate('调整预览宽度')}
-            className={`relative z-10 shrink-0 border-l border-r border-border/70 bg-background/12 transition hover:bg-accent/45 ${
+            className={`relative z-10 shrink-0 border-l border-r border-border/70 bg-background/30 transition hover:bg-accent/52 dark:bg-background/12 dark:hover:bg-accent/45 ${
               isResizingSplit ? 'bg-accent/70' : ''
             }`}
             style={{ width: SPLIT_DIVIDER_WIDTH, cursor: 'col-resize' }}
@@ -784,7 +784,7 @@ export function SearchPanel({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={panelTransition}
-            className="launchpad-glass-panel-strong pointer-events-auto relative overflow-hidden rounded-2xl shadow-2xl will-change-opacity"
+            className="launchpad-glass-panel-strong search-panel-surface pointer-events-auto relative overflow-hidden rounded-2xl shadow-2xl will-change-opacity"
           >
             <div className="relative z-10">
               <div className="flex items-center justify-between gap-3 border-b border-border/70 px-3 py-2">
