@@ -49,9 +49,16 @@ pub(crate) const DEFAULT_LAUNCHPAD_SHORTCUT: &str = "Ctrl+Space";
 const DEFAULT_LAUNCH_ON_STARTUP: bool = true;
 const LAUNCH_ON_STARTUP_SETTING_KEY: &str = "launchOnStartup";
 const LANGUAGE_SETTING_KEY: &str = "language";
+const WINDOW_MODE_SETTING_KEY: &str = "windowMode";
 const WINDOWS_RUN_VALUE_NAME: &str = "DesktopGo";
 const INSTALL_LANGUAGE_MARKER_FILE_NAME: &str = ".install_language";
 const SHOW_ON_LAUNCH_MARKER_FILE_NAME: &str = ".show_on_launch";
+const MAIN_WINDOW_LARGE_WIDTH: f64 = 1600.0;
+const MAIN_WINDOW_LARGE_HEIGHT: f64 = 900.0;
+const MAIN_WINDOW_MEDIUM_WIDTH: f64 = 1280.0;
+const MAIN_WINDOW_MEDIUM_HEIGHT: f64 = 720.0;
+const MAIN_WINDOW_SMALL_WIDTH: f64 = 800.0;
+const MAIN_WINDOW_SMALL_HEIGHT: f64 = 600.0;
 const SETTINGS_WINDOW_WIDTH: f64 = 800.0;
 const SETTINGS_WINDOW_HEIGHT: f64 = 600.0;
 const TRAY_ICON_ID: &str = "main";
@@ -434,6 +441,35 @@ fn save_language_setting(app: &tauri::AppHandle, language: &str) -> Result<(), S
         .map_err(|error| format!("无法保存界面语言设置：{}", error))
 }
 
+fn normalize_window_mode(value: &str) -> Option<&'static str> {
+    match value.trim() {
+        "fullscreen" => Some("fullscreen"),
+        "large" => Some("large"),
+        "medium" => Some("medium"),
+        "small" => Some("small"),
+        _ => None,
+    }
+}
+
+fn read_saved_window_mode(app: &tauri::AppHandle) -> Option<&'static str> {
+    app.store("settings.json").ok().and_then(|store| {
+        store
+            .get(WINDOW_MODE_SETTING_KEY)
+            .and_then(|value| value.as_str().and_then(normalize_window_mode))
+    })
+}
+
+fn resolve_initial_main_window_size(app: &tauri::AppHandle) -> (f64, f64) {
+    match read_saved_window_mode(app) {
+        Some("large") => (MAIN_WINDOW_LARGE_WIDTH, MAIN_WINDOW_LARGE_HEIGHT),
+        Some("small") => (MAIN_WINDOW_SMALL_WIDTH, MAIN_WINDOW_SMALL_HEIGHT),
+        Some("fullscreen") | Some("medium") | None => {
+            (MAIN_WINDOW_MEDIUM_WIDTH, MAIN_WINDOW_MEDIUM_HEIGHT)
+        }
+        Some(_) => (MAIN_WINDOW_MEDIUM_WIDTH, MAIN_WINDOW_MEDIUM_HEIGHT),
+    }
+}
+
 fn consume_install_language_marker() -> Option<&'static str> {
     let marker = std::env::current_exe()
         .ok()
@@ -809,11 +845,12 @@ fn schedule_main_window_focus_retry(app: tauri::AppHandle) {
 fn create_main_window(app: &tauri::AppHandle) {
     let state = app.state::<MainWindowState>();
     state.ready.store(false, Ordering::SeqCst);
+    let (initial_width, initial_height) = resolve_initial_main_window_size(app);
 
     let builder =
         tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
             .title("DesktopGo")
-            .inner_size(1920.0, 1080.0)
+            .inner_size(initial_width, initial_height)
             .fullscreen(false)
             .resizable(false)
             .decorations(false)
