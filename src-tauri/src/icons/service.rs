@@ -10,8 +10,9 @@ use super::models::{
 };
 #[cfg(windows)]
 use super::platform_windows::{
-    create_recycle_bin_icon, extract_icon_for_item, get_desktop_dirs, get_dpi_scale,
-    launch_app_windows, resolve_lnk, scan_desktop_items,
+    collect_special_desktop_items, extract_icon_for_item, extract_special_shell_icon,
+    get_desktop_dirs, get_dpi_scale, is_special_shell_path, launch_app_windows, resolve_lnk,
+    scan_desktop_items,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -262,6 +263,10 @@ pub fn get_default_customapp_dir(app_handle: tauri::AppHandle) -> Result<String,
 
 #[cfg(windows)]
 fn get_path_icon_base64_windows(path: &str, icon_size: i32) -> String {
+    if is_special_shell_path(path) {
+        return extract_special_shell_icon(path, icon_size).unwrap_or_default();
+    }
+
     let item_path = PathBuf::from(path);
     if !item_path.exists() {
         return String::new();
@@ -411,7 +416,9 @@ fn read_icon_snapshot(
         item.source = IconSource::from_value(&item.source).as_str().to_string();
     }
 
-    if normalize_snapshot_display_order(&mut snapshot) {
+    let changed = normalize_snapshot_display_order(&mut snapshot);
+
+    if changed {
         write_icon_snapshot(app_handle, source, &snapshot)?;
     }
 
@@ -521,14 +528,7 @@ fn stable_item_key(item: &ScannedDesktopItem) -> String {
 
 #[cfg(windows)]
 fn collect_desktop_items() -> Vec<ScannedDesktopItem> {
-    let mut items = Vec::new();
-
-    items.push(ScannedDesktopItem {
-        name: "Recycle Bin".to_string(),
-        path: "::{645FF040-5081-101B-9F08-00AA002F954E}".to_string(),
-        target_path: "::{645FF040-5081-101B-9F08-00AA002F954E}".to_string(),
-        item_type: "special".to_string(),
-    });
+    let mut items = collect_special_desktop_items();
 
     let dirs = get_desktop_dirs();
     for item_path in scan_desktop_items(&dirs) {
@@ -620,13 +620,74 @@ fn collect_items_from_single_dir(dir: &PathBuf) -> Result<Vec<ScannedDesktopItem
 #[cfg(windows)]
 fn extract_icon_for_scanned_item(item: &ScannedDesktopItem, icon_size: i32) -> String {
     if item.item_type == "special" {
-        return create_recycle_bin_icon(icon_size)
-            .map(|icon| icon.icon_base64)
-            .unwrap_or_default();
+        return extract_special_shell_icon(&item.path, icon_size).unwrap_or_default();
     }
 
     let item_path = PathBuf::from(&item.path);
     extract_icon_for_item(&item_path, &item.target_path, &item.item_type, icon_size)
+}
+
+#[cfg(windows)]
+fn is_managed_special_desktop_item(item: &SnapshotIconItem) -> bool {
+    item.item_type == "special" && is_special_shell_path(&item.path)
+}
+
+#[cfg(windows)]
+fn reconcile_special_desktop_items(
+    app_handle: &tauri::AppHandle,
+    snapshot: &mut IconSnapshot,
+) -> Result<bool, String> {
+    let visible_items = collect_special_desktop_items();
+    let visible_keys = visible_items
+        .iter()
+        .map(stable_item_key)
+        .collect::<HashSet<_>>();
+
+    let mut changed = false;
+    let mut removed_items = Vec::new();
+    let mut retained_items = Vec::with_capacity(snapshot.icons.len());
+
+    for item in std::mem::take(&mut snapshot.icons) {
+        if is_managed_special_desktop_item(&item) && !visible_keys.contains(&item.key) {
+            removed_items.push(item);
+            changed = true;
+            continue;
+        }
+
+        retained_items.push(item);
+    }
+
+    for item in &removed_items {
+        remove_cached_icon_file(app_handle, &item.icons.small)?;
+        remove_cached_icon_file(app_handle, &item.icons.medium)?;
+        remove_cached_icon_file(app_handle, &item.icons.large)?;
+    }
+
+    snapshot.icons = retained_items;
+
+    let mut known_keys = snapshot
+        .icons
+        .iter()
+        .map(|item| item.key.clone())
+        .collect::<HashSet<_>>();
+    let mut max_display_order =
+        max_display_order_with_other_source(app_handle, IconSource::Desktop, snapshot)?;
+
+    for item in visible_items {
+        let key = stable_item_key(&item);
+        if known_keys.contains(&key) {
+            continue;
+        }
+
+        max_display_order = max_display_order.saturating_add(1);
+        let snapshot_item =
+            build_snapshot_item(app_handle, &item, IconSource::Desktop, max_display_order)?;
+        known_keys.insert(snapshot_item.key.clone());
+        snapshot.icons.push(snapshot_item);
+        changed = true;
+    }
+
+    Ok(changed)
 }
 
 #[cfg(windows)]
@@ -862,6 +923,10 @@ where
         version: 1,
         icons: Vec::new(),
     });
+
+    if source == IconSource::Desktop {
+        reconcile_special_desktop_items(app_handle, &mut snapshot)?;
+    }
 
     let scanned_items = collect_items()?;
     let mut known_keys = snapshot

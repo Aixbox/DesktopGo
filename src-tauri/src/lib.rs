@@ -342,9 +342,7 @@ fn should_show_on_launch(_app: &tauri::AppHandle) -> bool {
     }
 }
 
-fn build_tray_menu(
-    app: &tauri::AppHandle,
-) -> tauri::Result<(Menu<tauri::Wry>, TrayMenuItems)> {
+fn build_tray_menu(app: &tauri::AppHandle) -> tauri::Result<(Menu<tauri::Wry>, TrayMenuItems)> {
     let language = app.state::<TrayState>().language();
     let menu_text = language.tray_menu_text();
     let launchpad_visible = main_window_is_visible(app);
@@ -518,7 +516,11 @@ fn refresh_tray_menu(app: &tauri::AppHandle) {
 }
 
 fn refresh_settings_window_title(app: &tauri::AppHandle) {
-    let title = app.state::<TrayState>().language().tray_menu_text().settings_window_title;
+    let title = app
+        .state::<TrayState>()
+        .language()
+        .tray_menu_text()
+        .settings_window_title;
 
     if let Some(window) = app.get_webview_window("settings") {
         let _ = window.set_title(title);
@@ -838,7 +840,11 @@ fn create_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    let title = app.state::<TrayState>().language().tray_menu_text().settings_window_title;
+    let title = app
+        .state::<TrayState>()
+        .language()
+        .tray_menu_text()
+        .settings_window_title;
 
     tauri::WebviewWindowBuilder::new(
         app,

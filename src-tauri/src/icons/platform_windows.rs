@@ -1,7 +1,65 @@
 use base64::Engine;
 use std::path::PathBuf;
+use winreg::HKEY;
+use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+use winreg::RegKey;
 
-use super::models::{DesktopIcon, ICON_SOURCE_DESKTOP};
+use super::models::ScannedDesktopItem;
+
+#[derive(Clone, Copy)]
+struct SpecialDesktopItemDescriptor {
+    clsid: &'static str,
+    fallback_name: &'static str,
+    default_visible: bool,
+}
+
+const SPECIAL_DESKTOP_ITEMS: [SpecialDesktopItemDescriptor; 5] = [
+    SpecialDesktopItemDescriptor {
+        clsid: "645FF040-5081-101B-9F08-00AA002F954E",
+        fallback_name: "Recycle Bin",
+        default_visible: true,
+    },
+    SpecialDesktopItemDescriptor {
+        clsid: "20D04FE0-3AEA-1069-A2D8-08002B30309D",
+        fallback_name: "This PC",
+        default_visible: false,
+    },
+    SpecialDesktopItemDescriptor {
+        clsid: "59031A47-3F72-44A7-89C5-5595FE6B30EE",
+        fallback_name: "User's Files",
+        default_visible: false,
+    },
+    SpecialDesktopItemDescriptor {
+        clsid: "F02C1A0D-BE21-4350-88B0-7367FC96EF3C",
+        fallback_name: "Network",
+        default_visible: false,
+    },
+    SpecialDesktopItemDescriptor {
+        clsid: "5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0",
+        fallback_name: "Control Panel",
+        default_visible: false,
+    },
+];
+
+const DESKTOP_ICON_VISIBILITY_REGISTRY_PATHS: [(&str, HKEY); 4] = [
+    (
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\HideDesktopIcons\\NewStartPanel",
+        HKEY_CURRENT_USER,
+    ),
+    (
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\HideDesktopIcons\\ClassicStartMenu",
+        HKEY_CURRENT_USER,
+    ),
+    (
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\HideDesktopIcons\\NewStartPanel",
+        HKEY_LOCAL_MACHINE,
+    ),
+    (
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\HideDesktopIcons\\ClassicStartMenu",
+        HKEY_LOCAL_MACHINE,
+    ),
+];
+
 pub(super) fn get_dpi_scale() -> f64 {
     unsafe {
         let hdc = windows::Win32::Graphics::Gdi::GetDC(None);
@@ -47,45 +105,125 @@ pub(super) fn scan_desktop_items(dirs: &[PathBuf]) -> Vec<PathBuf> {
 }
 
 #[cfg(windows)]
-pub(super) fn create_recycle_bin_icon(icon_size: i32) -> Option<DesktopIcon> {
-    use windows::core::GUID;
+fn special_item_shell_path(clsid: &str) -> String {
+    format!("::{{{clsid}}}")
+}
 
-    const CLSID_RECYCLE_BIN: GUID = GUID::from_u128(0x645FF040_5081_101B_9F08_00AA002F954E);
+#[cfg(windows)]
+fn special_item_registry_name(clsid: &str) -> String {
+    format!("{{{clsid}}}")
+}
 
-    unsafe {
-        let _ = windows::Win32::System::Com::CoInitializeEx(
-            None,
-            windows::Win32::System::Com::COINIT_APARTMENTTHREADED,
-        );
+#[cfg(windows)]
+fn special_desktop_item_is_visible(item: SpecialDesktopItemDescriptor) -> bool {
+    let value_name = special_item_registry_name(item.clsid);
 
-        let icon_base64 =
-            extract_special_folder_icon(&CLSID_RECYCLE_BIN, icon_size).unwrap_or_default();
+    for (subkey_path, hive) in DESKTOP_ICON_VISIBILITY_REGISTRY_PATHS {
+        let root = RegKey::predef(hive);
+        let Ok(subkey) = root.open_subkey(subkey_path) else {
+            continue;
+        };
 
-        Some(DesktopIcon {
-            id: uuid::Uuid::new_v4().to_string(),
-            name: "Recycle Bin".to_string(),
-            path: "::{645FF040-5081-101B-9F08-00AA002F954E}".to_string(),
-            target_path: "::{645FF040-5081-101B-9F08-00AA002F954E}".to_string(),
-            icon_base64,
-            item_type: "special".to_string(),
-            source: ICON_SOURCE_DESKTOP.to_string(),
+        match subkey.get_value::<u32, _>(&value_name) {
+            Ok(value) => return value == 0,
+            Err(_) => continue,
+        }
+    }
+
+    item.default_visible
+}
+
+#[cfg(windows)]
+pub(super) fn is_special_shell_path(path: &str) -> bool {
+    let trimmed = path.trim();
+    trimmed.starts_with("::{") && trimmed.ends_with('}')
+}
+
+#[cfg(windows)]
+pub(super) fn collect_special_desktop_items() -> Vec<ScannedDesktopItem> {
+    SPECIAL_DESKTOP_ITEMS
+        .iter()
+        .copied()
+        .filter(|item| special_desktop_item_is_visible(*item))
+        .map(|item| {
+            let shell_path = special_item_shell_path(item.clsid);
+            let name = unsafe {
+                resolve_special_item_display_name(&shell_path)
+                    .unwrap_or_else(|| item.fallback_name.to_string())
+            };
+
+            ScannedDesktopItem {
+                name,
+                path: shell_path.clone(),
+                target_path: shell_path,
+                item_type: "special".to_string(),
+            }
         })
+        .collect()
+}
+
+#[cfg(windows)]
+pub(super) fn extract_special_shell_icon(path: &str, icon_size: i32) -> Option<String> {
+    unsafe { extract_shell_item_icon(path, icon_size) }
+}
+
+#[cfg(windows)]
+pub(super) fn launch_special_shell_path(path: &str) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+
+    std::process::Command::new("explorer.exe")
+        .arg(format!("shell:{path}"))
+        .creation_flags(0x08000000)
+        .spawn()
+        .map_err(|e| format!("Failed to launch special shell item `{path}`: {e}"))?;
+
+    Ok(())
+}
+
+#[cfg(windows)]
+unsafe fn resolve_special_item_display_name(path: &str) -> Option<String> {
+    use windows::Win32::System::Com::CoTaskMemFree;
+    use windows::Win32::UI::Shell::SIGDN_NORMALDISPLAY;
+
+    let shell_item = create_shell_item_from_path(path)?;
+    let display_name = shell_item.GetDisplayName(SIGDN_NORMALDISPLAY).ok()?;
+    if display_name.0.is_null() {
+        return None;
+    }
+
+    let mut len = 0usize;
+    while *display_name.0.add(len) != 0 {
+        len += 1;
+    }
+
+    let name = String::from_utf16_lossy(std::slice::from_raw_parts(display_name.0, len));
+    CoTaskMemFree(Some(display_name.0 as *const _));
+
+    if name.trim().is_empty() {
+        None
+    } else {
+        Some(name)
     }
 }
 
 #[cfg(windows)]
-unsafe fn extract_special_folder_icon(_clsid: &windows::core::GUID, size: i32) -> Option<String> {
-    use windows::core::Interface;
+unsafe fn create_shell_item_from_path(path: &str) -> Option<windows::Win32::UI::Shell::IShellItem> {
     use windows::core::HSTRING;
     use windows::Win32::System::Com::*;
     use windows::Win32::UI::Shell::*;
 
     let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-
-    let path = "::{645FF040-5081-101B-9F08-00AA002F954E}";
     let path_hstring = HSTRING::from(path);
 
-    let shell_item: IShellItem = SHCreateItemFromParsingName(&path_hstring, None).ok()?;
+    SHCreateItemFromParsingName(&path_hstring, None).ok()
+}
+
+#[cfg(windows)]
+unsafe fn extract_shell_item_icon(path: &str, size: i32) -> Option<String> {
+    use windows::core::Interface;
+    use windows::Win32::UI::Shell::*;
+
+    let shell_item = create_shell_item_from_path(path)?;
     let factory: IShellItemImageFactory = shell_item.cast().ok()?;
 
     let icon_size = windows::Win32::Foundation::SIZE { cx: size, cy: size };
@@ -134,22 +272,7 @@ pub(super) fn resolve_lnk(lnk_path: &PathBuf) -> Option<String> {
 
 #[cfg(windows)]
 unsafe fn extract_high_res_icon(path: &str, size: i32) -> Option<String> {
-    use windows::core::Interface;
-    use windows::core::HSTRING;
-    use windows::Win32::System::Com::*;
-    use windows::Win32::UI::Shell::*;
-
-    let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-
-    let path_hstring = HSTRING::from(path);
-    let shell_item: IShellItem = SHCreateItemFromParsingName(&path_hstring, None).ok()?;
-
-    let factory: IShellItemImageFactory = shell_item.cast().ok()?;
-
-    let icon_size = windows::Win32::Foundation::SIZE { cx: size, cy: size };
-    let hbitmap = factory.GetImage(icon_size, SIIGBF_ICONONLY).ok()?;
-
-    hbitmap_to_base64(hbitmap)
+    extract_shell_item_icon(path, size)
 }
 
 #[cfg(windows)]
@@ -258,6 +381,16 @@ pub(super) fn extract_icon_for_item(
         );
 
         match item_type {
+            "special" => {
+                if let Some(b64) = extract_special_shell_icon(target_path, icon_size) {
+                    return b64;
+                }
+                if let Some(b64) =
+                    extract_special_shell_icon(&item_path.to_string_lossy(), icon_size)
+                {
+                    return b64;
+                }
+            }
             "shortcut" => {
                 if !target_path.is_empty() {
                     if let Some(b64) = extract_high_res_icon(target_path, icon_size) {
@@ -288,6 +421,10 @@ pub(super) fn extract_icon_for_item(
 #[cfg(windows)]
 pub(super) fn launch_app_windows(path: &str) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
+
+    if is_special_shell_path(path) {
+        return launch_special_shell_path(path);
+    }
 
     std::process::Command::new("cmd")
         .args(["/C", "start", "", path])
