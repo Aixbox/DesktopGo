@@ -7,8 +7,8 @@ mod search_preview;
 mod updater;
 
 use commands::{
-    activate_main_window, activate_settings_window, check_for_app_update, delete_desktop_icons,
-    get_default_customapp_dir, get_desktop_icons, get_icon_manager_items,
+    activate_main_window, activate_settings_window, apply_window_style, check_for_app_update,
+    delete_desktop_icons, get_default_customapp_dir, get_desktop_icons, get_icon_manager_items,
     get_launch_on_startup_enabled, get_layout_payload, get_layout_payloads, get_search_preview,
     get_search_runtime_status, get_updater_configuration_status, hide_desktop_icons,
     install_app_update, launch_app, notify_main_window_ready, record_search_result_run,
@@ -20,6 +20,8 @@ use commands::{
 #[cfg(windows)]
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
+#[cfg(windows)]
+use std::ffi::c_void;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Mutex,
@@ -30,13 +32,21 @@ use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{Listener, Manager, RunEvent};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tauri_plugin_store::StoreExt;
+#[cfg(target_os = "windows")]
+use window_vibrancy::apply_acrylic;
+#[cfg(windows)]
+use windows::core::PCSTR;
 #[cfg(windows)]
 use windows::Win32::UI::Input::KeyboardAndMouse::{SetActiveWindow, SetFocus};
 #[cfg(windows)]
+use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
+#[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
     BringWindowToTop, SetForegroundWindow, SetWindowPos, ShowWindow, HWND_TOP, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,
+    SWP_NOSIZE, SWP_SHOWWINDOW, SW_HIDE, SW_RESTORE,
 };
+#[cfg(windows)]
+use winreg::{enums::HKEY_CURRENT_USER, RegKey};
 
 #[cfg(windows)]
 static WINDOWS_CONSOLE_APP_HANDLE: OnceCell<tauri::AppHandle> = OnceCell::new();
@@ -49,7 +59,9 @@ pub(crate) const DEFAULT_LAUNCHPAD_SHORTCUT: &str = "Ctrl+Space";
 const DEFAULT_LAUNCH_ON_STARTUP: bool = true;
 const LAUNCH_ON_STARTUP_SETTING_KEY: &str = "launchOnStartup";
 const LANGUAGE_SETTING_KEY: &str = "language";
+const THEME_MODE_SETTING_KEY: &str = "themeMode";
 const WINDOW_MODE_SETTING_KEY: &str = "windowMode";
+const WINDOW_STYLE_SETTING_KEY: &str = "windowStyle";
 const WINDOWS_RUN_VALUE_NAME: &str = "DesktopGo";
 const INSTALL_LANGUAGE_MARKER_FILE_NAME: &str = ".install_language";
 const SHOW_ON_LAUNCH_MARKER_FILE_NAME: &str = ".show_on_launch";
@@ -67,6 +79,36 @@ const TRAY_TOGGLE_MENU_ITEM_ID: &str = "tray-toggle-launchpad";
 const TRAY_SETTINGS_MENU_ITEM_ID: &str = "tray-open-settings";
 const TRAY_QUIT_MENU_ITEM_ID: &str = "tray-quit";
 const LANGUAGE_CHANGED_EVENT: &str = "desktopgo://language-changed";
+
+#[cfg(windows)]
+const WCA_ACCENT_POLICY: u32 = 19;
+#[cfg(windows)]
+const ACCENT_DISABLED: u32 = 0;
+#[cfg(windows)]
+const ACCENT_ENABLE_ACRYLICBLURBEHIND: u32 = 4;
+
+#[cfg(windows)]
+#[repr(C)]
+struct AccentPolicy {
+    accent_state: u32,
+    accent_flags: u32,
+    gradient_color: u32,
+    animation_id: u32,
+}
+
+#[cfg(windows)]
+#[repr(C)]
+struct WindowCompositionAttribData {
+    attrib: u32,
+    pv_data: *mut c_void,
+    cb_data: usize,
+}
+
+#[cfg(windows)]
+type SetWindowCompositionAttributeFn = unsafe extern "system" fn(
+    hwnd: windows::Win32::Foundation::HWND,
+    data: *mut WindowCompositionAttribData,
+) -> i32;
 
 struct MainWindowState {
     ready: AtomicBool,
@@ -317,6 +359,7 @@ pub fn run() {
             get_search_preview,
             record_search_result_run,
             notify_main_window_ready,
+            apply_window_style,
             get_updater_configuration_status,
             check_for_app_update,
             install_app_update,
@@ -457,6 +500,189 @@ fn read_saved_window_mode(app: &tauri::AppHandle) -> Option<&'static str> {
             .get(WINDOW_MODE_SETTING_KEY)
             .and_then(|value| value.as_str().and_then(normalize_window_mode))
     })
+}
+
+fn normalize_theme_mode(value: &str) -> Option<&'static str> {
+    match value.trim() {
+        "system" => Some("system"),
+        "dark" => Some("dark"),
+        "light" => Some("light"),
+        _ => None,
+    }
+}
+
+fn read_saved_theme_mode(app: &tauri::AppHandle) -> Option<&'static str> {
+    app.store("settings.json").ok().and_then(|store| {
+        store
+            .get(THEME_MODE_SETTING_KEY)
+            .and_then(|value| value.as_str().and_then(normalize_theme_mode))
+    })
+}
+
+#[cfg(windows)]
+fn system_prefers_light_theme() -> Option<bool> {
+    let personalize = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize")
+        .ok()?;
+
+    personalize
+        .get_value::<u32, _>("AppsUseLightTheme")
+        .ok()
+        .map(|value| value != 0)
+}
+
+#[cfg(windows)]
+fn resolved_theme_is_dark(app: &tauri::AppHandle) -> bool {
+    match read_saved_theme_mode(app) {
+        Some("dark") => true,
+        Some("light") => false,
+        Some("system") | None => !system_prefers_light_theme().unwrap_or(true),
+        Some(_) => false,
+    }
+}
+
+fn normalize_window_style(value: &str) -> Option<&'static str> {
+    match value.trim() {
+        "default" => Some("default"),
+        "nativeAcrylic" => Some("nativeAcrylic"),
+        _ => None,
+    }
+}
+
+fn read_saved_window_style(app: &tauri::AppHandle) -> Option<&'static str> {
+    app.store("settings.json").ok().and_then(|store| {
+        store
+            .get(WINDOW_STYLE_SETTING_KEY)
+            .and_then(|value| value.as_str().and_then(normalize_window_style))
+    })
+}
+
+#[cfg(windows)]
+fn get_set_window_composition_attribute() -> Option<SetWindowCompositionAttributeFn> {
+    let module = unsafe { LoadLibraryA(PCSTR(b"user32.dll\0".as_ptr())) }.ok()?;
+    let proc = unsafe { GetProcAddress(module, PCSTR(b"SetWindowCompositionAttribute\0".as_ptr())) };
+    proc.map(|f| unsafe {
+        std::mem::transmute::<unsafe extern "system" fn() -> isize, SetWindowCompositionAttributeFn>(
+            f,
+        )
+    })
+}
+
+#[cfg(windows)]
+fn set_window_composition_accent(
+    hwnd: windows::Win32::Foundation::HWND,
+    accent_state: u32,
+    color: Option<(u8, u8, u8, u8)>,
+) -> Result<(), String> {
+    let mut rgba = color.unwrap_or((0, 0, 0, 0));
+    if accent_state == ACCENT_ENABLE_ACRYLICBLURBEHIND && rgba.3 == 0 {
+        rgba.3 = 1;
+    }
+
+    let mut policy = AccentPolicy {
+        accent_state,
+        accent_flags: 0,
+        gradient_color: (rgba.0 as u32)
+            | ((rgba.1 as u32) << 8)
+            | ((rgba.2 as u32) << 16)
+            | ((rgba.3 as u32) << 24),
+        animation_id: 0,
+    };
+
+    let mut data = WindowCompositionAttribData {
+        attrib: WCA_ACCENT_POLICY,
+        pv_data: &mut policy as *mut _ as _,
+        cb_data: std::mem::size_of::<AccentPolicy>(),
+    };
+
+    let Some(set_window_composition_attribute) = get_set_window_composition_attribute() else {
+        return Err("SetWindowCompositionAttribute is unavailable on this system.".to_string());
+    };
+
+    unsafe {
+        let _ = set_window_composition_attribute(hwnd, &mut data as *mut _);
+    }
+
+    Ok(())
+}
+
+#[cfg(windows)]
+fn apply_window_style_to_window(
+    app: &tauri::AppHandle,
+    window: &tauri::WebviewWindow,
+    style: &str,
+) -> Result<(), String> {
+    let hwnd = window
+        .hwnd()
+        .map_err(|error| format!("Failed to resolve main HWND: {}", error))?;
+
+    match normalize_window_style(style).unwrap_or("default") {
+        "nativeAcrylic" => {
+            apply_acrylic(window, Some((250, 250, 250, 4)))
+                .map_err(|e| format!("Failed to apply acrylic: {}", e))
+        }
+        _ => {
+            set_window_composition_accent(hwnd, ACCENT_DISABLED, None)
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn apply_window_style_to_window(
+    _app: &tauri::AppHandle,
+    _window: &tauri::WebviewWindow,
+    _style: &str,
+) -> Result<(), String> {
+    Ok(())
+}
+
+pub(crate) fn apply_main_window_style(
+    app: &tauri::AppHandle,
+    style: Option<&str>,
+) -> Result<(), String> {
+    let Some(window) = app.get_webview_window("main") else {
+        return Ok(());
+    };
+
+    let resolved_style = style
+        .and_then(normalize_window_style)
+        .or_else(|| read_saved_window_style(app))
+        .unwrap_or("default");
+
+    apply_window_style_to_window(app, &window, resolved_style)
+}
+
+fn build_window_bootstrap_script(app: &tauri::AppHandle, include_window_style: bool) -> String {
+    let theme_mode = read_saved_theme_mode(app).unwrap_or("system");
+    let window_style = if include_window_style {
+        read_saved_window_style(app).unwrap_or("default")
+    } else {
+        "default"
+    };
+
+    format!(
+        r#"
+(() => {{
+  const root = document.documentElement;
+  const themeMode = {theme_mode:?};
+  const windowStyle = {window_style:?};
+  root.classList.remove('dark', 'window-style-native-acrylic');
+  root.style.opacity = '0';
+  root.style.transition = 'opacity 50ms ease-out';
+
+  if (
+    themeMode === 'dark' ||
+    (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  ) {{
+    root.classList.add('dark');
+  }}
+
+  if (windowStyle === 'nativeAcrylic') {{
+    root.classList.add('window-style-native-acrylic');
+  }}
+}})();
+"#
+    )
 }
 
 fn resolve_initial_main_window_size(app: &tauri::AppHandle) -> (f64, f64) {
@@ -792,7 +1018,15 @@ pub(crate) fn show_main_window(app: &tauri::AppHandle) {
         let _ = window.unminimize();
         let _ = window.set_always_on_top(true);
         let _ = window.show();
-        let _ = window.set_focus();
+        let _ = activate_webview_window(&window);
+
+        // Let DWM composite the acrylic effect, then reveal content.
+        let reveal_window = window.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(60));
+            let _ = reveal_window.eval("document.documentElement.style.opacity='1'");
+        });
+
         refresh_tray_menu(app);
         schedule_main_window_focus_retry(app.clone());
     }
@@ -800,8 +1034,18 @@ pub(crate) fn show_main_window(app: &tauri::AppHandle) {
 
 pub(crate) fn hide_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.set_always_on_top(false);
+        // Reset opacity so next show starts invisible (avoids acrylic flash).
+        let _ = window.eval("document.documentElement.style.opacity='0'");
+
+        #[cfg(windows)]
+        if let Ok(hwnd) = window.hwnd() {
+            unsafe {
+                let _ = ShowWindow(hwnd, SW_HIDE);
+            }
+        }
+
         let _ = window.hide();
+        let _ = window.set_always_on_top(false);
     }
 
     refresh_tray_menu(app);
@@ -846,11 +1090,13 @@ fn create_main_window(app: &tauri::AppHandle) {
     let state = app.state::<MainWindowState>();
     state.ready.store(false, Ordering::SeqCst);
     let (initial_width, initial_height) = resolve_initial_main_window_size(app);
+    let bootstrap_script = build_window_bootstrap_script(app, true);
 
     let builder =
         tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
             .title("DesktopGo")
             .inner_size(initial_width, initial_height)
+            .background_color(tauri::utils::config::Color(0, 0, 0, 0))
             .fullscreen(false)
             .resizable(false)
             .decorations(false)
@@ -860,10 +1106,14 @@ fn create_main_window(app: &tauri::AppHandle) {
             .visible(false)
             .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
             .devtools(cfg!(debug_assertions))
+            .initialization_script(bootstrap_script)
             .center();
 
     match builder.build() {
         Ok(_) => {
+            if let Err(error) = apply_main_window_style(app, None) {
+                eprintln!("Warning: Failed to apply saved main window style: {}", error);
+            }
             attach_blur_handler(app);
         }
         Err(e) => {
@@ -882,6 +1132,7 @@ fn create_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
         .language()
         .tray_menu_text()
         .settings_window_title;
+    let bootstrap_script = build_window_bootstrap_script(app, false);
 
     tauri::WebviewWindowBuilder::new(
         app,
@@ -896,6 +1147,7 @@ fn create_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
     .decorations(false)
     .shadow(true)
     .visible(false)
+    .initialization_script(bootstrap_script)
     .build()
     .map(|_| ())
     .map_err(|error| format!("Failed to create settings window: {error}"))

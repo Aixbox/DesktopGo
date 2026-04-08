@@ -6,6 +6,7 @@ import type {
   ThemeMode,
   TitleLineCount,
   WindowMode,
+  WindowStyle,
 } from '@/types'
 import { isIconManagerViewMode } from './iconManager'
 
@@ -16,6 +17,7 @@ type SettingKey =
   | 'windowMode'
   | 'titleLineCount'
   | 'themeMode'
+  | 'windowStyle'
   | 'language'
   | 'dockEnabled'
   | 'launchOnStartup'
@@ -28,6 +30,7 @@ type SettingValueMap = {
   windowMode: WindowMode
   titleLineCount: TitleLineCount
   themeMode: ThemeMode
+  windowStyle: WindowStyle
   language: AppLanguage
   dockEnabled: boolean
   launchOnStartup: boolean
@@ -36,13 +39,14 @@ type SettingValueMap = {
   customAppDir: string
 }
 
-const SETTINGS_STORE_VERSION = 5
+const SETTINGS_STORE_VERSION = 6
 const SETTINGS_VERSION_KEY = 'settingsVersion'
 const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'iconSize',
   'windowMode',
   'titleLineCount',
   'themeMode',
+  'windowStyle',
   'language',
   'dockEnabled',
   'launchOnStartup',
@@ -56,6 +60,7 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   windowMode: 'medium',
   titleLineCount: 'two',
   themeMode: 'system',
+  windowStyle: 'default',
   language: 'zh',
   dockEnabled: true,
   launchOnStartup: true,
@@ -80,6 +85,9 @@ const isTitleLineCount = (value: unknown): value is TitleLineCount =>
 const isThemeMode = (value: unknown): value is ThemeMode =>
   value === 'system' || value === 'dark' || value === 'light'
 
+const isWindowStyle = (value: unknown): value is WindowStyle =>
+  value === 'default' || value === 'nativeAcrylic'
+
 const isAppLanguage = (value: unknown): value is AppLanguage => value === 'zh' || value === 'en'
 
 const isDockEnabled = (value: unknown): value is boolean => typeof value === 'boolean'
@@ -96,6 +104,7 @@ const validators: {
   windowMode: isWindowMode,
   titleLineCount: isTitleLineCount,
   themeMode: isThemeMode,
+  windowStyle: isWindowStyle,
   language: isAppLanguage,
   dockEnabled: isDockEnabled,
   launchOnStartup: isLaunchOnStartup,

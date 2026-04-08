@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils'
 import { useIconStore } from '@/stores/iconStore'
 import { translate, useI18n } from '@/lib/i18n'
 import { applyTheme, saveTheme } from '@/lib/theme'
+import { applyWindowStyle, saveWindowStyle } from '@/lib/windowStyle'
 import { DEFAULT_LAUNCHPAD_SHORTCUT, getSetting, setSetting } from '@/lib/settingsStore'
 import {
   LAUNCHPAD_LAYOUT_RESET_EVENT,
@@ -52,6 +53,7 @@ import type {
   ThemeMode,
   TitleLineCount,
   WindowMode,
+  WindowStyle,
 } from '@/types'
 import {
   Settings as SettingsIcon,
@@ -114,6 +116,23 @@ const THEME_OPTIONS: { label: string; value: ThemeMode }[] = [
   { label: '跟随系统', value: 'system' },
   { label: '深色模式', value: 'dark' },
   { label: '浅色模式', value: 'light' },
+]
+
+const WINDOW_STYLE_OPTIONS: {
+  label: string
+  value: WindowStyle
+  description: string
+}[] = [
+  {
+    label: '当前风格',
+    value: 'default',
+    description: '保留 DesktopGo 当前的柔和玻璃层次。',
+  },
+  {
+    label: 'Windows 原生 Acrylic',
+    value: 'nativeAcrylic',
+    description: '更接近 Windows 原生磨砂亚克力，背景更透，仅主启动台窗口生效。',
+  },
 ]
 
 const LANGUAGE_OPTIONS: { label: string; value: AppLanguage }[] = [
@@ -464,6 +483,7 @@ function SettingsPanel() {
   const { language, setLanguage } = useI18n()
   const { iconSize, windowMode, titleLineCount, dockEnabled, setDockEnabled } = useIconStore()
   const [themeMode, setThemeMode] = useState<ThemeMode>('system')
+  const [windowStyle, setWindowStyle] = useState<WindowStyle>('default')
   const [launchOnStartupEnabled, setLaunchOnStartupEnabled] = useState(true)
   const [isSavingLaunchOnStartup, setIsSavingLaunchOnStartup] = useState(false)
   const [launchpadShortcut, setLaunchpadShortcut] = useState(DEFAULT_LAUNCHPAD_SHORTCUT)
@@ -484,6 +504,7 @@ function SettingsPanel() {
           savedTitleLineCount,
           savedDockEnabled,
           savedThemeMode,
+          savedWindowStyle,
           savedLaunchOnStartup,
           savedLaunchpadShortcut,
         ] = await Promise.all([
@@ -492,6 +513,7 @@ function SettingsPanel() {
           getSetting('titleLineCount'),
           getSetting('dockEnabled'),
           getSetting('themeMode'),
+          getSetting('windowStyle'),
           getSetting('launchOnStartup'),
           getSetting('launchpadShortcut'),
         ])
@@ -521,6 +543,7 @@ function SettingsPanel() {
           dockEnabled: savedDockEnabled,
         })
         setThemeMode(savedThemeMode)
+        setWindowStyle(savedWindowStyle)
         setLaunchOnStartupEnabled(resolvedLaunchOnStartup)
         setLaunchpadShortcut(savedLaunchpadShortcut)
         setLaunchpadShortcutDraft(formatShortcutForInput(savedLaunchpadShortcut))
@@ -565,6 +588,39 @@ function SettingsPanel() {
     void saveTheme(value).catch(e => console.error('Failed to save theme mode:', e))
     setThemeMode(value)
     applyTheme(value)
+    if (windowStyle === 'nativeAcrylic') {
+      void invoke('apply_window_style', { style: windowStyle }).catch(error => {
+        console.error('Failed to refresh native acrylic after theme change:', error)
+      })
+    }
+  }
+
+  const handleWindowStyle = async (value: WindowStyle) => {
+    const previousStyle = windowStyle
+    setWindowStyle(value)
+    applyWindowStyle(value)
+
+    try {
+      await saveWindowStyle(value)
+    } catch (error) {
+      setWindowStyle(previousStyle)
+      applyWindowStyle(previousStyle)
+      toast.error(translate('保存主题风格失败：{error}', { error: String(error) }), {
+        key: 'settings-window-style',
+        title: translate('主题风格'),
+      })
+      return
+    }
+
+    try {
+      await invoke('apply_window_style', { style: value })
+    } catch (error) {
+      console.error('Failed to apply window style:', error)
+      toast.error(translate('应用主题风格失败：{error}', { error: String(error) }), {
+        key: 'settings-window-style',
+        title: translate('主题风格'),
+      })
+    }
   }
 
   const handleLaunchOnStartup = async (value: boolean) => {
@@ -765,6 +821,8 @@ function SettingsPanel() {
   const shortcutDisplayValue = isRecordingShortcut
     ? translate('请按下新的组合键')
     : launchpadShortcutDraft
+  const selectedWindowStyleOption =
+    WINDOW_STYLE_OPTIONS.find(option => option.value === windowStyle) ?? WINDOW_STYLE_OPTIONS[0]
 
   return (
     <>
@@ -791,6 +849,29 @@ function SettingsPanel() {
           />
         ))}
       </SettingGroup>
+
+      <div className="mb-6">
+        <SettingCard
+          label={translate('主题风格')}
+          desc={translate(
+            '切换主启动台的视觉材质。Windows 原生 Acrylic 需要 Windows 10/11，设置会立即应用到主启动台窗口。'
+          )}
+        >
+          <div className="flex flex-wrap gap-2">
+            {WINDOW_STYLE_OPTIONS.map(option => (
+              <OptionButton
+                key={option.value}
+                label={translate(option.label)}
+                selected={windowStyle === option.value}
+                onClick={() => void handleWindowStyle(option.value)}
+              />
+            ))}
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {translate(selectedWindowStyleOption.description)}
+          </p>
+        </SettingCard>
+      </div>
 
       <SettingGroup title={translate('图标大小')}>
         {ICON_SIZE_OPTIONS.map(opt => (

@@ -69,6 +69,7 @@ const EN_MESSAGES: Record<string, string> = {
   '当前已关闭，登录 Windows 后需要手动启动 DesktopGo。':
     'DesktopGo will not start automatically after Windows sign-in.',
   '主题模式': 'Theme',
+  '主题风格': 'Theme style',
   '图标大小': 'Icon size',
   '窗口大小': 'Window size',
   '标题行数': 'Title lines',
@@ -76,6 +77,16 @@ const EN_MESSAGES: Record<string, string> = {
   '跟随系统': 'System',
   '深色模式': 'Dark',
   '浅色模式': 'Light',
+  '当前风格': 'Current style',
+  'Windows 原生 Acrylic': 'Windows native Acrylic',
+  '保留 DesktopGo 当前的柔和玻璃层次。':
+    "Keep DesktopGo's current soft glass layering.",
+  '更接近 Windows 原生磨砂亚克力，背景更透，仅主启动台窗口生效。':
+    'Closer to native Windows acrylic with a more translucent backdrop. Applies to the main launchpad window only.',
+  '切换主启动台的视觉材质。Windows 原生 Acrylic 需要 Windows 10/11，设置会立即应用到主启动台窗口。':
+    'Switch the main launchpad surface material. Windows native Acrylic requires Windows 10/11 and is applied to the main launchpad window immediately.',
+  '保存主题风格失败：{error}': 'Failed to save theme style: {error}',
+  '应用主题风格失败：{error}': 'Failed to apply theme style: {error}',
   '简体中文': 'Simplified Chinese',
   '打开启动台快捷键': 'Launchpad shortcut',
   '修改唤起启动台的全局快捷键。录制支持 Ctrl、Alt、Shift；像 Ctrl+Space 这种可能被系统或输入法拦截的组合，可以直接手动输入。':

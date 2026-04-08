@@ -13,6 +13,7 @@ import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import { Check, ChevronDown } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
 import { applyTheme, getSavedTheme } from '@/lib/theme'
+import { applyWindowStyle, getSavedWindowStyle } from '@/lib/windowStyle'
 import { getSearchPreview, recordSearchResultRun } from '@/lib/search/api'
 import { getSearchFilterLabel, getSearchFilterOptions } from '@/lib/search/filters'
 import { SearchFloatingMenu } from '@/components/search/SearchFloatingMenu'
@@ -187,6 +188,7 @@ export function Launchpad() {
         const { windowMode: currentWindowMode, applyWindowMode } = useIconStore.getState()
         await applyWindowMode(currentWindowMode)
         applyTheme(await getSavedTheme())
+        applyWindowStyle(await getSavedWindowStyle())
       } catch (e) {
         console.error('Failed to initialize launchpad settings:', e)
       } finally {
@@ -205,6 +207,7 @@ export function Launchpad() {
       await state.fetchIcons()
       await reloadSearchSettings()
       applyTheme(await getSavedTheme())
+      applyWindowStyle(await getSavedWindowStyle())
     } catch (e) {
       console.error('Failed to sync launchpad state:', e)
     }

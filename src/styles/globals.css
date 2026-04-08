@@ -287,6 +287,17 @@ body {
   background: rgba(30, 30, 40, 0.85);
 }
 
+.window-style-native-acrylic .launchpad-bg {
+  /* Dynamic transparency and blur predominantly handled by native vibrancy */
+  background: transparent;
+  backdrop-filter: blur(3px) saturate(180%) brightness(1.25);
+  -webkit-backdrop-filter: blur(3px) saturate(180%) brightness(1.25);
+}
+
+.dark.window-style-native-acrylic .launchpad-bg {
+  background: transparent;
+}
+
 .launchpad-glass-panel {
   border: 1px solid color-mix(in oklch, var(--foreground) 14%, transparent);
   background: color-mix(in oklch, var(--background) 76%, transparent);
