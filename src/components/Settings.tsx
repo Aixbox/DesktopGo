@@ -157,6 +157,7 @@ type IconSyncResult = {
   mode: string
   scanned_count: number
   added_count: number
+  removed_count: number
   total_count: number
 }
 
@@ -1055,12 +1056,13 @@ function IconManagerPanel() {
       const modeText = action.mode === 'full' ? translate('全量对账') : translate('导入新增项')
       toast.success(
         translate(
-          '{source}{mode}完成：扫描 {scanned} 项，新增 {added} 项，当前快照共 {total} 项。',
+          '{source}{mode}完成：扫描 {scanned} 项，新增 {added} 项，删除 {removed} 项，当前快照共 {total} 项。',
           {
             source: translate(action.sourceLabel),
             mode: modeText,
             scanned: result.scanned_count,
             added: result.added_count,
+            removed: result.removed_count,
             total: result.total_count,
           }
         ),

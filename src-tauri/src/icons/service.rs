@@ -633,24 +633,28 @@ fn is_managed_special_desktop_item(item: &SnapshotIconItem) -> bool {
 }
 
 #[cfg(windows)]
+struct SpecialDesktopReconcileResult {
+    added_count: usize,
+    removed_count: usize,
+}
+
+#[cfg(windows)]
 fn reconcile_special_desktop_items(
     app_handle: &tauri::AppHandle,
     snapshot: &mut IconSnapshot,
-) -> Result<bool, String> {
+) -> Result<SpecialDesktopReconcileResult, String> {
     let visible_items = collect_special_desktop_items();
     let visible_keys = visible_items
         .iter()
         .map(stable_item_key)
         .collect::<HashSet<_>>();
 
-    let mut changed = false;
     let mut removed_items = Vec::new();
     let mut retained_items = Vec::with_capacity(snapshot.icons.len());
 
     for item in std::mem::take(&mut snapshot.icons) {
         if is_managed_special_desktop_item(&item) && !visible_keys.contains(&item.key) {
             removed_items.push(item);
-            changed = true;
             continue;
         }
 
@@ -672,6 +676,7 @@ fn reconcile_special_desktop_items(
         .collect::<HashSet<_>>();
     let mut max_display_order =
         max_display_order_with_other_source(app_handle, IconSource::Desktop, snapshot)?;
+    let mut added_count = 0usize;
 
     for item in visible_items {
         let key = stable_item_key(&item);
@@ -684,10 +689,13 @@ fn reconcile_special_desktop_items(
             build_snapshot_item(app_handle, &item, IconSource::Desktop, max_display_order)?;
         known_keys.insert(snapshot_item.key.clone());
         snapshot.icons.push(snapshot_item);
-        changed = true;
+        added_count += 1;
     }
 
-    Ok(changed)
+    Ok(SpecialDesktopReconcileResult {
+        added_count,
+        removed_count: removed_items.len(),
+    })
 }
 
 #[cfg(windows)]
@@ -923,9 +931,13 @@ where
         version: 1,
         icons: Vec::new(),
     });
+    let mut removed_count = 0usize;
+    let mut added_count = 0usize;
 
     if source == IconSource::Desktop {
-        reconcile_special_desktop_items(app_handle, &mut snapshot)?;
+        let special_result = reconcile_special_desktop_items(app_handle, &mut snapshot)?;
+        added_count += special_result.added_count;
+        removed_count += special_result.removed_count;
     }
 
     let scanned_items = collect_items()?;
@@ -936,7 +948,6 @@ where
         .collect::<HashSet<_>>();
     let mut max_display_order = max_display_order_with_other_source(app_handle, source, &snapshot)?;
 
-    let mut added_count = 0usize;
     for item in &scanned_items {
         let key = stable_item_key(item);
         if known_keys.contains(&key) {
@@ -956,6 +967,7 @@ where
         mode: "incremental".to_string(),
         scanned_count: scanned_items.len(),
         added_count,
+        removed_count,
         total_count: snapshot.icons.len(),
     })
 }
@@ -1032,6 +1044,7 @@ where
         version: 1,
         icons: next_icons,
     };
+    let removed_count = removed_items.len();
     let total_count = snapshot.icons.len();
     write_icon_snapshot(app_handle, source, &snapshot)?;
 
@@ -1039,6 +1052,7 @@ where
         mode: "full".to_string(),
         scanned_count: scanned_items.len(),
         added_count,
+        removed_count,
         total_count,
     })
 }

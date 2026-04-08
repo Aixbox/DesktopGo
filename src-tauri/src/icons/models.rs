@@ -72,6 +72,7 @@ pub struct IconSyncResult {
     pub(crate) mode: String,
     pub(crate) scanned_count: usize,
     pub(crate) added_count: usize,
+    pub(crate) removed_count: usize,
     pub(crate) total_count: usize,
 }
 

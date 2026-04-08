@@ -92,8 +92,8 @@ const EN_MESSAGES: Record<string, string> = {
   '恢复默认': 'Restore default',
   '导入新增项': 'Import new items',
   '全量对账': 'Full reconciliation',
-  '{source}{mode}完成：扫描 {scanned} 项，新增 {added} 项，当前快照共 {total} 项。':
-    '{source} {mode} completed: scanned {scanned}, added {added}, total snapshot {total}.',
+  '{source}{mode}完成：扫描 {scanned} 项，新增 {added} 项，删除 {removed} 项，当前快照共 {total} 项。':
+    '{source} {mode} completed: scanned {scanned}, added {added}, removed {removed}, total snapshot {total}.',
   '{source}{mode}失败：{error}': '{source} {mode} failed: {error}',
   '{action}完成：{source} 图标影响 {count} 项。':
     '{action} completed: {count} {source} icon item(s) affected.',
