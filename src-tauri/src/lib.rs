@@ -19,16 +19,24 @@ use commands::{
 };
 #[cfg(windows)]
 use once_cell::sync::OnceCell;
+use serde::Deserialize;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Mutex,
 };
 use std::time::{Duration, Instant};
-use tauri::menu::{Menu, MenuItem};
-use tauri::tray::{TrayIconBuilder, TrayIconEvent};
-use tauri::{Manager, RunEvent};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
+use tauri::{Listener, Manager, RunEvent};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tauri_plugin_store::StoreExt;
+#[cfg(windows)]
+use windows::Win32::UI::Input::KeyboardAndMouse::{SetActiveWindow, SetFocus};
+#[cfg(windows)]
+use windows::Win32::UI::WindowsAndMessaging::{
+    BringWindowToTop, SetForegroundWindow, SetWindowPos, ShowWindow, HWND_TOP, SWP_NOMOVE,
+    SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,
+};
 
 #[cfg(windows)]
 static WINDOWS_CONSOLE_APP_HANDLE: OnceCell<tauri::AppHandle> = OnceCell::new();
@@ -44,6 +52,14 @@ const LANGUAGE_SETTING_KEY: &str = "language";
 const WINDOWS_RUN_VALUE_NAME: &str = "DesktopGo";
 const INSTALL_LANGUAGE_MARKER_FILE_NAME: &str = ".install_language";
 const SHOW_ON_LAUNCH_MARKER_FILE_NAME: &str = ".show_on_launch";
+const SETTINGS_WINDOW_WIDTH: f64 = 800.0;
+const SETTINGS_WINDOW_HEIGHT: f64 = 600.0;
+const TRAY_ICON_ID: &str = "main";
+const TRAY_STATUS_MENU_ITEM_ID: &str = "tray-status";
+const TRAY_TOGGLE_MENU_ITEM_ID: &str = "tray-toggle-launchpad";
+const TRAY_SETTINGS_MENU_ITEM_ID: &str = "tray-open-settings";
+const TRAY_QUIT_MENU_ITEM_ID: &str = "tray-quit";
+const LANGUAGE_CHANGED_EVENT: &str = "desktopgo://language-changed";
 
 struct MainWindowState {
     ready: AtomicBool,
@@ -54,6 +70,42 @@ struct MainWindowState {
 
 pub(crate) struct LaunchpadShortcutState {
     current: Mutex<Option<String>>,
+}
+
+#[derive(Clone)]
+struct TrayMenuItems {
+    status_item: MenuItem<tauri::Wry>,
+    toggle_item: MenuItem<tauri::Wry>,
+    settings_item: MenuItem<tauri::Wry>,
+    quit_item: MenuItem<tauri::Wry>,
+}
+
+pub(crate) struct TrayState {
+    language: Mutex<AppLanguage>,
+    menu_items: Mutex<Option<TrayMenuItems>>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AppLanguage {
+    Zh,
+    En,
+}
+
+#[derive(Clone, Copy)]
+struct TrayMenuText {
+    status_visible: &'static str,
+    status_hidden: &'static str,
+    show_launchpad: &'static str,
+    hide_launchpad: &'static str,
+    open_settings: &'static str,
+    quit: &'static str,
+    tooltip: &'static str,
+    settings_window_title: &'static str,
+}
+
+#[derive(Deserialize)]
+struct LanguageChangedPayload {
+    language: String,
 }
 
 impl Default for LaunchpadShortcutState {
@@ -75,6 +127,79 @@ impl Default for MainWindowState {
     }
 }
 
+impl Default for TrayState {
+    fn default() -> Self {
+        Self {
+            language: Mutex::new(AppLanguage::Zh),
+            menu_items: Mutex::new(None),
+        }
+    }
+}
+
+impl AppLanguage {
+    fn from_code(value: &str) -> Self {
+        match value {
+            "en" => Self::En,
+            _ => Self::Zh,
+        }
+    }
+
+    fn tray_menu_text(self) -> TrayMenuText {
+        match self {
+            Self::En => TrayMenuText {
+                status_visible: "Launchpad: visible",
+                status_hidden: "Launchpad: hidden",
+                show_launchpad: "Show Launchpad",
+                hide_launchpad: "Hide Launchpad",
+                open_settings: "Open Settings",
+                quit: "Quit DesktopGo",
+                tooltip: "DesktopGo",
+                settings_window_title: "Settings",
+            },
+            Self::Zh => TrayMenuText {
+                status_visible: "启动台当前: 已显示",
+                status_hidden: "启动台当前: 已隐藏",
+                show_launchpad: "显示启动台",
+                hide_launchpad: "隐藏启动台",
+                open_settings: "打开设置",
+                quit: "退出 DesktopGo",
+                tooltip: "DesktopGo",
+                settings_window_title: "设置",
+            },
+        }
+    }
+}
+
+impl TrayState {
+    fn language(&self) -> AppLanguage {
+        *self
+            .language
+            .lock()
+            .expect("failed to lock tray language state")
+    }
+
+    fn set_language(&self, language: AppLanguage) {
+        *self
+            .language
+            .lock()
+            .expect("failed to lock tray language state") = language;
+    }
+
+    fn menu_items(&self) -> Option<TrayMenuItems> {
+        self.menu_items
+            .lock()
+            .expect("failed to lock tray menu state")
+            .clone()
+    }
+
+    fn set_menu_items(&self, items: TrayMenuItems) {
+        *self
+            .menu_items
+            .lock()
+            .expect("failed to lock tray menu state") = Some(items);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -85,7 +210,8 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .manage(updater::PendingUpdate::default())
         .manage(MainWindowState::default())
-        .manage(LaunchpadShortcutState::default());
+        .manage(LaunchpadShortcutState::default())
+        .manage(TrayState::default());
 
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
@@ -93,35 +219,57 @@ pub fn run() {
     let app = builder
         .setup(|app| {
             let initial_language = initialize_app_language(app.handle());
-            let (show_label, quit_label) = match initial_language {
-                "en" => ("Show Launchpad", "Quit"),
-                _ => ("显示启动台", "退出"),
-            };
+            let tray_state = app.state::<TrayState>();
+            tray_state.set_language(AppLanguage::from_code(initial_language));
 
-            let show_item = MenuItem::with_id(app, "show", show_label, true, None::<&str>)?;
-            let quit_item = MenuItem::with_id(app, "quit", quit_label, true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
-            let _tray = TrayIconBuilder::new()
+            let (menu, menu_items) = build_tray_menu(app.handle())?;
+            tray_state.set_menu_items(menu_items);
+
+            let _tray = TrayIconBuilder::with_id(TRAY_ICON_ID)
                 .icon(app.default_window_icon().unwrap().clone())
+                .tooltip(tray_state.language().tray_menu_text().tooltip)
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
-                    "show" => {
-                        request_main_window_show(app);
+                    TRAY_TOGGLE_MENU_ITEM_ID => {
+                        toggle_main_window_visibility(app);
                     }
-                    "quit" => app.exit(0),
+                    TRAY_SETTINGS_MENU_ITEM_ID => {
+                        if let Err(error) = show_settings_window(app) {
+                            eprintln!("Warning: Failed to open settings window from tray: {error}");
+                        }
+                    }
+                    TRAY_QUIT_MENU_ITEM_ID => app.exit(0),
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: tauri::tray::MouseButton::Left,
-                        ..
-                    } = event
-                    {
-                        let app = tray.app_handle();
-                        request_main_window_show(app);
+                    let app = tray.app_handle();
+                    match event {
+                        TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            ..
+                        } => request_main_window_show(app),
+                        TrayIconEvent::Click {
+                            button: MouseButton::Right,
+                            ..
+                        } => refresh_tray_menu(app),
+                        _ => {}
                     }
                 })
                 .build(app)?;
+
+            let tray_refresh_handle = app.handle().clone();
+            app.listen_any(LANGUAGE_CHANGED_EVENT, move |event| {
+                if let Ok(payload) = serde_json::from_str::<LanguageChangedPayload>(event.payload())
+                {
+                    if let Some(language) = normalize_app_language(&payload.language) {
+                        tray_refresh_handle
+                            .state::<TrayState>()
+                            .set_language(AppLanguage::from_code(language));
+                        refresh_tray_menu(&tray_refresh_handle);
+                        refresh_settings_window_title(&tray_refresh_handle);
+                    }
+                }
+            });
 
             create_main_window(app.handle());
             install_windows_console_exit_handler(app.handle());
@@ -194,6 +342,74 @@ fn should_show_on_launch(_app: &tauri::AppHandle) -> bool {
     }
 }
 
+fn build_tray_menu(
+    app: &tauri::AppHandle,
+) -> tauri::Result<(Menu<tauri::Wry>, TrayMenuItems)> {
+    let language = app.state::<TrayState>().language();
+    let menu_text = language.tray_menu_text();
+    let launchpad_visible = main_window_is_visible(app);
+
+    let status_item = MenuItem::with_id(
+        app,
+        TRAY_STATUS_MENU_ITEM_ID,
+        if launchpad_visible {
+            menu_text.status_visible
+        } else {
+            menu_text.status_hidden
+        },
+        false,
+        None::<&str>,
+    )?;
+    let toggle_item = MenuItem::with_id(
+        app,
+        TRAY_TOGGLE_MENU_ITEM_ID,
+        if launchpad_visible {
+            menu_text.hide_launchpad
+        } else {
+            menu_text.show_launchpad
+        },
+        true,
+        None::<&str>,
+    )?;
+    let settings_item = MenuItem::with_id(
+        app,
+        TRAY_SETTINGS_MENU_ITEM_ID,
+        menu_text.open_settings,
+        true,
+        None::<&str>,
+    )?;
+    let quit_item = MenuItem::with_id(
+        app,
+        TRAY_QUIT_MENU_ITEM_ID,
+        menu_text.quit,
+        true,
+        None::<&str>,
+    )?;
+    let first_separator = PredefinedMenuItem::separator(app)?;
+    let second_separator = PredefinedMenuItem::separator(app)?;
+    let menu = Menu::with_items(
+        app,
+        &[
+            &status_item,
+            &first_separator,
+            &toggle_item,
+            &settings_item,
+            &second_separator,
+            &quit_item,
+        ],
+    )?;
+
+    Ok((
+        menu,
+        TrayMenuItems {
+            status_item,
+            toggle_item,
+            settings_item,
+            quit_item,
+        },
+    ))
+}
+
 fn normalize_app_language(value: &str) -> Option<&'static str> {
     match value.trim() {
         "zh" => Some("zh"),
@@ -258,6 +474,55 @@ fn initialize_app_language(app: &tauri::AppHandle) -> &'static str {
     }
 
     "zh"
+}
+
+fn main_window_is_visible(app: &tauri::AppHandle) -> bool {
+    app.get_webview_window("main")
+        .and_then(|window| window.is_visible().ok())
+        .unwrap_or(false)
+}
+
+fn try_refresh_tray_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let tray_state = app.state::<TrayState>();
+    let Some(menu_items) = tray_state.menu_items() else {
+        return Ok(());
+    };
+
+    let menu_text = tray_state.language().tray_menu_text();
+    let launchpad_visible = main_window_is_visible(app);
+
+    menu_items.status_item.set_text(if launchpad_visible {
+        menu_text.status_visible
+    } else {
+        menu_text.status_hidden
+    })?;
+    menu_items.toggle_item.set_text(if launchpad_visible {
+        menu_text.hide_launchpad
+    } else {
+        menu_text.show_launchpad
+    })?;
+    menu_items.settings_item.set_text(menu_text.open_settings)?;
+    menu_items.quit_item.set_text(menu_text.quit)?;
+
+    if let Some(tray) = app.tray_by_id(TRAY_ICON_ID) {
+        tray.set_tooltip(Some(menu_text.tooltip))?;
+    }
+
+    Ok(())
+}
+
+fn refresh_tray_menu(app: &tauri::AppHandle) {
+    if let Err(error) = try_refresh_tray_menu(app) {
+        eprintln!("Warning: Failed to refresh tray menu: {error}");
+    }
+}
+
+fn refresh_settings_window_title(app: &tauri::AppHandle) {
+    let title = app.state::<TrayState>().language().tray_menu_text().settings_window_title;
+
+    if let Some(window) = app.get_webview_window("settings") {
+        let _ = window.set_title(title);
+    }
 }
 
 fn read_saved_launch_on_startup(app: &tauri::AppHandle) -> Option<bool> {
@@ -490,7 +755,25 @@ pub(crate) fn show_main_window(app: &tauri::AppHandle) {
         let _ = window.set_always_on_top(true);
         let _ = window.show();
         let _ = window.set_focus();
+        refresh_tray_menu(app);
         schedule_main_window_focus_retry(app.clone());
+    }
+}
+
+pub(crate) fn hide_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_always_on_top(false);
+        let _ = window.hide();
+    }
+
+    refresh_tray_menu(app);
+}
+
+fn toggle_main_window_visibility(app: &tauri::AppHandle) {
+    if main_window_is_visible(app) {
+        hide_main_window(app);
+    } else {
+        request_main_window_show(app);
     }
 }
 
@@ -550,25 +833,101 @@ fn create_main_window(app: &tauri::AppHandle) {
     }
 }
 
+fn create_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
+    if app.get_webview_window("settings").is_some() {
+        return Ok(());
+    }
+
+    let title = app.state::<TrayState>().language().tray_menu_text().settings_window_title;
+
+    tauri::WebviewWindowBuilder::new(
+        app,
+        "settings",
+        tauri::WebviewUrl::App("index.html?page=settings".into()),
+    )
+    .title(title)
+    .inner_size(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
+    .min_inner_size(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
+    .center()
+    .resizable(true)
+    .decorations(false)
+    .shadow(true)
+    .visible(false)
+    .build()
+    .map(|_| ())
+    .map_err(|error| format!("Failed to create settings window: {error}"))
+}
+
+pub(crate) fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
+    create_settings_window(app)?;
+    refresh_settings_window_title(app);
+
+    let settings_window = app
+        .get_webview_window("settings")
+        .ok_or_else(|| "Settings window not found".to_string())?;
+
+    let _ = settings_window.unminimize();
+    let _ = settings_window.show();
+    activate_webview_window(&settings_window)?;
+    hide_main_window(app);
+
+    Ok(())
+}
+
 fn attach_blur_handler(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        let window_clone = window.clone();
         let app_handle = app.clone();
         window.on_window_event(move |event| match event {
             tauri::WindowEvent::Focused(true) => {
                 // 主窗口成功获得焦点，清除抑制标记。
                 let state = app_handle.state::<MainWindowState>();
                 state.suppress_blur.store(false, Ordering::SeqCst);
+                refresh_tray_menu(&app_handle);
             }
             tauri::WindowEvent::Focused(false) => {
                 // swap(false) 读取并清除标记：若为 true 说明正在显示流程中，跳过隐藏。
                 let state = app_handle.state::<MainWindowState>();
                 if !state.suppress_blur.swap(false, Ordering::SeqCst) {
-                    let _ = window_clone.hide();
+                    hide_main_window(&app_handle);
                 }
             }
             _ => {}
         });
+    }
+}
+
+pub(crate) fn activate_webview_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let hwnd = window
+            .hwnd()
+            .map_err(|error| format!("Failed to resolve settings HWND: {}", error))?;
+
+        unsafe {
+            let _ = ShowWindow(hwnd, SW_RESTORE);
+            let _ = SetWindowPos(
+                hwnd,
+                Some(HWND_TOP),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
+            );
+            let _ = BringWindowToTop(hwnd);
+            let _ = SetForegroundWindow(hwnd);
+            let _ = SetActiveWindow(hwnd);
+            let _ = SetFocus(Some(hwnd));
+        }
+
+        Ok(())
+    }
+
+    #[cfg(not(windows))]
+    {
+        window
+            .set_focus()
+            .map_err(|error| format!("Failed to focus window: {error}"))
     }
 }
 

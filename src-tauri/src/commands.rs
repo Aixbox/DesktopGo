@@ -6,17 +6,10 @@ use crate::updater::{self, PendingUpdate, UpdateCheckResult, UpdaterConfiguratio
 use crate::{LaunchpadShortcutState, MainWindowState};
 use std::sync::atomic::Ordering;
 use tauri::Manager;
-#[cfg(windows)]
-use windows::Win32::UI::Input::KeyboardAndMouse::{SetActiveWindow, SetFocus};
-#[cfg(windows)]
-use windows::Win32::UI::WindowsAndMessaging::{
-    BringWindowToTop, SetForegroundWindow, SetWindowPos, ShowWindow, HWND_TOP, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,
-};
 
 #[tauri::command]
 pub fn toggle_window(window: tauri::Window) {
-    let _ = window.hide();
+    crate::hide_main_window(&window.app_handle());
 }
 
 #[tauri::command]
@@ -49,25 +42,7 @@ pub fn update_launch_on_startup_enabled(
 
 #[tauri::command]
 pub fn activate_settings_window(app_handle: tauri::AppHandle) -> Result<(), String> {
-    let main_window = app_handle.get_webview_window("main");
-
-    let settings_window = app_handle
-        .get_webview_window("settings")
-        .ok_or_else(|| "Settings window not found".to_string())?;
-
-    if let Some(main_window) = &main_window {
-        let _ = main_window.set_always_on_top(false);
-    }
-
-    let _ = settings_window.unminimize();
-    let _ = settings_window.show();
-    activate_window_native(&settings_window)?;
-
-    if let Some(main_window) = &main_window {
-        let _ = main_window.hide();
-    }
-
-    Ok(())
+    crate::show_settings_window(&app_handle)
 }
 
 #[tauri::command]
@@ -104,40 +79,6 @@ pub fn notify_main_window_ready(
     crate::show_main_window(&app_handle);
 
     Ok(())
-}
-
-#[cfg(windows)]
-fn activate_window_native(window: &tauri::WebviewWindow) -> Result<(), String> {
-    let hwnd = window
-        .hwnd()
-        .map_err(|error| format!("Failed to resolve settings HWND: {}", error))?;
-
-    unsafe {
-        let _ = ShowWindow(hwnd, SW_RESTORE);
-        let _ = SetWindowPos(
-            hwnd,
-            Some(HWND_TOP),
-            0,
-            0,
-            0,
-            0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
-        );
-        let _ = BringWindowToTop(hwnd);
-        let _ = SetActiveWindow(hwnd);
-        let _ = SetFocus(Some(hwnd));
-        let _ = SetForegroundWindow(hwnd);
-    }
-
-    let _ = window.set_focus();
-    Ok(())
-}
-
-#[cfg(not(windows))]
-fn activate_window_native(window: &tauri::WebviewWindow) -> Result<(), String> {
-    window
-        .set_focus()
-        .map_err(|error| format!("Failed to focus settings window: {}", error))
 }
 
 #[tauri::command]
