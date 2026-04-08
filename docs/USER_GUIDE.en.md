@@ -34,7 +34,6 @@ Default values on first launch:
 Notes:
 
 - 💡 The main window hides automatically when it loses focus. This is expected behavior.
-- 💾 If you already have local settings saved, future upgrades will keep your existing preferences instead of overwriting them with new defaults.
 
 ## 🧭 2. Quick Start
 
@@ -266,11 +265,3 @@ This is expected.
 - GitHub repository: <https://github.com/Aixbox/DesktopGo>
 - Issue tracker: <https://github.com/Aixbox/DesktopGo/issues>
 - Releases: <https://github.com/Aixbox/DesktopGo/releases>
-
-When reporting a problem, it helps to include:
-
-- DesktopGo version
-- Windows version
-- Whether Everything is installed and running
-- Whether the issue is reproducible
-- Diagnostic information copied from the About page

@@ -34,7 +34,6 @@ DesktopGo 是一个面向 Windows 的桌面启动台，用来把桌面图标整�
 说明：
 
 - 💡 主窗口失去焦点后会自动隐藏，这属于正常设计。
-- 💾 如果你之前已经保存过本地设置，后续升级不会自动覆盖你现有的个人配置。
 
 ## 🧭 2. 快速上手
 
@@ -266,11 +265,3 @@ DesktopGo 采用本地优先设计。
 - GitHub 仓库：<https://github.com/Aixbox/DesktopGo>
 - 问题反馈：<https://github.com/Aixbox/DesktopGo/issues>
 - 发布页：<https://github.com/Aixbox/DesktopGo/releases>
-
-提交问题时，建议附带：
-
-- DesktopGo 版本号
-- Windows 版本
-- 是否安装并运行了 Everything
-- 是否能稳定复现
-- 设置页“关于”里的诊断信息
