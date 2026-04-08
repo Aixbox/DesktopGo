@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { SearchHistoryEntry } from '@/lib/search/history'
 import { parseEverythingHighlightedText } from '@/lib/search/highlight'
-import type { SearchHit, SearchPreview, SearchSort } from '@/lib/search/types'
+import type { SearchHit, SearchPreview, SearchRuntimeState, SearchSort } from '@/lib/search/types'
 import { useIconStore } from '@/stores/iconStore'
 import { ICON_SIZE_CONFIG, type DesktopIcon } from '@/types'
 import { AppWindow, File, Folder } from 'lucide-react'
@@ -36,6 +36,7 @@ interface SearchPanelProps {
   searchPending: boolean
   loadingMore: boolean
   error: string | null
+  runtimeState: SearchRuntimeState
   totalResults: number
   loadedCount: number
   pageSize: number
@@ -178,6 +179,7 @@ export function SearchPanel({
   searchPending,
   loadingMore,
   error,
+  runtimeState,
   totalResults,
   loadedCount,
   pageSize,
@@ -494,11 +496,20 @@ export function SearchPanel({
 
   const showHistoryState = isEverything && !hasCommittedQuery && !error && virtualCount === 0
   const panelTransition = prefersReducedMotion ? { duration: 0 } : PANEL_TRANSITION
+  const isEverythingInitializing = isEverything && runtimeState === 'initializing'
+  const everythingInitializingText = translate(
+    'Everything 正在启动或建立索引，搜索结果可能暂不完整。'
+  )
   const iconEmptyText = trimmedKeyword
     ? translate('没有匹配的图标。')
     : translate('输入关键词以搜索桌面图标。')
   const everythingEmptyText =
     searchPending && virtualCount === 0 ? translate('搜索中...') : translate('没有结果')
+  const effectiveEverythingEmptyText = isEverythingInitializing
+    ? searchPending && virtualCount === 0
+      ? translate('搜索中...')
+      : everythingInitializingText
+    : everythingEmptyText
   const bodyStateKey = isEverything
     ? error
       ? `everything-error-${error}`
@@ -691,7 +702,15 @@ export function SearchPanel({
   const bodyContent = (
     <div ref={bodyContentRef}>
       {isEverything && error ? (
-        <div className="px-4 py-3 text-sm text-red-700 dark:text-red-300">{error}</div>
+        <div
+          className={`px-4 py-3 text-sm ${
+            isEverythingInitializing
+              ? 'text-amber-700 dark:text-amber-300'
+              : 'text-red-700 dark:text-red-300'
+          }`}
+        >
+          {error}
+        </div>
       ) : null}
 
       {isEverything && !error && showHistoryState ? (
@@ -734,10 +753,21 @@ export function SearchPanel({
       ) : null}
 
       {isEverything && !error && !showHistoryState && virtualCount === 0 ? (
-        <div className="px-4 py-3 text-sm text-muted-foreground">{everythingEmptyText}</div>
+        <div className="px-4 py-3 text-sm text-muted-foreground">
+          {effectiveEverythingEmptyText}
+        </div>
       ) : null}
 
-      {isEverything && !error && virtualCount > 0 ? everythingResultsContent : null}
+      {isEverything && !error && virtualCount > 0 ? (
+        <>
+          {isEverythingInitializing ? (
+            <div className="border-b border-amber-500/20 bg-amber-500/8 px-4 py-2 text-sm text-amber-700 dark:text-amber-300">
+              {everythingInitializingText}
+            </div>
+          ) : null}
+          {everythingResultsContent}
+        </>
+      ) : null}
     </div>
   )
 

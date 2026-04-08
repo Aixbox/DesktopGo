@@ -1,5 +1,5 @@
 ﻿import { invoke } from '@tauri-apps/api/core'
-import type { SearchSort } from './types'
+import type { SearchRuntimeState, SearchSort } from './types'
 import { translate } from '@/lib/i18n'
 
 export type SearchDefaultFilter =
@@ -317,6 +317,9 @@ export const saveLastFilter = async (filter: SearchDefaultFilter): Promise<void>
 }
 
 export const describeSearchRuntimeError = (message: string) => {
+  if (message.startsWith('EverythingInitializing')) {
+    return translate('Everything 正在启动或建立索引，搜索结果可能暂不完整，请稍后重试。')
+  }
   if (message.startsWith('EverythingNotFound')) {
     return translate('未找到已安装的 Everything。请通过 DesktopGo 安装程序完成安装。')
   }
@@ -332,6 +335,19 @@ export const describeSearchRuntimeError = (message: string) => {
     return translate('DesktopGo 在准备 Everything 时超时，请重试搜索。')
   }
   return message
+}
+
+export const getSearchRuntimeStateFromError = (message: string): SearchRuntimeState => {
+  if (message.startsWith('EverythingNotFound')) {
+    return 'not_installed'
+  }
+  if (message.startsWith('EverythingInitializing')) {
+    return 'initializing'
+  }
+  if (message.startsWith('EverythingIpcUnavailable')) {
+    return 'unavailable'
+  }
+  return 'unknown'
 }
 
 export const getSearchSettingsErrorMessage = (error: unknown) =>

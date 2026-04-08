@@ -4,6 +4,12 @@ use super::errors::map_ipc_error;
 use super::models::{SearchHit, SearchQuery, SearchSort};
 use super::runtime::append_debug_log;
 
+#[derive(Debug, Clone, Copy)]
+pub struct RuntimeProbeStatus {
+    pub reachable: bool,
+    pub database_loaded: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct SearchResponse {
     pub items: Vec<SearchHit>,
@@ -81,6 +87,8 @@ mod windows_impl {
     type GetResultHighlightedTextW = unsafe extern "system" fn(u32) -> *const u16;
     type IsFolderResult = unsafe extern "system" fn(u32) -> i32;
     type IsFileResult = unsafe extern "system" fn(u32) -> i32;
+    type GetVersion = unsafe extern "system" fn() -> u32;
+    type GetBoolStatus = unsafe extern "system" fn() -> i32;
     type GetLastError = unsafe extern "system" fn() -> u32;
     type Reset = unsafe extern "system" fn();
     type CleanUp = unsafe extern "system" fn();
@@ -107,6 +115,8 @@ mod windows_impl {
         get_result_highlighted_path_w: GetResultHighlightedTextW,
         is_folder_result: Option<IsFolderResult>,
         is_file_result: Option<IsFileResult>,
+        get_major_version: GetVersion,
+        is_db_loaded: GetBoolStatus,
         get_last_error: GetLastError,
         reset: Reset,
         clean_up: CleanUp,
@@ -148,6 +158,8 @@ mod windows_impl {
                     )?,
                     is_folder_result: load_symbol_optional(&lib, b"Everything_IsFolderResult\0"),
                     is_file_result: load_symbol_optional(&lib, b"Everything_IsFileResult\0"),
+                    get_major_version: load_symbol(&lib, b"Everything_GetMajorVersion\0")?,
+                    is_db_loaded: load_symbol(&lib, b"Everything_IsDBLoaded\0")?,
                     get_last_error: load_symbol(&lib, b"Everything_GetLastError\0")?,
                     reset: load_symbol(&lib, b"Everything_Reset\0")?,
                     clean_up: load_symbol(&lib, b"Everything_CleanUp\0")?,
@@ -697,6 +709,68 @@ mod windows_impl {
         })
     }
 
+    pub(super) fn inspect_runtime(
+        dll_path: &Path,
+        app_handle: &tauri::AppHandle,
+    ) -> Result<RuntimeProbeStatus, String> {
+        let api = EverythingApi::load(dll_path)?;
+
+        let major_version = unsafe { (api.get_major_version)() };
+        let major_version_error = unsafe { (api.get_last_error)() };
+        append_debug_log(
+            app_handle,
+            format!(
+                "ipc inspect: major_version={} error_code={}",
+                major_version, major_version_error
+            ),
+        );
+
+        if major_version == 0 {
+            if major_version_error == 0 || major_version_error == 2 {
+                return Ok(RuntimeProbeStatus {
+                    reachable: false,
+                    database_loaded: false,
+                });
+            }
+
+            return Err(format!(
+                "Everything status query failed (code={}): {}",
+                major_version_error,
+                map_ipc_error(major_version_error)
+            ));
+        }
+
+        let database_loaded = unsafe { (api.is_db_loaded)() != 0 };
+        let database_loaded_error = unsafe { (api.get_last_error)() };
+        append_debug_log(
+            app_handle,
+            format!(
+                "ipc inspect: database_loaded={} error_code={}",
+                database_loaded, database_loaded_error
+            ),
+        );
+
+        if !database_loaded && database_loaded_error != 0 {
+            if database_loaded_error == 2 {
+                return Ok(RuntimeProbeStatus {
+                    reachable: false,
+                    database_loaded: false,
+                });
+            }
+
+            return Err(format!(
+                "Everything database status query failed (code={}): {}",
+                database_loaded_error,
+                map_ipc_error(database_loaded_error)
+            ));
+        }
+
+        Ok(RuntimeProbeStatus {
+            reachable: true,
+            database_loaded,
+        })
+    }
+
     fn start_search(
         api: &EverythingApi,
         reply_hwnd: HWND,
@@ -1017,6 +1091,14 @@ pub fn search(
 }
 
 #[cfg(windows)]
+pub fn inspect_runtime(
+    dll_path: &Path,
+    app_handle: &tauri::AppHandle,
+) -> Result<RuntimeProbeStatus, String> {
+    windows_impl::inspect_runtime(dll_path, app_handle)
+}
+
+#[cfg(windows)]
 pub fn increment_run_count(dll_path: &Path, file_name: &str) -> Result<u32, String> {
     windows_impl::increment_run_count(dll_path, file_name)
 }
@@ -1037,6 +1119,14 @@ pub fn search(
     _query: &SearchQuery,
     _app_handle: &tauri::AppHandle,
 ) -> Result<SearchResponse, String> {
+    Err("Everything search is only supported on Windows".to_string())
+}
+
+#[cfg(not(windows))]
+pub fn inspect_runtime(
+    _dll_path: &Path,
+    _app_handle: &tauri::AppHandle,
+) -> Result<RuntimeProbeStatus, String> {
     Err("Everything search is only supported on Windows".to_string())
 }
 

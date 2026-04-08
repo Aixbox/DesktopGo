@@ -72,6 +72,7 @@ pub enum SearchProvider {
 pub enum SearchRuntimeState {
     Unknown,
     InstalledReady,
+    Initializing,
     NotInstalled,
     Unavailable,
 }
@@ -98,6 +99,7 @@ pub struct SearchPage {
     pub total_results: u32,
     pub has_more: bool,
     pub provider: SearchProvider,
+    pub runtime_state: SearchRuntimeState,
     pub took_ms: u64,
 }
 

@@ -157,14 +157,29 @@ fn persist_last_provider(app_handle: &tauri::AppHandle) {
 }
 
 fn set_runtime_ready(app_handle: &tauri::AppHandle) -> Result<SearchRuntimeStatus, String> {
+    set_runtime_status(app_handle, true)
+}
+
+fn set_runtime_status(
+    app_handle: &tauri::AppHandle,
+    database_loaded: bool,
+) -> Result<SearchRuntimeStatus, String> {
     let mut guard = RUNTIME_STATE
         .lock()
         .map_err(|_| "Failed to lock search runtime state".to_string())?;
-    guard.set_status(
-        SearchRuntimeState::InstalledReady,
-        Some(SearchProvider::Installed),
-        None,
-    );
+    let state = if database_loaded {
+        SearchRuntimeState::InstalledReady
+    } else {
+        SearchRuntimeState::Initializing
+    };
+    let message = if database_loaded {
+        None
+    } else {
+        Some(build_initializing_error(
+            "Installed Everything is still starting or building its initial index",
+        ))
+    };
+    guard.set_status(state, Some(SearchProvider::Installed), message);
     let snapshot = guard.snapshot();
     drop(guard);
 
@@ -188,9 +203,56 @@ fn set_unavailable_state(message: String) -> Result<(), String> {
     Ok(())
 }
 
-fn map_search_query_error(error: String) -> String {
+fn set_initializing_state(message: String) -> Result<(), String> {
+    let mut guard = RUNTIME_STATE
+        .lock()
+        .map_err(|_| "Failed to lock search runtime state".to_string())?;
+    guard.set_status(
+        SearchRuntimeState::Initializing,
+        Some(SearchProvider::Installed),
+        Some(message),
+    );
+    Ok(())
+}
+
+fn build_initializing_error(message: impl AsRef<str>) -> String {
+    build_error(SearchErrorCode::EverythingInitializing, message)
+}
+
+fn resolve_runtime_status(
+    app_handle: &tauri::AppHandle,
+    dll_path: &Path,
+) -> Result<SearchRuntimeStatus, String> {
+    match ipc::inspect_runtime(dll_path, app_handle) {
+        Ok(runtime_status) => set_runtime_status(app_handle, runtime_status.database_loaded),
+        Err(error) => {
+            append_debug_log(
+                app_handle,
+                format!(
+                    "start_search_runtime: inspect_runtime failed after successful probe: {}",
+                    error
+                ),
+            );
+            set_runtime_ready(app_handle)
+        }
+    }
+}
+
+fn map_search_query_error(
+    app_handle: &tauri::AppHandle,
+    dll_path: &Path,
+    error: String,
+) -> String {
     if error.starts_with("EverythingBusy") {
         return error;
+    }
+
+    if let Ok(runtime_status) = ipc::inspect_runtime(dll_path, app_handle) {
+        if runtime_status.reachable && !runtime_status.database_loaded {
+            return build_initializing_error(
+                "Everything is still starting or building its index, please try again shortly",
+            );
+        }
     }
 
     build_error(
@@ -272,7 +334,7 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
     if let Some(dll_path) = cached_dll_path.as_ref() {
         if ipc::probe_connection(dll_path, app_handle).is_ok() {
             append_debug_log(app_handle, "start_search_runtime: probe ok");
-            return set_runtime_ready(app_handle);
+            return resolve_runtime_status(app_handle, dll_path);
         }
     }
     append_debug_log(app_handle, "start_search_runtime: initial probe failed");
@@ -302,7 +364,39 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
             app_handle,
             "start_search_runtime: probe ok after desktop start",
         );
-        return set_runtime_ready(app_handle);
+        return resolve_runtime_status(app_handle, &dll_path);
+    }
+
+    match ipc::inspect_runtime(&dll_path, app_handle) {
+        Ok(runtime_status) if runtime_status.reachable && !runtime_status.database_loaded => {
+            let error = build_initializing_error(
+                "Installed Everything is still starting or building its initial index",
+            );
+            append_debug_log(
+                app_handle,
+                format!("start_search_runtime: initializing: {}", error),
+            );
+            let _ = set_initializing_state(error.clone());
+            return Err(error);
+        }
+        Ok(runtime_status) => {
+            append_debug_log(
+                app_handle,
+                format!(
+                    "start_search_runtime: inspect_runtime after timeout reachable={} database_loaded={}",
+                    runtime_status.reachable, runtime_status.database_loaded
+                ),
+            );
+        }
+        Err(error) => {
+            append_debug_log(
+                app_handle,
+                format!(
+                    "start_search_runtime: inspect_runtime after timeout failed: {}",
+                    error
+                ),
+            );
+        }
     }
 
     let version_text = installation
@@ -361,6 +455,7 @@ pub fn search_files(
             total_results: 0,
             has_more: false,
             provider,
+            runtime_state: status.state,
             took_ms: 0,
         });
     }
@@ -381,7 +476,8 @@ pub fn search_files(
 
     let started_at = Instant::now();
     append_debug_log(app_handle, "search_files: ipc search begin");
-    let response = ipc::search(&dll_path, &query, app_handle).map_err(map_search_query_error)?;
+    let response = ipc::search(&dll_path, &query, app_handle)
+        .map_err(|error| map_search_query_error(app_handle, &dll_path, error))?;
     let took_ms = started_at.elapsed().as_millis() as u64;
     let has_more =
         query.offset.saturating_add(response.items.len() as u32) < response.total_results;
@@ -403,6 +499,7 @@ pub fn search_files(
         total_results: response.total_results,
         has_more,
         provider,
+        runtime_state: status.state,
         took_ms,
     })
 }

@@ -120,6 +120,7 @@ export function Launchpad() {
     loading: searchLoading,
     loadingMore: searchLoadingMore,
     error: searchError,
+    runtimeState: searchRuntimeState,
     totalResults: searchTotalResults,
     selectedIndex,
     setSelectedIndex,
@@ -780,6 +781,7 @@ export function Launchpad() {
             searchPending={searchPending}
             loadingMore={searchLoadingMore}
             error={searchError}
+            runtimeState={searchRuntimeState}
             totalResults={searchTotalResults}
             loadedCount={searchLoadedCount}
             pageSize={searchSettings.maxResultsPerPage}

@@ -1,6 +1,7 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SearchErrorCode {
     EverythingNotFound,
+    EverythingInitializing,
     EverythingIpcUnavailable,
 }
 
@@ -8,6 +9,7 @@ impl SearchErrorCode {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::EverythingNotFound => "EverythingNotFound",
+            Self::EverythingInitializing => "EverythingInitializing",
             Self::EverythingIpcUnavailable => "EverythingIpcUnavailable",
         }
     }

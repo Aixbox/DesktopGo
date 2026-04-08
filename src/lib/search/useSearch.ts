@@ -11,13 +11,21 @@ import {
 import {
   DEFAULT_SEARCH_SETTINGS,
   describeSearchRuntimeError,
+  getSearchRuntimeStateFromError,
   loadLastFilter,
   loadSearchSettings,
   saveLastFilter,
   type SearchDefaultFilter,
   type SearchSettings,
 } from './settings'
-import type { SearchHit, SearchPage, SearchProvider, SearchQuery, SearchSort } from './types'
+import type {
+  SearchHit,
+  SearchPage,
+  SearchProvider,
+  SearchQuery,
+  SearchRuntimeState,
+  SearchSort,
+} from './types'
 
 type SearchQueryOptions = Omit<SearchQuery, 'keyword' | 'offset'> & {
   limit: number
@@ -94,6 +102,7 @@ interface UseSearchResult {
   loading: boolean
   loadingMore: boolean
   error: string | null
+  runtimeState: SearchRuntimeState
   provider: SearchProvider | null
   tookMs: number
   totalResults: number
@@ -145,6 +154,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
   const [loadingMore, setLoadingMore] = useState(false)
   const [searchPending, setSearchPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [runtimeState, setRuntimeState] = useState<SearchRuntimeState>('unknown')
   const [provider, setProvider] = useState<SearchProvider | null>(null)
   const [tookMs, setTookMs] = useState(0)
   const [totalResults, setTotalResults] = useState(0)
@@ -196,6 +206,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     setLoading(false)
     setSearchPending(false)
     setError(null)
+    setRuntimeState('unknown')
     setProvider(null)
     setTookMs(0)
     setTotalResults(0)
@@ -269,6 +280,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
           totalResultsRef.current = page.totalResults
           setTotalResults(page.totalResults)
           setProvider(page.provider)
+          setRuntimeState(page.runtimeState)
           setTookMs(page.tookMs)
           setError(null)
           setSelectedIndex(page.totalResults === 0 ? -1 : context.autoSelectFirst ? 0 : -1)
@@ -282,7 +294,9 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
           setTookMs(0)
           setTotalResults(0)
           setSelectedIndex(-1)
-          setError(describeSearchRuntimeError(asErrorMessage(searchError)))
+          const rawMessage = asErrorMessage(searchError)
+          setRuntimeState(getSearchRuntimeStateFromError(rawMessage))
+          setError(describeSearchRuntimeError(rawMessage))
         })
         .finally(() => {
           if (!isContextActive(context)) return
@@ -389,6 +403,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
         totalResultsRef.current = page.totalResults
         setTotalResults(page.totalResults)
         setProvider(page.provider)
+        setRuntimeState(page.runtimeState)
         setTookMs(currentTookMs => currentTookMs + page.tookMs)
         setError(null)
       })
@@ -405,7 +420,9 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
           return
         }
 
-        setError(describeSearchRuntimeError(asErrorMessage(searchError)))
+        const rawMessage = asErrorMessage(searchError)
+        setRuntimeState(getSearchRuntimeStateFromError(rawMessage))
+        setError(describeSearchRuntimeError(rawMessage))
       })
       .finally(() => {
         const activeRangeRequest = rangeRequestRef.current
@@ -816,6 +833,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
       loading,
       loadingMore,
       error,
+      runtimeState,
       provider,
       tookMs,
       totalResults,
@@ -860,6 +878,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
       matchCase,
       matchPath,
       moveSelection,
+      runtimeState,
       provider,
       recordCurrentSearch,
       reloadSettings,

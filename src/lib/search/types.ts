@@ -57,10 +57,16 @@ export interface SearchPage {
   totalResults: number
   hasMore: boolean
   provider: SearchProvider
+  runtimeState: SearchRuntimeState
   tookMs: number
 }
 
-export type SearchRuntimeState = 'unknown' | 'installed_ready' | 'not_installed' | 'unavailable'
+export type SearchRuntimeState =
+  | 'unknown'
+  | 'installed_ready'
+  | 'initializing'
+  | 'not_installed'
+  | 'unavailable'
 
 export interface SearchRuntimeStatus {
   state: SearchRuntimeState
