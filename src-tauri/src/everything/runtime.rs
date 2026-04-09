@@ -307,12 +307,21 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
         ),
     );
 
-    let dll_path = sdk::ensure_sdk_dll(app_handle).map_err(|e| {
-        build_error(
-            SearchErrorCode::EverythingNotFound,
-            format!("Everything SDK is unavailable: {}", e),
-        )
-    })?;
+    let dll_path = match sdk::ensure_sdk_dll(app_handle) {
+        Ok(path) => path,
+        Err(e) => {
+            let error = build_error(
+                SearchErrorCode::EverythingSdkUnavailable,
+                format!("Everything SDK is unavailable: {}", e),
+            );
+            append_debug_log(
+                app_handle,
+                format!("start_search_runtime: sdk unavailable: {}", error),
+            );
+            let _ = set_unavailable_state(error.clone());
+            return Err(error);
+        }
+    };
     append_debug_log(
         app_handle,
         format!("start_search_runtime: sdk ready at {:?}", dll_path),

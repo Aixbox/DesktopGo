@@ -323,6 +323,9 @@ export const describeSearchRuntimeError = (message: string) => {
   if (message.startsWith('EverythingNotFound')) {
     return translate('未找到已安装的 Everything。请通过 DesktopGo 安装程序完成安装。')
   }
+  if (message.startsWith('EverythingSdkUnavailable')) {
+    return translate('DesktopGo 的 Everything 组件不可用。请重新安装 DesktopGo。')
+  }
   if (message.startsWith('EverythingIpcUnavailable')) {
     return translate(
       'DesktopGo 无法连接正在运行的 Everything。请确认 Everything 已启动，并且两个应用使用相同的权限级别。'
@@ -340,6 +343,9 @@ export const describeSearchRuntimeError = (message: string) => {
 export const getSearchRuntimeStateFromError = (message: string): SearchRuntimeState => {
   if (message.startsWith('EverythingNotFound')) {
     return 'not_installed'
+  }
+  if (message.startsWith('EverythingSdkUnavailable')) {
+    return 'unavailable'
   }
   if (message.startsWith('EverythingInitializing')) {
     return 'initializing'

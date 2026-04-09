@@ -385,6 +385,8 @@ const EN_MESSAGES: Record<string, string> = {
   '运行时间 降序': 'Run time descending',
   '未找到已安装的 Everything。请通过 DesktopGo 安装程序完成安装。':
     'Installed Everything was not found. Please install it through the DesktopGo installer.',
+  'DesktopGo 的 Everything 组件不可用。请重新安装 DesktopGo。':
+    'DesktopGo Everything components are unavailable. Please reinstall DesktopGo.',
   'DesktopGo 无法连接正在运行的 Everything。请确认 Everything 已启动，并且两个应用使用相同的权限级别。':
     'DesktopGo cannot connect to the running Everything instance. Make sure Everything is running and both apps use the same privilege level.',
   'DesktopGo 正在等待上一个 Everything IPC 请求完成。':
