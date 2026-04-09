@@ -129,12 +129,12 @@ const WINDOW_STYLE_OPTIONS: {
   description: string
 }[] = [
   {
-    label: '当前风格',
+    label: '柔光玻璃',
     value: 'default',
-    description: '保留 DesktopGo 当前的柔和玻璃层次。',
+    description: 'DesktopGo 自带的柔和玻璃层次，观感更稳定。',
   },
   {
-    label: 'Windows 原生 Acrylic',
+    label: '亚克力',
     value: 'nativeAcrylic',
     description: '更接近 Windows 原生磨砂亚克力，背景更透，仅主启动台窗口生效。',
   },
@@ -883,12 +883,7 @@ function SettingsPanel() {
       </SettingGroup>
 
       <div className="mb-6">
-        <SettingCard
-          label={translate('主题风格')}
-          desc={translate(
-            '切换主启动台的视觉材质。Windows 原生 Acrylic 需要 Windows 10/11，设置会立即应用到主启动台窗口。'
-          )}
-        >
+        <SettingCard label={translate('主题风格')}>
           <div className="flex flex-wrap gap-2">
             {WINDOW_STYLE_OPTIONS.map(option => (
               <OptionButton
