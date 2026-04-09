@@ -20,8 +20,6 @@ use commands::{
 #[cfg(windows)]
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
-#[cfg(windows)]
-use std::ffi::c_void;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Mutex,
@@ -33,13 +31,9 @@ use tauri::{Listener, Manager, RunEvent};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tauri_plugin_store::StoreExt;
 #[cfg(target_os = "windows")]
-use window_vibrancy::apply_acrylic;
-#[cfg(windows)]
-use windows::core::PCSTR;
+use window_vibrancy::{apply_acrylic, clear_acrylic};
 #[cfg(windows)]
 use windows::Win32::UI::Input::KeyboardAndMouse::{SetActiveWindow, SetFocus};
-#[cfg(windows)]
-use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
     BringWindowToTop, SetForegroundWindow, SetWindowPos, ShowWindow, HWND_TOP, SWP_NOMOVE,
@@ -79,36 +73,6 @@ const TRAY_TOGGLE_MENU_ITEM_ID: &str = "tray-toggle-launchpad";
 const TRAY_SETTINGS_MENU_ITEM_ID: &str = "tray-open-settings";
 const TRAY_QUIT_MENU_ITEM_ID: &str = "tray-quit";
 const LANGUAGE_CHANGED_EVENT: &str = "desktopgo://language-changed";
-
-#[cfg(windows)]
-const WCA_ACCENT_POLICY: u32 = 19;
-#[cfg(windows)]
-const ACCENT_DISABLED: u32 = 0;
-#[cfg(windows)]
-const ACCENT_ENABLE_ACRYLICBLURBEHIND: u32 = 4;
-
-#[cfg(windows)]
-#[repr(C)]
-struct AccentPolicy {
-    accent_state: u32,
-    accent_flags: u32,
-    gradient_color: u32,
-    animation_id: u32,
-}
-
-#[cfg(windows)]
-#[repr(C)]
-struct WindowCompositionAttribData {
-    attrib: u32,
-    pv_data: *mut c_void,
-    cb_data: usize,
-}
-
-#[cfg(windows)]
-type SetWindowCompositionAttributeFn = unsafe extern "system" fn(
-    hwnd: windows::Win32::Foundation::HWND,
-    data: *mut WindowCompositionAttribData,
-) -> i32;
 
 struct MainWindowState {
     ready: AtomicBool,
@@ -558,72 +522,17 @@ fn read_saved_window_style(app: &tauri::AppHandle) -> Option<&'static str> {
 }
 
 #[cfg(windows)]
-fn get_set_window_composition_attribute() -> Option<SetWindowCompositionAttributeFn> {
-    let module = unsafe { LoadLibraryA(PCSTR(b"user32.dll\0".as_ptr())) }.ok()?;
-    let proc = unsafe { GetProcAddress(module, PCSTR(b"SetWindowCompositionAttribute\0".as_ptr())) };
-    proc.map(|f| unsafe {
-        std::mem::transmute::<unsafe extern "system" fn() -> isize, SetWindowCompositionAttributeFn>(
-            f,
-        )
-    })
-}
-
-#[cfg(windows)]
-fn set_window_composition_accent(
-    hwnd: windows::Win32::Foundation::HWND,
-    accent_state: u32,
-    color: Option<(u8, u8, u8, u8)>,
-) -> Result<(), String> {
-    let mut rgba = color.unwrap_or((0, 0, 0, 0));
-    if accent_state == ACCENT_ENABLE_ACRYLICBLURBEHIND && rgba.3 == 0 {
-        rgba.3 = 1;
-    }
-
-    let mut policy = AccentPolicy {
-        accent_state,
-        accent_flags: 0,
-        gradient_color: (rgba.0 as u32)
-            | ((rgba.1 as u32) << 8)
-            | ((rgba.2 as u32) << 16)
-            | ((rgba.3 as u32) << 24),
-        animation_id: 0,
-    };
-
-    let mut data = WindowCompositionAttribData {
-        attrib: WCA_ACCENT_POLICY,
-        pv_data: &mut policy as *mut _ as _,
-        cb_data: std::mem::size_of::<AccentPolicy>(),
-    };
-
-    let Some(set_window_composition_attribute) = get_set_window_composition_attribute() else {
-        return Err("SetWindowCompositionAttribute is unavailable on this system.".to_string());
-    };
-
-    unsafe {
-        let _ = set_window_composition_attribute(hwnd, &mut data as *mut _);
-    }
-
-    Ok(())
-}
-
-#[cfg(windows)]
 fn apply_window_style_to_window(
-    app: &tauri::AppHandle,
+    _app: &tauri::AppHandle,
     window: &tauri::WebviewWindow,
     style: &str,
 ) -> Result<(), String> {
-    let hwnd = window
-        .hwnd()
-        .map_err(|error| format!("Failed to resolve main HWND: {}", error))?;
-
     match normalize_window_style(style).unwrap_or("default") {
         "nativeAcrylic" => {
             apply_acrylic(window, Some((250, 250, 250, 4)))
                 .map_err(|e| format!("Failed to apply acrylic: {}", e))
         }
-        _ => {
-            set_window_composition_accent(hwnd, ACCENT_DISABLED, None)
-        }
+        _ => clear_acrylic(window).map_err(|e| format!("Failed to clear acrylic: {}", e)),
     }
 }
 
@@ -666,9 +575,10 @@ fn build_window_bootstrap_script(app: &tauri::AppHandle, include_window_style: b
   const root = document.documentElement;
   const themeMode = {theme_mode:?};
   const windowStyle = {window_style:?};
+  const useDelayedReveal = windowStyle === 'nativeAcrylic';
   root.classList.remove('dark', 'window-style-native-acrylic');
-  root.style.opacity = '0';
-  root.style.transition = 'opacity 50ms ease-out';
+  root.style.opacity = useDelayedReveal ? '0' : '1';
+  root.style.transition = useDelayedReveal ? 'opacity 50ms ease-out' : '';
 
   if (
     themeMode === 'dark' ||
@@ -683,6 +593,20 @@ fn build_window_bootstrap_script(app: &tauri::AppHandle, include_window_style: b
 }})();
 "#
     )
+}
+
+fn main_window_uses_delayed_reveal(app: &tauri::AppHandle) -> bool {
+    matches!(read_saved_window_style(app), Some("nativeAcrylic"))
+}
+
+fn sync_main_window_dom_visibility(window: &tauri::WebviewWindow, delayed_reveal: bool) {
+    let script = if delayed_reveal {
+        "document.documentElement.style.transition='opacity 50ms ease-out';document.documentElement.style.opacity='0';"
+    } else {
+        "document.documentElement.style.transition='';document.documentElement.style.opacity='1';"
+    };
+
+    let _ = window.eval(script);
 }
 
 fn resolve_initial_main_window_size(app: &tauri::AppHandle) -> (f64, f64) {
@@ -1015,17 +939,21 @@ fn request_main_window_show(app: &tauri::AppHandle) {
 
 pub(crate) fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        let delayed_reveal = main_window_uses_delayed_reveal(app);
+        sync_main_window_dom_visibility(&window, delayed_reveal);
         let _ = window.unminimize();
         let _ = window.set_always_on_top(true);
         let _ = window.show();
         let _ = activate_webview_window(&window);
 
-        // Let DWM composite the acrylic effect, then reveal content.
-        let reveal_window = window.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(60));
-            let _ = reveal_window.eval("document.documentElement.style.opacity='1'");
-        });
+        if delayed_reveal {
+            // Let DWM composite the acrylic effect, then reveal content.
+            let reveal_window = window.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(60));
+                let _ = reveal_window.eval("document.documentElement.style.opacity='1'");
+            });
+        }
 
         refresh_tray_menu(app);
         schedule_main_window_focus_retry(app.clone());
@@ -1034,8 +962,12 @@ pub(crate) fn show_main_window(app: &tauri::AppHandle) {
 
 pub(crate) fn hide_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        // Reset opacity so next show starts invisible (avoids acrylic flash).
-        let _ = window.eval("document.documentElement.style.opacity='0'");
+        if main_window_uses_delayed_reveal(app) {
+            // Reset opacity so next show starts invisible (avoids acrylic flash).
+            let _ = window.eval("document.documentElement.style.opacity='0'");
+        } else {
+            let _ = window.eval("document.documentElement.style.transition='';document.documentElement.style.opacity='1'");
+        }
 
         #[cfg(windows)]
         if let Ok(hwnd) = window.hwnd() {
