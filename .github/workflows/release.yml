@@ -3,6 +3,10 @@ name: release
 on:
   workflow_dispatch:
 
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.sha }}
+  cancel-in-progress: false
+
 jobs:
   publish-windows:
     runs-on: windows-latest
@@ -11,15 +15,15 @@ jobs:
 
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: 10
 
       - name: setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
@@ -85,7 +89,7 @@ jobs:
 
       - name: build and publish release
         id: tauri_release
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v0.6.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -97,21 +101,31 @@ jobs:
           releaseDraft: true
           prerelease: false
           generateReleaseNotes: false
-          uploadUpdaterJson: true
-          uploadUpdaterSignatures: true
-          releaseAssetNamePattern: "[name]_[version]_[arch][setup]-zh-CN[ext]"
+          includeUpdaterJson: true
+          assetNamePattern: "[name]_[version]_[arch][setup][ext]"
+          retryAttempts: 3
 
       - name: build localized installers
         shell: pwsh
         run: pnpm run build:installers
 
       - name: upload localized installers
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.release_meta.outputs.version }}
-          draft: true
-          prerelease: false
-          fail_on_unmatched_files: true
-          files: |
-            src-tauri/target/release/bundle/nsis/DesktopGo_${{ steps.release_meta.outputs.version }}_x64-setup-zh-CN.exe
-            src-tauri/target/release/bundle/nsis/DesktopGo_${{ steps.release_meta.outputs.version }}_x64-setup-en-US.exe
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $version = "${{ steps.release_meta.outputs.version }}"
+          $files = @(
+            "src-tauri/target/release/bundle/nsis/DesktopGo_${version}_x64-setup-zh-CN.exe",
+            "src-tauri/target/release/bundle/nsis/DesktopGo_${version}_x64-setup-en-US.exe"
+          )
+
+          foreach ($file in $files) {
+            if (-not (Test-Path -LiteralPath $file)) {
+              throw "Release asset not found: $file"
+            }
+          }
+
+          $arguments = @('release', 'upload', "v$version") + $files + @('--clobber')
+          & gh @arguments
