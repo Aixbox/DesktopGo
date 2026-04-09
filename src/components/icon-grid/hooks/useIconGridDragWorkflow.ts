@@ -182,6 +182,8 @@ export function useIconGridDragWorkflow({
   const queuedDragMoveRef = useRef<{ pointerId: number; x: number; y: number } | null>(null)
   const dragPointerRef = useRef<{ pointerX: number; pointerY: number } | null>(null)
   const renderedDragStateRef = useRef<DragState | null>(null)
+  const pendingPointerCaptureTargetRef = useRef<HTMLElement | null>(null)
+  const dragPointerCaptureTargetRef = useRef<HTMLElement | null>(null)
 
   const [dragState, setDragState] = useState<DragState | null>(null)
 
@@ -207,8 +209,34 @@ export function useIconGridDragWorkflow({
     }
   }
 
+  const capturePointer = (target: HTMLElement, pointerId: number) => {
+    try {
+      target.setPointerCapture(pointerId)
+    } catch {
+      // Some Windows/WebView states may reject pointer capture; dragging still falls back to window listeners.
+    }
+  }
+
+  const releasePointerCapture = (
+    targetRef: MutableRefObject<HTMLElement | null>,
+    pointerId: number | null | undefined
+  ) => {
+    const target = targetRef.current
+    targetRef.current = null
+    if (!target || pointerId == null) return
+    try {
+      if (target.hasPointerCapture(pointerId)) {
+        target.releasePointerCapture(pointerId)
+      }
+    } catch {
+      // Ignore release failures after the element unmounts or capture is already gone.
+    }
+  }
+
   const clearPending = () => {
+    const pendingPointerId = pendingRef.current?.pointerId
     pendingRef.current = null
+    releasePointerCapture(pendingPointerCaptureTargetRef, pendingPointerId)
     clearTimer()
     clearOuterDwellTimer()
     clearEdgeSwitchTimer()
@@ -1342,6 +1370,8 @@ export function useIconGridDragWorkflow({
       return
     }
 
+    dragPointerCaptureTargetRef.current = pendingPointerCaptureTargetRef.current
+    pendingPointerCaptureTargetRef.current = null
     commitDragState(nextState)
     clearPending()
   }
@@ -1738,6 +1768,7 @@ export function useIconGridDragWorkflow({
     finishDragFnRef.current = (pointerId: number) => {
       const completedDrag = dragRef.current
       if (!finishDrag(pointerId)) return
+      releasePointerCapture(dragPointerCaptureTargetRef, pointerId)
       if (completedDrag && completedDrag.draggingIds.length > 0) {
         unselectIcons(completedDrag.draggingIds)
       }
@@ -1764,9 +1795,50 @@ export function useIconGridDragWorkflow({
       clearOuterDwellTimer()
       clearEdgeSwitchTimer()
       cancelQueuedDragMove()
+      releasePointerCapture(dragPointerCaptureTargetRef, pointerId)
       commitDragState(null)
     }
   }, [clearEdgeSwitchTimer])
+
+  useEffect(() => {
+    const cancelActiveInteractions = () => {
+      const activeDrag = dragRef.current
+      if (activeDrag) {
+        cancelDragFnRef.current(activeDrag.pointerId)
+        return
+      }
+      if (pendingRef.current) {
+        clearPendingFnRef.current()
+      }
+    }
+
+    const handleWindowBlur = () => {
+      cancelActiveInteractions()
+    }
+
+    const handleDocumentVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        cancelActiveInteractions()
+      }
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (!dragRef.current && !pendingRef.current) return
+      event.preventDefault()
+      event.stopPropagation()
+      cancelActiveInteractions()
+    }
+
+    window.addEventListener('blur', handleWindowBlur)
+    document.addEventListener('visibilitychange', handleDocumentVisibilityChange)
+    window.addEventListener('keydown', handleEscape, true)
+    return () => {
+      window.removeEventListener('blur', handleWindowBlur)
+      document.removeEventListener('visibilitychange', handleDocumentVisibilityChange)
+      window.removeEventListener('keydown', handleEscape, true)
+    }
+  }, [])
 
   usePointerDragController({
     pendingRef,
@@ -1784,6 +1856,8 @@ export function useIconGridDragWorkflow({
   const handleTilePointerDown = (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => {
     if (event.button !== 0) return
     const rect = event.currentTarget.getBoundingClientRect()
+    capturePointer(event.currentTarget, event.pointerId)
+    pendingPointerCaptureTargetRef.current = event.currentTarget
     pendingRef.current = {
       context: 'outer',
       sourceFolderId: null,
@@ -1809,6 +1883,8 @@ export function useIconGridDragWorkflow({
   ) => {
     if (event.button !== 0) return
     const rect = event.currentTarget.getBoundingClientRect()
+    capturePointer(event.currentTarget, event.pointerId)
+    pendingPointerCaptureTargetRef.current = event.currentTarget
     pendingRef.current = {
       context: 'folder',
       sourceFolderId: folderId,
@@ -1830,6 +1906,8 @@ export function useIconGridDragWorkflow({
   const handleDockItemPointerDown = (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => {
     if (event.button !== 0) return
     const rect = event.currentTarget.getBoundingClientRect()
+    capturePointer(event.currentTarget, event.pointerId)
+    pendingPointerCaptureTargetRef.current = event.currentTarget
     pendingRef.current = {
       context: 'dock',
       sourceFolderId: null,
@@ -1877,6 +1955,9 @@ export function useIconGridDragWorkflow({
 
   useEffect(
     () => () => {
+      const activePointerId = dragRef.current?.pointerId ?? pendingRef.current?.pointerId
+      releasePointerCapture(dragPointerCaptureTargetRef, activePointerId)
+      releasePointerCapture(pendingPointerCaptureTargetRef, activePointerId)
       clearTimer()
       clearOuterDwellTimer()
       clearEdgeSwitchTimer()
