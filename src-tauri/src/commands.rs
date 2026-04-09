@@ -19,8 +19,12 @@ pub fn activate_main_window(app_handle: tauri::AppHandle) -> Result<(), String> 
 }
 
 #[tauri::command]
-pub fn apply_window_style(app_handle: tauri::AppHandle, style: String) -> Result<(), String> {
-    crate::apply_main_window_style(&app_handle, Some(style.as_str()))
+pub fn apply_window_style(
+    app_handle: tauri::AppHandle,
+    style: String,
+    theme_mode: Option<String>,
+) -> Result<(), String> {
+    crate::apply_main_window_style(&app_handle, Some(style.as_str()), theme_mode.as_deref())
 }
 
 #[tauri::command]

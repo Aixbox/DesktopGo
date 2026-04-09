@@ -295,7 +295,9 @@ body {
 }
 
 .dark.window-style-native-acrylic .launchpad-bg {
-  background: transparent;
+  background: rgba(7, 10, 16, 0.08);
+  backdrop-filter: blur(4px) saturate(145%) brightness(0.92);
+  -webkit-backdrop-filter: blur(4px) saturate(145%) brightness(0.92);
 }
 
 .launchpad-glass-panel {
@@ -394,4 +396,78 @@ body {
 .search-surface-card {
   border: 1px solid color-mix(in oklch, var(--foreground) 10%, transparent);
   background: color-mix(in oklch, var(--background) 68%, transparent);
+}
+
+.dark.window-style-native-acrylic .launchpad-glass-panel {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--background) 78%, transparent) 0%,
+      color-mix(in oklch, var(--background) 70%, transparent) 100%
+    );
+  box-shadow:
+    0 22px 56px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+}
+
+.dark.window-style-native-acrylic .launchpad-glass-panel-strong {
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--background) 86%, transparent) 0%,
+      color-mix(in oklch, var(--background) 79%, transparent) 100%
+    );
+  box-shadow:
+    0 24px 56px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(22px) saturate(148%);
+  -webkit-backdrop-filter: blur(22px) saturate(148%);
+}
+
+.dark.window-style-native-acrylic .search-panel-surface {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--background) 88%, transparent) 0%,
+      color-mix(in oklch, var(--background) 80%, transparent) 100%
+    );
+  box-shadow:
+    0 24px 56px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+}
+
+.dark.window-style-native-acrylic .launchpad-glass-button {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: color-mix(in oklch, var(--background) 56%, transparent);
+  color: color-mix(in oklch, var(--foreground) 86%, transparent);
+}
+
+.dark.window-style-native-acrylic .launchpad-glass-button:hover {
+  background: color-mix(in oklch, var(--background) 68%, transparent);
+  color: var(--foreground);
+}
+
+.dark.window-style-native-acrylic .search-floating-menu {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--background) 90%, transparent) 0%,
+      color-mix(in oklch, var(--background) 82%, transparent) 100%
+    );
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(20px) saturate(148%);
+  -webkit-backdrop-filter: blur(20px) saturate(148%);
+}
+
+.dark.window-style-native-acrylic .search-surface-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: color-mix(in oklch, var(--background) 64%, transparent);
 }

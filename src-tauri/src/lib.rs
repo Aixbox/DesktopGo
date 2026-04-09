@@ -33,6 +33,8 @@ use tauri_plugin_store::StoreExt;
 #[cfg(target_os = "windows")]
 use window_vibrancy::{apply_acrylic, clear_acrylic};
 #[cfg(windows)]
+use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE};
+#[cfg(windows)]
 use windows::Win32::UI::Input::KeyboardAndMouse::{SetActiveWindow, SetFocus};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -496,8 +498,11 @@ fn system_prefers_light_theme() -> Option<bool> {
 }
 
 #[cfg(windows)]
-fn resolved_theme_is_dark(app: &tauri::AppHandle) -> bool {
-    match read_saved_theme_mode(app) {
+fn resolved_theme_is_dark(app: &tauri::AppHandle, theme_mode_override: Option<&str>) -> bool {
+    match theme_mode_override
+        .and_then(normalize_theme_mode)
+        .or_else(|| read_saved_theme_mode(app))
+    {
         Some("dark") => true,
         Some("light") => false,
         Some("system") | None => !system_prefers_light_theme().unwrap_or(true),
@@ -522,17 +527,52 @@ fn read_saved_window_style(app: &tauri::AppHandle) -> Option<&'static str> {
 }
 
 #[cfg(windows)]
+fn set_window_immersive_dark_mode(window: &tauri::WebviewWindow, dark: bool) -> Result<(), String> {
+    let hwnd = window
+        .hwnd()
+        .map_err(|error| format!("Failed to resolve main HWND: {}", error))?;
+
+    unsafe {
+        DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_USE_IMMERSIVE_DARK_MODE,
+            &(dark as u32) as *const _ as _,
+            std::mem::size_of::<u32>() as u32,
+        )
+        .map_err(|error| format!("Failed to set immersive dark mode: {}", error))
+    }
+}
+
+#[cfg(windows)]
 fn apply_window_style_to_window(
-    _app: &tauri::AppHandle,
+    app: &tauri::AppHandle,
     window: &tauri::WebviewWindow,
     style: &str,
+    theme_mode_override: Option<&str>,
 ) -> Result<(), String> {
+    let dark = resolved_theme_is_dark(app, theme_mode_override);
+    let use_native_acrylic = matches!(normalize_window_style(style), Some("nativeAcrylic"));
+    let _ = set_window_immersive_dark_mode(window, use_native_acrylic && dark);
+
     match normalize_window_style(style).unwrap_or("default") {
         "nativeAcrylic" => {
-            apply_acrylic(window, Some((250, 250, 250, 4)))
+            // Rebuild the native backdrop each time theme changes, otherwise
+            // Windows 11 may keep the previous acrylic appearance.
+            let _ = clear_acrylic(window);
+
+            let acrylic_tint = if dark {
+                (24, 28, 36, 96)
+            } else {
+                (250, 250, 250, 4)
+            };
+
+            apply_acrylic(window, Some(acrylic_tint))
                 .map_err(|e| format!("Failed to apply acrylic: {}", e))
         }
-        _ => clear_acrylic(window).map_err(|e| format!("Failed to clear acrylic: {}", e)),
+        _ => {
+            let _ = set_window_immersive_dark_mode(window, false);
+            clear_acrylic(window).map_err(|e| format!("Failed to clear acrylic: {}", e))
+        }
     }
 }
 
@@ -541,6 +581,7 @@ fn apply_window_style_to_window(
     _app: &tauri::AppHandle,
     _window: &tauri::WebviewWindow,
     _style: &str,
+    _theme_mode_override: Option<&str>,
 ) -> Result<(), String> {
     Ok(())
 }
@@ -548,6 +589,7 @@ fn apply_window_style_to_window(
 pub(crate) fn apply_main_window_style(
     app: &tauri::AppHandle,
     style: Option<&str>,
+    theme_mode_override: Option<&str>,
 ) -> Result<(), String> {
     let Some(window) = app.get_webview_window("main") else {
         return Ok(());
@@ -558,7 +600,7 @@ pub(crate) fn apply_main_window_style(
         .or_else(|| read_saved_window_style(app))
         .unwrap_or("default");
 
-    apply_window_style_to_window(app, &window, resolved_style)
+    apply_window_style_to_window(app, &window, resolved_style, theme_mode_override)
 }
 
 fn build_window_bootstrap_script(app: &tauri::AppHandle, include_window_style: bool) -> String {
@@ -1043,7 +1085,7 @@ fn create_main_window(app: &tauri::AppHandle) {
 
     match builder.build() {
         Ok(_) => {
-            if let Err(error) = apply_main_window_style(app, None) {
+            if let Err(error) = apply_main_window_style(app, None, None) {
                 eprintln!("Warning: Failed to apply saved main window style: {}", error);
             }
             attach_blur_handler(app);

@@ -584,12 +584,18 @@ function SettingsPanel() {
     setDockEnabled(value)
   }
 
-  const handleThemeMode = (value: ThemeMode) => {
-    void saveTheme(value).catch(e => console.error('Failed to save theme mode:', e))
+  const handleThemeMode = async (value: ThemeMode) => {
     setThemeMode(value)
     applyTheme(value)
+
+    try {
+      await saveTheme(value)
+    } catch (e) {
+      console.error('Failed to save theme mode:', e)
+    }
+
     if (windowStyle === 'nativeAcrylic') {
-      void invoke('apply_window_style', { style: windowStyle }).catch(error => {
+      void invoke('apply_window_style', { style: windowStyle, themeMode: value }).catch(error => {
         console.error('Failed to refresh native acrylic after theme change:', error)
       })
     }
@@ -613,7 +619,7 @@ function SettingsPanel() {
     }
 
     try {
-      await invoke('apply_window_style', { style: value })
+      await invoke('apply_window_style', { style: value, themeMode })
     } catch (error) {
       console.error('Failed to apply window style:', error)
       toast.error(translate('应用主题风格失败：{error}', { error: String(error) }), {
