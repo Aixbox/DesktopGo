@@ -59,6 +59,7 @@ const ICON_SEARCH_LIMIT = 48
 const SETTINGS_WINDOW_WIDTH = 800
 const SETTINGS_WINDOW_HEIGHT = 600
 const SEARCH_FLOATING_MENU_SELECTOR = '[data-search-floating-menu="true"]'
+const EXTERNAL_SHOW_CLICK_GUARD_MS = 350
 
 async function ensureSettingsWindowMinSize(settingsWindow: WebviewWindow) {
   const minSize = new LogicalSize(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
@@ -151,6 +152,7 @@ export function Launchpad() {
   const longPressTimerRef = useRef<number | null>(null)
   const longPressTriggeredRef = useRef(false)
   const backgroundPointerStartedRef = useRef(false)
+  const suppressBackgroundClickUntilRef = useRef(0)
   const filterMenuRef = useRef<HTMLDivElement | null>(null)
   const filterButtonRef = useRef<HTMLButtonElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -218,6 +220,7 @@ export function Launchpad() {
   useEffect(() => {
     const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
       if (focused) {
+        suppressBackgroundClickUntilRef.current = performance.now() + EXTERNAL_SHOW_CLICK_GUARD_MS
         void syncExternalState()
       }
     })
@@ -630,6 +633,9 @@ export function Launchpad() {
 
     if (windowMode === 'fullscreen' && !hasSearchKeyword) {
       if (isTrueBackgroundClick) {
+        if (performance.now() < suppressBackgroundClickUntilRef.current) {
+          return
+        }
         void invoke('toggle_window')
       }
     }

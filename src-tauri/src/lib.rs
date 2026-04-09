@@ -49,8 +49,8 @@ static WINDOWS_CONSOLE_APP_HANDLE: OnceCell<tauri::AppHandle> = OnceCell::new();
 #[cfg(windows)]
 static WINDOWS_CONSOLE_EXIT_REQUESTED: AtomicBool = AtomicBool::new(false);
 
-const MAIN_WINDOW_FOCUS_RETRY_COUNT: usize = 8;
 const MAIN_WINDOW_FOCUS_RETRY_DELAY_MS: u64 = 40;
+const MAIN_WINDOW_BLUR_GUARD_MS: u64 = 1200;
 pub(crate) const DEFAULT_LAUNCHPAD_SHORTCUT: &str = "Ctrl+Space";
 const DEFAULT_LAUNCH_ON_STARTUP: bool = true;
 const LAUNCH_ON_STARTUP_SETTING_KEY: &str = "launchOnStartup";
@@ -80,6 +80,7 @@ struct MainWindowState {
     ready: AtomicBool,
     pending_show: AtomicBool,
     suppress_blur: AtomicBool,
+    suppress_blur_until: Mutex<Option<Instant>>,
     last_show_request: Mutex<Option<Instant>>,
 }
 
@@ -137,6 +138,7 @@ impl Default for MainWindowState {
             ready: AtomicBool::new(false),
             pending_show: AtomicBool::new(false),
             suppress_blur: AtomicBool::new(false),
+            suppress_blur_until: Mutex::new(None),
             last_show_request: Mutex::new(None),
         }
     }
@@ -576,6 +578,30 @@ fn apply_window_style_to_window(
     }
 }
 
+fn set_main_window_blur_guard(state: &MainWindowState, duration_ms: u64) {
+    state.suppress_blur.store(true, Ordering::SeqCst);
+    if let Ok(mut guard) = state.suppress_blur_until.lock() {
+        *guard = Some(Instant::now() + Duration::from_millis(duration_ms));
+    }
+}
+
+fn clear_main_window_blur_guard(state: &MainWindowState) {
+    state.suppress_blur.store(false, Ordering::SeqCst);
+    if let Ok(mut guard) = state.suppress_blur_until.lock() {
+        *guard = None;
+    }
+}
+
+fn main_window_blur_guard_active(state: &MainWindowState) -> bool {
+    state
+        .suppress_blur_until
+        .lock()
+        .ok()
+        .and_then(|guard| *guard)
+        .map(|until| Instant::now() < until)
+        .unwrap_or(false)
+}
+
 #[cfg(not(windows))]
 fn apply_window_style_to_window(
     _app: &tauri::AppHandle,
@@ -970,7 +996,7 @@ fn request_main_window_show(app: &tauri::AppHandle) {
 
     // 在显示主窗口之前，临时抑制 blur 隐藏，防止其他窗口（如 settings）
     // 占据焦点导致主窗口刚显示就因失焦被自动隐藏。
-    state.suppress_blur.store(true, Ordering::SeqCst);
+    set_main_window_blur_guard(&state, MAIN_WINDOW_BLUR_GUARD_MS);
 
     if state.ready.load(Ordering::SeqCst) {
         show_main_window(app);
@@ -1035,7 +1061,7 @@ fn toggle_main_window_visibility(app: &tauri::AppHandle) {
 
 fn schedule_main_window_focus_retry(app: tauri::AppHandle) {
     std::thread::spawn(move || {
-        for _ in 0..MAIN_WINDOW_FOCUS_RETRY_COUNT {
+        loop {
             std::thread::sleep(Duration::from_millis(MAIN_WINDOW_FOCUS_RETRY_DELAY_MS));
 
             let Some(window) = app.get_webview_window("main") else {
@@ -1043,20 +1069,25 @@ fn schedule_main_window_focus_retry(app: tauri::AppHandle) {
             };
 
             if !window.is_visible().unwrap_or(false) {
+                let state = app.state::<MainWindowState>();
+                clear_main_window_blur_guard(&state);
                 return;
             }
 
             if window.is_focused().unwrap_or(false) {
                 let state = app.state::<MainWindowState>();
-                state.suppress_blur.store(false, Ordering::SeqCst);
+                clear_main_window_blur_guard(&state);
                 return;
             }
 
             let _ = window.set_focus();
-        }
 
-        let state = app.state::<MainWindowState>();
-        state.suppress_blur.store(false, Ordering::SeqCst);
+            let state = app.state::<MainWindowState>();
+            if !main_window_blur_guard_active(&state) {
+                state.suppress_blur.store(false, Ordering::SeqCst);
+                return;
+            }
+        }
     });
 }
 
@@ -1148,15 +1179,17 @@ fn attach_blur_handler(app: &tauri::AppHandle) {
         let app_handle = app.clone();
         window.on_window_event(move |event| match event {
             tauri::WindowEvent::Focused(true) => {
-                // 主窗口成功获得焦点，清除抑制标记。
-                let state = app_handle.state::<MainWindowState>();
-                state.suppress_blur.store(false, Ordering::SeqCst);
                 refresh_tray_menu(&app_handle);
             }
             tauri::WindowEvent::Focused(false) => {
-                // swap(false) 读取并清除标记：若为 true 说明正在显示流程中，跳过隐藏。
+                // 在显示流程完成前，可能连续收到多个 Focused(false) 事件。
+                // 除了抑制标记，再额外给显示流程一个短暂保护窗口，避免托盘菜单关闭时
+                // 紧跟着的失焦把主窗口立即隐藏。
                 let state = app_handle.state::<MainWindowState>();
-                if !state.suppress_blur.swap(false, Ordering::SeqCst) {
+                if main_window_blur_guard_active(&state) {
+                    return;
+                }
+                if !state.suppress_blur.load(Ordering::SeqCst) {
                     hide_main_window(&app_handle);
                 }
             }
