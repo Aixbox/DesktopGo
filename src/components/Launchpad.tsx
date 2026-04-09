@@ -187,8 +187,9 @@ export function Launchpad() {
         await fetchIcons()
         const { windowMode: currentWindowMode, applyWindowMode } = useIconStore.getState()
         await applyWindowMode(currentWindowMode)
-        applyTheme(await getSavedTheme())
-        applyWindowStyle(await getSavedWindowStyle())
+        const savedWindowStyle = await getSavedWindowStyle()
+        applyTheme(await getSavedTheme(), savedWindowStyle)
+        applyWindowStyle(savedWindowStyle)
       } catch (e) {
         console.error('Failed to initialize launchpad settings:', e)
       } finally {
@@ -206,8 +207,9 @@ export function Launchpad() {
       await state.hydrateSettings()
       await state.fetchIcons()
       await reloadSearchSettings()
-      applyTheme(await getSavedTheme())
-      applyWindowStyle(await getSavedWindowStyle())
+      const savedWindowStyle = await getSavedWindowStyle()
+      applyTheme(await getSavedTheme(), savedWindowStyle)
+      applyWindowStyle(savedWindowStyle)
     } catch (e) {
       console.error('Failed to sync launchpad state:', e)
     }

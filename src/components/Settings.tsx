@@ -25,7 +25,12 @@ import {
 import { cn } from '@/lib/utils'
 import { useIconStore } from '@/stores/iconStore'
 import { translate, useI18n } from '@/lib/i18n'
-import { applyTheme, saveTheme } from '@/lib/theme'
+import {
+  THEME_MODE_SYNC_EVENT,
+  applyTheme,
+  resolveEffectiveThemeMode,
+  saveTheme,
+} from '@/lib/theme'
 import { applyWindowStyle, saveWindowStyle } from '@/lib/windowStyle'
 import { DEFAULT_LAUNCHPAD_SHORTCUT, getSetting, setSetting } from '@/lib/settingsStore'
 import {
@@ -586,7 +591,7 @@ function SettingsPanel() {
 
   const handleThemeMode = async (value: ThemeMode) => {
     setThemeMode(value)
-    applyTheme(value)
+    applyTheme(value, windowStyle)
 
     try {
       await saveTheme(value)
@@ -595,22 +600,40 @@ function SettingsPanel() {
     }
 
     if (windowStyle === 'nativeAcrylic') {
-      void invoke('apply_window_style', { style: windowStyle, themeMode: value }).catch(error => {
+      void invoke('apply_window_style', {
+        style: windowStyle,
+        themeMode: resolveEffectiveThemeMode(value, windowStyle),
+      }).catch(error => {
         console.error('Failed to refresh native acrylic after theme change:', error)
       })
     }
   }
 
+  useEffect(() => {
+    const handleThemeModeSync = (event: Event) => {
+      const nextMode = (event as CustomEvent<{ mode?: ThemeMode }>).detail?.mode
+      if (!nextMode) return
+      setThemeMode(nextMode)
+    }
+
+    window.addEventListener(THEME_MODE_SYNC_EVENT, handleThemeModeSync)
+    return () => {
+      window.removeEventListener(THEME_MODE_SYNC_EVENT, handleThemeModeSync)
+    }
+  }, [])
+
   const handleWindowStyle = async (value: WindowStyle) => {
     const previousStyle = windowStyle
     setWindowStyle(value)
     applyWindowStyle(value)
+    applyTheme(themeMode, value)
 
     try {
       await saveWindowStyle(value)
     } catch (error) {
       setWindowStyle(previousStyle)
       applyWindowStyle(previousStyle)
+      applyTheme(themeMode, previousStyle)
       toast.error(translate('保存主题风格失败：{error}', { error: String(error) }), {
         key: 'settings-window-style',
         title: translate('主题风格'),
@@ -619,7 +642,10 @@ function SettingsPanel() {
     }
 
     try {
-      await invoke('apply_window_style', { style: value, themeMode })
+      await invoke('apply_window_style', {
+        style: value,
+        themeMode: resolveEffectiveThemeMode(themeMode, value),
+      })
     } catch (error) {
       console.error('Failed to apply window style:', error)
       toast.error(translate('应用主题风格失败：{error}', { error: String(error) }), {
