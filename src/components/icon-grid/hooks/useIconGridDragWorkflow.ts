@@ -36,6 +36,7 @@ import { OUTER_DRAG_RULES } from '../constants'
 import { usePointerDragController } from './usePointerDragController'
 import { useEdgeAutoPaging } from './useEdgeAutoPaging'
 import { useDragDropCommit } from './useDragDropCommit'
+import { activateDragPointerCapture, releaseDragPointerCapture } from './dragPointerCapture'
 import { resetOuterInteraction } from '../state/dragMachine'
 import type {
   DragHit,
@@ -209,34 +210,13 @@ export function useIconGridDragWorkflow({
     }
   }
 
-  const capturePointer = (target: HTMLElement, pointerId: number) => {
-    try {
-      target.setPointerCapture(pointerId)
-    } catch {
-      // Some Windows/WebView states may reject pointer capture; dragging still falls back to window listeners.
-    }
-  }
-
-  const releasePointerCapture = (
-    targetRef: MutableRefObject<HTMLElement | null>,
-    pointerId: number | null | undefined
-  ) => {
-    const target = targetRef.current
-    targetRef.current = null
-    if (!target || pointerId == null) return
-    try {
-      if (target.hasPointerCapture(pointerId)) {
-        target.releasePointerCapture(pointerId)
-      }
-    } catch {
-      // Ignore release failures after the element unmounts or capture is already gone.
-    }
-  }
-
   const clearPending = () => {
     const pendingPointerId = pendingRef.current?.pointerId
     pendingRef.current = null
-    releasePointerCapture(pendingPointerCaptureTargetRef, pendingPointerId)
+    pendingPointerCaptureTargetRef.current = releaseDragPointerCapture(
+      pendingPointerCaptureTargetRef.current,
+      pendingPointerId
+    )
     clearTimer()
     clearOuterDwellTimer()
     clearEdgeSwitchTimer()
@@ -1370,7 +1350,11 @@ export function useIconGridDragWorkflow({
       return
     }
 
-    dragPointerCaptureTargetRef.current = pendingPointerCaptureTargetRef.current
+    // 只有真正进入拖拽后才抢占 pointer capture，避免普通点击的 click 被外层 tile 吞掉。
+    dragPointerCaptureTargetRef.current = activateDragPointerCapture(
+      pendingPointerCaptureTargetRef.current,
+      pending.pointerId
+    )
     pendingPointerCaptureTargetRef.current = null
     commitDragState(nextState)
     clearPending()
@@ -1768,7 +1752,10 @@ export function useIconGridDragWorkflow({
     finishDragFnRef.current = (pointerId: number) => {
       const completedDrag = dragRef.current
       if (!finishDrag(pointerId)) return
-      releasePointerCapture(dragPointerCaptureTargetRef, pointerId)
+      dragPointerCaptureTargetRef.current = releaseDragPointerCapture(
+        dragPointerCaptureTargetRef.current,
+        pointerId
+      )
       if (completedDrag && completedDrag.draggingIds.length > 0) {
         unselectIcons(completedDrag.draggingIds)
       }
@@ -1795,7 +1782,10 @@ export function useIconGridDragWorkflow({
       clearOuterDwellTimer()
       clearEdgeSwitchTimer()
       cancelQueuedDragMove()
-      releasePointerCapture(dragPointerCaptureTargetRef, pointerId)
+      dragPointerCaptureTargetRef.current = releaseDragPointerCapture(
+        dragPointerCaptureTargetRef.current,
+        pointerId
+      )
       commitDragState(null)
     }
   }, [clearEdgeSwitchTimer])
@@ -1856,7 +1846,6 @@ export function useIconGridDragWorkflow({
   const handleTilePointerDown = (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => {
     if (event.button !== 0) return
     const rect = event.currentTarget.getBoundingClientRect()
-    capturePointer(event.currentTarget, event.pointerId)
     pendingPointerCaptureTargetRef.current = event.currentTarget
     pendingRef.current = {
       context: 'outer',
@@ -1883,7 +1872,6 @@ export function useIconGridDragWorkflow({
   ) => {
     if (event.button !== 0) return
     const rect = event.currentTarget.getBoundingClientRect()
-    capturePointer(event.currentTarget, event.pointerId)
     pendingPointerCaptureTargetRef.current = event.currentTarget
     pendingRef.current = {
       context: 'folder',
@@ -1906,7 +1894,6 @@ export function useIconGridDragWorkflow({
   const handleDockItemPointerDown = (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => {
     if (event.button !== 0) return
     const rect = event.currentTarget.getBoundingClientRect()
-    capturePointer(event.currentTarget, event.pointerId)
     pendingPointerCaptureTargetRef.current = event.currentTarget
     pendingRef.current = {
       context: 'dock',
@@ -1956,8 +1943,14 @@ export function useIconGridDragWorkflow({
   useEffect(
     () => () => {
       const activePointerId = dragRef.current?.pointerId ?? pendingRef.current?.pointerId
-      releasePointerCapture(dragPointerCaptureTargetRef, activePointerId)
-      releasePointerCapture(pendingPointerCaptureTargetRef, activePointerId)
+      dragPointerCaptureTargetRef.current = releaseDragPointerCapture(
+        dragPointerCaptureTargetRef.current,
+        activePointerId
+      )
+      pendingPointerCaptureTargetRef.current = releaseDragPointerCapture(
+        pendingPointerCaptureTargetRef.current,
+        activePointerId
+      )
       clearTimer()
       clearOuterDwellTimer()
       clearEdgeSwitchTimer()
