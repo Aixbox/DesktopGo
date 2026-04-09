@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use tauri::Manager;
+use tauri::{path::BaseDirectory, Manager};
 
 #[cfg(target_pointer_width = "64")]
 const SDK_DLL_NAME: &str = "Everything64.dll";
@@ -9,13 +9,27 @@ const SDK_DLL_NAME: &str = "Everything64.dll";
 const SDK_DLL_NAME: &str = "Everything32.dll";
 
 fn resolve_sdk_root(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let mut attempted_paths = Vec::new();
+
+    if let Ok(resource_root) = app_handle
+        .path()
+        .resolve("everything/Everything-SDK/dll", BaseDirectory::Resource)
+    {
+        attempted_paths.push(resource_root.clone());
+        if resource_root.exists() {
+            return Ok(resource_root);
+        }
+    }
+
     if let Ok(resource_dir) = app_handle.path().resource_dir() {
-        let resource_root = resource_dir
+        let windows_bundle_root = resource_dir
+            .join("resources")
             .join("everything")
             .join("Everything-SDK")
             .join("dll");
-        if resource_root.exists() {
-            return Ok(resource_root);
+        attempted_paths.push(windows_bundle_root.clone());
+        if windows_bundle_root.exists() {
+            return Ok(windows_bundle_root);
         }
     }
 
@@ -24,11 +38,19 @@ fn resolve_sdk_root(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
         .join("everything")
         .join("Everything-SDK")
         .join("dll");
+    attempted_paths.push(dev_resource_root.clone());
     if dev_resource_root.exists() {
         return Ok(dev_resource_root);
     }
 
-    Err("Failed to locate packaged Everything SDK resources".to_string())
+    Err(format!(
+        "Failed to locate packaged Everything SDK resources. Tried: {}",
+        attempted_paths
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>()
+            .join(" | ")
+    ))
 }
 
 fn should_copy(src: &Path, dst: &Path) -> Result<bool, String> {
