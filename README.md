@@ -218,6 +218,10 @@ DesktopGo/
 - 新增文件后，到设置页执行一次增量同步
 - 如果你刚整理过整个目录，执行一次全量同步更稳妥
 
+## 🤝 友链
+
+- [linux.do](https://linux.do/)
+
 ## 📄 许可证
 
 本项目基于 MIT License 发布，详见 [`LICENSE.txt`](LICENSE.txt)。
