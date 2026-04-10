@@ -238,11 +238,7 @@ fn resolve_runtime_status(
     }
 }
 
-fn map_search_query_error(
-    app_handle: &tauri::AppHandle,
-    dll_path: &Path,
-    error: String,
-) -> String {
+fn map_search_query_error(app_handle: &tauri::AppHandle, dll_path: &Path, error: String) -> String {
     if error.starts_with("EverythingBusy") {
         return error;
     }

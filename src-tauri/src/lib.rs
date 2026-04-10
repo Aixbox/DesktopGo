@@ -39,7 +39,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{SetActiveWindow, SetFocus};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
     BringWindowToTop, SetForegroundWindow, SetWindowPos, ShowWindow, HWND_TOP, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_SHOWWINDOW, SW_HIDE, SW_RESTORE,
+    SWP_NOSIZE, SWP_SHOWWINDOW, SW_HIDE, SW_RESTORE, SW_SHOW,
 };
 #[cfg(windows)]
 use winreg::{enums::HKEY_CURRENT_USER, RegKey};
@@ -1008,11 +1008,12 @@ fn request_main_window_show(app: &tauri::AppHandle) {
 pub(crate) fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let delayed_reveal = main_window_uses_delayed_reveal(app);
+        let was_minimized = window.is_minimized().unwrap_or(false);
         sync_main_window_dom_visibility(&window, delayed_reveal);
         let _ = window.unminimize();
         let _ = window.set_always_on_top(true);
         let _ = window.show();
-        let _ = activate_webview_window(&window);
+        let _ = activate_webview_window(&window, was_minimized);
 
         if delayed_reveal {
             // Let DWM composite the acrylic effect, then reveal content.
@@ -1060,33 +1061,31 @@ fn toggle_main_window_visibility(app: &tauri::AppHandle) {
 }
 
 fn schedule_main_window_focus_retry(app: tauri::AppHandle) {
-    std::thread::spawn(move || {
-        loop {
-            std::thread::sleep(Duration::from_millis(MAIN_WINDOW_FOCUS_RETRY_DELAY_MS));
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_millis(MAIN_WINDOW_FOCUS_RETRY_DELAY_MS));
 
-            let Some(window) = app.get_webview_window("main") else {
-                return;
-            };
+        let Some(window) = app.get_webview_window("main") else {
+            return;
+        };
 
-            if !window.is_visible().unwrap_or(false) {
-                let state = app.state::<MainWindowState>();
-                clear_main_window_blur_guard(&state);
-                return;
-            }
-
-            if window.is_focused().unwrap_or(false) {
-                let state = app.state::<MainWindowState>();
-                clear_main_window_blur_guard(&state);
-                return;
-            }
-
-            let _ = window.set_focus();
-
+        if !window.is_visible().unwrap_or(false) {
             let state = app.state::<MainWindowState>();
-            if !main_window_blur_guard_active(&state) {
-                state.suppress_blur.store(false, Ordering::SeqCst);
-                return;
-            }
+            clear_main_window_blur_guard(&state);
+            return;
+        }
+
+        if window.is_focused().unwrap_or(false) {
+            let state = app.state::<MainWindowState>();
+            clear_main_window_blur_guard(&state);
+            return;
+        }
+
+        let _ = window.set_focus();
+
+        let state = app.state::<MainWindowState>();
+        if !main_window_blur_guard_active(&state) {
+            state.suppress_blur.store(false, Ordering::SeqCst);
+            return;
         }
     });
 }
@@ -1117,7 +1116,10 @@ fn create_main_window(app: &tauri::AppHandle) {
     match builder.build() {
         Ok(_) => {
             if let Err(error) = apply_main_window_style(app, None, None) {
-                eprintln!("Warning: Failed to apply saved main window style: {}", error);
+                eprintln!(
+                    "Warning: Failed to apply saved main window style: {}",
+                    error
+                );
             }
             attach_blur_handler(app);
         }
@@ -1166,9 +1168,10 @@ pub(crate) fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String>
         .get_webview_window("settings")
         .ok_or_else(|| "Settings window not found".to_string())?;
 
+    let was_minimized = settings_window.is_minimized().unwrap_or(false);
     let _ = settings_window.unminimize();
     let _ = settings_window.show();
-    activate_webview_window(&settings_window)?;
+    activate_webview_window(&settings_window, was_minimized)?;
     hide_main_window(app);
 
     Ok(())
@@ -1198,7 +1201,23 @@ fn attach_blur_handler(app: &tauri::AppHandle) {
     }
 }
 
-pub(crate) fn activate_webview_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+#[cfg(windows)]
+fn resolve_activation_show_window_command(
+    window_was_minimized: bool,
+) -> windows::Win32::UI::WindowsAndMessaging::SHOW_WINDOW_CMD {
+    if window_was_minimized {
+        SW_RESTORE
+    } else {
+        // 非最小化窗口只需要重新显示并抢焦点，不能用 restore，
+        // 否则会把已最大化的启动台恢复成之前的普通尺寸。
+        SW_SHOW
+    }
+}
+
+pub(crate) fn activate_webview_window(
+    window: &tauri::WebviewWindow,
+    window_was_minimized: bool,
+) -> Result<(), String> {
     #[cfg(windows)]
     {
         let hwnd = window
@@ -1206,7 +1225,10 @@ pub(crate) fn activate_webview_window(window: &tauri::WebviewWindow) -> Result<(
             .map_err(|error| format!("Failed to resolve settings HWND: {}", error))?;
 
         unsafe {
-            let _ = ShowWindow(hwnd, SW_RESTORE);
+            let _ = ShowWindow(
+                hwnd,
+                resolve_activation_show_window_command(window_was_minimized),
+            );
             let _ = SetWindowPos(
                 hwnd,
                 Some(HWND_TOP),
@@ -1227,9 +1249,27 @@ pub(crate) fn activate_webview_window(window: &tauri::WebviewWindow) -> Result<(
 
     #[cfg(not(windows))]
     {
+        let _ = window_was_minimized;
         window
             .set_focus()
             .map_err(|error| format!("Failed to focus window: {error}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn preserves_current_size_state_when_window_is_not_minimized() {
+        assert_eq!(resolve_activation_show_window_command(false), SW_SHOW);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn restores_window_when_it_was_minimized() {
+        assert_eq!(resolve_activation_show_window_command(true), SW_RESTORE);
     }
 }
 

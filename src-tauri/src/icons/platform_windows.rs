@@ -1,8 +1,8 @@
 use base64::Engine;
 use std::path::PathBuf;
-use winreg::HKEY;
 use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
 use winreg::RegKey;
+use winreg::HKEY;
 
 use super::models::ScannedDesktopItem;
 
