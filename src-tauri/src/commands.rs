@@ -7,6 +7,83 @@ use crate::{LaunchpadShortcutState, MainWindowState};
 use std::sync::atomic::Ordering;
 use tauri::Manager;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct WindowBounds {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+struct WindowFrameInsets {
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+}
+
+fn build_window_bounds(x: i32, y: i32, width: u32, height: u32) -> WindowBounds {
+    WindowBounds {
+        x,
+        y,
+        width,
+        height,
+    }
+}
+
+fn build_window_frame_insets(
+    outer_position: tauri::PhysicalPosition<i32>,
+    inner_position: tauri::PhysicalPosition<i32>,
+    outer_size: tauri::PhysicalSize<u32>,
+    inner_size: tauri::PhysicalSize<u32>,
+) -> WindowFrameInsets {
+    let left = inner_position.x - outer_position.x;
+    let top = inner_position.y - outer_position.y;
+    let right =
+        (outer_position.x + outer_size.width as i32) - (inner_position.x + inner_size.width as i32);
+    let bottom = (outer_position.y + outer_size.height as i32)
+        - (inner_position.y + inner_size.height as i32);
+
+    WindowFrameInsets {
+        left,
+        top,
+        right,
+        bottom,
+    }
+}
+
+fn resolve_window_frame_insets(window: &tauri::WebviewWindow) -> WindowFrameInsets {
+    let outer_position = window.outer_position().ok();
+    let inner_position = window.inner_position().ok();
+    let outer_size = window.outer_size().ok();
+    let inner_size = window.inner_size().ok();
+
+    match (outer_position, inner_position, outer_size, inner_size) {
+        (Some(outer_position), Some(inner_position), Some(outer_size), Some(inner_size)) => {
+            build_window_frame_insets(outer_position, inner_position, outer_size, inner_size)
+        }
+        _ => WindowFrameInsets::default(),
+    }
+}
+
+fn resolve_window_work_area_bounds(window: &tauri::WebviewWindow) -> Option<WindowBounds> {
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten())?;
+    let work_area = monitor.work_area();
+    let insets = resolve_window_frame_insets(window);
+
+    Some(build_window_bounds(
+        work_area.position.x - insets.left,
+        work_area.position.y - insets.top,
+        work_area.size.width,
+        work_area.size.height,
+    ))
+}
+
 #[tauri::command]
 pub fn toggle_window(window: tauri::Window) {
     crate::hide_main_window(&window.app_handle());
@@ -63,8 +140,15 @@ pub fn set_window_mode(
 ) {
     if let Some(window) = app_handle.get_webview_window("main") {
         if mode == "fullscreen" {
-            let _ = window.maximize();
+            let _ = window.set_fullscreen(false);
+            let _ = window.unmaximize();
+
+            if let Some(bounds) = resolve_window_work_area_bounds(&window) {
+                let _ = window.set_position(tauri::PhysicalPosition::new(bounds.x, bounds.y));
+                let _ = window.set_size(tauri::PhysicalSize::new(bounds.width, bounds.height));
+            }
         } else {
+            let _ = window.set_fullscreen(false);
             let _ = window.unmaximize();
             if let (Some(w), Some(h)) = (width, height) {
                 let _ = window.set_size(tauri::LogicalSize::new(w, h));
@@ -208,6 +292,55 @@ pub async fn start_search_runtime(
     tauri::async_runtime::spawn_blocking(move || everything::start_search_runtime(&app_handle))
         .await
         .map_err(|e| format!("Failed to join start_search_runtime task: {}", e))?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_window_bounds_preserves_monitor_origin_and_size() {
+        assert_eq!(
+            build_window_bounds(-1920, 0, 1920, 1080),
+            WindowBounds {
+                x: -1920,
+                y: 0,
+                width: 1920,
+                height: 1080,
+            }
+        );
+    }
+
+    #[test]
+    fn build_window_bounds_supports_non_primary_monitor_offsets() {
+        assert_eq!(
+            build_window_bounds(2560, -180, 2560, 1440),
+            WindowBounds {
+                x: 2560,
+                y: -180,
+                width: 2560,
+                height: 1440,
+            }
+        );
+    }
+
+    #[test]
+    fn build_window_frame_insets_extracts_hidden_shadow_offsets() {
+        assert_eq!(
+            build_window_frame_insets(
+                tauri::PhysicalPosition::new(-8, 0),
+                tauri::PhysicalPosition::new(0, 0),
+                tauri::PhysicalSize::new(1936, 1048),
+                tauri::PhysicalSize::new(1920, 1040),
+            ),
+            WindowFrameInsets {
+                left: 8,
+                top: 0,
+                right: 8,
+                bottom: 8,
+            }
+        );
+    }
 }
 
 #[tauri::command]

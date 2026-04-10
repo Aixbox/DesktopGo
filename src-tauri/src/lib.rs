@@ -38,8 +38,7 @@ use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_D
 use windows::Win32::UI::Input::KeyboardAndMouse::{SetActiveWindow, SetFocus};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
-    BringWindowToTop, SetForegroundWindow, SetWindowPos, ShowWindow, HWND_TOP, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_SHOWWINDOW, SW_HIDE, SW_RESTORE, SW_SHOW,
+    BringWindowToTop, SetForegroundWindow, SetWindowPos, HWND_TOP, SWP_NOMOVE, SWP_NOSIZE,
 };
 #[cfg(windows)]
 use winreg::{enums::HKEY_CURRENT_USER, RegKey};
@@ -1008,12 +1007,11 @@ fn request_main_window_show(app: &tauri::AppHandle) {
 pub(crate) fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let delayed_reveal = main_window_uses_delayed_reveal(app);
-        let was_minimized = window.is_minimized().unwrap_or(false);
         sync_main_window_dom_visibility(&window, delayed_reveal);
         let _ = window.unminimize();
         let _ = window.set_always_on_top(true);
         let _ = window.show();
-        let _ = activate_webview_window(&window, was_minimized);
+        let _ = activate_webview_window(&window);
 
         if delayed_reveal {
             // Let DWM composite the acrylic effect, then reveal content.
@@ -1036,13 +1034,6 @@ pub(crate) fn hide_main_window(app: &tauri::AppHandle) {
             let _ = window.eval("document.documentElement.style.opacity='0'");
         } else {
             let _ = window.eval("document.documentElement.style.transition='';document.documentElement.style.opacity='1'");
-        }
-
-        #[cfg(windows)]
-        if let Ok(hwnd) = window.hwnd() {
-            unsafe {
-                let _ = ShowWindow(hwnd, SW_HIDE);
-            }
         }
 
         let _ = window.hide();
@@ -1168,10 +1159,9 @@ pub(crate) fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String>
         .get_webview_window("settings")
         .ok_or_else(|| "Settings window not found".to_string())?;
 
-    let was_minimized = settings_window.is_minimized().unwrap_or(false);
     let _ = settings_window.unminimize();
     let _ = settings_window.show();
-    activate_webview_window(&settings_window, was_minimized)?;
+    activate_webview_window(&settings_window)?;
     hide_main_window(app);
 
     Ok(())
@@ -1202,22 +1192,14 @@ fn attach_blur_handler(app: &tauri::AppHandle) {
 }
 
 #[cfg(windows)]
-fn resolve_activation_show_window_command(
-    window_was_minimized: bool,
-) -> windows::Win32::UI::WindowsAndMessaging::SHOW_WINDOW_CMD {
-    if window_was_minimized {
-        SW_RESTORE
-    } else {
-        // 非最小化窗口只需要重新显示并抢焦点，不能用 restore，
-        // 否则会把已最大化的启动台恢复成之前的普通尺寸。
-        SW_SHOW
-    }
+fn resolve_activation_window_pos_flags(
+) -> windows::Win32::UI::WindowsAndMessaging::SET_WINDOW_POS_FLAGS {
+    // 显隐统一交给 Tauri 的 show/hide，原生 SetWindowPos 只负责 z-order，
+    // 避免全屏窗口在显示链路里被重复 show，导致明显闪烁。
+    SWP_NOMOVE | SWP_NOSIZE
 }
 
-pub(crate) fn activate_webview_window(
-    window: &tauri::WebviewWindow,
-    window_was_minimized: bool,
-) -> Result<(), String> {
+pub(crate) fn activate_webview_window(window: &tauri::WebviewWindow) -> Result<(), String> {
     #[cfg(windows)]
     {
         let hwnd = window
@@ -1225,10 +1207,6 @@ pub(crate) fn activate_webview_window(
             .map_err(|error| format!("Failed to resolve settings HWND: {}", error))?;
 
         unsafe {
-            let _ = ShowWindow(
-                hwnd,
-                resolve_activation_show_window_command(window_was_minimized),
-            );
             let _ = SetWindowPos(
                 hwnd,
                 Some(HWND_TOP),
@@ -1236,7 +1214,7 @@ pub(crate) fn activate_webview_window(
                 0,
                 0,
                 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
+                resolve_activation_window_pos_flags(),
             );
             let _ = BringWindowToTop(hwnd);
             let _ = SetForegroundWindow(hwnd);
@@ -1249,7 +1227,6 @@ pub(crate) fn activate_webview_window(
 
     #[cfg(not(windows))]
     {
-        let _ = window_was_minimized;
         window
             .set_focus()
             .map_err(|error| format!("Failed to focus window: {error}"))
@@ -1262,14 +1239,22 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn preserves_current_size_state_when_window_is_not_minimized() {
-        assert_eq!(resolve_activation_show_window_command(false), SW_SHOW);
+    fn activation_window_pos_flags_only_change_z_order() {
+        assert_eq!(
+            resolve_activation_window_pos_flags(),
+            SWP_NOMOVE | SWP_NOSIZE
+        );
     }
 
     #[cfg(windows)]
     #[test]
-    fn restores_window_when_it_was_minimized() {
-        assert_eq!(resolve_activation_show_window_command(true), SW_RESTORE);
+    fn activation_window_pos_flags_do_not_force_show_window() {
+        use windows::Win32::UI::WindowsAndMessaging::SWP_SHOWWINDOW;
+
+        assert_ne!(
+            resolve_activation_window_pos_flags() | SWP_SHOWWINDOW,
+            resolve_activation_window_pos_flags()
+        );
     }
 }
 
