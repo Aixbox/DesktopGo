@@ -52,6 +52,7 @@ static WINDOWS_CONSOLE_EXIT_REQUESTED: AtomicBool = AtomicBool::new(false);
 const MAIN_WINDOW_FOCUS_RETRY_DELAY_MS: u64 = 40;
 const MAIN_WINDOW_BLUR_GUARD_MS: u64 = 1200;
 pub(crate) const DEFAULT_LAUNCHPAD_SHORTCUT: &str = "Ctrl+Space";
+#[cfg(any(not(windows), not(debug_assertions)))]
 const DEFAULT_LAUNCH_ON_STARTUP: bool = true;
 const LAUNCH_ON_STARTUP_SETTING_KEY: &str = "launchOnStartup";
 const LANGUAGE_SETTING_KEY: &str = "language";
@@ -799,6 +800,26 @@ fn save_launch_on_startup_setting(app: &tauri::AppHandle, enabled: bool) -> Resu
         .map_err(|error| format!("无法保存开机自启设置：{}", error))
 }
 
+#[cfg(all(windows, debug_assertions))]
+fn initialize_launch_on_startup(_app: &tauri::AppHandle) {
+    match autostart::get_registered_command(WINDOWS_RUN_VALUE_NAME) {
+        Ok(Some(command)) if autostart::is_debug_launch_command(&command) => {
+            if let Err(error) = autostart::set_enabled(WINDOWS_RUN_VALUE_NAME, false) {
+                eprintln!(
+                    "Warning: Failed to remove debug launch-on-startup registration: {}",
+                    error
+                );
+            }
+        }
+        Ok(_) => {}
+        Err(error) => eprintln!(
+            "Warning: Failed to inspect launch-on-startup registration in debug build: {}",
+            error
+        ),
+    }
+}
+
+#[cfg(all(windows, not(debug_assertions)))]
 fn initialize_launch_on_startup(app: &tauri::AppHandle) {
     let saved_launch_on_startup = read_saved_launch_on_startup(app);
     let enabled = saved_launch_on_startup.unwrap_or(DEFAULT_LAUNCH_ON_STARTUP);
@@ -821,6 +842,67 @@ fn initialize_launch_on_startup(app: &tauri::AppHandle) {
     }
 }
 
+#[cfg(not(windows))]
+fn initialize_launch_on_startup(app: &tauri::AppHandle) {
+    let saved_launch_on_startup = read_saved_launch_on_startup(app);
+    let enabled = saved_launch_on_startup.unwrap_or(DEFAULT_LAUNCH_ON_STARTUP);
+
+    match autostart::set_enabled(WINDOWS_RUN_VALUE_NAME, enabled) {
+        Ok(()) => {
+            if saved_launch_on_startup.is_none() {
+                if let Err(error) = save_launch_on_startup_setting(app, enabled) {
+                    eprintln!(
+                        "Warning: Failed to persist default launch on startup setting `{}`: {}",
+                        enabled, error
+                    );
+                }
+            }
+        }
+        Err(error) => eprintln!(
+            "Warning: Failed to update launch on startup state `{}`: {}",
+            enabled, error
+        ),
+    }
+}
+
+#[cfg(all(windows, debug_assertions))]
+pub(crate) fn read_launch_on_startup_enabled(app: &tauri::AppHandle) -> Result<bool, String> {
+    let enabled = autostart::get_registered_command(WINDOWS_RUN_VALUE_NAME)?
+        .map(|command| !command.trim().is_empty() && !autostart::is_debug_launch_command(&command))
+        .unwrap_or(false);
+
+    if read_saved_launch_on_startup(app) != Some(enabled) {
+        if let Err(error) = save_launch_on_startup_setting(app, enabled) {
+            eprintln!(
+                "Warning: Failed to synchronize launch on startup setting `{}`: {}",
+                enabled, error
+            );
+        }
+    }
+
+    Ok(enabled)
+}
+
+#[cfg(all(windows, not(debug_assertions)))]
+pub(crate) fn read_launch_on_startup_enabled(app: &tauri::AppHandle) -> Result<bool, String> {
+    let enabled = match autostart::get_registered_command(WINDOWS_RUN_VALUE_NAME)? {
+        Some(command) => command.trim() == autostart::current_launch_command()?,
+        None => false,
+    };
+
+    if read_saved_launch_on_startup(app) != Some(enabled) {
+        if let Err(error) = save_launch_on_startup_setting(app, enabled) {
+            eprintln!(
+                "Warning: Failed to synchronize launch on startup setting `{}`: {}",
+                enabled, error
+            );
+        }
+    }
+
+    Ok(enabled)
+}
+
+#[cfg(not(windows))]
 pub(crate) fn read_launch_on_startup_enabled(app: &tauri::AppHandle) -> Result<bool, String> {
     let enabled = autostart::is_enabled(WINDOWS_RUN_VALUE_NAME)?;
 
@@ -836,6 +918,36 @@ pub(crate) fn read_launch_on_startup_enabled(app: &tauri::AppHandle) -> Result<b
     Ok(enabled)
 }
 
+#[cfg(all(windows, debug_assertions))]
+pub(crate) fn set_launch_on_startup_enabled(
+    _app: &tauri::AppHandle,
+    _enabled: bool,
+) -> Result<bool, String> {
+    Err("调试构建不支持开机自启，请使用安装版或发布版 DesktopGo。".to_string())
+}
+
+#[cfg(all(windows, not(debug_assertions)))]
+pub(crate) fn set_launch_on_startup_enabled(
+    app: &tauri::AppHandle,
+    enabled: bool,
+) -> Result<bool, String> {
+    let previous_enabled = autostart::is_enabled(WINDOWS_RUN_VALUE_NAME)?;
+    autostart::set_enabled(WINDOWS_RUN_VALUE_NAME, enabled)?;
+
+    if let Err(error) = save_launch_on_startup_setting(app, enabled) {
+        let rollback_message =
+            match autostart::set_enabled(WINDOWS_RUN_VALUE_NAME, previous_enabled) {
+                Ok(()) => "已回滚系统开机自启状态。".to_string(),
+                Err(rollback_error) => format!("回滚系统开机自启状态也失败了：{}", rollback_error),
+            };
+
+        return Err(format!("{} {}", error, rollback_message));
+    }
+
+    Ok(enabled)
+}
+
+#[cfg(not(windows))]
 pub(crate) fn set_launch_on_startup_enabled(
     app: &tauri::AppHandle,
     enabled: bool,
