@@ -221,6 +221,10 @@ Check these first:
 - After adding new entries, run an incremental sync in settings
 - If you reorganized the directory heavily, a full sync is safer
 
+## 🤝 Links
+
+- [linux.do](https://linux.do/)
+
 ## 📄 License
 
 Released under the MIT License. See [`LICENSE.txt`](LICENSE.txt).
