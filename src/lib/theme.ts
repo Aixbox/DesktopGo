@@ -1,15 +1,16 @@
 import type { ThemeMode, WindowStyle } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 import { getSetting, setSetting } from "@/lib/settingsStore";
+import {
+    planThemeSyncOnSystemPreferenceChange,
+    resolveEffectiveThemeMode,
+} from "./themePolicy";
 
 export const THEME_MODE_SYNC_EVENT = "desktopgo:theme-mode-sync";
-
-export function resolveEffectiveThemeMode(
-    mode: ThemeMode,
-    windowStyle: WindowStyle = "default",
-): ThemeMode {
-    return windowStyle === "nativeAcrylic" ? "system" : mode;
-}
+export {
+    planThemeSyncOnSystemPreferenceChange,
+    resolveEffectiveThemeMode,
+} from "./themePolicy";
 
 function emitThemeModeSync(mode: ThemeMode) {
     window.dispatchEvent(
@@ -70,24 +71,28 @@ export async function initTheme(): Promise<() => void> {
                 getSavedTheme(),
                 getSetting("windowStyle"),
             ]);
+            const plan = planThemeSyncOnSystemPreferenceChange(
+                currentMode,
+                windowStyle,
+                mediaQuery.matches,
+            );
 
-            if (windowStyle === "nativeAcrylic") {
-                const nextMode: ThemeMode = mediaQuery.matches ? "dark" : "light";
-                if (currentMode !== nextMode) {
-                    await saveTheme(nextMode);
-                }
-                applyTheme(nextMode, windowStyle);
-                emitThemeModeSync(nextMode);
-                await invoke("apply_window_style", {
-                    style: windowStyle,
-                    themeMode: nextMode,
-                });
+            if (!plan) {
                 return;
             }
 
-            if (currentMode === "system") {
-                applyTheme("system");
-                emitThemeModeSync("system");
+            if (plan.saveMode && currentMode !== plan.saveMode) {
+                await saveTheme(plan.saveMode);
+            }
+
+            applyTheme(plan.applyMode, windowStyle);
+            emitThemeModeSync(plan.emitMode);
+
+            if (plan.refreshNativeAcrylic) {
+                await invoke("apply_window_style", {
+                    style: windowStyle,
+                    themeMode: plan.applyMode,
+                });
             }
         })().catch((e) => {
             console.error("Failed to sync system theme change:", e);
