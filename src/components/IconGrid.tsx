@@ -42,9 +42,14 @@ import { EdgeGlow } from './icon-grid/views/EdgeGlow'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
 import { DockBar } from './icon-grid/views/DockBar'
 import { getFolderChildSelectionsByIds } from './icon-grid/domain/folderPolicy'
+import {
+  resolveLayoutHydrationSource,
+  shouldResetPersistedLayoutCache,
+} from './icon-grid/domain/layoutHydrationPolicy'
 
 interface IconGridProps {
   icons: DesktopIcon[]
+  layoutResetToken: number
 }
 
 const GRID_GAP = 8
@@ -95,7 +100,7 @@ const getLayoutNormalizationMetrics = (
   }
 }
 
-export function IconGrid({ icons }: IconGridProps) {
+export function IconGrid({ icons, layoutResetToken }: IconGridProps) {
   const {
     iconSize,
     dockEnabled,
@@ -130,6 +135,8 @@ export function IconGrid({ icons }: IconGridProps) {
   const persistedLayoutRef = useRef<PersistedLayout | null>(null)
   const persistedLayoutLoadedRef = useRef(false)
   const persistedLayoutLoadPromiseRef = useRef<Promise<PersistedLayout | null> | null>(null)
+  const hydratedLayoutResetTokenRef = useRef(layoutResetToken)
+  const persistedLayoutResetTokenRef = useRef<number | null>(null)
   const layoutWriteQueueRef = useRef<Promise<void>>(Promise.resolve())
   const itemsRef = useRef<GridItem[]>([])
   const outerSlotsRef = useRef<Array<string | null>>([])
@@ -221,7 +228,14 @@ export function IconGrid({ icons }: IconGridProps) {
       if (!hydratedRef.current && icons.length === 0) return
 
       let persisted: PersistedLayout | null = null
-      if (hydratedRef.current) {
+      // 设置页重置布局后，不能继续复用旧内存态，否则下一次写回会把旧排序重新覆盖回来。
+      const hydrationSource = resolveLayoutHydrationSource({
+        hydrated: hydratedRef.current,
+        hydratedResetToken: hydratedLayoutResetTokenRef.current,
+        currentResetToken: layoutResetToken,
+      })
+
+      if (hydrationSource === 'memory') {
         persisted = {
           items: serializeItems(itemsRef.current),
           slots: outerSlotsRef.current,
@@ -230,6 +244,17 @@ export function IconGrid({ icons }: IconGridProps) {
           columns: prevColumnsRef.current,
         }
       } else {
+        if (
+          shouldResetPersistedLayoutCache({
+            cachedResetToken: persistedLayoutResetTokenRef.current,
+            currentResetToken: layoutResetToken,
+          })
+        ) {
+          persistedLayoutRef.current = null
+          persistedLayoutLoadedRef.current = false
+          persistedLayoutLoadPromiseRef.current = null
+          persistedLayoutResetTokenRef.current = layoutResetToken
+        }
         if (!persistedLayoutLoadedRef.current) {
           if (!persistedLayoutLoadPromiseRef.current) {
             persistedLayoutLoadPromiseRef.current = readLayout()
@@ -262,13 +287,14 @@ export function IconGrid({ icons }: IconGridProps) {
       setOuterSlots(rawSlots)
       setDockKeys(nextDockKeys)
       hydratedRef.current = true
+      hydratedLayoutResetTokenRef.current = layoutResetToken
     }
 
     void hydrate()
     return () => {
       cancelled = true
     }
-  }, [icons])
+  }, [icons, layoutResetToken])
 
   useEffect(() => {
     itemsRef.current = items

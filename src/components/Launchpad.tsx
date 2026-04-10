@@ -162,6 +162,7 @@ export function Launchpad() {
   const [selectedIconResultIndex, setSelectedIconResultIndex] = useState(-1)
   const [searchPreviewLoading, setSearchPreviewLoading] = useState(false)
   const [searchPreviewError, setSearchPreviewError] = useState<string | null>(null)
+  const [layoutResetToken, setLayoutResetToken] = useState(0)
   const [searchPreview, setSearchPreview] = useState<Awaited<
     ReturnType<typeof getSearchPreview>
   > | null>(null)
@@ -235,6 +236,8 @@ export function Launchpad() {
 
     void getCurrentWindow()
       .listen(LAUNCHPAD_LAYOUT_RESET_EVENT, () => {
+        // 布局重置不会直接改变 icons 数据，需要额外递增令牌，强制 IconGrid 丢弃旧内存布局。
+        setLayoutResetToken(current => current + 1)
         void syncExternalState()
       })
       .then(fn => {
@@ -881,7 +884,7 @@ export function Launchpad() {
               {translate('No desktop shortcuts found')}
             </div>
           ) : (
-            <IconGrid icons={icons} />
+            <IconGrid icons={icons} layoutResetToken={layoutResetToken} />
           )}
         </div>
       </ContextMenuTrigger>
