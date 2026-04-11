@@ -3,12 +3,17 @@ import type {
   AppLanguage,
   IconManagerViewMode,
   IconSize,
+  LaunchpadOpenFocusTarget,
   ThemeMode,
   TitleLineCount,
   WindowMode,
   WindowStyle,
 } from '@/types'
 import { isIconManagerViewMode } from './iconManager'
+import {
+  DEFAULT_LAUNCHPAD_OPEN_FOCUS_TARGET,
+  isLaunchpadOpenFocusTarget,
+} from './launchpadOpenFocus'
 
 export const DEFAULT_LAUNCHPAD_SHORTCUT = 'Ctrl+Space'
 
@@ -22,6 +27,7 @@ type SettingKey =
   | 'dockEnabled'
   | 'launchOnStartup'
   | 'launchpadShortcut'
+  | 'launchpadOpenFocusTarget'
   | 'iconManagerViewMode'
 type ExtendedSettingKey = SettingKey | 'customAppDir'
 
@@ -35,11 +41,12 @@ type SettingValueMap = {
   dockEnabled: boolean
   launchOnStartup: boolean
   launchpadShortcut: string
+  launchpadOpenFocusTarget: LaunchpadOpenFocusTarget
   iconManagerViewMode: IconManagerViewMode
   customAppDir: string
 }
 
-const SETTINGS_STORE_VERSION = 6
+const SETTINGS_STORE_VERSION = 8
 const SETTINGS_VERSION_KEY = 'settingsVersion'
 const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'iconSize',
@@ -51,6 +58,7 @@ const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'dockEnabled',
   'launchOnStartup',
   'launchpadShortcut',
+  'launchpadOpenFocusTarget',
   'iconManagerViewMode',
   'customAppDir',
 ]
@@ -65,6 +73,7 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   dockEnabled: true,
   launchOnStartup: true,
   launchpadShortcut: DEFAULT_LAUNCHPAD_SHORTCUT,
+  launchpadOpenFocusTarget: DEFAULT_LAUNCHPAD_OPEN_FOCUS_TARGET,
   iconManagerViewMode: 'list',
   customAppDir: '',
 }
@@ -94,6 +103,8 @@ const isDockEnabled = (value: unknown): value is boolean => typeof value === 'bo
 const isLaunchOnStartup = (value: unknown): value is boolean => typeof value === 'boolean'
 
 const isLaunchpadShortcut = (value: unknown): value is string => typeof value === 'string'
+const isLaunchpadOpenFocus = (value: unknown): value is LaunchpadOpenFocusTarget =>
+  isLaunchpadOpenFocusTarget(value)
 
 const isCustomAppDir = (value: unknown): value is string => typeof value === 'string'
 
@@ -109,11 +120,15 @@ const validators: {
   dockEnabled: isDockEnabled,
   launchOnStartup: isLaunchOnStartup,
   launchpadShortcut: isLaunchpadShortcut,
+  launchpadOpenFocusTarget: isLaunchpadOpenFocus,
   iconManagerViewMode: isIconManagerViewMode,
   customAppDir: isCustomAppDir,
 }
 
 async function migrateStore(): Promise<void> {
+  const version = await store.get<unknown>(SETTINGS_VERSION_KEY)
+  const numericVersion = typeof version === 'number' ? version : 0
+
   for (const key of MANAGED_SETTING_KEYS) {
     const value = await store.get<unknown>(key)
     if (!validators[key](value)) {
@@ -121,7 +136,12 @@ async function migrateStore(): Promise<void> {
     }
   }
 
-  const version = await store.get<unknown>(SETTINGS_VERSION_KEY)
+  if (numericVersion < 8) {
+    // 该设置尚未正式发布前，早期本地环境可能已经把旧默认值 search 写入本地。
+    // 这里做一次性迁移，确保发布版默认行为切到“直接打开”。
+    await store.set('launchpadOpenFocusTarget', DEFAULT_LAUNCHPAD_OPEN_FOCUS_TARGET)
+  }
+
   if (version !== SETTINGS_STORE_VERSION) {
     await store.set(SETTINGS_VERSION_KEY, SETTINGS_STORE_VERSION)
   }

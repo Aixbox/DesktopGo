@@ -87,6 +87,16 @@ const EN_MESSAGES: Record<string, string> = {
   '应用主题风格失败：{error}': 'Failed to apply theme style: {error}',
   '简体中文': 'Simplified Chinese',
   '打开启动台快捷键': 'Launchpad shortcut',
+  '打开启动台时默认焦点': 'Default focus when opening Launchpad',
+  '选择唤起启动台后，默认把输入焦点放到搜索栏，还是仅显示主界面。':
+    'Choose whether Launchpad should focus the search box by default or just open the main surface.',
+  '搜索栏': 'Search box',
+  '直接打开': 'Open surface',
+  '每次打开启动台后，搜索栏会立即获得焦点，可以直接输入关键词。':
+    'Each time Launchpad opens, the search box is focused immediately so you can start typing.',
+  '每次打开启动台后，不自动激活搜索栏，只显示当前启动台界面。':
+    'Each time Launchpad opens, the search box stays inactive and only the current Launchpad surface is shown.',
+  '保存启动台默认焦点失败：{error}': 'Failed to save the default Launchpad focus target: {error}',
   '修改唤起启动台的全局快捷键。录制支持 Ctrl、Alt、Shift；像 Ctrl+Space 这种可能被系统或输入法拦截的组合，可以直接手动输入。':
     'Change the global shortcut used to open the launchpad. Recording supports Ctrl, Alt, and Shift. Shortcuts like Ctrl+Space that may be intercepted by the system or IME can be entered manually.',
   '当前生效：{shortcut}': 'Current: {shortcut}',

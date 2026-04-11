@@ -33,6 +33,7 @@ import {
 } from '@/lib/theme'
 import { applyWindowStyle, saveWindowStyle } from '@/lib/windowStyle'
 import { DEFAULT_LAUNCHPAD_SHORTCUT, getSetting, setSetting } from '@/lib/settingsStore'
+import { DEFAULT_LAUNCHPAD_OPEN_FOCUS_TARGET } from '@/lib/launchpadOpenFocus'
 import {
   LAUNCHPAD_LAYOUT_RESET_EVENT,
   resetLaunchpadLayout,
@@ -55,6 +56,7 @@ import type {
   IconMutationTarget,
   IconSize,
   AppLanguage,
+  LaunchpadOpenFocusTarget,
   ThemeMode,
   TitleLineCount,
   WindowMode,
@@ -144,6 +146,16 @@ const LANGUAGE_OPTIONS: { label: string; value: AppLanguage }[] = [
   { label: '简体中文', value: 'zh' },
   { label: 'English', value: 'en' },
 ]
+
+const LAUNCHPAD_OPEN_FOCUS_OPTIONS: { label: string; value: LaunchpadOpenFocusTarget }[] = [
+  { label: '搜索栏', value: 'search' },
+  { label: '直接打开', value: 'launchpad' },
+]
+
+const LAUNCHPAD_OPEN_FOCUS_DESCRIPTIONS: Record<LaunchpadOpenFocusTarget, string> = {
+  search: '每次打开启动台后，搜索栏会立即获得焦点，可以直接输入关键词。',
+  launchpad: '每次打开启动台后，不自动激活搜索栏，只显示当前启动台界面。',
+}
 
 type AboutAppInfo = {
   name: string
@@ -492,6 +504,8 @@ function SettingsPanel() {
   const [launchOnStartupEnabled, setLaunchOnStartupEnabled] = useState(true)
   const [isSavingLaunchOnStartup, setIsSavingLaunchOnStartup] = useState(false)
   const [launchpadShortcut, setLaunchpadShortcut] = useState(DEFAULT_LAUNCHPAD_SHORTCUT)
+  const [launchpadOpenFocusTarget, setLaunchpadOpenFocusTarget] =
+    useState<LaunchpadOpenFocusTarget>(DEFAULT_LAUNCHPAD_OPEN_FOCUS_TARGET)
   const [launchpadShortcutDraft, setLaunchpadShortcutDraft] = useState(
     formatShortcutForInput(DEFAULT_LAUNCHPAD_SHORTCUT)
   )
@@ -512,6 +526,7 @@ function SettingsPanel() {
           savedWindowStyle,
           savedLaunchOnStartup,
           savedLaunchpadShortcut,
+          savedLaunchpadOpenFocusTarget,
         ] = await Promise.all([
           getSetting('iconSize'),
           getSetting('windowMode'),
@@ -521,6 +536,7 @@ function SettingsPanel() {
           getSetting('windowStyle'),
           getSetting('launchOnStartup'),
           getSetting('launchpadShortcut'),
+          getSetting('launchpadOpenFocusTarget'),
         ])
 
         let resolvedLaunchOnStartup = savedLaunchOnStartup
@@ -551,6 +567,7 @@ function SettingsPanel() {
         setWindowStyle(savedWindowStyle)
         setLaunchOnStartupEnabled(resolvedLaunchOnStartup)
         setLaunchpadShortcut(savedLaunchpadShortcut)
+        setLaunchpadOpenFocusTarget(savedLaunchpadOpenFocusTarget)
         setLaunchpadShortcutDraft(formatShortcutForInput(savedLaunchpadShortcut))
       } catch (e) {
         console.error('Failed to load settings:', e)
@@ -587,6 +604,19 @@ function SettingsPanel() {
 
   const handleDockEnabled = (value: boolean) => {
     setDockEnabled(value)
+  }
+
+  const handleLaunchpadOpenFocusTarget = (value: LaunchpadOpenFocusTarget) => {
+    const previousValue = launchpadOpenFocusTarget
+    setLaunchpadOpenFocusTarget(value)
+    void setSetting('launchpadOpenFocusTarget', value).catch(error => {
+      console.error('Failed to save launchpad open focus target:', error)
+      setLaunchpadOpenFocusTarget(previousValue)
+      toast.error(translate('保存启动台默认焦点失败：{error}', { error: String(error) }), {
+        key: 'settings-launchpad-open-focus',
+        title: translate('打开启动台时默认焦点'),
+      })
+    })
   }
 
   const handleThemeMode = async (value: ThemeMode) => {
@@ -1036,6 +1066,27 @@ function SettingsPanel() {
             {translate(
               '支持手动输入 `Ctrl+Space`、`Ctrl+Alt+K`、`Alt+Shift+P`。录制模式只识别 `Ctrl / Alt / Shift`。'
             )}
+          </p>
+        </SettingCard>
+      </div>
+
+      <div className="mb-6">
+        <SettingCard
+          label={translate('打开启动台时默认焦点')}
+          desc={translate('选择唤起启动台后，默认把输入焦点放到搜索栏，还是仅显示主界面。')}
+        >
+          <div className="flex flex-wrap gap-2">
+            {LAUNCHPAD_OPEN_FOCUS_OPTIONS.map(option => (
+              <OptionButton
+                key={option.value}
+                label={translate(option.label)}
+                selected={launchpadOpenFocusTarget === option.value}
+                onClick={() => handleLaunchpadOpenFocusTarget(option.value)}
+              />
+            ))}
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {translate(LAUNCHPAD_OPEN_FOCUS_DESCRIPTIONS[launchpadOpenFocusTarget])}
           </p>
         </SettingCard>
       </div>

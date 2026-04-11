@@ -12,6 +12,7 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import { Check, ChevronDown } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
+import { getSetting } from '@/lib/settingsStore'
 import { applyTheme, getSavedTheme } from '@/lib/theme'
 import { applyWindowStyle, getSavedWindowStyle } from '@/lib/windowStyle'
 import { getSearchPreview, recordSearchResultRun } from '@/lib/search/api'
@@ -36,6 +37,7 @@ import { useIconStore } from '@/stores/iconStore'
 import type { DesktopIcon, IconSize, TitleLineCount, WindowMode } from '@/types'
 import { IconGrid } from './IconGrid'
 
+const LAUNCHPAD_SHOWN_EVENT = 'launchpad:shown'
 const ICON_SIZE_OPTIONS: { label: string; value: IconSize }[] = [
   { label: '大图标', value: 'large' },
   { label: '中图标', value: 'medium' },
@@ -153,6 +155,7 @@ export function Launchpad() {
   const longPressTriggeredRef = useRef(false)
   const backgroundPointerStartedRef = useRef(false)
   const suppressBackgroundClickUntilRef = useRef(0)
+  const launchpadSurfaceRef = useRef<HTMLDivElement | null>(null)
   const filterMenuRef = useRef<HTMLDivElement | null>(null)
   const filterButtonRef = useRef<HTMLButtonElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -218,6 +221,27 @@ export function Launchpad() {
     }
   }, [reloadSearchSettings])
 
+  const applyLaunchpadOpenFocus = useCallback(async () => {
+    try {
+      const target = await getSetting('launchpadOpenFocusTarget')
+      window.requestAnimationFrame(() => {
+        if (target === 'search') {
+          searchInputRef.current?.focus({ preventScroll: true })
+          return
+        }
+
+        // 这里只在启动台真正显示时切换焦点，避免普通回焦场景
+        // 抢走重命名输入框或系统对话框返回后的原始焦点。
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur()
+        }
+        launchpadSurfaceRef.current?.focus({ preventScroll: true })
+      })
+    } catch (error) {
+      console.error('Failed to apply launchpad open focus target:', error)
+    }
+  }, [])
+
   useEffect(() => {
     const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
       if (focused) {
@@ -229,6 +253,28 @@ export function Launchpad() {
       unlisten.then(fn => fn())
     }
   }, [syncExternalState])
+
+  useEffect(() => {
+    let disposed = false
+    let unlisten: (() => void) | null = null
+
+    void getCurrentWindow()
+      .listen(LAUNCHPAD_SHOWN_EVENT, () => {
+        void applyLaunchpadOpenFocus()
+      })
+      .then(fn => {
+        if (disposed) {
+          fn()
+          return
+        }
+        unlisten = fn
+      })
+
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [applyLaunchpadOpenFocus])
 
   useEffect(() => {
     let disposed = false
@@ -696,6 +742,8 @@ export function Launchpad() {
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
+          ref={launchpadSurfaceRef}
+          tabIndex={-1}
           className="launchpad-bg relative flex h-screen w-screen select-none flex-col items-center justify-center"
           onPointerDown={handleBackgroundPointerDown}
           onPointerUp={handleBackgroundPointerUp}

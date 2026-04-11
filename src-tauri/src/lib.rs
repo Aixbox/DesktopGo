@@ -28,7 +28,7 @@ use std::sync::{
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
-use tauri::{Listener, Manager, RunEvent};
+use tauri::{Emitter, Listener, Manager, RunEvent};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tauri_plugin_store::StoreExt;
 #[cfg(target_os = "windows")]
@@ -76,6 +76,7 @@ const TRAY_TOGGLE_MENU_ITEM_ID: &str = "tray-toggle-launchpad";
 const TRAY_SETTINGS_MENU_ITEM_ID: &str = "tray-open-settings";
 const TRAY_QUIT_MENU_ITEM_ID: &str = "tray-quit";
 const LANGUAGE_CHANGED_EVENT: &str = "desktopgo://language-changed";
+const MAIN_WINDOW_SHOWN_EVENT: &str = "launchpad:shown";
 
 struct MainWindowState {
     ready: AtomicBool,
@@ -1126,6 +1127,7 @@ pub(crate) fn show_main_window(app: &tauri::AppHandle) {
         let _ = window.set_always_on_top(true);
         let _ = window.show();
         let _ = activate_webview_window(&window);
+        let _ = window.emit(MAIN_WINDOW_SHOWN_EVENT, ());
 
         if delayed_reveal {
             // Let DWM composite the acrylic effect, then reveal content.

@@ -60,6 +60,8 @@ export type WindowMode = 'fullscreen' | 'large' | 'medium' | 'small'
 
 export type WindowStyle = 'default' | 'nativeAcrylic'
 
+export type LaunchpadOpenFocusTarget = 'search' | 'launchpad'
+
 export const WINDOW_SIZE_CONFIG: Record<
   Exclude<WindowMode, 'fullscreen'>,
   { width: number; height: number }
