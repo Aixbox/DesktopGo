@@ -61,7 +61,6 @@ interface DockBarProps {
 }
 
 const MENU_OPEN_LABEL = '打开'
-const MENU_SYSTEM_MENU_LABEL = '系统菜单'
 const MENU_REMOVE_LABEL = '移出 Dock'
 const DOCK_CONTAINER_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
 const DOCK_CONTAINER_TRANSITION_MS = 220
@@ -619,107 +618,127 @@ export function DockBar({
                   style={{ width: dockButtonSize, height: dockButtonSize }}
                 >
                   {item && id ? (
-                    <ContextMenu>
-                      <ContextMenuTrigger asChild>
-                        <div
-                          ref={node => {
-                            bindDockItemRef(id, node)
-                          }}
-                          data-dock-item
-                          data-dock-key={id}
-                          className="group relative flex items-center justify-center"
+                    item.kind === 'icon' ? (
+                      <div
+                        ref={node => {
+                          bindDockItemRef(id, node)
+                        }}
+                        data-dock-item
+                        data-dock-key={id}
+                        className="group relative flex items-center justify-center"
+                        style={{ width: dockButtonSize, height: dockButtonSize }}
+                        onPointerDown={event => {
+                          onDockItemPointerDown(event, id)
+                        }}
+                        onClickCapture={onDockItemClickCapture}
+                        onContextMenu={event => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          if (!selectionMode) {
+                            onShowSystemMenu(item.icon)
+                          }
+                        }}
+                      >
+                        <button
+                          type="button"
+                          title={item.icon.name}
+                          className={`relative flex cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
+                            selectionMode ? '' : 'hover:-translate-y-0.5 active:translate-y-0'
+                          }`}
                           style={{ width: dockButtonSize, height: dockButtonSize }}
-                          onPointerDown={event => {
-                            onDockItemPointerDown(event, id)
-                          }}
-                          onClickCapture={onDockItemClickCapture}
-                          onContextMenu={event => {
+                          onClick={event => {
                             event.stopPropagation()
+                            if (selectionMode) {
+                              onToggleSelectIcon(id)
+                              return
+                            }
+                            onLaunchIcon(item.icon.path)
                           }}
                         >
-                          <button
-                            type="button"
-                            title={item.kind === 'icon' ? item.icon.name : item.name}
-                            className={`relative flex cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
-                              selectionMode ? '' : 'hover:-translate-y-0.5 active:translate-y-0'
+                          {selectionMode && selectableIcon ? (
+                            <span
+                              className={`absolute right-0.5 top-0.5 z-10 flex h-4 w-4 items-center justify-center rounded-full border text-xs ${
+                                selectedSet.has(id)
+                                  ? 'border-blue-500 bg-blue-500 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950'
+                                  : 'border-border/70 bg-background/72 text-transparent shadow-sm dark:border-white/60 dark:bg-black/30'
+                              }`}
+                            >
+                              {selectedSet.has(id) ? (
+                                <Check className="h-3 w-3" strokeWidth={3} />
+                              ) : null}
+                            </span>
+                          ) : null}
+                          <div
+                            className={`transition-opacity duration-150 ${
+                              folderPreview ? 'opacity-0' : 'opacity-100'
                             }`}
+                          >
+                            {item.icon.icon_base64 ? (
+                              <img
+                                src={item.icon.icon_base64}
+                                alt={item.icon.name}
+                                className="icon-image object-contain"
+                                style={{ width: iconImageSize, height: iconImageSize }}
+                                draggable={false}
+                              />
+                            ) : (
+                              <div
+                                className="icon-image rounded-xl bg-foreground/8 dark:bg-white/12"
+                                style={{ width: iconImageSize, height: iconImageSize }}
+                                aria-hidden="true"
+                              />
+                            )}
+                          </div>
+                          <DockFolderCreatePreview
+                            active={folderPreview}
+                            icon={item.icon}
+                            metrics={singleSlotFolderMetrics}
+                            reorderAnimationMs={220}
+                          />
+                        </button>
+                      </div>
+                    ) : (
+                      <ContextMenu>
+                        <ContextMenuTrigger asChild>
+                          <div
+                            ref={node => {
+                              bindDockItemRef(id, node)
+                            }}
+                            data-dock-item
+                            data-dock-key={id}
+                            className="group relative flex items-center justify-center"
                             style={{ width: dockButtonSize, height: dockButtonSize }}
-                            onClick={event => {
+                            onPointerDown={event => {
+                              onDockItemPointerDown(event, id)
+                            }}
+                            onClickCapture={onDockItemClickCapture}
+                            onContextMenu={event => {
                               event.stopPropagation()
-                              if (selectionMode) {
-                                if (item.kind === 'icon') {
-                                  onToggleSelectIcon(id)
-                                  return
-                                }
-                                onOpenFolder(item.id)
-                                return
-                              }
-                              if (item.kind === 'icon') {
-                                onLaunchIcon(item.icon.path)
-                                return
-                              }
-                              onOpenFolder(item.id)
                             }}
                           >
-                            {selectionMode && selectableIcon ? (
-                              <span
-                                className={`absolute right-0.5 top-0.5 z-10 flex h-4 w-4 items-center justify-center rounded-full border text-xs ${
-                                  selectedSet.has(id)
-                                    ? 'border-blue-500 bg-blue-500 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950'
-                                    : 'border-border/70 bg-background/72 text-transparent shadow-sm dark:border-white/60 dark:bg-black/30'
-                                }`}
-                              >
-                                {selectedSet.has(id) ? (
-                                  <Check className="h-3 w-3" strokeWidth={3} />
-                                ) : null}
-                              </span>
-                            ) : null}
-                            {item.kind === 'icon' ? (
-                              <>
-                                <div
-                                  className={`transition-opacity duration-150 ${
-                                    folderPreview ? 'opacity-0' : 'opacity-100'
-                                  }`}
-                                >
-                                  {item.icon.icon_base64 ? (
-                                    <img
-                                      src={item.icon.icon_base64}
-                                      alt={item.icon.name}
-                                      className="icon-image object-contain"
-                                      style={{ width: iconImageSize, height: iconImageSize }}
-                                      draggable={false}
-                                    />
-                                  ) : (
-                                    <div
-                                      className="icon-image rounded-xl bg-foreground/8 dark:bg-white/12"
-                                      style={{ width: iconImageSize, height: iconImageSize }}
-                                      aria-hidden="true"
-                                    />
-                                  )}
-                                </div>
-                                <DockFolderCreatePreview
-                                  active={folderPreview}
-                                  icon={item.icon}
-                                  metrics={singleSlotFolderMetrics}
-                                  reorderAnimationMs={220}
-                                />
-                              </>
-                            ) : (
+                            <button
+                              type="button"
+                              title={item.name}
+                              className={`relative flex cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
+                                selectionMode ? '' : 'hover:-translate-y-0.5 active:translate-y-0'
+                              }`}
+                              style={{ width: dockButtonSize, height: dockButtonSize }}
+                              onClick={event => {
+                                event.stopPropagation()
+                                onOpenFolder(item.id)
+                              }}
+                            >
                               <div
                                 className="flex items-center justify-center transition-opacity duration-150"
                                 style={{ width: dockButtonSize, height: dockButtonSize }}
                               >
                                 <motion.div
                                   layoutId={
-                                    sharedLayoutActive
-                                      ? getFolderSharedLayoutId(item.id)
-                                      : undefined
+                                    sharedLayoutActive ? getFolderSharedLayoutId(item.id) : undefined
                                   }
                                   transition={FOLDER_SHARED_LAYOUT_TRANSITION}
                                   className={`${DOCK_FOLDER_SURFACE_CLASS} flex items-center justify-center transition-all duration-150 ${
-                                    folderPreview || folderOpen
-                                      ? DOCK_FOLDER_SURFACE_ACTIVE_CLASS
-                                      : ''
+                                    folderPreview || folderOpen ? DOCK_FOLDER_SURFACE_ACTIVE_CLASS : ''
                                   }`}
                                   style={{
                                     width: `${singleSlotFolderMetrics.surfaceSize}px`,
@@ -734,49 +753,35 @@ export function DockBar({
                                   />
                                 </motion.div>
                               </div>
-                            )}
-                          </button>
-                        </div>
-                      </ContextMenuTrigger>
+                            </button>
+                          </div>
+                        </ContextMenuTrigger>
 
-                      {!selectionMode ? (
-                        <ContextMenuContent
-                          data-dock-menu="true"
-                          className="w-44 rounded-2xl p-1.5 shadow-2xl backdrop-blur-xl"
-                        >
-                          <ContextMenuItem
-                            className="rounded-xl px-3 py-2 text-foreground/85 focus:bg-accent focus:text-foreground"
-                            onSelect={() => {
-                              if (item.kind === 'icon') {
-                                onLaunchIcon(item.icon.path)
-                                return
-                              }
-                              onOpenFolder(item.id)
-                            }}
+                        {!selectionMode ? (
+                          <ContextMenuContent
+                            data-dock-menu="true"
+                            className="w-44 rounded-2xl p-1.5 shadow-2xl backdrop-blur-xl"
                           >
-                            {translate(MENU_OPEN_LABEL)}
-                          </ContextMenuItem>
-                          {item.kind === 'icon' ? (
                             <ContextMenuItem
                               className="rounded-xl px-3 py-2 text-foreground/85 focus:bg-accent focus:text-foreground"
                               onSelect={() => {
-                                onShowSystemMenu(item.icon)
+                                onOpenFolder(item.id)
                               }}
                             >
-                              {translate(MENU_SYSTEM_MENU_LABEL)}
+                              {translate(MENU_OPEN_LABEL)}
                             </ContextMenuItem>
-                          ) : null}
-                          <ContextMenuItem
-                            className="rounded-xl px-3 py-2 text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/20 dark:focus:text-red-100"
-                            onSelect={() => {
-                              onRemoveItem(id)
-                            }}
-                          >
-                            {translate(MENU_REMOVE_LABEL)}
-                          </ContextMenuItem>
-                        </ContextMenuContent>
-                      ) : null}
-                    </ContextMenu>
+                            <ContextMenuItem
+                              className="rounded-xl px-3 py-2 text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/20 dark:focus:text-red-100"
+                              onSelect={() => {
+                                onRemoveItem(id)
+                              }}
+                            >
+                              {translate(MENU_REMOVE_LABEL)}
+                            </ContextMenuItem>
+                          </ContextMenuContent>
+                        ) : null}
+                      </ContextMenu>
+                    )
                   ) : (
                     <div
                       className={`pointer-events-none flex items-center justify-center rounded-[18px] border border-dashed transition ${
