@@ -7,6 +7,7 @@ import {
 } from '../types'
 import { useIconStore } from '../stores/iconStore'
 import { AppWindow, Check } from 'lucide-react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 
 interface IconProps {
   icon: DesktopIcon
@@ -17,7 +18,7 @@ interface IconProps {
 }
 
 export function Icon({ icon, selectionKey, selectionMode, selected, onToggleSelect }: IconProps) {
-  const { launchApp, iconSize, titleLineCount } = useIconStore()
+  const { launchApp, iconSize, titleLineCount, showShellContextMenu } = useIconStore()
   const config = ICON_SIZE_CONFIG[iconSize]
   const tileHeight = getIconGridRowHeight(iconSize)
   const isSingleLineTitle = titleLineCount === 'one'
@@ -29,6 +30,16 @@ export function Icon({ icon, selectionKey, selectionMode, selected, onToggleSele
     }
 
     launchApp(icon.path)
+  }
+
+  const handleContextMenu = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (selectionMode) {
+      return
+    }
+
+    void showShellContextMenu(icon)
   }
 
   const buttonStateClass = selectionMode
@@ -50,6 +61,7 @@ export function Icon({ icon, selectionKey, selectionMode, selected, onToggleSele
         rowGap: ICON_GRID_TITLE_GAP,
       }}
       onClick={handleClick}
+      onContextMenu={handleContextMenu}
       title={icon.name}
       aria-pressed={selectionMode ? selected : undefined}
     >

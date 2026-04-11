@@ -55,11 +55,13 @@ interface DockBarProps {
   onDockItemClickCapture: (event: ReactMouseEvent<HTMLDivElement>) => void
   onDockAutoScroll: () => void
   onLaunchIcon: (path: string) => void
+  onShowSystemMenu: (icon: DesktopIcon) => void
   onOpenFolder: (folderId: string) => void
   onRemoveItem: (id: string) => void
 }
 
 const MENU_OPEN_LABEL = '打开'
+const MENU_SYSTEM_MENU_LABEL = '系统菜单'
 const MENU_REMOVE_LABEL = '移出 Dock'
 const DOCK_CONTAINER_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
 const DOCK_CONTAINER_TRANSITION_MS = 220
@@ -177,6 +179,7 @@ export function DockBar({
   onDockItemClickCapture,
   onDockAutoScroll,
   onLaunchIcon,
+  onShowSystemMenu,
   onOpenFolder,
   onRemoveItem,
 }: DockBarProps) {
@@ -753,6 +756,16 @@ export function DockBar({
                           >
                             {translate(MENU_OPEN_LABEL)}
                           </ContextMenuItem>
+                          {item.kind === 'icon' ? (
+                            <ContextMenuItem
+                              className="rounded-xl px-3 py-2 text-foreground/85 focus:bg-accent focus:text-foreground"
+                              onSelect={() => {
+                                onShowSystemMenu(item.icon)
+                              }}
+                            >
+                              {translate(MENU_SYSTEM_MENU_LABEL)}
+                            </ContextMenuItem>
+                          ) : null}
                           <ContextMenuItem
                             className="rounded-xl px-3 py-2 text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/20 dark:focus:text-red-100"
                             onSelect={() => {

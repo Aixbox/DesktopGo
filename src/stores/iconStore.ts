@@ -8,6 +8,7 @@ import type {
   WindowMode,
 } from '../types'
 import { ICON_SIZE_CONFIG, WINDOW_SIZE_CONFIG } from '../types'
+import { shouldRefreshAfterShellMenuVerb } from '../lib/shellContextMenu'
 import { getSetting, setSetting } from '../lib/settingsStore'
 
 export const buildIconSelectionKey = (icon: Pick<DesktopIcon, 'id' | 'source'>): string =>
@@ -38,6 +39,7 @@ interface IconStore {
   clearSelection: () => void
   hideSelectedIcons: () => Promise<void>
   deleteSelectedIcons: () => Promise<void>
+  showShellContextMenu: (icon: DesktopIcon) => Promise<void>
   applyWindowMode: (mode: WindowMode) => Promise<void>
   hydrateSettings: () => Promise<void>
 }
@@ -90,7 +92,7 @@ export const useIconStore = create<IconStore>((set, get) => ({
 
   setIconSize: (size: IconSize) => {
     set({ iconSize: size, selectionMode: false, selectedIconKeys: [] })
-    void setSetting('iconSize', size).catch((e) => {
+    void setSetting('iconSize', size).catch(e => {
       console.error('Failed to persist icon size:', e)
     })
     get().fetchIcons()
@@ -98,7 +100,7 @@ export const useIconStore = create<IconStore>((set, get) => ({
 
   setWindowMode: (mode: WindowMode) => {
     set({ windowMode: mode })
-    void setSetting('windowMode', mode).catch((e) => {
+    void setSetting('windowMode', mode).catch(e => {
       console.error('Failed to persist window mode:', e)
     })
     void get().applyWindowMode(mode)
@@ -106,14 +108,14 @@ export const useIconStore = create<IconStore>((set, get) => ({
 
   setTitleLineCount: (count: TitleLineCount) => {
     set({ titleLineCount: count })
-    void setSetting('titleLineCount', count).catch((e) => {
+    void setSetting('titleLineCount', count).catch(e => {
       console.error('Failed to persist title line count:', e)
     })
   },
 
   setDockEnabled: (enabled: boolean) => {
     set({ dockEnabled: enabled })
-    void setSetting('dockEnabled', enabled).catch((e) => {
+    void setSetting('dockEnabled', enabled).catch(e => {
       console.error('Failed to persist dock enabled state:', e)
     })
   },
@@ -215,6 +217,30 @@ export const useIconStore = create<IconStore>((set, get) => ({
       await get().fetchIcons()
     } catch (e) {
       console.error('Failed to delete icons:', e)
+    }
+  },
+
+  showShellContextMenu: async (icon: DesktopIcon) => {
+    try {
+      const selectedVerb = await invoke<string | null>('show_shell_context_menu', {
+        path: icon.path,
+      })
+      if (selectedVerb === null || !shouldRefreshAfterShellMenuVerb(selectedVerb)) {
+        return
+      }
+
+      if (icon.source === 'desktop') {
+        await invoke('sync_full_desktop_icons')
+      } else {
+        const customAppDir = (await getSetting('customAppDir')).trim()
+        await invoke('sync_full_customapp_icons', {
+          customAppDir: customAppDir || null,
+        })
+      }
+
+      await get().fetchIcons()
+    } catch (e) {
+      console.error('显示 Windows Shell 右键菜单失败：', e)
     }
   },
 

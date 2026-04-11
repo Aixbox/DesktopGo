@@ -4,6 +4,7 @@ mod everything;
 mod icons;
 mod layout_db;
 mod search_preview;
+mod shell_context_menu;
 mod updater;
 
 use commands::{
@@ -12,10 +13,10 @@ use commands::{
     get_launch_on_startup_enabled, get_layout_payload, get_layout_payloads, get_search_preview,
     get_search_runtime_status, get_updater_configuration_status, hide_desktop_icons,
     install_app_update, launch_app, notify_main_window_ready, record_search_result_run,
-    search_files, set_layout_payload, set_layout_payloads, set_window_mode, start_search_runtime,
-    sync_full_customapp_icons, sync_full_desktop_icons, sync_new_customapp_icons,
-    sync_new_desktop_icons, toggle_window, unhide_desktop_icons, update_launch_on_startup_enabled,
-    update_launchpad_shortcut,
+    search_files, set_layout_payload, set_layout_payloads, set_window_mode,
+    show_shell_context_menu, start_search_runtime, sync_full_customapp_icons,
+    sync_full_desktop_icons, sync_new_customapp_icons, sync_new_desktop_icons, toggle_window,
+    unhide_desktop_icons, update_launch_on_startup_enabled, update_launchpad_shortcut,
 };
 #[cfg(windows)]
 use once_cell::sync::OnceCell;
@@ -308,6 +309,7 @@ pub fn run() {
             get_desktop_icons,
             get_icon_manager_items,
             launch_app,
+            show_shell_context_menu,
             set_window_mode,
             sync_new_desktop_icons,
             sync_full_desktop_icons,

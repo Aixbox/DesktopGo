@@ -253,6 +253,14 @@ pub fn launch_app(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn show_shell_context_menu(
+    app_handle: tauri::AppHandle,
+    path: String,
+) -> Result<Option<String>, String> {
+    crate::shell_context_menu::show_shell_context_menu(&app_handle, path).await
+}
+
+#[tauri::command]
 pub fn get_layout_payload(
     app_handle: tauri::AppHandle,
     key: String,

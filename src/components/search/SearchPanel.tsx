@@ -113,7 +113,7 @@ function IconResultTile({
   onActivate: () => void
   singleLineTitle: boolean
 }) {
-  const { iconSize } = useIconStore()
+  const { iconSize, showShellContextMenu } = useIconStore()
   const config = ICON_SIZE_CONFIG[iconSize]
 
   return (
@@ -129,6 +129,11 @@ function IconResultTile({
       onMouseEnter={onSelect}
       onClick={onSelect}
       onDoubleClick={onActivate}
+      onContextMenu={event => {
+        event.preventDefault()
+        event.stopPropagation()
+        void showShellContextMenu(icon)
+      }}
     >
       <div
         className="flex items-center justify-center overflow-hidden transition-all duration-200 group-hover:scale-105 group-active:scale-95"
@@ -298,11 +303,7 @@ export function SearchPanel({
   }, [clearPendingRangeNotify, notifyVisibleRange])
 
   const scheduleVisibleRange = useCallback(
-    (
-      nextScrollTop: number,
-      nextViewportHeight: number,
-      options?: { immediate?: boolean }
-    ) => {
+    (nextScrollTop: number, nextViewportHeight: number, options?: { immediate?: boolean }) => {
       pendingVisibleRangeRef.current = {
         scrollTop: nextScrollTop,
         viewportHeight: nextViewportHeight,
@@ -831,4 +832,3 @@ export function SearchPanel({
     </div>
   )
 }
-
