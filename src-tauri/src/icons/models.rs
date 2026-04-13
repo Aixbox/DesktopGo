@@ -76,6 +76,13 @@ pub struct IconSyncResult {
     pub(crate) total_count: usize,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct ImportDroppedPathsResult {
+    pub(crate) imported_count: usize,
+    pub(crate) duplicate_count: usize,
+    pub(crate) invalid_count: usize,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct ScannedDesktopItem {
     pub(crate) name: String,

@@ -1,5 +1,8 @@
 use crate::everything::{self, SearchPage, SearchQuery, SearchRuntimeStatus};
-use crate::icons::{self, DesktopIcon, IconManagerItem, IconMutationTarget, IconSyncResult};
+use crate::icons::{
+    self, DesktopIcon, IconManagerItem, IconMutationTarget, IconSyncResult,
+    ImportDroppedPathsResult,
+};
 use crate::layout_db;
 use crate::search_preview::{self, SearchPreview};
 use crate::updater::{self, PendingUpdate, UpdateCheckResult, UpdaterConfigurationStatus};
@@ -132,6 +135,25 @@ pub fn activate_settings_window(app_handle: tauri::AppHandle) -> Result<(), Stri
 }
 
 #[tauri::command]
+pub fn get_import_mode_enabled(
+    main_window_state: tauri::State<'_, MainWindowState>,
+) -> Result<bool, String> {
+    Ok(crate::main_window_import_mode_enabled(
+        main_window_state.inner(),
+    ))
+}
+
+#[tauri::command]
+pub fn set_import_mode_enabled(
+    app_handle: tauri::AppHandle,
+    main_window_state: tauri::State<'_, MainWindowState>,
+    enabled: bool,
+) -> Result<bool, String> {
+    crate::set_main_window_import_mode_enabled(&app_handle, main_window_state.inner(), enabled);
+    Ok(enabled)
+}
+
+#[tauri::command]
 pub fn set_window_mode(
     app_handle: tauri::AppHandle,
     mode: String,
@@ -245,6 +267,15 @@ pub fn delete_desktop_icons(
 #[tauri::command]
 pub fn get_default_customapp_dir(app_handle: tauri::AppHandle) -> Result<String, String> {
     icons::get_default_customapp_dir(app_handle)
+}
+
+#[tauri::command]
+pub fn import_dropped_paths(
+    app_handle: tauri::AppHandle,
+    paths: Vec<String>,
+    custom_app_dir: Option<String>,
+) -> Result<ImportDroppedPathsResult, String> {
+    icons::import_dropped_paths(app_handle, paths, custom_app_dir)
 }
 
 #[tauri::command]

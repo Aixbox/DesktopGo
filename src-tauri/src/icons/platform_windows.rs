@@ -271,6 +271,61 @@ pub(super) fn resolve_lnk(lnk_path: &PathBuf) -> Option<String> {
 }
 
 #[cfg(windows)]
+pub(super) fn create_shortcut_windows(
+    shortcut_path: &PathBuf,
+    target_path: &str,
+) -> Result<(), String> {
+    use windows::core::Interface;
+    use windows::core::PCWSTR;
+    use windows::Win32::System::Com::*;
+    use windows::Win32::UI::Shell::*;
+
+    let target_trimmed = target_path.trim();
+    if target_trimmed.is_empty() {
+        return Err("Shortcut target path is empty".to_string());
+    }
+
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+
+        let shell_link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)
+            .map_err(|error| format!("Failed to create ShellLink instance: {error}"))?;
+
+        let target_wide: Vec<u16> = target_trimmed
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        shell_link
+            .SetPath(PCWSTR(target_wide.as_ptr()))
+            .map_err(|error| format!("Failed to set shortcut target path: {error}"))?;
+
+        if let Some(parent) = PathBuf::from(target_trimmed)
+            .parent()
+            .and_then(|path| path.to_str())
+        {
+            if !parent.trim().is_empty() {
+                let working_dir_wide: Vec<u16> =
+                    parent.encode_utf16().chain(std::iter::once(0)).collect();
+                let _ = shell_link.SetWorkingDirectory(PCWSTR(working_dir_wide.as_ptr()));
+            }
+        }
+
+        let persist_file: IPersistFile = shell_link
+            .cast()
+            .map_err(|error| format!("Failed to cast ShellLink to IPersistFile: {error}"))?;
+        let shortcut_wide: Vec<u16> = shortcut_path
+            .as_os_str()
+            .to_string_lossy()
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        persist_file
+            .Save(PCWSTR(shortcut_wide.as_ptr()), true)
+            .map_err(|error| format!("Failed to save shortcut file {:?}: {error}", shortcut_path))
+    }
+}
+
+#[cfg(windows)]
 unsafe fn extract_high_res_icon(path: &str, size: i32) -> Option<String> {
     extract_shell_item_icon(path, size)
 }

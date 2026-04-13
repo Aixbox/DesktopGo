@@ -5,14 +5,14 @@ use tauri::Manager;
 
 use super::models::{
     DesktopIcon, IconBucket, IconManagerItem, IconMutationTarget, IconSnapshot, IconSyncResult,
-    ScannedDesktopItem, SnapshotIconItem, SnapshotIconPaths, ICON_SOURCE_CUSTOMAPP,
-    ICON_SOURCE_DESKTOP,
+    ImportDroppedPathsResult, ScannedDesktopItem, SnapshotIconItem, SnapshotIconPaths,
+    ICON_SOURCE_CUSTOMAPP, ICON_SOURCE_DESKTOP,
 };
 #[cfg(windows)]
 use super::platform_windows::{
-    collect_special_desktop_items, extract_icon_for_item, extract_special_shell_icon,
-    get_desktop_dirs, get_dpi_scale, is_special_shell_path, launch_app_windows, resolve_lnk,
-    scan_desktop_items,
+    collect_special_desktop_items, create_shortcut_windows, extract_icon_for_item,
+    extract_special_shell_icon, get_desktop_dirs, get_dpi_scale, is_special_shell_path,
+    launch_app_windows, resolve_lnk, scan_desktop_items,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -255,6 +255,24 @@ pub fn get_default_customapp_dir(app_handle: tauri::AppHandle) -> Result<String,
     #[cfg(not(windows))]
     {
         let _ = app_handle;
+        Err("Not supported on this platform".to_string())
+    }
+}
+
+pub fn import_dropped_paths(
+    app_handle: tauri::AppHandle,
+    paths: Vec<String>,
+    custom_app_dir: Option<String>,
+) -> Result<ImportDroppedPathsResult, String> {
+    #[cfg(windows)]
+    {
+        import_dropped_paths_windows(&app_handle, paths, custom_app_dir)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app_handle;
+        let _ = paths;
+        let _ = custom_app_dir;
         Err("Not supported on this platform".to_string())
     }
 }
@@ -514,6 +532,79 @@ fn has_extension(path: &PathBuf, ext: &str) -> bool {
         .and_then(|v| v.to_str())
         .map(|v| v.eq_ignore_ascii_case(ext))
         .unwrap_or(false)
+}
+
+#[cfg(windows)]
+fn build_scanned_item_from_path(path: &PathBuf) -> Option<ScannedDesktopItem> {
+    if !path.exists() {
+        return None;
+    }
+
+    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+        if name.starts_with('.') || name.eq_ignore_ascii_case("desktop.ini") {
+            return None;
+        }
+    }
+
+    let name = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Unknown")
+        .to_string();
+
+    let (target_path, item_type) = if has_extension(path, "lnk") {
+        (
+            resolve_lnk(path).unwrap_or_default(),
+            "shortcut".to_string(),
+        )
+    } else if path.is_dir() {
+        (path.to_string_lossy().to_string(), "folder".to_string())
+    } else if has_extension(path, "exe") {
+        (path.to_string_lossy().to_string(), "executable".to_string())
+    } else {
+        (path.to_string_lossy().to_string(), "file".to_string())
+    };
+
+    Some(ScannedDesktopItem {
+        name,
+        path: path.to_string_lossy().to_string(),
+        target_path,
+        item_type,
+    })
+}
+
+#[cfg(windows)]
+fn import_identity_key(item: &ScannedDesktopItem) -> String {
+    let primary = if item.target_path.trim().is_empty() {
+        item.path.trim()
+    } else {
+        item.target_path.trim()
+    };
+    primary.to_lowercase()
+}
+
+#[cfg(windows)]
+fn build_import_file_path(custom_dir: &PathBuf, source_path: &PathBuf) -> PathBuf {
+    let ext = "lnk";
+    let stem = source_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("Imported");
+
+    let mut attempt = 0usize;
+    loop {
+        let file_name = if attempt == 0 {
+            format!("{stem}.{ext}")
+        } else {
+            format!("{stem} ({attempt}).{ext}")
+        };
+        let candidate = custom_dir.join(file_name);
+        if !candidate.exists() {
+            return candidate;
+        }
+        attempt = attempt.saturating_add(1);
+    }
 }
 
 #[cfg(windows)]
@@ -1264,6 +1355,70 @@ fn resolve_customapp_dir_windows(
             .map_err(|e| format!("Failed to create customapp directory {:?}: {}", dir, e))?;
     }
     Ok(dir)
+}
+
+#[cfg(windows)]
+fn import_dropped_paths_windows(
+    app_handle: &tauri::AppHandle,
+    paths: Vec<String>,
+    custom_app_dir: Option<String>,
+) -> Result<ImportDroppedPathsResult, String> {
+    let custom_dir = resolve_customapp_dir_windows(app_handle, custom_app_dir)?;
+    let existing_custom_items = collect_items_from_single_dir(&custom_dir)?;
+    let mut known_keys = existing_custom_items
+        .iter()
+        .map(import_identity_key)
+        .collect::<HashSet<_>>();
+    let mut imported_count = 0usize;
+    let mut duplicate_count = 0usize;
+    let mut invalid_count = 0usize;
+
+    for raw_path in paths {
+        let trimmed = raw_path.trim();
+        if trimmed.is_empty() {
+            invalid_count = invalid_count.saturating_add(1);
+            continue;
+        }
+
+        let source_path = PathBuf::from(trimmed);
+        let Some(scanned_item) = build_scanned_item_from_path(&source_path) else {
+            invalid_count = invalid_count.saturating_add(1);
+            continue;
+        };
+
+        let identity_key = import_identity_key(&scanned_item);
+        if known_keys.contains(&identity_key) {
+            duplicate_count = duplicate_count.saturating_add(1);
+            continue;
+        }
+
+        let destination_path = build_import_file_path(&custom_dir, &source_path);
+        if has_extension(&source_path, "lnk") {
+            std::fs::copy(&source_path, &destination_path).map_err(|error| {
+                format!(
+                    "Failed to copy shortcut {:?} to {:?}: {}",
+                    source_path, destination_path, error
+                )
+            })?;
+        } else {
+            create_shortcut_windows(&destination_path, &source_path.to_string_lossy())?;
+        }
+
+        let _ = known_keys.insert(identity_key);
+        imported_count = imported_count.saturating_add(1);
+    }
+
+    if imported_count > 0 {
+        sync_new_icons_windows(app_handle, IconSource::CustomApp, || {
+            collect_items_from_single_dir(&custom_dir)
+        })?;
+    }
+
+    Ok(ImportDroppedPathsResult {
+        imported_count,
+        duplicate_count,
+        invalid_count,
+    })
 }
 
 #[cfg(windows)]
