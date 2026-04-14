@@ -131,11 +131,15 @@ const EN_MESSAGES: Record<string, string> = {
   '已恢复默认自定义应用目录。': 'Default custom app directory restored.',
   '恢复默认失败：{error}': 'Failed to restore defaults: {error}',
   图标布局重置: 'Reset icon layout',
-  '确定要重置图标布局吗？这会清空当前宫格排序、文件夹和 Dock 排布，但不会删除图标记录。':
-    'Reset the icon layout? This clears the current grid order, folders, and Dock arrangement, but does not delete icon records.',
+  '确定要重置图标吗？这会先全量同步桌面和自定义应用，移除已不存在的图标记录，再清空当前宫格排序、文件夹和 Dock 排布。':
+    'Reset icons? This first performs a full desktop and custom app sync, removes records for missing icons, then clears the current grid order, folders, and Dock arrangement.',
   '图标布局已重置，主窗口已刷新。': 'Icon layout reset. The main window has been refreshed.',
   '图标布局已重置，主窗口下次同步时会应用。':
     'Icon layout reset. It will apply the next time the main window syncs.',
+  '图标已重置并同步，主窗口已刷新。':
+    'Icons were reset and synced. The main window has been refreshed.',
+  '图标已重置并同步，主窗口下次显示时会应用。':
+    'Icons were reset and synced. The next time the main window is shown, the changes will apply.',
   '重置图标失败：{error}': 'Failed to reset icons: {error}',
   确认隐藏图标: 'Confirm hide icon',
   '将隐藏图标”{name}”。隐藏后不会在主页面显示。':

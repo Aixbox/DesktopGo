@@ -1411,7 +1411,7 @@ function IconManagerPanel() {
     if (layoutResetting) return
     const confirmed = window.confirm(
       translate(
-        '确定要重置图标布局吗？这会清空当前宫格排序、文件夹和 Dock 排布，但不会删除图标记录。'
+        '确定要重置图标吗？这会先全量同步桌面和自定义应用，移除已不存在的图标记录，再清空当前宫格排序、文件夹和 Dock 排布。'
       )
     )
     if (!confirmed) return
@@ -1419,16 +1419,22 @@ function IconManagerPanel() {
     setLayoutResetting(true)
 
     try {
+      const savedCustomAppDir = (await getSetting('customAppDir')).trim()
+      await invoke('sync_full_desktop_icons')
+      await invoke('sync_full_customapp_icons', {
+        customAppDir: savedCustomAppDir || null,
+      })
       await resetLaunchpadLayout()
+      await refreshIconManagerList()
       const mainWindow = await WebviewWindow.getByLabel('main')
       if (mainWindow) {
         await mainWindow.emit(LAUNCHPAD_LAYOUT_RESET_EVENT)
-        toast.success(translate('图标布局已重置，主窗口已刷新。'), {
+        toast.success(translate('图标已重置并同步，主窗口已刷新。'), {
           key: 'icon-manager-layout',
           title: translate('图标布局重置'),
         })
       } else {
-        toast.success(translate('图标布局已重置，主窗口下次同步时会应用。'), {
+        toast.success(translate('图标已重置并同步，主窗口下次显示时会应用。'), {
           key: 'icon-manager-layout',
           title: translate('图标布局重置'),
         })
