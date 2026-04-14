@@ -50,6 +50,10 @@ import {
 interface IconGridProps {
   icons: DesktopIcon[]
   layoutResetToken: number
+  importPlacementRequest?: {
+    token: number
+    iconKeys: string[]
+  } | null
 }
 
 const GRID_GAP = 8
@@ -100,7 +104,7 @@ const getLayoutNormalizationMetrics = (
   }
 }
 
-export function IconGrid({ icons, layoutResetToken }: IconGridProps) {
+export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: IconGridProps) {
   const {
     iconSize,
     dockEnabled,
@@ -139,6 +143,7 @@ export function IconGrid({ icons, layoutResetToken }: IconGridProps) {
   const hydratedLayoutResetTokenRef = useRef(layoutResetToken)
   const persistedLayoutResetTokenRef = useRef<number | null>(null)
   const layoutWriteQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const appliedImportPlacementTokenRef = useRef<number | null>(null)
   const itemsRef = useRef<GridItem[]>([])
   const outerSlotsRef = useRef<Array<string | null>>([])
   const dockKeysRef = useRef<Array<string | null>>([])
@@ -697,6 +702,86 @@ export function IconGrid({ icons, layoutResetToken }: IconGridProps) {
     setOuterSlots(compactedOuterSlots)
     setDockKeys([])
   }, [columns, dockEnabled])
+
+  useEffect(() => {
+    const request = importPlacementRequest
+    if (!request || request.iconKeys.length === 0) return
+    if (appliedImportPlacementTokenRef.current === request.token) return
+    if (!hydratedRef.current || !layoutReadyRef.current || !layoutBaselineRef.current) return
+
+    const outerItems = filterItemsByIds(itemsRef.current, outerItemIds)
+    if (outerItems.length === 0) {
+      appliedImportPlacementTokenRef.current = request.token
+      return
+    }
+
+    const outerItemIdSet = new Set(outerItemIds)
+    const importedIds = request.iconKeys.filter(id => outerItemIdSet.has(id))
+    if (importedIds.length === 0) {
+      appliedImportPlacementTokenRef.current = request.token
+      return
+    }
+
+    const importedIdSet = new Set(importedIds)
+    const safeColumns = Math.max(1, prevColumnsRef.current || columns)
+    const safePageSize = Math.max(1, prevPageSizeRef.current || pageSize)
+    const activePage = clampNumber(currentPageRef.current, 0, Number.MAX_SAFE_INTEGER)
+    const currentPageStart = activePage * safePageSize
+    const currentPageEnd = currentPageStart + safePageSize
+    const workingSlots = outerSlotsRef.current.map(slot =>
+      typeof slot === 'string' && importedIdSet.has(slot) ? null : slot
+    )
+    const preferredAnchorById = new Map<string, number>()
+
+    for (const id of importedIds) {
+      const item = outerItems.find(entry => getId(entry) === id)
+      if (!item) continue
+
+      const span = getGridItemSpan(item)
+      for (let anchorIndex = currentPageStart; anchorIndex < currentPageEnd; anchorIndex += 1) {
+        if (
+          !canPlaceItemAtAnchorIndex(
+            workingSlots,
+            outerItems,
+            anchorIndex,
+            span,
+            safeColumns,
+            safePageSize
+          )
+        ) {
+          continue
+        }
+
+        preferredAnchorById.set(id, anchorIndex)
+        workingSlots[anchorIndex] = id
+        break
+      }
+    }
+
+    const nextSlots = compactEmptyPages(
+      normalizeOuterSlots(workingSlots, outerItems, safePageSize, safeColumns, {
+        preferredAnchorById,
+      }),
+      safePageSize
+    )
+    const currentPageHasImported = nextSlots
+      .slice(currentPageStart, currentPageEnd)
+      .some(slot => typeof slot === 'string' && importedIdSet.has(slot))
+    const firstImportedAnchorIndex = nextSlots.findIndex(
+      slot => typeof slot === 'string' && importedIdSet.has(slot)
+    )
+    const targetPage =
+      firstImportedAnchorIndex >= 0 ? Math.floor(firstImportedAnchorIndex / safePageSize) : activePage
+
+    appliedImportPlacementTokenRef.current = request.token
+    outerSlotsRef.current = nextSlots
+    setOuterSlots(nextSlots)
+
+    if (!currentPageHasImported && targetPage !== currentPageRef.current) {
+      currentPageRef.current = targetPage
+      setCurrentPage(targetPage)
+    }
+  }, [columns, importPlacementRequest, outerItemIds, pageSize])
 
   const outerRenderCount = Math.max(pageSize, renderOrder.length)
   const pageCount = Math.max(1, Math.ceil(outerRenderCount / pageSize))

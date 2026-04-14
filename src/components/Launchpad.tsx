@@ -35,7 +35,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
 import { useToast } from '@/components/ui/toast'
-import { useIconStore } from '@/stores/iconStore'
+import { buildIconSelectionKey, useIconStore } from '@/stores/iconStore'
 import type { DesktopIcon, IconSize, TitleLineCount, WindowMode } from '@/types'
 import { IconGrid } from './IconGrid'
 
@@ -178,9 +178,14 @@ export function Launchpad() {
   const [isImportModeEnabled, setIsImportModeEnabled] = useState(false)
   const [isExternalDragActive, setIsExternalDragActive] = useState(false)
   const [isImportingDrop, setIsImportingDrop] = useState(false)
+  const [importPlacementRequest, setImportPlacementRequest] = useState<{
+    token: number
+    iconKeys: string[]
+  } | null>(null)
   const [searchPreview, setSearchPreview] = useState<Awaited<
     ReturnType<typeof getSearchPreview>
   > | null>(null)
+  const importPlacementTokenRef = useRef(0)
   const searchFilterOptions = useMemo(() => {
     void language
     return getSearchFilterOptions()
@@ -307,12 +312,28 @@ export function Launchpad() {
 
         void (async () => {
           try {
+            const previousIconKeySet = new Set(icons.map(buildIconSelectionKey))
             const savedCustomAppDir = (await getSetting('customAppDir')).trim()
             const result = await invoke<ImportDroppedPathsResult>('import_dropped_paths', {
               paths: payload.paths,
               customAppDir: savedCustomAppDir || null,
             })
             await fetchIcons()
+
+            if (result.imported_count > 0) {
+              const nextIcons = useIconStore.getState().icons
+              const importedIconKeys = nextIcons
+                .map(icon => buildIconSelectionKey(icon))
+                .filter(key => !previousIconKeySet.has(key))
+
+              if (importedIconKeys.length > 0) {
+                importPlacementTokenRef.current += 1
+                setImportPlacementRequest({
+                  token: importPlacementTokenRef.current,
+                  iconKeys: importedIconKeys,
+                })
+              }
+            }
 
             const message = translate(
               '导入完成：新增 {imported} 项，重复 {duplicate} 项，无效 {invalid} 项。',
@@ -1173,7 +1194,11 @@ export function Launchpad() {
               {translate('No desktop shortcuts found')}
             </div>
           ) : (
-            <IconGrid icons={icons} layoutResetToken={layoutResetToken} />
+            <IconGrid
+              icons={icons}
+              layoutResetToken={layoutResetToken}
+              importPlacementRequest={importPlacementRequest}
+            />
           )}
         </div>
       </ContextMenuTrigger>
