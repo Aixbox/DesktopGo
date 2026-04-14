@@ -15,9 +15,17 @@ interface IconProps {
   selectionMode: boolean
   selected: boolean
   onToggleSelect: (key: string) => void
+  onActivate?: (icon: DesktopIcon) => void
 }
 
-export function Icon({ icon, selectionKey, selectionMode, selected, onToggleSelect }: IconProps) {
+export function Icon({
+  icon,
+  selectionKey,
+  selectionMode,
+  selected,
+  onToggleSelect,
+  onActivate,
+}: IconProps) {
   const { launchApp, iconSize, titleLineCount, showShellContextMenu } = useIconStore()
   const config = ICON_SIZE_CONFIG[iconSize]
   const tileHeight = getIconGridRowHeight(iconSize)
@@ -29,7 +37,12 @@ export function Icon({ icon, selectionKey, selectionMode, selected, onToggleSele
       return
     }
 
-    launchApp(icon.path)
+    if (onActivate) {
+      onActivate(icon)
+      return
+    }
+
+    void launchApp(icon.path)
   }
 
   const handleContextMenu = (event: ReactMouseEvent<HTMLButtonElement>) => {

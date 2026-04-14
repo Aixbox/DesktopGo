@@ -227,6 +227,13 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     })
   }
 
+  const closeFolderImmediately = () => {
+    cancelPendingFolderClose()
+    clearFolderSharedLayoutTimer()
+    setActiveFolderSharedLayoutId(null)
+    setOpenFolderId(null)
+  }
+
   useEffect(() => {
     let cancelled = false
 
@@ -1357,6 +1364,11 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
             )
             itemsRef.current = nextItems
             setItems(nextItems)
+          }}
+          onActivateIcon={icon => {
+            void launchApp(icon.icon.path).finally(() => {
+              closeFolderImmediately()
+            })
           }}
           onFolderTilePointerDown={handleFolderTilePointerDown}
           onTileClickCapture={handleTileClickCapture}

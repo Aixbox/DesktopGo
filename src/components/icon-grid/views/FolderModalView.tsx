@@ -39,6 +39,7 @@ interface FolderModalViewProps {
   onPanelClick: (event: ReactMouseEvent<HTMLDivElement>) => void
   onClose: () => void
   onRenameFolder: (folderId: string, name: string) => void
+  onActivateIcon: (icon: IconItem) => void
   onFolderTilePointerDown: (
     event: ReactPointerEvent<HTMLDivElement>,
     folderId: string,
@@ -71,6 +72,7 @@ export function FolderModalView({
   onPanelClick,
   onClose,
   onRenameFolder,
+  onActivateIcon,
   onFolderTilePointerDown,
   onTileClickCapture,
   maxModalWidth,
@@ -274,6 +276,7 @@ export function FolderModalView({
                             selectionMode={selectionMode}
                             selected={selectedSet.has(item.key)}
                             onToggleSelect={onToggleSelectIcon}
+                            onActivate={() => onActivateIcon(item)}
                           />
                         </div>
                       )
