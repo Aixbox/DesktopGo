@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -11,10 +12,15 @@ import {
 import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
-import { Check, ChevronDown, Download, X } from 'lucide-react'
+import { Check, ChevronDown, Copy, Download, Minus, Square, X } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
 import { getSetting } from '@/lib/settingsStore'
 import { applyTheme, getSavedTheme } from '@/lib/theme'
+import {
+  SETTINGS_RETURNED_TO_MAIN_EVENT,
+  WINDOW_PERSISTENT_SYNC_EVENT,
+  type WindowPersistentSyncPayload,
+} from '@/lib/windowPersistent'
 import { applyWindowStyle, getSavedWindowStyle } from '@/lib/windowStyle'
 import { getSearchPreview, recordSearchResultRun } from '@/lib/search/api'
 import { getSearchFilterLabel, getSearchFilterOptions } from '@/lib/search/filters'
@@ -84,6 +90,40 @@ async function waitForSettingsWindowDisposed() {
 
     await new Promise(resolve => window.setTimeout(resolve, 25))
   }
+}
+
+function WindowControlButton({
+  label,
+  onClick,
+  tone = 'default',
+  children,
+}: {
+  label: string
+  onClick: () => void
+  tone?: 'default' | 'danger'
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      data-no-window-drag="true"
+      onPointerDown={event => event.stopPropagation()}
+      onDoubleClick={event => event.stopPropagation()}
+      onClick={event => {
+        event.stopPropagation()
+        onClick()
+      }}
+      className={`flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-sm transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 ${
+        tone === 'danger'
+          ? 'text-muted-foreground hover:bg-red-500/12 hover:text-red-500 dark:hover:text-red-300'
+          : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+      }`}
+    >
+      <span className="flex h-4 w-4 items-center justify-center">{children}</span>
+    </button>
+  )
 }
 
 type SearchSource = 'icons' | 'everything'
@@ -164,6 +204,7 @@ export function Launchpad() {
   const longPressTriggeredRef = useRef(false)
   const backgroundPointerStartedRef = useRef(false)
   const suppressBackgroundClickUntilRef = useRef(0)
+  const bypassNextFocusGuardRef = useRef(false)
   const launchpadSurfaceRef = useRef<HTMLDivElement | null>(null)
   const filterMenuRef = useRef<HTMLDivElement | null>(null)
   const filterButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -177,6 +218,7 @@ export function Launchpad() {
   const [layoutResetToken, setLayoutResetToken] = useState(0)
   const [isImportModeEnabled, setIsImportModeEnabled] = useState(false)
   const [windowPersistentEnabled, setWindowPersistentEnabled] = useState(false)
+  const [isWindowMaximized, setIsWindowMaximized] = useState(false)
   const [isExternalDragActive, setIsExternalDragActive] = useState(false)
   const [isImportingDrop, setIsImportingDrop] = useState(false)
   const [importPlacementRequest, setImportPlacementRequest] = useState<{
@@ -229,6 +271,14 @@ export function Launchpad() {
     }
   }, [])
 
+  const syncWindowState = useCallback(async () => {
+    try {
+      setIsWindowMaximized(await getCurrentWindow().isMaximized())
+    } catch (error) {
+      console.error('Failed to sync launchpad window state:', error)
+    }
+  }, [])
+
   useEffect(() => {
     void (async () => {
       try {
@@ -236,6 +286,7 @@ export function Launchpad() {
         await fetchIcons()
         await syncImportModeState()
         await syncWindowPersistentState()
+        await syncWindowState()
         const { windowMode: currentWindowMode, applyWindowMode } = useIconStore.getState()
         await applyWindowMode(currentWindowMode)
         const savedWindowStyle = await getSavedWindowStyle()
@@ -249,7 +300,7 @@ export function Launchpad() {
         })
       }
     })()
-  }, [fetchIcons, hydrateSettings, syncImportModeState, syncWindowPersistentState])
+  }, [fetchIcons, hydrateSettings, syncImportModeState, syncWindowPersistentState, syncWindowState])
 
   const syncExternalState = useCallback(async () => {
     try {
@@ -259,6 +310,7 @@ export function Launchpad() {
       await state.fetchIcons()
       await syncImportModeState()
       await syncWindowPersistentState()
+      await syncWindowState()
       await reloadSearchSettings()
       const savedWindowStyle = await getSavedWindowStyle()
       applyTheme(await getSavedTheme(), savedWindowStyle)
@@ -266,7 +318,7 @@ export function Launchpad() {
     } catch (e) {
       console.error('Failed to sync launchpad state:', e)
     }
-  }, [reloadSearchSettings, syncImportModeState, syncWindowPersistentState])
+  }, [reloadSearchSettings, syncImportModeState, syncWindowPersistentState, syncWindowState])
 
   const setImportModeEnabled = useCallback(
     async (enabled: boolean) => {
@@ -423,7 +475,13 @@ export function Launchpad() {
   useEffect(() => {
     const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
       if (focused) {
-        suppressBackgroundClickUntilRef.current = performance.now() + EXTERNAL_SHOW_CLICK_GUARD_MS
+        if (bypassNextFocusGuardRef.current) {
+          bypassNextFocusGuardRef.current = false
+          suppressBackgroundClickUntilRef.current = 0
+        } else {
+          suppressBackgroundClickUntilRef.current =
+            performance.now() + EXTERNAL_SHOW_CLICK_GUARD_MS
+        }
         void syncExternalState()
       }
     })
@@ -431,6 +489,30 @@ export function Launchpad() {
       unlisten.then(fn => fn())
     }
   }, [syncExternalState])
+
+  useEffect(() => {
+    let disposed = false
+    let unlistenResize: (() => void) | null = null
+
+    void syncWindowState()
+
+    void getCurrentWindow()
+      .onResized(() => {
+        void syncWindowState()
+      })
+      .then(fn => {
+        if (disposed) {
+          fn()
+          return
+        }
+        unlistenResize = fn
+      })
+
+    return () => {
+      disposed = true
+      unlistenResize?.()
+    }
+  }, [syncWindowState])
 
   useEffect(() => {
     let disposed = false
@@ -453,6 +535,57 @@ export function Launchpad() {
       unlisten?.()
     }
   }, [applyLaunchpadOpenFocus])
+
+  useEffect(() => {
+    let disposed = false
+    let unlisten: (() => void) | null = null
+
+    void getCurrentWindow()
+      .listen<WindowPersistentSyncPayload>(WINDOW_PERSISTENT_SYNC_EVENT, event => {
+        const enabled = Boolean(event.payload?.enabled)
+        setWindowPersistentEnabled(enabled)
+        if (!enabled) {
+          // 从设置关闭“窗口常驻”返回主窗口时，下一次焦点恢复不应再吞掉
+          // 用户对全屏空白区域的首次点击，否则会表现成“必须先点一下窗口”。
+          bypassNextFocusGuardRef.current = true
+        }
+      })
+      .then(fn => {
+        if (disposed) {
+          fn()
+          return
+        }
+        unlisten = fn
+      })
+
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [])
+
+  useEffect(() => {
+    let disposed = false
+    let unlisten: (() => void) | null = null
+
+    void getCurrentWindow()
+      .listen(SETTINGS_RETURNED_TO_MAIN_EVENT, () => {
+        bypassNextFocusGuardRef.current = true
+        suppressBackgroundClickUntilRef.current = 0
+      })
+      .then(fn => {
+        if (disposed) {
+          fn()
+          return
+        }
+        unlisten = fn
+      })
+
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [])
 
   useEffect(() => {
     let disposed = false
@@ -589,6 +722,23 @@ export function Launchpad() {
       console.error('Failed to hide launchpad window:', error)
     })
   }, [])
+
+  const handleMinimizeWindow = useCallback(() => {
+    void getCurrentWindow()
+      .minimize()
+      .catch(error => {
+        console.error('Failed to minimize launchpad window:', error)
+      })
+  }, [])
+
+  const handleToggleMaximizeWindow = useCallback(() => {
+    void getCurrentWindow()
+      .toggleMaximize()
+      .then(() => syncWindowState())
+      .catch(error => {
+        console.error('Failed to toggle launchpad window size:', error)
+      })
+  }, [syncWindowState])
 
   const clearBackgroundLongPressTimer = () => {
     if (longPressTimerRef.current !== null) {
@@ -976,7 +1126,7 @@ export function Launchpad() {
     }
 
     const settingsWindow = new WebviewWindow('settings', {
-      url: 'index.html?page=settings',
+      url: 'index.html?page=settings&returnToMain=1',
       title: translate('设置'),
       // 设置窗口允许放大，但默认尺寸同时作为最小尺寸，避免布局继续被压缩。
       width: SETTINGS_WINDOW_WIDTH,
@@ -1013,22 +1163,34 @@ export function Launchpad() {
           onClick={handleBackgroundClick}
         >
           {windowPersistentEnabled ? (
-            <button
-              type="button"
-              aria-label={translate('关闭窗口')}
-              title={translate('关闭窗口')}
+            <div
               data-no-window-drag="true"
-              className="launchpad-glass-panel-strong absolute right-5 top-5 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-border/80 text-foreground/80 shadow-lg transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
-              onPointerDown={event => {
-                event.stopPropagation()
-              }}
-              onClick={event => {
-                event.stopPropagation()
-                requestCloseLaunchpad()
-              }}
+              className="launchpad-glass-panel-strong absolute right-5 top-5 z-40 flex items-center gap-1 rounded-xl border border-border/80 px-1.5 py-1 shadow-lg"
             >
-              <X className="h-4 w-4" />
-            </button>
+              <WindowControlButton
+                label={translate('最小化')}
+                onClick={handleMinimizeWindow}
+              >
+                <Minus className="h-4 w-4" />
+              </WindowControlButton>
+              <WindowControlButton
+                label={isWindowMaximized ? translate('还原窗口') : translate('最大化')}
+                onClick={handleToggleMaximizeWindow}
+              >
+                {isWindowMaximized ? (
+                  <Copy className="h-3.5 w-3.5" />
+                ) : (
+                  <Square className="h-3.5 w-3.5" />
+                )}
+              </WindowControlButton>
+              <WindowControlButton
+                label={translate('关闭窗口')}
+                tone="danger"
+                onClick={requestCloseLaunchpad}
+              >
+                <X className="h-4 w-4" />
+              </WindowControlButton>
+            </div>
           ) : null}
 
           {isImportModeEnabled || windowPersistentEnabled ? (

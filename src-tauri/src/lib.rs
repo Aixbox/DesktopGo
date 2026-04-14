@@ -9,19 +9,20 @@ mod updater;
 
 use commands::{
     activate_main_window, activate_settings_window, apply_window_style, check_for_app_update,
-    delete_desktop_icons, get_default_customapp_dir, get_desktop_icons, get_icon_manager_items,
-    get_import_mode_enabled, get_launch_on_startup_enabled, get_layout_payload,
-    get_layout_payloads, get_search_preview, get_search_runtime_status,
+    close_settings_window, delete_desktop_icons, get_default_customapp_dir, get_desktop_icons,
+    get_icon_manager_items, get_import_mode_enabled, get_launch_on_startup_enabled,
+    get_layout_payload, get_layout_payloads, get_search_preview, get_search_runtime_status,
     get_updater_configuration_status, hide_desktop_icons, import_dropped_paths, install_app_update,
     launch_app, notify_main_window_ready, record_search_result_run, search_files,
     set_import_mode_enabled, set_layout_payload, set_layout_payloads, set_window_mode,
     show_shell_context_menu, start_search_runtime, sync_full_customapp_icons,
-    sync_full_desktop_icons, sync_new_customapp_icons, sync_new_desktop_icons, toggle_window,
-    unhide_desktop_icons, update_launch_on_startup_enabled, update_launchpad_shortcut,
+    sync_full_desktop_icons, sync_new_customapp_icons, sync_new_desktop_icons,
+    sync_window_persistent_state, toggle_window, unhide_desktop_icons,
+    update_launch_on_startup_enabled, update_launchpad_shortcut,
 };
 #[cfg(windows)]
 use once_cell::sync::OnceCell;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Mutex,
@@ -79,12 +80,17 @@ const TRAY_SETTINGS_MENU_ITEM_ID: &str = "tray-open-settings";
 const TRAY_QUIT_MENU_ITEM_ID: &str = "tray-quit";
 const LANGUAGE_CHANGED_EVENT: &str = "desktopgo://language-changed";
 const MAIN_WINDOW_SHOWN_EVENT: &str = "launchpad:shown";
+pub(crate) const WINDOW_PERSISTENT_CHANGED_EVENT: &str =
+    "desktopgo://window-persistent-changed";
+pub(crate) const SETTINGS_RETURNED_TO_MAIN_EVENT: &str =
+    "desktopgo://settings-returned-to-main";
 
 struct MainWindowState {
     ready: AtomicBool,
     pending_show: AtomicBool,
     suppress_blur: AtomicBool,
     import_mode_enabled: AtomicBool,
+    window_persistent_enabled: AtomicBool,
     suppress_blur_until: Mutex<Option<Instant>>,
     last_show_request: Mutex<Option<Instant>>,
 }
@@ -129,6 +135,11 @@ struct LanguageChangedPayload {
     language: String,
 }
 
+#[derive(Clone, Copy, Serialize)]
+pub(crate) struct WindowPersistentChangedPayload {
+    enabled: bool,
+}
+
 impl Default for LaunchpadShortcutState {
     fn default() -> Self {
         Self {
@@ -144,6 +155,7 @@ impl Default for MainWindowState {
             pending_show: AtomicBool::new(false),
             suppress_blur: AtomicBool::new(false),
             import_mode_enabled: AtomicBool::new(false),
+            window_persistent_enabled: AtomicBool::new(false),
             suppress_blur_until: Mutex::new(None),
             last_show_request: Mutex::new(None),
         }
@@ -244,6 +256,11 @@ pub fn run() {
             let initial_language = initialize_app_language(app.handle());
             let tray_state = app.state::<TrayState>();
             tray_state.set_language(AppLanguage::from_code(initial_language));
+            let main_window_state = app.state::<MainWindowState>();
+            main_window_state.window_persistent_enabled.store(
+                read_saved_window_persistent_enabled(app.handle()),
+                Ordering::SeqCst,
+            );
 
             let (menu, menu_items) = build_tray_menu(app.handle())?;
             tray_state.set_menu_items(menu_items);
@@ -342,6 +359,8 @@ pub fn run() {
             check_for_app_update,
             install_app_update,
             update_launchpad_shortcut,
+            close_settings_window,
+            sync_window_persistent_state,
             get_launch_on_startup_enabled,
             update_launch_on_startup_enabled
         ])
@@ -472,7 +491,7 @@ fn normalize_window_mode(value: &str) -> Option<&'static str> {
     }
 }
 
-fn read_saved_window_mode(app: &tauri::AppHandle) -> Option<&'static str> {
+pub(crate) fn read_saved_window_mode(app: &tauri::AppHandle) -> Option<&'static str> {
     app.store("settings.json").ok().and_then(|store| {
         store
             .get(WINDOW_MODE_SETTING_KEY)
@@ -615,6 +634,7 @@ pub(crate) fn set_main_window_import_mode_enabled(
         set_main_window_blur_guard(state, MAIN_WINDOW_BLUR_GUARD_MS);
     } else {
         if let Some(window) = app.get_webview_window("main") {
+            let _ = window.set_always_on_top(main_window_should_always_on_top(state));
             let _ = window.center();
         }
         clear_main_window_blur_guard(state);
@@ -623,6 +643,27 @@ pub(crate) fn set_main_window_import_mode_enabled(
 
 pub(crate) fn main_window_import_mode_enabled(state: &MainWindowState) -> bool {
     state.import_mode_enabled.load(Ordering::SeqCst)
+}
+
+fn main_window_should_always_on_top(state: &MainWindowState) -> bool {
+    state.import_mode_enabled.load(Ordering::SeqCst)
+        || !state.window_persistent_enabled.load(Ordering::SeqCst)
+}
+
+pub(crate) fn apply_main_window_runtime_mode(app: &tauri::AppHandle, state: &MainWindowState) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+
+    let persistent_enabled = main_window_persistent_enabled(state);
+
+    // “窗口常驻”开启后，主窗口应更接近普通桌面窗口：
+    // 在任务栏可见、可最小化/最大化、可调整大小，而不是继续维持启动台的顶层态。
+    let _ = window.set_skip_taskbar(!persistent_enabled);
+    let _ = window.set_resizable(persistent_enabled);
+    let _ = window.set_minimizable(persistent_enabled);
+    let _ = window.set_maximizable(persistent_enabled);
+    let _ = window.set_always_on_top(main_window_should_always_on_top(state));
 }
 
 fn main_window_blur_guard_active(state: &MainWindowState) -> bool {
@@ -700,6 +741,22 @@ fn main_window_uses_delayed_reveal(app: &tauri::AppHandle) -> bool {
     matches!(read_saved_window_style(app), Some("nativeAcrylic"))
 }
 
+fn schedule_main_window_style_refresh(app: tauri::AppHandle, delay_ms: u64) {
+    if !main_window_uses_delayed_reveal(&app) {
+        return;
+    }
+
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(delay_ms));
+        if let Err(error) = apply_main_window_style(&app, None, None) {
+            eprintln!(
+                "Warning: Failed to refresh main window acrylic style after focus change: {}",
+                error
+            );
+        }
+    });
+}
+
 fn sync_main_window_dom_visibility(window: &tauri::WebviewWindow, delayed_reveal: bool) {
     let script = if delayed_reveal {
         "document.documentElement.style.transition='opacity 50ms ease-out';document.documentElement.style.opacity='0';"
@@ -710,7 +767,7 @@ fn sync_main_window_dom_visibility(window: &tauri::WebviewWindow, delayed_reveal
     let _ = window.eval(script);
 }
 
-fn resolve_initial_main_window_size(app: &tauri::AppHandle) -> (f64, f64) {
+pub(crate) fn resolve_initial_main_window_size(app: &tauri::AppHandle) -> (f64, f64) {
     match read_saved_window_mode(app) {
         Some("large") => (MAIN_WINDOW_LARGE_WIDTH, MAIN_WINDOW_LARGE_HEIGHT),
         Some("small") => (MAIN_WINDOW_SMALL_WIDTH, MAIN_WINDOW_SMALL_HEIGHT),
@@ -822,7 +879,7 @@ fn read_saved_launch_on_startup(app: &tauri::AppHandle) -> Option<bool> {
     })
 }
 
-fn main_window_persistent_enabled(app: &tauri::AppHandle) -> bool {
+fn read_saved_window_persistent_enabled(app: &tauri::AppHandle) -> bool {
     app.store("settings.json")
         .ok()
         .and_then(|store| {
@@ -831,6 +888,14 @@ fn main_window_persistent_enabled(app: &tauri::AppHandle) -> bool {
                 .and_then(|value| value.as_bool())
         })
         .unwrap_or(false)
+}
+
+fn main_window_persistent_enabled(state: &MainWindowState) -> bool {
+    state.window_persistent_enabled.load(Ordering::SeqCst)
+}
+
+pub(crate) fn set_main_window_persistent_enabled(state: &MainWindowState, enabled: bool) {
+    state.window_persistent_enabled.store(enabled, Ordering::SeqCst);
 }
 
 fn save_launch_on_startup_setting(app: &tauri::AppHandle, enabled: bool) -> Result<(), String> {
@@ -1162,10 +1227,19 @@ fn request_main_window_show(app: &tauri::AppHandle) {
 
 pub(crate) fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        let state = app.state::<MainWindowState>();
+        apply_main_window_runtime_mode(app, state.inner());
+
+        if let Err(error) = apply_main_window_style(app, None, None) {
+            eprintln!(
+                "Warning: Failed to refresh main window style before showing: {}",
+                error
+            );
+        }
+
         let delayed_reveal = main_window_uses_delayed_reveal(app);
         sync_main_window_dom_visibility(&window, delayed_reveal);
         let _ = window.unminimize();
-        let _ = window.set_always_on_top(true);
         let _ = window.show();
         let _ = activate_webview_window(&window);
         let _ = window.emit(MAIN_WINDOW_SHOWN_EVENT, ());
@@ -1333,6 +1407,9 @@ fn attach_blur_handler(app: &tauri::AppHandle) {
         let app_handle = app.clone();
         window.on_window_event(move |event| match event {
             tauri::WindowEvent::Focused(true) => {
+                if main_window_persistent_enabled(&app_handle.state::<MainWindowState>()) {
+                    schedule_main_window_style_refresh(app_handle.clone(), 10);
+                }
                 refresh_tray_menu(&app_handle);
             }
             tauri::WindowEvent::Focused(false) => {
@@ -1340,10 +1417,13 @@ fn attach_blur_handler(app: &tauri::AppHandle) {
                 // 除了抑制标记，再额外给显示流程一个短暂保护窗口，避免托盘菜单关闭时
                 // 紧跟着的失焦把主窗口立即隐藏。
                 let state = app_handle.state::<MainWindowState>();
+                if main_window_persistent_enabled(&state) {
+                    schedule_main_window_style_refresh(app_handle.clone(), 30);
+                }
                 if state.import_mode_enabled.load(Ordering::SeqCst) {
                     return;
                 }
-                if main_window_persistent_enabled(&app_handle) {
+                if main_window_persistent_enabled(&state) {
                     return;
                 }
                 if main_window_blur_guard_active(&state) {

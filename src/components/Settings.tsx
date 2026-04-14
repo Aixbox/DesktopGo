@@ -174,6 +174,7 @@ const ABOUT_APP_INFO_FALLBACK: AboutAppInfo = {
 const ABOUT_REPOSITORY_URL = 'https://github.com/Aixbox/DesktopGo'
 const ABOUT_ISSUES_URL = `${ABOUT_REPOSITORY_URL}/issues`
 const ABOUT_RELEASES_URL = `${ABOUT_REPOSITORY_URL}/releases`
+let pendingWindowPersistentSync: Promise<void> = Promise.resolve()
 
 type IconSyncAction =
   | 'desktopIncremental'
@@ -613,13 +614,24 @@ function SettingsPanel() {
   const handleWindowPersistent = (value: boolean) => {
     const previousValue = windowPersistentEnabled
     setWindowPersistentEnabled(value)
-    void setSetting('windowPersistent', value).catch(error => {
-      console.error('Failed to save window persistent state:', error)
-      setWindowPersistentEnabled(previousValue)
-      toast.error(translate('保存窗口常驻失败：{error}', { error: String(error) }), {
-        key: 'settings-window-persistent',
-        title: translate('窗口常驻'),
-      })
+    const task = (async () => {
+      try {
+        await setSetting('windowPersistent', value)
+        await invoke('sync_window_persistent_state', { enabled: value })
+      } catch (error) {
+        console.error('Failed to save window persistent state:', error)
+        setWindowPersistentEnabled(previousValue)
+        void setSetting('windowPersistent', previousValue).catch(rollbackError => {
+          console.error('Failed to rollback window persistent state:', rollbackError)
+        })
+        toast.error(translate('保存窗口常驻失败：{error}', { error: String(error) }), {
+          key: 'settings-window-persistent',
+          title: translate('窗口常驻'),
+        })
+      }
+    })()
+    pendingWindowPersistentSync = task.catch(() => {
+      // 关闭设置窗口前会等待当前同步链结束，这里吞掉异常，避免把 close 链路也打断。
     })
   }
 
@@ -2389,6 +2401,10 @@ export function Settings() {
   const [activeNav, setActiveNav] = useState<NavItem>('settings')
   const [isMaximized, setIsMaximized] = useState(false)
   const isClosingRef = useRef(false)
+  const shouldReturnToMainOnClose = useMemo(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('returnToMain') === '1'
+  }, [])
   const navItems = useMemo(
     () =>
       NAV_ITEMS.map(item => ({
@@ -2413,13 +2429,16 @@ export function Settings() {
 
     isClosingRef.current = true
     try {
-      await getCurrentWindow().destroy()
+      await pendingWindowPersistentSync
+      await invoke('close_settings_window', {
+        returnToMain: shouldReturnToMainOnClose,
+      })
     } catch (e) {
       console.error('Failed to close settings window:', e)
     } finally {
       isClosingRef.current = false
     }
-  }, [])
+  }, [shouldReturnToMainOnClose])
 
   useEffect(() => {
     let disposed = false

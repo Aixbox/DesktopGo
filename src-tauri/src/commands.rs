@@ -8,7 +8,8 @@ use crate::search_preview::{self, SearchPreview};
 use crate::updater::{self, PendingUpdate, UpdateCheckResult, UpdaterConfigurationStatus};
 use crate::{LaunchpadShortcutState, MainWindowState};
 use std::sync::atomic::Ordering;
-use tauri::Manager;
+use std::time::Duration;
+use tauri::{Emitter, Manager};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct WindowBounds {
@@ -87,6 +88,43 @@ fn resolve_window_work_area_bounds(window: &tauri::WebviewWindow) -> Option<Wind
     ))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MainWindowRestoreStrategy {
+    WorkArea,
+    Center,
+}
+
+fn resolve_main_window_restore_strategy(mode: Option<&str>) -> MainWindowRestoreStrategy {
+    match mode {
+        Some("fullscreen") => MainWindowRestoreStrategy::WorkArea,
+        _ => MainWindowRestoreStrategy::Center,
+    }
+}
+
+fn restore_main_window_default_position(app_handle: &tauri::AppHandle) {
+    let Some(window) = app_handle.get_webview_window("main") else {
+        return;
+    };
+
+    // 关闭窗口常驻后，需要把主窗口拉回该窗口模式的默认位置，
+    // 避免保留用户在常驻状态下拖拽出来的偏移。
+    match resolve_main_window_restore_strategy(crate::read_saved_window_mode(app_handle)) {
+        MainWindowRestoreStrategy::WorkArea => {
+            if let Some(bounds) = resolve_window_work_area_bounds(&window) {
+                let _ = window.set_position(tauri::PhysicalPosition::new(bounds.x, bounds.y));
+                let _ = window.set_size(tauri::PhysicalSize::new(bounds.width, bounds.height));
+                return;
+            }
+            let _ = window.center();
+        }
+        MainWindowRestoreStrategy::Center => {
+            let (width, height) = crate::resolve_initial_main_window_size(app_handle);
+            let _ = window.set_size(tauri::LogicalSize::new(width, height));
+            let _ = window.center();
+        }
+    }
+}
+
 #[tauri::command]
 pub fn toggle_window(window: tauri::Window) {
     crate::hide_main_window(&window.app_handle());
@@ -135,6 +173,35 @@ pub fn activate_settings_window(app_handle: tauri::AppHandle) -> Result<(), Stri
 }
 
 #[tauri::command]
+pub fn close_settings_window(
+    app_handle: tauri::AppHandle,
+    return_to_main: bool,
+) -> Result<(), String> {
+    if let Some(window) = app_handle.get_webview_window("settings") {
+        window
+            .destroy()
+            .map_err(|error| format!("Failed to destroy settings window: {error}"))?;
+    }
+
+    if return_to_main {
+        let app_handle = app_handle.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(40));
+            if app_handle.get_webview_window("main").is_some() {
+                crate::show_main_window(&app_handle);
+            } else {
+                crate::request_main_window_show(&app_handle);
+            }
+            if let Some(window) = app_handle.get_webview_window("main") {
+                let _ = window.emit(crate::SETTINGS_RETURNED_TO_MAIN_EVENT, ());
+            }
+        });
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 pub fn get_import_mode_enabled(
     main_window_state: tauri::State<'_, MainWindowState>,
 ) -> Result<bool, String> {
@@ -150,6 +217,32 @@ pub fn set_import_mode_enabled(
     enabled: bool,
 ) -> Result<bool, String> {
     crate::set_main_window_import_mode_enabled(&app_handle, main_window_state.inner(), enabled);
+    Ok(enabled)
+}
+
+#[tauri::command]
+pub fn sync_window_persistent_state(
+    app_handle: tauri::AppHandle,
+    main_window_state: tauri::State<'_, MainWindowState>,
+    enabled: bool,
+) -> Result<bool, String> {
+    crate::set_main_window_persistent_enabled(main_window_state.inner(), enabled);
+    crate::apply_main_window_runtime_mode(&app_handle, main_window_state.inner());
+
+    if !enabled {
+        if let Some(window) = app_handle.get_webview_window("main") {
+            let _ = window.unmaximize();
+        }
+        restore_main_window_default_position(&app_handle);
+    }
+
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.emit(
+            crate::WINDOW_PERSISTENT_CHANGED_EVENT,
+            crate::WindowPersistentChangedPayload { enabled },
+        );
+    }
+
     Ok(enabled)
 }
 
@@ -378,6 +471,42 @@ mod tests {
                 right: 8,
                 bottom: 8,
             }
+        );
+    }
+
+    #[test]
+    fn fullscreen_restore_strategy_uses_work_area() {
+        assert_eq!(
+            resolve_main_window_restore_strategy(Some("fullscreen")),
+            MainWindowRestoreStrategy::WorkArea
+        );
+    }
+
+    #[test]
+    fn standard_window_restore_strategy_uses_center() {
+        assert_eq!(
+            resolve_main_window_restore_strategy(Some("medium")),
+            MainWindowRestoreStrategy::Center
+        );
+        assert_eq!(
+            resolve_main_window_restore_strategy(Some("large")),
+            MainWindowRestoreStrategy::Center
+        );
+        assert_eq!(
+            resolve_main_window_restore_strategy(Some("small")),
+            MainWindowRestoreStrategy::Center
+        );
+    }
+
+    #[test]
+    fn unknown_window_mode_restore_strategy_falls_back_to_center() {
+        assert_eq!(
+            resolve_main_window_restore_strategy(Some("unexpected")),
+            MainWindowRestoreStrategy::Center
+        );
+        assert_eq!(
+            resolve_main_window_restore_strategy(None),
+            MainWindowRestoreStrategy::Center
         );
     }
 }
