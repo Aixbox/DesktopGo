@@ -56,6 +56,7 @@ pub(crate) const DEFAULT_LAUNCHPAD_SHORTCUT: &str = "Ctrl+Space";
 #[cfg(any(not(windows), not(debug_assertions)))]
 const DEFAULT_LAUNCH_ON_STARTUP: bool = true;
 const LAUNCH_ON_STARTUP_SETTING_KEY: &str = "launchOnStartup";
+const WINDOW_PERSISTENT_SETTING_KEY: &str = "windowPersistent";
 const LANGUAGE_SETTING_KEY: &str = "language";
 const THEME_MODE_SETTING_KEY: &str = "themeMode";
 const WINDOW_MODE_SETTING_KEY: &str = "windowMode";
@@ -821,6 +822,17 @@ fn read_saved_launch_on_startup(app: &tauri::AppHandle) -> Option<bool> {
     })
 }
 
+fn main_window_persistent_enabled(app: &tauri::AppHandle) -> bool {
+    app.store("settings.json")
+        .ok()
+        .and_then(|store| {
+            store
+                .get(WINDOW_PERSISTENT_SETTING_KEY)
+                .and_then(|value| value.as_bool())
+        })
+        .unwrap_or(false)
+}
+
 fn save_launch_on_startup_setting(app: &tauri::AppHandle, enabled: bool) -> Result<(), String> {
     let store = app
         .store("settings.json")
@@ -1329,6 +1341,9 @@ fn attach_blur_handler(app: &tauri::AppHandle) {
                 // 紧跟着的失焦把主窗口立即隐藏。
                 let state = app_handle.state::<MainWindowState>();
                 if state.import_mode_enabled.load(Ordering::SeqCst) {
+                    return;
+                }
+                if main_window_persistent_enabled(&app_handle) {
                     return;
                 }
                 if main_window_blur_guard_active(&state) {

@@ -25,6 +25,7 @@ type SettingKey =
   | 'windowStyle'
   | 'language'
   | 'dockEnabled'
+  | 'windowPersistent'
   | 'launchOnStartup'
   | 'launchpadShortcut'
   | 'launchpadOpenFocusTarget'
@@ -39,6 +40,7 @@ type SettingValueMap = {
   windowStyle: WindowStyle
   language: AppLanguage
   dockEnabled: boolean
+  windowPersistent: boolean
   launchOnStartup: boolean
   launchpadShortcut: string
   launchpadOpenFocusTarget: LaunchpadOpenFocusTarget
@@ -46,7 +48,7 @@ type SettingValueMap = {
   customAppDir: string
 }
 
-const SETTINGS_STORE_VERSION = 8
+const SETTINGS_STORE_VERSION = 9
 const SETTINGS_VERSION_KEY = 'settingsVersion'
 const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'iconSize',
@@ -56,6 +58,7 @@ const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'windowStyle',
   'language',
   'dockEnabled',
+  'windowPersistent',
   'launchOnStartup',
   'launchpadShortcut',
   'launchpadOpenFocusTarget',
@@ -71,6 +74,7 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   windowStyle: 'default',
   language: 'zh',
   dockEnabled: true,
+  windowPersistent: false,
   launchOnStartup: true,
   launchpadShortcut: DEFAULT_LAUNCHPAD_SHORTCUT,
   launchpadOpenFocusTarget: DEFAULT_LAUNCHPAD_OPEN_FOCUS_TARGET,
@@ -100,6 +104,7 @@ const isWindowStyle = (value: unknown): value is WindowStyle =>
 const isAppLanguage = (value: unknown): value is AppLanguage => value === 'zh' || value === 'en'
 
 const isDockEnabled = (value: unknown): value is boolean => typeof value === 'boolean'
+const isWindowPersistent = (value: unknown): value is boolean => typeof value === 'boolean'
 const isLaunchOnStartup = (value: unknown): value is boolean => typeof value === 'boolean'
 
 const isLaunchpadShortcut = (value: unknown): value is string => typeof value === 'string'
@@ -118,6 +123,7 @@ const validators: {
   windowStyle: isWindowStyle,
   language: isAppLanguage,
   dockEnabled: isDockEnabled,
+  windowPersistent: isWindowPersistent,
   launchOnStartup: isLaunchOnStartup,
   launchpadShortcut: isLaunchpadShortcut,
   launchpadOpenFocusTarget: isLaunchpadOpenFocus,

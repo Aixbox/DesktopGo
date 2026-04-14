@@ -11,7 +11,7 @@ import {
 import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
-import { Check, ChevronDown, Download } from 'lucide-react'
+import { Check, ChevronDown, Download, X } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
 import { getSetting } from '@/lib/settingsStore'
 import { applyTheme, getSavedTheme } from '@/lib/theme'
@@ -176,6 +176,7 @@ export function Launchpad() {
   const [searchPreviewError, setSearchPreviewError] = useState<string | null>(null)
   const [layoutResetToken, setLayoutResetToken] = useState(0)
   const [isImportModeEnabled, setIsImportModeEnabled] = useState(false)
+  const [windowPersistentEnabled, setWindowPersistentEnabled] = useState(false)
   const [isExternalDragActive, setIsExternalDragActive] = useState(false)
   const [isImportingDrop, setIsImportingDrop] = useState(false)
   const [importPlacementRequest, setImportPlacementRequest] = useState<{
@@ -219,12 +220,22 @@ export function Launchpad() {
     }
   }, [])
 
+  const syncWindowPersistentState = useCallback(async () => {
+    try {
+      const enabled = await getSetting('windowPersistent')
+      setWindowPersistentEnabled(enabled)
+    } catch (error) {
+      console.error('Failed to sync window persistent state:', error)
+    }
+  }, [])
+
   useEffect(() => {
     void (async () => {
       try {
         await hydrateSettings()
         await fetchIcons()
         await syncImportModeState()
+        await syncWindowPersistentState()
         const { windowMode: currentWindowMode, applyWindowMode } = useIconStore.getState()
         await applyWindowMode(currentWindowMode)
         const savedWindowStyle = await getSavedWindowStyle()
@@ -238,7 +249,7 @@ export function Launchpad() {
         })
       }
     })()
-  }, [fetchIcons, hydrateSettings, syncImportModeState])
+  }, [fetchIcons, hydrateSettings, syncImportModeState, syncWindowPersistentState])
 
   const syncExternalState = useCallback(async () => {
     try {
@@ -247,6 +258,7 @@ export function Launchpad() {
       await state.hydrateSettings()
       await state.fetchIcons()
       await syncImportModeState()
+      await syncWindowPersistentState()
       await reloadSearchSettings()
       const savedWindowStyle = await getSavedWindowStyle()
       applyTheme(await getSavedTheme(), savedWindowStyle)
@@ -254,7 +266,7 @@ export function Launchpad() {
     } catch (e) {
       console.error('Failed to sync launchpad state:', e)
     }
-  }, [reloadSearchSettings, syncImportModeState])
+  }, [reloadSearchSettings, syncImportModeState, syncWindowPersistentState])
 
   const setImportModeEnabled = useCallback(
     async (enabled: boolean) => {
@@ -633,7 +645,7 @@ export function Launchpad() {
     )
   }
 
-  const handleImportModeWindowDragStart = (event: ReactPointerEvent<HTMLElement>) => {
+  const handleWindowTopDragStart = (event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return
     if (isWindowDragInteractiveTarget(event.target)) return
 
@@ -920,7 +932,12 @@ export function Launchpad() {
       return
     }
 
-    if (windowMode === 'fullscreen' && !hasSearchKeyword && !isImportModeEnabled) {
+    if (
+      windowMode === 'fullscreen' &&
+      !hasSearchKeyword &&
+      !isImportModeEnabled &&
+      !windowPersistentEnabled
+    ) {
       if (isTrueBackgroundClick) {
         if (performance.now() < suppressBackgroundClickUntilRef.current) {
           return
@@ -995,10 +1012,29 @@ export function Launchpad() {
           onPointerLeave={handleBackgroundPointerLeave}
           onClick={handleBackgroundClick}
         >
-          {isImportModeEnabled ? (
+          {windowPersistentEnabled ? (
+            <button
+              type="button"
+              aria-label={translate('关闭窗口')}
+              title={translate('关闭窗口')}
+              data-no-window-drag="true"
+              className="launchpad-glass-panel-strong absolute right-5 top-5 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-border/80 text-foreground/80 shadow-lg transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+              onPointerDown={event => {
+                event.stopPropagation()
+              }}
+              onClick={event => {
+                event.stopPropagation()
+                requestCloseLaunchpad()
+              }}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
+
+          {isImportModeEnabled || windowPersistentEnabled ? (
             <div
               className="absolute inset-x-0 top-0 z-20 h-14"
-              onPointerDown={handleImportModeWindowDragStart}
+              onPointerDown={handleWindowTopDragStart}
             />
           ) : null}
 
@@ -1172,10 +1208,12 @@ export function Launchpad() {
           ) : null}
 
           {isImportModeEnabled ? (
-            <div className="absolute right-5 top-5 z-30 max-w-[280px]">
+            <div
+              className="absolute left-5 top-5 z-30 max-w-[280px]"
+            >
               <div
                 className="launchpad-glass-panel-strong pointer-events-auto flex items-start gap-2.5 rounded-[22px] border border-blue-500/20 px-3 py-2.5 shadow-xl"
-                onPointerDown={handleImportModeWindowDragStart}
+                onPointerDown={handleWindowTopDragStart}
                 onClick={event => {
                   event.stopPropagation()
                 }}

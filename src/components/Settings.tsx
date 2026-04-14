@@ -501,6 +501,7 @@ function SettingsPanel() {
   const { iconSize, windowMode, titleLineCount, dockEnabled, setDockEnabled } = useIconStore()
   const [themeMode, setThemeMode] = useState<ThemeMode>('system')
   const [windowStyle, setWindowStyle] = useState<WindowStyle>('default')
+  const [windowPersistentEnabled, setWindowPersistentEnabled] = useState(false)
   const [launchOnStartupEnabled, setLaunchOnStartupEnabled] = useState(true)
   const [isSavingLaunchOnStartup, setIsSavingLaunchOnStartup] = useState(false)
   const [launchpadShortcut, setLaunchpadShortcut] = useState(DEFAULT_LAUNCHPAD_SHORTCUT)
@@ -524,6 +525,7 @@ function SettingsPanel() {
           savedDockEnabled,
           savedThemeMode,
           savedWindowStyle,
+          savedWindowPersistent,
           savedLaunchOnStartup,
           savedLaunchpadShortcut,
           savedLaunchpadOpenFocusTarget,
@@ -534,6 +536,7 @@ function SettingsPanel() {
           getSetting('dockEnabled'),
           getSetting('themeMode'),
           getSetting('windowStyle'),
+          getSetting('windowPersistent'),
           getSetting('launchOnStartup'),
           getSetting('launchpadShortcut'),
           getSetting('launchpadOpenFocusTarget'),
@@ -565,6 +568,7 @@ function SettingsPanel() {
         })
         setThemeMode(savedThemeMode)
         setWindowStyle(savedWindowStyle)
+        setWindowPersistentEnabled(savedWindowPersistent)
         setLaunchOnStartupEnabled(resolvedLaunchOnStartup)
         setLaunchpadShortcut(savedLaunchpadShortcut)
         setLaunchpadOpenFocusTarget(savedLaunchpadOpenFocusTarget)
@@ -604,6 +608,19 @@ function SettingsPanel() {
 
   const handleDockEnabled = (value: boolean) => {
     setDockEnabled(value)
+  }
+
+  const handleWindowPersistent = (value: boolean) => {
+    const previousValue = windowPersistentEnabled
+    setWindowPersistentEnabled(value)
+    void setSetting('windowPersistent', value).catch(error => {
+      console.error('Failed to save window persistent state:', error)
+      setWindowPersistentEnabled(previousValue)
+      toast.error(translate('保存窗口常驻失败：{error}', { error: String(error) }), {
+        key: 'settings-window-persistent',
+        title: translate('窗口常驻'),
+      })
+    })
   }
 
   const handleLaunchpadOpenFocusTarget = (value: LaunchpadOpenFocusTarget) => {
@@ -973,6 +990,23 @@ function SettingsPanel() {
           }
           checked={dockEnabled}
           onChange={handleDockEnabled}
+        />
+      </div>
+
+      <div className="mb-6">
+        <ToggleRow
+          title={translate('窗口常驻')}
+          description={
+            windowPersistentEnabled
+              ? translate(
+                  '当前已开启，点击窗口外部或全屏空白区域都不会自动隐藏，主窗口右上角会显示关闭按钮。'
+                )
+              : translate(
+                  '当前已关闭，点击窗口外部或全屏空白区域时，主窗口仍会按原来的行为自动隐藏。'
+                )
+          }
+          checked={windowPersistentEnabled}
+          onChange={handleWindowPersistent}
         />
       </div>
 
