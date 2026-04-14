@@ -16,6 +16,7 @@ interface IconProps {
   selected: boolean
   onToggleSelect: (key: string) => void
   onActivate?: (icon: DesktopIcon) => void
+  highlighted?: boolean
 }
 
 export function Icon({
@@ -25,6 +26,7 @@ export function Icon({
   selected,
   onToggleSelect,
   onActivate,
+  highlighted = false,
 }: IconProps) {
   const { launchApp, iconSize, titleLineCount, showShellContextMenu } = useIconStore()
   const config = ICON_SIZE_CONFIG[iconSize]
@@ -65,7 +67,9 @@ export function Icon({
     <button
       data-icon
       data-selection-mode={selectionMode ? 'on' : 'off'}
-      className={`icon-item relative flex flex-col items-center justify-start rounded-2xl border-none px-3 shadow-none transition-all duration-200 cursor-pointer group ${buttonStateClass} ${layerClass}`}
+      className={`icon-item relative flex flex-col items-center justify-start rounded-2xl border-none px-3 shadow-none transition-all duration-200 cursor-pointer group ${buttonStateClass} ${layerClass} ${
+        highlighted ? 'launchpad-import-highlight-edge' : ''
+      }`}
       style={{
         width: config.containerWidth,
         height: tileHeight,

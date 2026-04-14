@@ -72,6 +72,7 @@ const EVASION_REARM_DISTANCE = 14
 const EVASION_COOLDOWN_MS = 80
 const REORDER_ANIMATION_MS = 220
 const FOLDER_SHARED_LAYOUT_WINDOW_MS = 320
+const IMPORT_HIGHLIGHT_MS = 4200
 const REORDER_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
 const fitCount = (container: number, item: number) => {
   if (item <= 0 || container <= item) return 1
@@ -134,6 +135,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   const tileAnimationTimerRef = useRef<Map<string, number>>(new Map())
   const folderTileAnimationTimerRef = useRef<Map<string, number>>(new Map())
   const dockTileAnimationTimerRef = useRef<Map<string, number>>(new Map())
+  const importHighlightTimerRef = useRef<number | null>(null)
   const hydratedRef = useRef(false)
   const layoutBaselineRef = useRef(false)
   const persistedDimsRef = useRef<{ pageSize: number; columns: number } | null>(null)
@@ -167,6 +169,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   const [itemWidth, setItemWidth] = useState<number>(columnWidth)
   const [itemHeight, setItemHeight] = useState<number>(rowHeight)
   const [items, setItems] = useState<GridItem[]>([])
+  const [importHighlightIds, setImportHighlightIds] = useState<string[]>([])
   const [outerSlots, setOuterSlots] = useState<Array<string | null>>([])
   const [dockKeys, setDockKeys] = useState<Array<string | null>>([])
   const [openFolderId, setOpenFolderId] = useState<string | null>(null)
@@ -178,6 +181,12 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   )
 
   dockEnabledRef.current = dockEnabled
+
+  const clearImportHighlightTimer = () => {
+    if (importHighlightTimerRef.current === null) return
+    window.clearTimeout(importHighlightTimerRef.current)
+    importHighlightTimerRef.current = null
+  }
 
   const clearFolderSharedLayoutTimer = () => {
     if (folderSharedLayoutTimerRef.current === null) return
@@ -308,6 +317,12 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       cancelled = true
     }
   }, [icons, layoutResetToken])
+
+  useEffect(() => {
+    return () => {
+      clearImportHighlightTimer()
+    }
+  }, [])
 
   useEffect(() => {
     itemsRef.current = items
@@ -783,6 +798,15 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     appliedImportPlacementTokenRef.current = request.token
     outerSlotsRef.current = nextSlots
     setOuterSlots(nextSlots)
+    setImportHighlightIds(importedIds)
+    clearImportHighlightTimer()
+    importHighlightTimerRef.current = window.setTimeout(() => {
+      setImportHighlightIds(current => {
+        const next = current.filter(id => !importedIdSet.has(id))
+        return next.length === current.length ? current : next
+      })
+      importHighlightTimerRef.current = null
+    }, IMPORT_HIGHLIGHT_MS)
 
     if (!currentPageHasImported && targetPage !== currentPageRef.current) {
       currentPageRef.current = targetPage
@@ -1228,6 +1252,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
             folderPreviewFreezeTargetId={folderPreviewFreezeTargetId}
             folderCreateTransitionTargetId={folderCreateTransitionTargetId}
             hiddenOuterItemIds={mergedHiddenOuterItemIds}
+            highlightedOuterItemIds={importHighlightIds}
             previewFootprint={previewFootprint}
             iconConfig={iconConfig}
             selectionMode={selectionMode}
