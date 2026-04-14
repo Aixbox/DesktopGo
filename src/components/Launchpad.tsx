@@ -622,6 +622,20 @@ export function Launchpad() {
     clearBackgroundLongPressTimer()
   }
 
+  const handleSurfacePointerDownCapture = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!isSearchPanelOpen) return
+
+    const target = event.target as HTMLElement | null
+    const isSearchInteraction =
+      !!target?.closest('[data-search-placeholder]') ||
+      !!target?.closest(SEARCH_FLOATING_MENU_SELECTOR) ||
+      !!target?.closest('[data-dock-menu="true"]')
+
+    if (!isSearchInteraction) {
+      setIsSearchPanelOpen(false)
+    }
+  }
+
   const launchSearchItem = useCallback(
     async (path: string) => {
       try {
@@ -951,6 +965,7 @@ export function Launchpad() {
           ref={launchpadSurfaceRef}
           tabIndex={-1}
           className="launchpad-bg relative flex h-screen w-screen select-none flex-col items-center justify-center"
+          onPointerDownCapture={handleSurfacePointerDownCapture}
           onPointerDown={handleBackgroundPointerDown}
           onPointerUp={handleBackgroundPointerUp}
           onPointerCancel={handleBackgroundPointerCancel}
