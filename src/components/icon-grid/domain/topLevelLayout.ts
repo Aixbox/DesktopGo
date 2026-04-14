@@ -415,6 +415,12 @@ export const resizeSlotPages = (
     return normalizeOuterSlots(slots, items, safeNextPS, safeNextCols)
   }
 
+  if (safePrevPS === 1 && safeNextPS > 1) {
+    // Recover from an abnormal one-slot page layout by rebuilding the layout
+    // against the current page geometry instead of preserving stale page boundaries.
+    return normalizeOuterSlots(slots, items, safeNextPS, safeNextCols)
+  }
+
   const itemById = buildItemMap(items)
   const oldPageCount = Math.max(1, Math.ceil(Math.max(slots.length, safePrevPS) / safePrevPS))
   const result: Array<string | null> = []

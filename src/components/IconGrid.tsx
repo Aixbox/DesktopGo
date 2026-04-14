@@ -105,6 +105,16 @@ const getLayoutNormalizationMetrics = (
   }
 }
 
+const isSuspiciousSingleCellPageGeometry = ({
+  columns,
+  rows,
+  pageSize,
+}: {
+  columns: number
+  rows: number
+  pageSize: number
+}) => columns === 1 && rows === 1 && pageSize === 1
+
 export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: IconGridProps) {
   const {
     iconSize,
@@ -335,6 +345,9 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     const nextDockKeys = dockKeys
     const nextPageSize = prevPageSizeRef.current
     const nextColumns = prevColumnsRef.current
+    if (nextPageSize === 1 && nextColumns === 1) {
+      return
+    }
     layoutWriteQueueRef.current = layoutWriteQueueRef.current
       .then(() => writeLayout(nextItems, nextSlots, nextDockKeys, nextPageSize, nextColumns))
       .catch(e => {
@@ -573,9 +586,22 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       const baseRows = Math.max(minRows, fitCount(height, layoutRowHeight))
       const nextRowGridHeight = (baseRows + 1) * tileHeight + baseRows * GRID_GAP
       const resolvedRows = !dockEnabled && nextRowGridHeight <= height ? baseRows + 1 : baseRows
+      const nextColumns = Math.max(hasWideItems ? 2 : 1, fitCount(width, tileWidth))
+      const nextPageSize = Math.max(1, nextColumns * resolvedRows)
+
+      if (
+        isSuspiciousSingleCellPageGeometry({
+          columns: nextColumns,
+          rows: resolvedRows,
+          pageSize: nextPageSize,
+        })
+      ) {
+        return
+      }
+
       setItemWidth(tileWidth)
       setItemHeight(tileHeight)
-      setColumns(Math.max(hasWideItems ? 2 : 1, fitCount(width, tileWidth)))
+      setColumns(nextColumns)
       setRows(resolvedRows)
       layoutReadyRef.current = true
     }
