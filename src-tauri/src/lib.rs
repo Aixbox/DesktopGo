@@ -613,6 +613,9 @@ pub(crate) fn set_main_window_import_mode_enabled(
         }
         set_main_window_blur_guard(state, MAIN_WINDOW_BLUR_GUARD_MS);
     } else {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.center();
+        }
         clear_main_window_blur_guard(state);
     }
 }

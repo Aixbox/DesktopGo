@@ -622,6 +622,29 @@ export function Launchpad() {
     clearBackgroundLongPressTimer()
   }
 
+  const isWindowDragInteractiveTarget = (target: EventTarget | null) => {
+    const element =
+      target instanceof Element ? target : target instanceof Node ? target.parentElement : null
+
+    return Boolean(
+      element?.closest(
+        'button, a, input, textarea, select, [role="button"], [data-no-window-drag="true"]'
+      )
+    )
+  }
+
+  const handleImportModeWindowDragStart = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return
+    if (isWindowDragInteractiveTarget(event.target)) return
+
+    event.stopPropagation()
+    void getCurrentWindow()
+      .startDragging()
+      .catch(error => {
+        console.error('Failed to start dragging launchpad window:', error)
+      })
+  }
+
   const handleSurfacePointerDownCapture = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!isSearchPanelOpen) return
 
@@ -972,6 +995,13 @@ export function Launchpad() {
           onPointerLeave={handleBackgroundPointerLeave}
           onClick={handleBackgroundClick}
         >
+          {isImportModeEnabled ? (
+            <div
+              className="absolute inset-x-0 top-0 z-20 h-14"
+              onPointerDown={handleImportModeWindowDragStart}
+            />
+          ) : null}
+
           <div
             data-search-placeholder
             className="absolute inset-x-0 top-6 z-40 mx-auto w-full max-w-2xl px-6"
@@ -1145,9 +1175,7 @@ export function Launchpad() {
             <div className="absolute right-5 top-5 z-30 max-w-[280px]">
               <div
                 className="launchpad-glass-panel-strong pointer-events-auto flex items-start gap-2.5 rounded-[22px] border border-blue-500/20 px-3 py-2.5 shadow-xl"
-                onPointerDown={event => {
-                  event.stopPropagation()
-                }}
+                onPointerDown={handleImportModeWindowDragStart}
                 onClick={event => {
                   event.stopPropagation()
                 }}
@@ -1166,6 +1194,7 @@ export function Launchpad() {
                   </p>
                   <button
                     type="button"
+                    data-no-window-drag="true"
                     className="launchpad-glass-button inline-flex h-7 items-center rounded-full px-3 text-[11px] font-medium text-foreground/86 transition-colors"
                     onClick={() => {
                       void setImportModeEnabled(false)
