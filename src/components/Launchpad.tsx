@@ -12,7 +12,7 @@ import {
 import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
-import { Check, ChevronDown, Copy, Download, Minus, Square, X } from 'lucide-react'
+import { Check, ChevronDown, Download, Minus, Pin, X } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
 import { getSetting } from '@/lib/settingsStore'
 import { applyTheme, getSavedTheme } from '@/lib/theme'
@@ -218,7 +218,7 @@ export function Launchpad() {
   const [layoutResetToken, setLayoutResetToken] = useState(0)
   const [isImportModeEnabled, setIsImportModeEnabled] = useState(false)
   const [windowPersistentEnabled, setWindowPersistentEnabled] = useState(false)
-  const [isWindowMaximized, setIsWindowMaximized] = useState(false)
+  const [mainWindowAlwaysOnTopEnabled, setMainWindowAlwaysOnTopEnabled] = useState(false)
   const [isExternalDragActive, setIsExternalDragActive] = useState(false)
   const [isImportingDrop, setIsImportingDrop] = useState(false)
   const [importPlacementRequest, setImportPlacementRequest] = useState<{
@@ -271,11 +271,12 @@ export function Launchpad() {
     }
   }, [])
 
-  const syncWindowState = useCallback(async () => {
+  const syncMainWindowAlwaysOnTopState = useCallback(async () => {
     try {
-      setIsWindowMaximized(await getCurrentWindow().isMaximized())
+      const enabled = await invoke<boolean>('get_main_window_always_on_top_enabled')
+      setMainWindowAlwaysOnTopEnabled(enabled)
     } catch (error) {
-      console.error('Failed to sync launchpad window state:', error)
+      console.error('Failed to sync launchpad always-on-top state:', error)
     }
   }, [])
 
@@ -286,7 +287,7 @@ export function Launchpad() {
         await fetchIcons()
         await syncImportModeState()
         await syncWindowPersistentState()
-        await syncWindowState()
+        await syncMainWindowAlwaysOnTopState()
         const { windowMode: currentWindowMode, applyWindowMode } = useIconStore.getState()
         await applyWindowMode(currentWindowMode)
         const savedWindowStyle = await getSavedWindowStyle()
@@ -300,7 +301,13 @@ export function Launchpad() {
         })
       }
     })()
-  }, [fetchIcons, hydrateSettings, syncImportModeState, syncWindowPersistentState, syncWindowState])
+  }, [
+    fetchIcons,
+    hydrateSettings,
+    syncImportModeState,
+    syncMainWindowAlwaysOnTopState,
+    syncWindowPersistentState,
+  ])
 
   const syncExternalState = useCallback(async () => {
     try {
@@ -310,7 +317,7 @@ export function Launchpad() {
       await state.fetchIcons()
       await syncImportModeState()
       await syncWindowPersistentState()
-      await syncWindowState()
+      await syncMainWindowAlwaysOnTopState()
       await reloadSearchSettings()
       const savedWindowStyle = await getSavedWindowStyle()
       applyTheme(await getSavedTheme(), savedWindowStyle)
@@ -318,7 +325,12 @@ export function Launchpad() {
     } catch (e) {
       console.error('Failed to sync launchpad state:', e)
     }
-  }, [reloadSearchSettings, syncImportModeState, syncWindowPersistentState, syncWindowState])
+  }, [
+    reloadSearchSettings,
+    syncImportModeState,
+    syncMainWindowAlwaysOnTopState,
+    syncWindowPersistentState,
+  ])
 
   const setImportModeEnabled = useCallback(
     async (enabled: boolean) => {
@@ -489,30 +501,6 @@ export function Launchpad() {
       unlisten.then(fn => fn())
     }
   }, [syncExternalState])
-
-  useEffect(() => {
-    let disposed = false
-    let unlistenResize: (() => void) | null = null
-
-    void syncWindowState()
-
-    void getCurrentWindow()
-      .onResized(() => {
-        void syncWindowState()
-      })
-      .then(fn => {
-        if (disposed) {
-          fn()
-          return
-        }
-        unlistenResize = fn
-      })
-
-    return () => {
-      disposed = true
-      unlistenResize?.()
-    }
-  }, [syncWindowState])
 
   useEffect(() => {
     let disposed = false
@@ -731,14 +719,16 @@ export function Launchpad() {
       })
   }, [])
 
-  const handleToggleMaximizeWindow = useCallback(() => {
-    void getCurrentWindow()
-      .toggleMaximize()
-      .then(() => syncWindowState())
+  const handleToggleAlwaysOnTop = useCallback(() => {
+    const nextEnabled = !mainWindowAlwaysOnTopEnabled
+    void invoke<boolean>('set_main_window_always_on_top_enabled', {
+      enabled: nextEnabled,
+    })
+      .then(setMainWindowAlwaysOnTopEnabled)
       .catch(error => {
-        console.error('Failed to toggle launchpad window size:', error)
+        console.error('Failed to update launchpad always-on-top state:', error)
       })
-  }, [syncWindowState])
+  }, [mainWindowAlwaysOnTopEnabled])
 
   const clearBackgroundLongPressTimer = () => {
     if (longPressTimerRef.current !== null) {
@@ -1165,31 +1155,39 @@ export function Launchpad() {
           {windowPersistentEnabled ? (
             <div
               data-no-window-drag="true"
-              className="launchpad-glass-panel-strong absolute right-5 top-5 z-40 flex items-center gap-1 rounded-xl border border-border/80 px-1.5 py-1 shadow-lg"
+              className="absolute right-5 top-5 z-40 flex items-center gap-2"
             >
-              <WindowControlButton
-                label={translate('最小化')}
-                onClick={handleMinimizeWindow}
-              >
-                <Minus className="h-4 w-4" />
-              </WindowControlButton>
-              <WindowControlButton
-                label={isWindowMaximized ? translate('还原窗口') : translate('最大化')}
-                onClick={handleToggleMaximizeWindow}
-              >
-                {isWindowMaximized ? (
-                  <Copy className="h-3.5 w-3.5" />
-                ) : (
-                  <Square className="h-3.5 w-3.5" />
-                )}
-              </WindowControlButton>
-              <WindowControlButton
-                label={translate('关闭窗口')}
-                tone="danger"
-                onClick={requestCloseLaunchpad}
-              >
-                <X className="h-4 w-4" />
-              </WindowControlButton>
+              <div className="launchpad-glass-panel-strong flex items-center rounded-xl border border-border/80 px-1.5 py-1 shadow-lg">
+                <WindowControlButton
+                  label={
+                    mainWindowAlwaysOnTopEnabled
+                      ? translate('取消置顶')
+                      : translate('置顶窗口')
+                  }
+                  onClick={handleToggleAlwaysOnTop}
+                >
+                  <Pin
+                    className={`h-4 w-4 ${
+                      mainWindowAlwaysOnTopEnabled ? 'text-blue-500 dark:text-blue-300' : ''
+                    }`}
+                  />
+                </WindowControlButton>
+              </div>
+              <div className="launchpad-glass-panel-strong flex items-center gap-1 rounded-xl border border-border/80 px-1.5 py-1 shadow-lg">
+                <WindowControlButton
+                  label={translate('最小化')}
+                  onClick={handleMinimizeWindow}
+                >
+                  <Minus className="h-4 w-4" />
+                </WindowControlButton>
+                <WindowControlButton
+                  label={translate('关闭窗口')}
+                  tone="danger"
+                  onClick={requestCloseLaunchpad}
+                >
+                  <X className="h-4 w-4" />
+                </WindowControlButton>
+              </div>
             </div>
           ) : null}
 

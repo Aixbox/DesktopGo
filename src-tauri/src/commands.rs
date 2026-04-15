@@ -136,6 +136,26 @@ pub fn activate_settings_window(app_handle: tauri::AppHandle) -> Result<(), Stri
 }
 
 #[tauri::command]
+pub fn get_main_window_always_on_top_enabled(
+    main_window_state: tauri::State<'_, MainWindowState>,
+) -> Result<bool, String> {
+    Ok(crate::main_window_manual_always_on_top_enabled(
+        main_window_state.inner(),
+    ))
+}
+
+#[tauri::command]
+pub fn set_main_window_always_on_top_enabled(
+    app_handle: tauri::AppHandle,
+    main_window_state: tauri::State<'_, MainWindowState>,
+    enabled: bool,
+) -> Result<bool, String> {
+    crate::set_main_window_manual_always_on_top_enabled(main_window_state.inner(), enabled);
+    crate::apply_main_window_runtime_mode(&app_handle, main_window_state.inner());
+    Ok(enabled)
+}
+
+#[tauri::command]
 pub fn close_settings_window(
     app_handle: tauri::AppHandle,
     return_to_main: bool,

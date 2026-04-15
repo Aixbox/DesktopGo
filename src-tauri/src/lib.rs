@@ -11,9 +11,11 @@ use commands::{
     activate_main_window, activate_settings_window, apply_window_style, check_for_app_update,
     close_settings_window, delete_desktop_icons, get_default_customapp_dir, get_desktop_icons,
     get_icon_manager_items, get_import_mode_enabled, get_launch_on_startup_enabled,
+    get_main_window_always_on_top_enabled,
     get_layout_payload, get_layout_payloads, get_search_preview, get_search_runtime_status,
     get_updater_configuration_status, hide_desktop_icons, import_dropped_paths, install_app_update,
     launch_app, notify_main_window_ready, record_search_result_run, search_files,
+    set_main_window_always_on_top_enabled,
     set_import_mode_enabled, set_layout_payload, set_layout_payloads, set_window_mode,
     show_shell_context_menu, start_search_runtime, sync_full_customapp_icons,
     sync_full_desktop_icons, sync_new_customapp_icons, sync_new_desktop_icons,
@@ -91,6 +93,7 @@ struct MainWindowState {
     suppress_blur: AtomicBool,
     import_mode_enabled: AtomicBool,
     window_persistent_enabled: AtomicBool,
+    manual_always_on_top_enabled: AtomicBool,
     suppress_blur_until: Mutex<Option<Instant>>,
     last_show_request: Mutex<Option<Instant>>,
 }
@@ -156,6 +159,7 @@ impl Default for MainWindowState {
             suppress_blur: AtomicBool::new(false),
             import_mode_enabled: AtomicBool::new(false),
             window_persistent_enabled: AtomicBool::new(false),
+            manual_always_on_top_enabled: AtomicBool::new(false),
             suppress_blur_until: Mutex::new(None),
             last_show_request: Mutex::new(None),
         }
@@ -355,6 +359,8 @@ pub fn run() {
             record_search_result_run,
             notify_main_window_ready,
             apply_window_style,
+            get_main_window_always_on_top_enabled,
+            set_main_window_always_on_top_enabled,
             get_updater_configuration_status,
             check_for_app_update,
             install_app_update,
@@ -648,6 +654,7 @@ pub(crate) fn main_window_import_mode_enabled(state: &MainWindowState) -> bool {
 fn main_window_should_always_on_top(state: &MainWindowState) -> bool {
     state.import_mode_enabled.load(Ordering::SeqCst)
         || !state.window_persistent_enabled.load(Ordering::SeqCst)
+        || state.manual_always_on_top_enabled.load(Ordering::SeqCst)
 }
 
 pub(crate) fn apply_main_window_runtime_mode(app: &tauri::AppHandle, state: &MainWindowState) {
@@ -658,12 +665,26 @@ pub(crate) fn apply_main_window_runtime_mode(app: &tauri::AppHandle, state: &Mai
     let persistent_enabled = main_window_persistent_enabled(state);
 
     // “窗口常驻”开启后，主窗口应更接近普通桌面窗口：
-    // 在任务栏可见、可最小化/最大化、可调整大小，而不是继续维持启动台的顶层态。
+    // 在任务栏可见、可最小化，但窗口尺寸仍只允许通过右键菜单切换，
+    // 不允许边缘拖拽缩放或原生最大化。
     let _ = window.set_skip_taskbar(!persistent_enabled);
-    let _ = window.set_resizable(persistent_enabled);
+    let _ = window.set_resizable(false);
     let _ = window.set_minimizable(persistent_enabled);
-    let _ = window.set_maximizable(persistent_enabled);
+    let _ = window.set_maximizable(false);
     let _ = window.set_always_on_top(main_window_should_always_on_top(state));
+}
+
+pub(crate) fn main_window_manual_always_on_top_enabled(state: &MainWindowState) -> bool {
+    state.manual_always_on_top_enabled.load(Ordering::SeqCst)
+}
+
+pub(crate) fn set_main_window_manual_always_on_top_enabled(
+    state: &MainWindowState,
+    enabled: bool,
+) {
+    state
+        .manual_always_on_top_enabled
+        .store(enabled, Ordering::SeqCst);
 }
 
 fn main_window_blur_guard_active(state: &MainWindowState) -> bool {
