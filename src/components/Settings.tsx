@@ -175,6 +175,7 @@ const ABOUT_REPOSITORY_URL = 'https://github.com/Aixbox/DesktopGo'
 const ABOUT_ISSUES_URL = `${ABOUT_REPOSITORY_URL}/issues`
 const ABOUT_RELEASES_URL = `${ABOUT_REPOSITORY_URL}/releases`
 let pendingWindowPersistentSync: Promise<void> = Promise.resolve()
+let skipReturnToMainOnClose = false
 
 type IconSyncAction =
   | 'desktopIncremental'
@@ -614,6 +615,7 @@ function SettingsPanel() {
   const handleWindowPersistent = (value: boolean) => {
     const previousValue = windowPersistentEnabled
     setWindowPersistentEnabled(value)
+    skipReturnToMainOnClose = !value
     const task = (async () => {
       try {
         await setSetting('windowPersistent', value)
@@ -621,6 +623,7 @@ function SettingsPanel() {
       } catch (error) {
         console.error('Failed to save window persistent state:', error)
         setWindowPersistentEnabled(previousValue)
+        skipReturnToMainOnClose = !previousValue
         void setSetting('windowPersistent', previousValue).catch(rollbackError => {
           console.error('Failed to rollback window persistent state:', rollbackError)
         })
@@ -2431,7 +2434,7 @@ export function Settings() {
     try {
       await pendingWindowPersistentSync
       await invoke('close_settings_window', {
-        returnToMain: shouldReturnToMainOnClose,
+        returnToMain: shouldReturnToMainOnClose && !skipReturnToMainOnClose,
       })
     } catch (e) {
       console.error('Failed to close settings window:', e)

@@ -88,43 +88,6 @@ fn resolve_window_work_area_bounds(window: &tauri::WebviewWindow) -> Option<Wind
     ))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MainWindowRestoreStrategy {
-    WorkArea,
-    Center,
-}
-
-fn resolve_main_window_restore_strategy(mode: Option<&str>) -> MainWindowRestoreStrategy {
-    match mode {
-        Some("fullscreen") => MainWindowRestoreStrategy::WorkArea,
-        _ => MainWindowRestoreStrategy::Center,
-    }
-}
-
-fn restore_main_window_default_position(app_handle: &tauri::AppHandle) {
-    let Some(window) = app_handle.get_webview_window("main") else {
-        return;
-    };
-
-    // 关闭窗口常驻后，需要把主窗口拉回该窗口模式的默认位置，
-    // 避免保留用户在常驻状态下拖拽出来的偏移。
-    match resolve_main_window_restore_strategy(crate::read_saved_window_mode(app_handle)) {
-        MainWindowRestoreStrategy::WorkArea => {
-            if let Some(bounds) = resolve_window_work_area_bounds(&window) {
-                let _ = window.set_position(tauri::PhysicalPosition::new(bounds.x, bounds.y));
-                let _ = window.set_size(tauri::PhysicalSize::new(bounds.width, bounds.height));
-                return;
-            }
-            let _ = window.center();
-        }
-        MainWindowRestoreStrategy::Center => {
-            let (width, height) = crate::resolve_initial_main_window_size(app_handle);
-            let _ = window.set_size(tauri::LogicalSize::new(width, height));
-            let _ = window.center();
-        }
-    }
-}
-
 #[tauri::command]
 pub fn toggle_window(window: tauri::Window) {
     crate::hide_main_window(&window.app_handle());
@@ -231,9 +194,10 @@ pub fn sync_window_persistent_state(
 
     if !enabled {
         if let Some(window) = app_handle.get_webview_window("main") {
-            let _ = window.unmaximize();
+            window
+                .destroy()
+                .map_err(|error| format!("Failed to destroy main window: {error}"))?;
         }
-        restore_main_window_default_position(&app_handle);
     }
 
     if let Some(window) = app_handle.get_webview_window("main") {
@@ -474,41 +438,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn fullscreen_restore_strategy_uses_work_area() {
-        assert_eq!(
-            resolve_main_window_restore_strategy(Some("fullscreen")),
-            MainWindowRestoreStrategy::WorkArea
-        );
-    }
-
-    #[test]
-    fn standard_window_restore_strategy_uses_center() {
-        assert_eq!(
-            resolve_main_window_restore_strategy(Some("medium")),
-            MainWindowRestoreStrategy::Center
-        );
-        assert_eq!(
-            resolve_main_window_restore_strategy(Some("large")),
-            MainWindowRestoreStrategy::Center
-        );
-        assert_eq!(
-            resolve_main_window_restore_strategy(Some("small")),
-            MainWindowRestoreStrategy::Center
-        );
-    }
-
-    #[test]
-    fn unknown_window_mode_restore_strategy_falls_back_to_center() {
-        assert_eq!(
-            resolve_main_window_restore_strategy(Some("unexpected")),
-            MainWindowRestoreStrategy::Center
-        );
-        assert_eq!(
-            resolve_main_window_restore_strategy(None),
-            MainWindowRestoreStrategy::Center
-        );
-    }
 }
 
 #[tauri::command]
