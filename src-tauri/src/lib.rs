@@ -36,7 +36,7 @@ use tauri::{Emitter, Listener, Manager, RunEvent};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tauri_plugin_store::StoreExt;
 #[cfg(target_os = "windows")]
-use window_vibrancy::{apply_acrylic, clear_acrylic};
+use window_vibrancy::{apply_acrylic, apply_mica, clear_acrylic, clear_mica};
 #[cfg(windows)]
 use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE};
 #[cfg(windows)]
@@ -93,6 +93,7 @@ struct MainWindowState {
     suppress_blur: AtomicBool,
     import_mode_enabled: AtomicBool,
     window_persistent_enabled: AtomicBool,
+    transparent_surface_enabled: AtomicBool,
     manual_always_on_top_enabled: AtomicBool,
     suppress_blur_until: Mutex<Option<Instant>>,
     last_show_request: Mutex<Option<Instant>>,
@@ -159,6 +160,7 @@ impl Default for MainWindowState {
             suppress_blur: AtomicBool::new(false),
             import_mode_enabled: AtomicBool::new(false),
             window_persistent_enabled: AtomicBool::new(false),
+            transparent_surface_enabled: AtomicBool::new(true),
             manual_always_on_top_enabled: AtomicBool::new(false),
             suppress_blur_until: Mutex::new(None),
             last_show_request: Mutex::new(None),
@@ -555,6 +557,44 @@ fn normalize_window_style(value: &str) -> Option<&'static str> {
     }
 }
 
+#[cfg(windows)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MainWindowBackdrop {
+    Default,
+    Acrylic,
+    Mica,
+}
+
+#[cfg(windows)]
+fn resolve_main_window_backdrop(style: &str, persistent_enabled: bool) -> MainWindowBackdrop {
+    match normalize_window_style(style).unwrap_or("default") {
+        "nativeAcrylic" if persistent_enabled => MainWindowBackdrop::Mica,
+        "nativeAcrylic" => MainWindowBackdrop::Acrylic,
+        _ => MainWindowBackdrop::Default,
+    }
+}
+
+#[cfg(windows)]
+fn main_window_should_use_transparent_surface(style: &str, persistent_enabled: bool) -> bool {
+    !matches!(
+        resolve_main_window_backdrop(style, persistent_enabled),
+        MainWindowBackdrop::Mica
+    )
+}
+
+fn resolve_main_window_background_color(
+    transparent_surface: bool,
+    dark: bool,
+) -> tauri::utils::config::Color {
+    if transparent_surface {
+        tauri::utils::config::Color(0, 0, 0, 0)
+    } else if dark {
+        tauri::utils::config::Color(18, 22, 30, 255)
+    } else {
+        tauri::utils::config::Color(244, 246, 250, 255)
+    }
+}
+
 fn read_saved_window_style(app: &tauri::AppHandle) -> Option<&'static str> {
     app.store("settings.json").ok().and_then(|store| {
         store
@@ -588,27 +628,39 @@ fn apply_window_style_to_window(
     theme_mode_override: Option<&str>,
 ) -> Result<(), String> {
     let dark = resolved_theme_is_dark(app, theme_mode_override);
-    let use_native_acrylic = matches!(normalize_window_style(style), Some("nativeAcrylic"));
-    let _ = set_window_immersive_dark_mode(window, use_native_acrylic && dark);
+    let persistent_enabled = main_window_persistent_enabled(app.state::<MainWindowState>().inner());
+    let backdrop = resolve_main_window_backdrop(style, persistent_enabled);
+    let transparent_surface = main_window_should_use_transparent_surface(style, persistent_enabled);
+    let use_native_backdrop = !matches!(backdrop, MainWindowBackdrop::Default);
+    let acrylic_tint = if dark {
+        (24, 28, 36, 96)
+    } else {
+        (250, 250, 250, 4)
+    };
+    let background_color = resolve_main_window_background_color(transparent_surface, dark);
 
-    match normalize_window_style(style).unwrap_or("default") {
-        "nativeAcrylic" => {
-            // Rebuild the native backdrop each time theme changes, otherwise
-            // Windows 11 may keep the previous acrylic appearance.
-            let _ = clear_acrylic(window);
+    let _ = set_window_immersive_dark_mode(window, use_native_backdrop && dark);
+    let _ = window.set_background_color(Some(background_color));
 
-            let acrylic_tint = if dark {
-                (24, 28, 36, 96)
-            } else {
-                (250, 250, 250, 4)
-            };
+    // Rebuild the native backdrop each time theme or runtime mode changes, otherwise
+    // Windows may keep the previous acrylic or mica appearance.
+    let _ = clear_acrylic(window);
+    let _ = clear_mica(window);
 
-            apply_acrylic(window, Some(acrylic_tint))
-                .map_err(|e| format!("Failed to apply acrylic: {}", e))
-        }
-        _ => {
+    match backdrop {
+        MainWindowBackdrop::Acrylic => apply_acrylic(window, Some(acrylic_tint))
+            .map_err(|error| format!("Failed to apply acrylic: {}", error)),
+        MainWindowBackdrop::Mica => apply_mica(window, Some(dark)).or_else(|mica_error| {
+            apply_acrylic(window, Some(acrylic_tint)).map_err(|acrylic_error| {
+                format!(
+                    "Failed to apply mica: {}. Acrylic fallback also failed: {}",
+                    mica_error, acrylic_error
+                )
+            })
+        }),
+        MainWindowBackdrop::Default => {
             let _ = set_window_immersive_dark_mode(window, false);
-            clear_acrylic(window).map_err(|e| format!("Failed to clear acrylic: {}", e))
+            Ok(())
         }
     }
 }
@@ -731,6 +783,7 @@ fn build_window_bootstrap_script(app: &tauri::AppHandle, include_window_style: b
     } else {
         "default"
     };
+    let window_persistent_enabled = include_window_style && read_saved_window_persistent_enabled(app);
 
     format!(
         r#"
@@ -738,8 +791,9 @@ fn build_window_bootstrap_script(app: &tauri::AppHandle, include_window_style: b
   const root = document.documentElement;
   const themeMode = {theme_mode:?};
   const windowStyle = {window_style:?};
-  const useDelayedReveal = windowStyle === 'nativeAcrylic';
-  root.classList.remove('dark', 'window-style-native-acrylic');
+  const windowPersistentEnabled = {window_persistent_enabled};
+  const useDelayedReveal = windowStyle === 'nativeAcrylic' && !windowPersistentEnabled;
+  root.classList.remove('dark', 'window-style-native-acrylic', 'window-style-native-mica');
   root.style.opacity = useDelayedReveal ? '0' : '1';
   root.style.transition = useDelayedReveal ? 'opacity 50ms ease-out' : '';
 
@@ -751,7 +805,9 @@ fn build_window_bootstrap_script(app: &tauri::AppHandle, include_window_style: b
   }}
 
   if (windowStyle === 'nativeAcrylic') {{
-    root.classList.add('window-style-native-acrylic');
+    root.classList.add(
+      windowPersistentEnabled ? 'window-style-native-mica' : 'window-style-native-acrylic'
+    );
   }}
 }})();
 "#
@@ -759,11 +815,61 @@ fn build_window_bootstrap_script(app: &tauri::AppHandle, include_window_style: b
 }
 
 fn main_window_uses_delayed_reveal(app: &tauri::AppHandle) -> bool {
-    matches!(read_saved_window_style(app), Some("nativeAcrylic"))
+    main_window_requires_focus_style_refresh(app)
+}
+
+#[cfg(windows)]
+pub(crate) fn main_window_should_recreate_for_surface_mode(
+    app: &tauri::AppHandle,
+    style_override: Option<&str>,
+    persistent_override: Option<bool>,
+) -> bool {
+    let Some(_window) = app.get_webview_window("main") else {
+        return false;
+    };
+
+    let style = style_override
+        .and_then(normalize_window_style)
+        .or_else(|| read_saved_window_style(app))
+        .unwrap_or("default");
+    let persistent_enabled = persistent_override
+        .unwrap_or_else(|| main_window_persistent_enabled(app.state::<MainWindowState>().inner()));
+    let desired_transparent = main_window_should_use_transparent_surface(style, persistent_enabled);
+    let current_transparent = app
+        .state::<MainWindowState>()
+        .transparent_surface_enabled
+        .load(Ordering::SeqCst);
+
+    desired_transparent != current_transparent
+}
+
+#[cfg(not(windows))]
+pub(crate) fn main_window_should_recreate_for_surface_mode(
+    _app: &tauri::AppHandle,
+    _style_override: Option<&str>,
+    _persistent_override: Option<bool>,
+) -> bool {
+    false
+}
+
+#[cfg(windows)]
+fn main_window_requires_focus_style_refresh(app: &tauri::AppHandle) -> bool {
+    let style = read_saved_window_style(app).unwrap_or("default");
+    let persistent_enabled = main_window_persistent_enabled(app.state::<MainWindowState>().inner());
+
+    matches!(
+        resolve_main_window_backdrop(style, persistent_enabled),
+        MainWindowBackdrop::Acrylic
+    )
+}
+
+#[cfg(not(windows))]
+fn main_window_requires_focus_style_refresh(_app: &tauri::AppHandle) -> bool {
+    false
 }
 
 fn schedule_main_window_style_refresh(app: tauri::AppHandle, delay_ms: u64) {
-    if !main_window_uses_delayed_reveal(&app) {
+    if !main_window_requires_focus_style_refresh(&app) {
         return;
     }
 
@@ -771,7 +877,7 @@ fn schedule_main_window_style_refresh(app: tauri::AppHandle, delay_ms: u64) {
         std::thread::sleep(Duration::from_millis(delay_ms));
         if let Err(error) = apply_main_window_style(&app, None, None) {
             eprintln!(
-                "Warning: Failed to refresh main window acrylic style after focus change: {}",
+                "Warning: Failed to refresh main window native backdrop after focus change: {}",
                 error
             );
         }
@@ -1342,16 +1448,22 @@ fn create_main_window(app: &tauri::AppHandle) {
     state.ready.store(false, Ordering::SeqCst);
     let (initial_width, initial_height) = resolve_initial_main_window_size(app);
     let bootstrap_script = build_window_bootstrap_script(app, true);
+    let saved_style = read_saved_window_style(app).unwrap_or("default");
+    let persistent_enabled = main_window_persistent_enabled(&state);
+    let transparent_surface =
+        main_window_should_use_transparent_surface(saved_style, persistent_enabled);
+    let dark = resolved_theme_is_dark(app, None);
+    let background_color = resolve_main_window_background_color(transparent_surface, dark);
 
     let builder =
         tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
             .title("DesktopGo")
             .inner_size(initial_width, initial_height)
-            .background_color(tauri::utils::config::Color(0, 0, 0, 0))
+            .background_color(background_color)
             .fullscreen(false)
             .resizable(false)
             .decorations(false)
-            .transparent(true)
+            .transparent(transparent_surface)
             .always_on_top(true)
             .skip_taskbar(true)
             .visible(false)
@@ -1362,6 +1474,9 @@ fn create_main_window(app: &tauri::AppHandle) {
 
     match builder.build() {
         Ok(_) => {
+            state
+                .transparent_surface_enabled
+                .store(transparent_surface, Ordering::SeqCst);
             if let Err(error) = apply_main_window_style(app, None, None) {
                 eprintln!(
                     "Warning: Failed to apply saved main window style: {}",

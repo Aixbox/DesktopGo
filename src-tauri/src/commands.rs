@@ -105,6 +105,15 @@ pub fn apply_window_style(
     style: String,
     theme_mode: Option<String>,
 ) -> Result<(), String> {
+    if crate::main_window_should_recreate_for_surface_mode(&app_handle, Some(style.as_str()), None) {
+        if let Some(window) = app_handle.get_webview_window("main") {
+            window
+                .destroy()
+                .map_err(|error| format!("Failed to recreate main window: {error}"))?;
+        }
+        return Ok(());
+    }
+
     crate::apply_main_window_style(&app_handle, Some(style.as_str()), theme_mode.as_deref())
 }
 
@@ -210,7 +219,20 @@ pub fn sync_window_persistent_state(
     enabled: bool,
 ) -> Result<bool, String> {
     crate::set_main_window_persistent_enabled(main_window_state.inner(), enabled);
+
+    if crate::main_window_should_recreate_for_surface_mode(&app_handle, None, Some(enabled)) {
+        if let Some(window) = app_handle.get_webview_window("main") {
+            window
+                .destroy()
+                .map_err(|error| format!("Failed to recreate main window: {error}"))?;
+        }
+    }
+
     crate::apply_main_window_runtime_mode(&app_handle, main_window_state.inner());
+
+    if enabled && app_handle.get_webview_window("main").is_some() {
+        crate::apply_main_window_style(&app_handle, None, None)?;
+    }
 
     if !enabled {
         if let Some(window) = app_handle.get_webview_window("main") {

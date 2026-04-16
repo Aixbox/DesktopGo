@@ -17,6 +17,7 @@ import { translate, useI18n } from '@/lib/i18n'
 import { getSetting } from '@/lib/settingsStore'
 import { applyTheme, getSavedTheme } from '@/lib/theme'
 import {
+  MAIN_WINDOW_APPEARANCE_SYNC_EVENT,
   SETTINGS_RETURNED_TO_MAIN_EVENT,
   WINDOW_PERSISTENT_SYNC_EVENT,
   type WindowPersistentSyncPayload,
@@ -280,6 +281,22 @@ export function Launchpad() {
     }
   }, [])
 
+  const syncWindowAppearance = useCallback(async () => {
+    try {
+      const [savedWindowStyle, persistentEnabled, savedTheme] = await Promise.all([
+        getSavedWindowStyle(),
+        getSetting('windowPersistent'),
+        getSavedTheme(),
+      ])
+
+      setWindowPersistentEnabled(persistentEnabled)
+      applyTheme(savedTheme, savedWindowStyle)
+      applyWindowStyle(savedWindowStyle, persistentEnabled)
+    } catch (error) {
+      console.error('Failed to sync launchpad appearance:', error)
+    }
+  }, [])
+
   useEffect(() => {
     void (async () => {
       try {
@@ -290,9 +307,7 @@ export function Launchpad() {
         await syncMainWindowAlwaysOnTopState()
         const { windowMode: currentWindowMode, applyWindowMode } = useIconStore.getState()
         await applyWindowMode(currentWindowMode)
-        const savedWindowStyle = await getSavedWindowStyle()
-        applyTheme(await getSavedTheme(), savedWindowStyle)
-        applyWindowStyle(savedWindowStyle)
+        await syncWindowAppearance()
       } catch (e) {
         console.error('Failed to initialize launchpad settings:', e)
       } finally {
@@ -306,6 +321,7 @@ export function Launchpad() {
     hydrateSettings,
     syncImportModeState,
     syncMainWindowAlwaysOnTopState,
+    syncWindowAppearance,
     syncWindowPersistentState,
   ])
 
@@ -319,9 +335,7 @@ export function Launchpad() {
       await syncWindowPersistentState()
       await syncMainWindowAlwaysOnTopState()
       await reloadSearchSettings()
-      const savedWindowStyle = await getSavedWindowStyle()
-      applyTheme(await getSavedTheme(), savedWindowStyle)
-      applyWindowStyle(savedWindowStyle)
+      await syncWindowAppearance()
     } catch (e) {
       console.error('Failed to sync launchpad state:', e)
     }
@@ -329,6 +343,7 @@ export function Launchpad() {
     reloadSearchSettings,
     syncImportModeState,
     syncMainWindowAlwaysOnTopState,
+    syncWindowAppearance,
     syncWindowPersistentState,
   ])
 
@@ -507,6 +522,28 @@ export function Launchpad() {
     let unlisten: (() => void) | null = null
 
     void getCurrentWindow()
+      .listen(MAIN_WINDOW_APPEARANCE_SYNC_EVENT, () => {
+        void syncWindowAppearance()
+      })
+      .then(fn => {
+        if (disposed) {
+          fn()
+          return
+        }
+        unlisten = fn
+      })
+
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [syncWindowAppearance])
+
+  useEffect(() => {
+    let disposed = false
+    let unlisten: (() => void) | null = null
+
+    void getCurrentWindow()
       .listen(LAUNCHPAD_SHOWN_EVENT, () => {
         void applyLaunchpadOpenFocus()
       })
@@ -532,6 +569,13 @@ export function Launchpad() {
       .listen<WindowPersistentSyncPayload>(WINDOW_PERSISTENT_SYNC_EVENT, event => {
         const enabled = Boolean(event.payload?.enabled)
         setWindowPersistentEnabled(enabled)
+        void getSavedWindowStyle()
+          .then(style => {
+            applyWindowStyle(style, enabled)
+          })
+          .catch(error => {
+            console.error('Failed to sync launchpad window style after persistent change:', error)
+          })
         if (!enabled) {
           // 从设置关闭“窗口常驻”返回主窗口时，下一次焦点恢复不应再吞掉
           // 用户对全屏空白区域的首次点击，否则会表现成“必须先点一下窗口”。

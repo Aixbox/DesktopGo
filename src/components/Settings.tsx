@@ -34,6 +34,7 @@ import {
 import { applyWindowStyle, saveWindowStyle } from '@/lib/windowStyle'
 import { DEFAULT_LAUNCHPAD_SHORTCUT, getSetting, setSetting } from '@/lib/settingsStore'
 import { DEFAULT_LAUNCHPAD_OPEN_FOCUS_TARGET } from '@/lib/launchpadOpenFocus'
+import { MAIN_WINDOW_APPEARANCE_SYNC_EVENT } from '@/lib/windowPersistent'
 import {
   LAUNCHPAD_LAYOUT_RESET_EVENT,
   resetLaunchpadLayout,
@@ -615,6 +616,7 @@ function SettingsPanel() {
   const handleWindowPersistent = (value: boolean) => {
     const previousValue = windowPersistentEnabled
     setWindowPersistentEnabled(value)
+    applyWindowStyle(windowStyle, value)
     skipReturnToMainOnClose = !value
     const task = (async () => {
       try {
@@ -623,6 +625,7 @@ function SettingsPanel() {
       } catch (error) {
         console.error('Failed to save window persistent state:', error)
         setWindowPersistentEnabled(previousValue)
+        applyWindowStyle(windowStyle, previousValue)
         skipReturnToMainOnClose = !previousValue
         void setSetting('windowPersistent', previousValue).catch(rollbackError => {
           console.error('Failed to rollback window persistent state:', rollbackError)
@@ -651,12 +654,26 @@ function SettingsPanel() {
     })
   }
 
+  const syncMainWindowAppearance = useCallback(async () => {
+    try {
+      const mainWindow = await WebviewWindow.getByLabel('main')
+      if (!mainWindow) {
+        return
+      }
+
+      await mainWindow.emit(MAIN_WINDOW_APPEARANCE_SYNC_EVENT)
+    } catch (error) {
+      console.error('Failed to sync main window appearance:', error)
+    }
+  }, [])
+
   const handleThemeMode = async (value: ThemeMode) => {
     setThemeMode(value)
     applyTheme(value, windowStyle)
 
     try {
       await saveTheme(value)
+      void syncMainWindowAppearance()
     } catch (e) {
       console.error('Failed to save theme mode:', e)
     }
@@ -687,14 +704,14 @@ function SettingsPanel() {
   const handleWindowStyle = async (value: WindowStyle) => {
     const previousStyle = windowStyle
     setWindowStyle(value)
-    applyWindowStyle(value)
+    applyWindowStyle(value, windowPersistentEnabled)
     applyTheme(themeMode, value)
 
     try {
       await saveWindowStyle(value)
     } catch (error) {
       setWindowStyle(previousStyle)
-      applyWindowStyle(previousStyle)
+      applyWindowStyle(previousStyle, windowPersistentEnabled)
       applyTheme(themeMode, previousStyle)
       toast.error(translate('保存主题风格失败：{error}', { error: String(error) }), {
         key: 'settings-window-style',
@@ -708,6 +725,7 @@ function SettingsPanel() {
         style: value,
         themeMode: resolveEffectiveThemeMode(themeMode, value),
       })
+      void syncMainWindowAppearance()
     } catch (error) {
       console.error('Failed to apply window style:', error)
       toast.error(translate('应用主题风格失败：{error}', { error: String(error) }), {
