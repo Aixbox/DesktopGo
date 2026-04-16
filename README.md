@@ -40,7 +40,7 @@ DesktopGo 是一个使用 Tauri 2 + React 19 + Rust 构建的 Windows 桌面启�
 
 - 最新版本：<https://github.com/Aixbox/DesktopGo/releases/latest>
 - 所有发布：<https://github.com/Aixbox/DesktopGo/releases>
-- `1.0.3` 发布说明：[`docs/RELEASE_NOTES/v1.0.3.md`](docs/RELEASE_NOTES/v1.0.3.md)
+- `1.0.4` 发布说明：[`docs/RELEASE_NOTES/v1.0.4.md`](docs/RELEASE_NOTES/v1.0.4.md)
 - 详细使用说明（中文）：[`docs/USER_GUIDE.zh-CN.md`](docs/USER_GUIDE.zh-CN.md)
 - User Guide (English): [`docs/USER_GUIDE.en.md`](docs/USER_GUIDE.en.md)
 
