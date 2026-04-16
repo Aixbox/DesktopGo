@@ -2,7 +2,6 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::PathBuf;
-use tauri::Manager;
 
 const DB_FILE_NAME: &str = "app_state.db";
 const CREATE_KV_TABLE_SQL: &str = r#"
@@ -35,19 +34,7 @@ pub struct LayoutPayloadValue {
 }
 
 fn resolve_db_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let base_dir = app_handle
-        .path()
-        .app_local_data_dir()
-        .map_err(|e| format!("Failed to resolve app local data directory: {}", e))?;
-
-    std::fs::create_dir_all(&base_dir).map_err(|e| {
-        format!(
-            "Failed to create app local data directory {:?}: {}",
-            base_dir, e
-        )
-    })?;
-
-    Ok(base_dir.join(DB_FILE_NAME))
+    crate::storage_profile::app_local_data_path(app_handle, DB_FILE_NAME)
 }
 
 fn open_db(app_handle: &tauri::AppHandle) -> Result<Connection, String> {

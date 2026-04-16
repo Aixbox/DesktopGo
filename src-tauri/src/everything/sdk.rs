@@ -83,10 +83,7 @@ pub fn ensure_sdk_dll(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> 
         return Err(format!("Everything SDK DLL is missing: {:?}", source_dll));
     }
 
-    let local_data_dir = app_handle
-        .path()
-        .app_local_data_dir()
-        .map_err(|e| format!("Failed to resolve app local data dir: {}", e))?;
+    let local_data_dir = crate::storage_profile::app_local_data_dir(app_handle)?;
     let target_root = local_data_dir.join("everything-sdk");
     fs::create_dir_all(&target_root)
         .map_err(|e| format!("Failed to create SDK target root {:?}: {}", target_root, e))?;

@@ -1,7 +1,6 @@
 use base64::Engine;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use tauri::Manager;
 
 use super::models::{
     DesktopIcon, IconBucket, IconManagerItem, IconMutationTarget, IconSnapshot, IconSyncResult,
@@ -306,10 +305,7 @@ fn get_path_icon_base64_windows(path: &str, icon_size: i32) -> String {
 
 #[cfg(windows)]
 fn snapshot_base_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
-    app_handle
-        .path()
-        .app_local_data_dir()
-        .map_err(|e| format!("Failed to resolve app local data directory: {}", e))
+    crate::storage_profile::app_local_data_dir(app_handle)
 }
 
 #[cfg(windows)]

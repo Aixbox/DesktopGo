@@ -6,7 +6,6 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use once_cell::sync::Lazy;
 use serde::Serialize;
-use tauri::Manager;
 
 use crate::layout_db;
 
@@ -92,7 +91,7 @@ pub(super) fn append_debug_log(app_handle: &tauri::AppHandle, message: impl AsRe
     let text = message.as_ref();
     eprintln!("[search-debug] {}", text);
 
-    let base_dir = match app_handle.path().app_local_data_dir() {
+    let base_dir = match crate::storage_profile::app_local_data_dir(app_handle) {
         Ok(path) => path,
         Err(_) => return,
     };

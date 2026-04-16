@@ -5,6 +5,7 @@ mod icons;
 mod layout_db;
 mod search_preview;
 mod shell_context_menu;
+mod storage_profile;
 mod updater;
 
 use commands::{
@@ -259,6 +260,7 @@ pub fn run() {
 
     let app = builder
         .setup(|app| {
+            storage_profile::ensure_dev_profile_seeded(app.handle())?;
             let initial_language = initialize_app_language(app.handle());
             let tray_state = app.state::<TrayState>();
             tray_state.set_language(AppLanguage::from_code(initial_language));
@@ -472,16 +474,18 @@ fn normalize_app_language(value: &str) -> Option<&'static str> {
 }
 
 fn read_saved_language(app: &tauri::AppHandle) -> Option<&'static str> {
-    app.store("settings.json").ok().and_then(|store| {
-        store
-            .get(LANGUAGE_SETTING_KEY)
-            .and_then(|value| value.as_str().and_then(normalize_app_language))
-    })
+    app.store(storage_profile::settings_store_path())
+        .ok()
+        .and_then(|store| {
+            store
+                .get(LANGUAGE_SETTING_KEY)
+                .and_then(|value| value.as_str().and_then(normalize_app_language))
+        })
 }
 
 fn save_language_setting(app: &tauri::AppHandle, language: &str) -> Result<(), String> {
     let store = app
-        .store("settings.json")
+        .store(storage_profile::settings_store_path())
         .map_err(|error| format!("无法打开本地语言设置存储：{}", error))?;
     store.set(LANGUAGE_SETTING_KEY, language.to_string());
     store
@@ -500,11 +504,13 @@ fn normalize_window_mode(value: &str) -> Option<&'static str> {
 }
 
 pub(crate) fn read_saved_window_mode(app: &tauri::AppHandle) -> Option<&'static str> {
-    app.store("settings.json").ok().and_then(|store| {
-        store
-            .get(WINDOW_MODE_SETTING_KEY)
-            .and_then(|value| value.as_str().and_then(normalize_window_mode))
-    })
+    app.store(storage_profile::settings_store_path())
+        .ok()
+        .and_then(|store| {
+            store
+                .get(WINDOW_MODE_SETTING_KEY)
+                .and_then(|value| value.as_str().and_then(normalize_window_mode))
+        })
 }
 
 fn normalize_theme_mode(value: &str) -> Option<&'static str> {
@@ -517,11 +523,13 @@ fn normalize_theme_mode(value: &str) -> Option<&'static str> {
 }
 
 fn read_saved_theme_mode(app: &tauri::AppHandle) -> Option<&'static str> {
-    app.store("settings.json").ok().and_then(|store| {
-        store
-            .get(THEME_MODE_SETTING_KEY)
-            .and_then(|value| value.as_str().and_then(normalize_theme_mode))
-    })
+    app.store(storage_profile::settings_store_path())
+        .ok()
+        .and_then(|store| {
+            store
+                .get(THEME_MODE_SETTING_KEY)
+                .and_then(|value| value.as_str().and_then(normalize_theme_mode))
+        })
 }
 
 #[cfg(windows)]
@@ -596,11 +604,13 @@ fn resolve_main_window_background_color(
 }
 
 fn read_saved_window_style(app: &tauri::AppHandle) -> Option<&'static str> {
-    app.store("settings.json").ok().and_then(|store| {
-        store
-            .get(WINDOW_STYLE_SETTING_KEY)
-            .and_then(|value| value.as_str().and_then(normalize_window_style))
-    })
+    app.store(storage_profile::settings_store_path())
+        .ok()
+        .and_then(|store| {
+            store
+                .get(WINDOW_STYLE_SETTING_KEY)
+                .and_then(|value| value.as_str().and_then(normalize_window_style))
+        })
 }
 
 #[cfg(windows)]
@@ -999,15 +1009,17 @@ fn refresh_settings_window_title(app: &tauri::AppHandle) {
 }
 
 fn read_saved_launch_on_startup(app: &tauri::AppHandle) -> Option<bool> {
-    app.store("settings.json").ok().and_then(|store| {
-        store
-            .get(LAUNCH_ON_STARTUP_SETTING_KEY)
-            .and_then(|value| value.as_bool())
-    })
+    app.store(storage_profile::settings_store_path())
+        .ok()
+        .and_then(|store| {
+            store
+                .get(LAUNCH_ON_STARTUP_SETTING_KEY)
+                .and_then(|value| value.as_bool())
+        })
 }
 
 fn read_saved_window_persistent_enabled(app: &tauri::AppHandle) -> bool {
-    app.store("settings.json")
+    app.store(storage_profile::settings_store_path())
         .ok()
         .and_then(|store| {
             store
@@ -1027,7 +1039,7 @@ pub(crate) fn set_main_window_persistent_enabled(state: &MainWindowState, enable
 
 fn save_launch_on_startup_setting(app: &tauri::AppHandle, enabled: bool) -> Result<(), String> {
     let store = app
-        .store("settings.json")
+        .store(storage_profile::settings_store_path())
         .map_err(|error| format!("无法打开本地设置存储：{}", error))?;
     store.set(LAUNCH_ON_STARTUP_SETTING_KEY, enabled);
     store
@@ -1240,7 +1252,7 @@ fn register_launchpad_shortcut_handler(
 }
 
 fn read_saved_launchpad_shortcut(app: &tauri::AppHandle) -> String {
-    app.store("settings.json")
+    app.store(storage_profile::settings_store_path())
         .ok()
         .and_then(|store| {
             store
@@ -1251,7 +1263,7 @@ fn read_saved_launchpad_shortcut(app: &tauri::AppHandle) -> String {
 }
 
 fn persist_launchpad_shortcut(app: &tauri::AppHandle, shortcut: &str) {
-    if let Ok(store) = app.store("settings.json") {
+    if let Ok(store) = app.store(storage_profile::settings_store_path()) {
         store.set("launchpadShortcut", shortcut.to_string());
         let _ = store.save();
     }

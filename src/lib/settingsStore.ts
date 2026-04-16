@@ -82,7 +82,8 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   customAppDir: '',
 }
 
-const store = new LazyStore('settings.json')
+const SETTINGS_STORE_PATH = import.meta.env.DEV ? 'dev/settings.json' : 'settings.json'
+const store = new LazyStore(SETTINGS_STORE_PATH)
 const managedStoreKeys = new Set<string>([...MANAGED_SETTING_KEYS, SETTINGS_VERSION_KEY])
 let storeReadyPromise: Promise<void> | null = null
 
