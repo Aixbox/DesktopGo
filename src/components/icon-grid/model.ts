@@ -40,12 +40,24 @@ export type PersistedItem =
       children: string[]
     }
 
+export interface PersistedGridCoordinate {
+  page: number
+  row: number
+  col: number
+}
+
+export interface PersistedItemCoordinates {
+  id: string
+  cells: PersistedGridCoordinate[]
+}
+
 export interface PersistedLayout {
   items: PersistedItem[]
   slots: Array<string | null> | null
   dockKeys: Array<string | null>
   pageSize?: number
   columns?: number
+  coordinates?: PersistedItemCoordinates[]
 }
 
 export const getId = (item: GridItem): string =>

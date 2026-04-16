@@ -1,7 +1,12 @@
-import type { GridItem, GridSpan } from '../model'
-import { getGridItemSpan, getId } from '../model'
-import { clampNumber } from './geometry'
-import { DRAG_HOLE_ID, getPageStartBySlotIndex } from './slots'
+import type {
+  GridItem,
+  GridSpan,
+  PersistedGridCoordinate,
+  PersistedItemCoordinates,
+} from '../model.ts'
+import { getGridItemSpan, getId } from '../model.ts'
+import { clampNumber } from './geometry.ts'
+import { DRAG_HOLE_ID, getPageStartBySlotIndex } from './slots.ts'
 
 export interface TopLevelOccupancy {
   cells: Array<string | null>
@@ -20,6 +25,8 @@ export interface PageAnchorEntry {
 
 interface NormalizeOuterSlotsOptions {
   preferredAnchorById?: Map<string, number>
+  fallbackOriginAnchorById?: Map<string, number>
+  preserveSourceAnchors?: boolean
 }
 
 interface ResizeAnchorCandidate {
@@ -36,6 +43,111 @@ const ensurePageCapacity = (cells: Array<string | null>, pageSize: number, ancho
   while (cells.length < requiredLength) {
     cells.push(...Array.from({ length: safePageSize }, () => null))
   }
+}
+
+export const getGridCoordinateForIndex = (
+  anchorIndex: number,
+  columns: number,
+  pageSize: number
+): PersistedGridCoordinate => {
+  const safeColumns = Math.max(1, columns)
+  const safePageSize = Math.max(1, pageSize)
+  const safeIndex = Math.max(0, anchorIndex)
+  const page = Math.floor(safeIndex / safePageSize)
+  const localIndex = safeIndex % safePageSize
+  return {
+    page,
+    row: Math.floor(localIndex / safeColumns),
+    col: localIndex % safeColumns,
+  }
+}
+
+const compareGridCoordinates = (
+  left: PersistedGridCoordinate,
+  right: PersistedGridCoordinate
+): number => {
+  if (left.page !== right.page) return left.page - right.page
+  if (left.row !== right.row) return left.row - right.row
+  return left.col - right.col
+}
+
+const getAnchorCoordinateFromCells = (
+  cells: PersistedGridCoordinate[]
+): PersistedGridCoordinate | null => {
+  if (cells.length === 0) return null
+
+  let anchor = cells[0]
+  for (let index = 1; index < cells.length; index += 1) {
+    if (compareGridCoordinates(cells[index], anchor) < 0) {
+      anchor = cells[index]
+    }
+  }
+  return anchor
+}
+
+const getAnchorIndexFromCoordinate = (
+  coordinate: PersistedGridCoordinate,
+  columns: number,
+  pageSize: number
+): number | null => {
+  if (
+    !Number.isInteger(coordinate.page) ||
+    !Number.isInteger(coordinate.row) ||
+    !Number.isInteger(coordinate.col) ||
+    coordinate.page < 0 ||
+    coordinate.row < 0 ||
+    coordinate.col < 0
+  ) {
+    return null
+  }
+
+  const safeColumns = Math.max(1, columns)
+  const safePageSize = Math.max(1, pageSize)
+  const maxRows = Math.max(1, Math.ceil(safePageSize / safeColumns))
+  if (coordinate.col >= safeColumns || coordinate.row >= maxRows) {
+    return null
+  }
+  const localIndex = coordinate.row * safeColumns + coordinate.col
+  if (localIndex >= safePageSize) return null
+  return coordinate.page * safePageSize + localIndex
+}
+
+const getLocalAnchorIndexFromCoordinate = (
+  coordinate: PersistedGridCoordinate,
+  columns: number,
+  pageSize: number
+): number | null => {
+  const globalAnchorIndex = getAnchorIndexFromCoordinate({ ...coordinate, page: 0 }, columns, pageSize)
+  if (globalAnchorIndex === null) return null
+  return globalAnchorIndex
+}
+
+const projectCoordinateToNearestAnchorIndex = (
+  coordinate: PersistedGridCoordinate,
+  columns: number,
+  pageSize: number
+): number | null => {
+  if (
+    !Number.isInteger(coordinate.page) ||
+    !Number.isInteger(coordinate.row) ||
+    !Number.isInteger(coordinate.col) ||
+    coordinate.page < 0 ||
+    coordinate.row < 0 ||
+    coordinate.col < 0
+  ) {
+    return null
+  }
+
+  const safeColumns = Math.max(1, columns)
+  const safePageSize = Math.max(1, pageSize)
+  const maxRows = Math.max(1, Math.ceil(safePageSize / safeColumns))
+  const clampedRow = clampNumber(coordinate.row, 0, maxRows - 1)
+  const clampedCol = clampNumber(coordinate.col, 0, safeColumns - 1)
+  let localIndex = clampedRow * safeColumns + clampedCol
+  if (localIndex >= safePageSize) {
+    localIndex = safePageSize - 1
+  }
+  return coordinate.page * safePageSize + localIndex
 }
 
 export const getFootprintIndices = (
@@ -174,6 +286,114 @@ export const buildTopLevelOccupancy = (
   return { cells, anchorIndexById }
 }
 
+export const buildPersistedItemCoordinates = (
+  slots: Array<string | null>,
+  items: GridItem[],
+  pageSize: number,
+  columns: number
+): PersistedItemCoordinates[] => {
+  const safeColumns = Math.max(1, columns)
+  const safePageSize = Math.max(1, pageSize)
+  const itemById = buildItemMap(items)
+  const seen = new Set<string>()
+  const coordinates: PersistedItemCoordinates[] = []
+
+  slots.forEach((slot, index) => {
+    if (!slot || slot === DRAG_HOLE_ID || seen.has(slot)) return
+
+    const item = itemById.get(slot)
+    if (!item) return
+
+    const span = getGridItemSpan(item)
+    const footprint =
+      getFootprintIndices(index, span, safeColumns, safePageSize) ?? [index]
+
+    coordinates.push({
+      id: slot,
+      cells: footprint.map(footprintIndex =>
+        getGridCoordinateForIndex(footprintIndex, safeColumns, safePageSize)
+      ),
+    })
+    seen.add(slot)
+  })
+
+  return coordinates
+}
+
+export const buildPreferredAnchorByIdFromCoordinates = (
+  coordinates: PersistedItemCoordinates[] | null | undefined,
+  items: GridItem[],
+  pageSize: number,
+  columns: number
+): Map<string, number> | undefined => {
+  if (!coordinates || coordinates.length === 0) return undefined
+
+  const validIds = new Set(items.map(getId))
+  const preferredAnchorById = new Map<string, number>()
+
+  coordinates.forEach(entry => {
+    if (!validIds.has(entry.id) || !Array.isArray(entry.cells) || entry.cells.length === 0) {
+      return
+    }
+
+    const anchorCoordinate = getAnchorCoordinateFromCells(entry.cells)
+    if (!anchorCoordinate) return
+
+    const anchorIndex = getAnchorIndexFromCoordinate(anchorCoordinate, columns, pageSize)
+    if (anchorIndex === null) return
+
+    preferredAnchorById.set(entry.id, anchorIndex)
+  })
+
+  return preferredAnchorById.size > 0 ? preferredAnchorById : undefined
+}
+
+export const buildFallbackOriginAnchorByIdFromCoordinates = (
+  coordinates: PersistedItemCoordinates[] | null | undefined,
+  items: GridItem[],
+  pageSize: number,
+  columns: number
+): Map<string, number> | undefined => {
+  if (!coordinates || coordinates.length === 0) return undefined
+
+  const validIds = new Set(items.map(getId))
+  const fallbackOriginAnchorById = new Map<string, number>()
+
+  coordinates.forEach(entry => {
+    if (!validIds.has(entry.id) || !Array.isArray(entry.cells) || entry.cells.length === 0) {
+      return
+    }
+
+    const anchorCoordinate = getAnchorCoordinateFromCells(entry.cells)
+    if (!anchorCoordinate) return
+
+    const anchorIndex = projectCoordinateToNearestAnchorIndex(anchorCoordinate, columns, pageSize)
+    if (anchorIndex === null) return
+
+    fallbackOriginAnchorById.set(entry.id, anchorIndex)
+  })
+
+  return fallbackOriginAnchorById.size > 0 ? fallbackOriginAnchorById : undefined
+}
+
+const buildAnchorCoordinateById = (
+  coordinates: PersistedItemCoordinates[] | null | undefined,
+  items: GridItem[]
+): Map<string, PersistedGridCoordinate> => {
+  const anchorCoordinateById = new Map<string, PersistedGridCoordinate>()
+  if (!coordinates || coordinates.length === 0) return anchorCoordinateById
+
+  const validIds = new Set(items.map(getId))
+  coordinates.forEach(entry => {
+    if (!validIds.has(entry.id) || !Array.isArray(entry.cells) || entry.cells.length === 0) return
+    const anchorCoordinate = getAnchorCoordinateFromCells(entry.cells)
+    if (!anchorCoordinate) return
+    anchorCoordinateById.set(entry.id, anchorCoordinate)
+  })
+
+  return anchorCoordinateById
+}
+
 export const normalizeOuterSlots = (
   source: Array<string | null> | null | undefined,
   items: GridItem[],
@@ -189,7 +409,8 @@ export const normalizeOuterSlots = (
   const consumed = new Set<string>()
   const anchors: Array<string | null> = []
   const occupied: Array<string | null> = []
-  const sourceAnchorIndexById = new Map<string, number>()
+  const sourceAnchorIndexById = new Map(options?.fallbackOriginAnchorById)
+  const preserveSourceAnchors = options?.preserveSourceAnchors ?? true
 
   const ensureAnchorCapacity = (anchorIndex: number) => {
     ensurePageCapacity(anchors, safePageSize, anchorIndex)
@@ -280,6 +501,7 @@ export const normalizeOuterSlots = (
       sourceAnchorIndexById.set(slot, index)
     }
 
+    if (!preserveSourceAnchors) return
     tryPlaceAtAnchor(slot, index)
   })
 
@@ -402,7 +624,8 @@ export const resizeSlotPages = (
   prevPageSize: number,
   nextPageSize: number,
   prevColumns: number,
-  nextColumns: number
+  nextColumns: number,
+  stableCoordinates?: PersistedItemCoordinates[] | null
 ): Array<string | null> => {
   const safePrevPS = Math.max(1, prevPageSize)
   const safeNextPS = Math.max(1, nextPageSize)
@@ -419,6 +642,126 @@ export const resizeSlotPages = (
     // Recover from an abnormal one-slot page layout by rebuilding the layout
     // against the current page geometry instead of preserving stale page boundaries.
     return normalizeOuterSlots(slots, items, safeNextPS, safeNextCols)
+  }
+
+  if (
+    stableCoordinates &&
+    stableCoordinates.length > 0 &&
+    (safeNextPS < safePrevPS || safeNextCols < safePrevCols)
+  ) {
+    const itemById = buildItemMap(items)
+    const anchorCoordinateById = buildAnchorCoordinateById(stableCoordinates, items)
+    const result: Array<string | null> = []
+    const occupied: Array<string | null> = []
+    const oldPageCount = Math.max(1, Math.ceil(Math.max(slots.length, safePrevPS) / safePrevPS))
+
+    const ensureResultPage = (page: number) => {
+      const anchorIndex = Math.max(0, page) * safeNextPS
+      ensurePageCapacity(result, safeNextPS, anchorIndex)
+      ensurePageCapacity(occupied, safeNextPS, anchorIndex)
+    }
+
+    const placeAtIndex = (id: string, anchorIndex: number): boolean => {
+      const item = itemById.get(id)
+      if (!item) return false
+      const span = getGridItemSpan(item)
+      ensurePageCapacity(result, safeNextPS, anchorIndex)
+      ensurePageCapacity(occupied, safeNextPS, anchorIndex)
+      if (result[anchorIndex]) return false
+      if (!canPlaceAtIndex(occupied, anchorIndex, span, safeNextCols, safeNextPS)) return false
+      result[anchorIndex] = id
+      paintFootprint(occupied, anchorIndex, id, span, safeNextCols, safeNextPS)
+      return true
+    }
+
+    const findFirstAvailableAnchorIndexFromPage = (startPage: number, id: string): number => {
+      const item = itemById.get(id)
+      if (!item) return Math.max(0, startPage) * safeNextPS
+      const span = getGridItemSpan(item)
+      let page = Math.max(0, startPage)
+
+      for (;;) {
+        ensureResultPage(page)
+        const pageStart = page * safeNextPS
+        for (let localIndex = 0; localIndex < safeNextPS; localIndex += 1) {
+          const anchorIndex = pageStart + localIndex
+          if (result[anchorIndex]) continue
+          if (!canPlaceAtIndex(occupied, anchorIndex, span, safeNextCols, safeNextPS)) continue
+          return anchorIndex
+        }
+        page += 1
+      }
+    }
+
+    const allOverflowIds: Array<{ id: string; sourcePage: number }> = []
+    const seen = new Set<string>()
+
+    for (let oldPage = 0; oldPage < oldPageCount; oldPage += 1) {
+      const targetPage = oldPage
+      ensureResultPage(targetPage)
+      const pageStart = oldPage * safePrevPS
+      const pageSlots = slots.slice(pageStart, pageStart + safePrevPS)
+
+      pageSlots.forEach(slot => {
+        if (!slot || slot === DRAG_HOLE_ID || seen.has(slot)) return
+        seen.add(slot)
+        const item = itemById.get(slot)
+        if (!item) return
+
+        const anchorCoordinate = anchorCoordinateById.get(slot)
+        const localAnchorIndex =
+          anchorCoordinate && anchorCoordinate.page === oldPage
+            ? getLocalAnchorIndexFromCoordinate(anchorCoordinate, safeNextCols, safeNextPS)
+            : null
+        if (localAnchorIndex === null) {
+          allOverflowIds.push({ id: slot, sourcePage: oldPage })
+          return
+        }
+
+        const nextAnchorIndex = targetPage * safeNextPS + localAnchorIndex
+        if (!placeAtIndex(slot, nextAnchorIndex)) {
+          allOverflowIds.push({ id: slot, sourcePage: oldPage })
+        }
+      })
+    }
+
+    allOverflowIds.forEach(({ id, sourcePage }) => {
+      const nextAnchorIndex = findFirstAvailableAnchorIndexFromPage(sourcePage, id)
+      placeAtIndex(id, nextAnchorIndex)
+    })
+
+    if (result.length === 0) {
+      result.push(...Array.from({ length: safeNextPS }, () => null))
+    }
+
+    while (result.length > safeNextPS) {
+      const lastPageStart = result.length - safeNextPS
+      const lastPageHasAnchor = result.slice(lastPageStart).some(slot => typeof slot === 'string')
+      if (lastPageHasAnchor) break
+      result.splice(lastPageStart, safeNextPS)
+    }
+
+    return result
+  }
+
+  const preferredAnchorById = buildPreferredAnchorByIdFromCoordinates(
+    stableCoordinates,
+    items,
+    safeNextPS,
+    safeNextCols
+  )
+  const fallbackOriginAnchorById = buildFallbackOriginAnchorByIdFromCoordinates(
+    stableCoordinates,
+    items,
+    safeNextPS,
+    safeNextCols
+  )
+  if (preferredAnchorById || fallbackOriginAnchorById) {
+    return normalizeOuterSlots(slots, items, safeNextPS, safeNextCols, {
+      preferredAnchorById,
+      fallbackOriginAnchorById,
+      preserveSourceAnchors: false,
+    })
   }
 
   const itemById = buildItemMap(items)

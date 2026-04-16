@@ -29,6 +29,7 @@ import {
 } from './icon-grid/views/FolderVisuals'
 import { DOCK_GAP, resolveDockDisplaySlots, resolveOuterItemIds } from './icon-grid/domain/dock'
 import {
+  buildPersistedItemCoordinates,
   canPlaceItemAtAnchorIndex,
   findBestResizeAnchorIndex,
   getFootprintIndices,
@@ -149,6 +150,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   const hydratedRef = useRef(false)
   const layoutBaselineRef = useRef(false)
   const persistedDimsRef = useRef<{ pageSize: number; columns: number } | null>(null)
+  const persistedCoordinatesRef = useRef<PersistedLayout['coordinates']>(undefined)
   const persistedLayoutRef = useRef<PersistedLayout | null>(null)
   const persistedLayoutLoadedRef = useRef(false)
   const persistedLayoutLoadPromiseRef = useRef<Promise<PersistedLayout | null> | null>(null)
@@ -274,6 +276,12 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
           dockKeys: dockKeysRef.current,
           pageSize: prevPageSizeRef.current,
           columns: prevColumnsRef.current,
+          coordinates: buildPersistedItemCoordinates(
+            outerSlotsRef.current,
+            itemsRef.current,
+            prevPageSizeRef.current,
+            prevColumnsRef.current
+          ),
         }
       } else {
         if (
@@ -310,6 +318,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       persistedDimsRef.current = hasDims
         ? { pageSize: persisted!.pageSize!, columns: persisted!.columns! }
         : null
+      persistedCoordinatesRef.current = persisted?.coordinates
       layoutBaselineRef.current = false
 
       itemsRef.current = nextItems
@@ -662,6 +671,12 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     if (!hydratedRef.current || !layoutReadyRef.current) return
     const outerItems = filterItemsByIds(itemsRef.current, outerItemIds)
     const layoutMetrics = getLayoutNormalizationMetrics(outerItems, Math.max(1, columns), pageSize)
+    const currentCoordinates = buildPersistedItemCoordinates(
+      outerSlotsRef.current,
+      outerItems,
+      prevPageSizeRef.current,
+      prevColumnsRef.current
+    )
 
     let result: Array<string | null>
     if (!layoutBaselineRef.current) {
@@ -673,7 +688,8 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
           dims.pageSize,
           layoutMetrics.pageSize,
           dims.columns,
-          layoutMetrics.columns
+          layoutMetrics.columns,
+          persistedCoordinatesRef.current ?? null
         )
       } else {
         result = normalizeOuterSlots(
@@ -691,7 +707,8 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
         prevPageSizeRef.current,
         layoutMetrics.pageSize,
         prevColumnsRef.current,
-        layoutMetrics.columns
+        layoutMetrics.columns,
+        currentCoordinates
       )
     }
     const compacted = compactEmptyPages(result, layoutMetrics.pageSize)
@@ -934,7 +951,13 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
             prevPageSizeRef.current,
             safePS,
             prevColumnsRef.current,
-            safeCols
+            safeCols,
+            buildPersistedItemCoordinates(
+              outerSlotsRef.current,
+              prevOuterItems,
+              prevPageSizeRef.current,
+              prevColumnsRef.current
+            )
           )
 
     const originalAnchorIndex = baseOuterSlots.indexOf(resizedFolderEntryId)

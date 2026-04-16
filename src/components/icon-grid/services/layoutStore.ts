@@ -1,7 +1,15 @@
 import { invoke } from '@tauri-apps/api/core'
 import { translate } from '../../../lib/i18n'
 import { normalizeDockKeys } from '../domain/dock'
-import type { GridItem, IconItem, PersistedItem, PersistedLayout } from '../model'
+import { buildPersistedItemCoordinates } from '../domain/topLevelLayout'
+import type {
+  GridItem,
+  IconItem,
+  PersistedGridCoordinate,
+  PersistedItem,
+  PersistedItemCoordinates,
+  PersistedLayout,
+} from '../model'
 import { makeFolderId } from '../model'
 import type { DesktopIcon } from '../../../types'
 import { buildIconSelectionKey } from '../../../stores/iconStore'
@@ -22,6 +30,59 @@ export const serializeItems = (items: GridItem[]): PersistedItem[] =>
         }
   )
 
+const normalizePersistedGridCoordinate = (value: unknown): PersistedGridCoordinate | null => {
+  if (!value || typeof value !== 'object') return null
+
+  const { page, row, col } = value as {
+    page?: unknown
+    row?: unknown
+    col?: unknown
+  }
+  const safePage = typeof page === 'number' ? page : Number.NaN
+  const safeRow = typeof row === 'number' ? row : Number.NaN
+  const safeCol = typeof col === 'number' ? col : Number.NaN
+
+  if (
+    !Number.isInteger(safePage) ||
+    !Number.isInteger(safeRow) ||
+    !Number.isInteger(safeCol) ||
+    safePage < 0 ||
+    safeRow < 0 ||
+    safeCol < 0
+  ) {
+    return null
+  }
+
+  return { page: safePage, row: safeRow, col: safeCol }
+}
+
+const normalizePersistedItemCoordinates = (
+  value: unknown
+): PersistedItemCoordinates[] | undefined => {
+  if (!Array.isArray(value)) return undefined
+
+  const result: PersistedItemCoordinates[] = []
+  value.forEach(entry => {
+    if (!entry || typeof entry !== 'object') return
+
+    const { id, cells } = entry as { id?: unknown; cells?: unknown }
+    if (typeof id !== 'string' || !Array.isArray(cells)) return
+
+    const normalizedCells = cells
+      .map(cell => normalizePersistedGridCoordinate(cell))
+      .filter((cell): cell is PersistedGridCoordinate => cell !== null)
+
+    if (normalizedCells.length === 0) return
+
+    result.push({
+      id,
+      cells: normalizedCells,
+    })
+  })
+
+  return result.length > 0 ? result : undefined
+}
+
 export const readLayout = async (): Promise<PersistedLayout | null> => {
   try {
     const raw = await invoke<string | null>('get_layout_payload', { key: LAYOUT_KEY })
@@ -32,6 +93,15 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
       | { version: 3; items: PersistedItem[]; slots: unknown[]; dockKeys: unknown[] }
       | { version: 4; items: PersistedItem[]; slots: unknown[]; dockKeys: unknown[] }
       | { version: 5; items: PersistedItem[]; slots: unknown[]; dockKeys: unknown[]; pageSize?: number; columns?: number }
+      | {
+          version: 6
+          items: PersistedItem[]
+          slots: unknown[]
+          dockKeys: unknown[]
+          pageSize?: number
+          columns?: number
+          coordinates?: unknown
+        }
     if (!Array.isArray(parsed.items)) return null
     if (parsed.version === 1) return { items: parsed.items, slots: null, dockKeys: [] }
     if (parsed.version === 2 && Array.isArray(parsed.slots)) {
@@ -42,7 +112,10 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
       }
     }
     if (
-      (parsed.version !== 3 && parsed.version !== 4 && parsed.version !== 5) ||
+      (parsed.version !== 3 &&
+        parsed.version !== 4 &&
+        parsed.version !== 5 &&
+        parsed.version !== 6) ||
       !Array.isArray(parsed.slots) ||
       !Array.isArray(parsed.dockKeys)
     ) {
@@ -56,6 +129,11 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
     if (parsed.version === 5) {
       if (typeof parsed.pageSize === 'number' && parsed.pageSize > 0) result.pageSize = parsed.pageSize
       if (typeof parsed.columns === 'number' && parsed.columns > 0) result.columns = parsed.columns
+    }
+    if (parsed.version === 6) {
+      if (typeof parsed.pageSize === 'number' && parsed.pageSize > 0) result.pageSize = parsed.pageSize
+      if (typeof parsed.columns === 'number' && parsed.columns > 0) result.columns = parsed.columns
+      result.coordinates = normalizePersistedItemCoordinates(parsed.coordinates)
     }
     return result
   } catch {
@@ -71,13 +149,21 @@ export const writeLayout = async (
   pageSize?: number,
   columns?: number
 ) => {
+  const coordinates =
+    typeof pageSize === 'number' &&
+    typeof columns === 'number' &&
+    pageSize > 0 &&
+    columns > 0
+      ? buildPersistedItemCoordinates(slots, items, pageSize, columns)
+      : undefined
   const payload = {
-    version: 5,
+    version: 6,
     items: serializeItems(items),
     slots,
     dockKeys,
     pageSize,
     columns,
+    coordinates,
   }
   await invoke('set_layout_payload', { key: LAYOUT_KEY, payload: JSON.stringify(payload) })
 }

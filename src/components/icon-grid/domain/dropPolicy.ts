@@ -646,9 +646,10 @@ const stabilizeMultiDropPage = ({
     .filter(
       (id): id is string => typeof id === 'string' && !dragIdSet.has(id) && !pageIdSet.has(id)
     )
-  const trailingIds = sourceSlots
-    .slice(pageEnd)
-    .filter((id): id is string => typeof id === 'string' && !dragIdSet.has(id))
+  const trailingSlots = sourceSlots.slice(pageEnd).map(slot => {
+    if (typeof slot !== 'string') return null
+    return dragIdSet.has(slot) ? null : slot
+  })
 
   const nextSlots = [...sourceSlots.slice(0, pageStart)]
   while (nextSlots.length < pageStart) {
@@ -656,15 +657,17 @@ const stabilizeMultiDropPage = ({
   }
   nextSlots.push(...stabilizedPageEntries)
   const insertedPageQueue = [...remainingDragIds, ...displacedCurrentPageIds]
-  if (insertedPageQueue.length > 0) {
-    nextSlots.push(
-      ...Array.from({ length: pageSize }, (_, index) => insertedPageQueue[index] ?? null)
-    )
-    nextSlots.push(...insertedPageQueue.slice(pageSize), ...trailingIds)
-    return nextSlots
-  }
 
-  nextSlots.push(...trailingIds)
+  insertedPageQueue.forEach(id => {
+    const emptyIndex = trailingSlots.indexOf(null)
+    if (emptyIndex >= 0) {
+      trailingSlots[emptyIndex] = id
+      return
+    }
+    trailingSlots.push(id)
+  })
+
+  nextSlots.push(...trailingSlots)
 
   return nextSlots
 }
