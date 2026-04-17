@@ -2,7 +2,7 @@ import type { FolderItem, GridItem } from '../model'
 import { getGridItemSpan, getId, makeFolderId } from '../model'
 import { translate } from '../../../lib/i18n'
 import { clampNumber } from './geometry'
-import { DRAG_HOLE_ID, getManhattanDistanceBySlotIndex } from './slots'
+import { DRAG_HOLE_ID } from './slots'
 import type { DragState } from '../state/types'
 import { canPlaceItemAtAnchorIndex, normalizeOuterSlots } from './topLevelLayout'
 
@@ -118,27 +118,30 @@ interface ApplyOuterDropFromSessionParams {
   columns?: number
   resolveNearestSlotIndexByContext: (state: DragState) => number | null
   mode?: 'paged' | 'linear'
+  sourceSlots?: Array<string | null>
 }
 
 export const applyOuterDropFromSession = ({
   base,
   session,
   pageSize,
+  columns = 1,
   resolveNearestSlotIndexByContext,
   mode = 'paged',
+  sourceSlots,
 }: ApplyOuterDropFromSessionParams): { items: GridItem[]; slots: Array<string | null> } => {
   const safePageSize = Math.max(1, pageSize)
-  const baseSlots = session.workingOrder.map(slot => (slot === DRAG_HOLE_ID ? null : slot))
   const map = new Map<string, GridItem>()
   base.forEach(item => map.set(getId(item), item))
   const hadDraggedInBase = map.has(session.draggingId)
   map.set(session.draggingId, session.draggingItem)
+  const dragIds = [session.draggingId]
+  const baseSlots = resolveCommittedBaseSlots(sourceSlots ?? session.workingOrder, dragIds)
 
   let nextSlots: Array<string | null> = [...baseSlots]
   if (nextSlots.length === 0) {
     nextSlots = Array.from({ length: safePageSize }, () => null)
   }
-  nextSlots = nextSlots.map(slot => (slot === session.draggingId ? null : slot))
 
   const nearestDropIndex = resolveNearestSlotIndexByContext(session)
   const sourceFallbackIndex = session.sourceFolderId ? null : session.sourceSlotIndex
@@ -156,45 +159,16 @@ export const applyOuterDropFromSession = ({
     const nextItems = hadDraggedInBase ? base : [...base, session.draggingItem]
     return { items: nextItems, slots: compactSlots }
   }
-
-  if (candidateDropIndex >= nextSlots.length) {
-    nextSlots.push(...Array.from({ length: candidateDropIndex - nextSlots.length + 1 }, () => null))
-  }
-  const remainder = nextSlots.length % safePageSize
-  if (remainder > 0) {
-    nextSlots.push(...Array.from({ length: safePageSize - remainder }, () => null))
-  }
-
-  const dropIndex = clampNumber(candidateDropIndex, 0, Math.max(0, nextSlots.length - 1))
-  nextSlots[dropIndex] = session.draggingId
-
   const nextItems = hadDraggedInBase ? base : [...base, session.draggingItem]
-  return { items: nextItems, slots: nextSlots }
-}
-
-const ensureSlotCapacity = (slots: Array<string | null>, index: number) => {
-  while (slots.length < index) {
-    slots.push(null)
-  }
-}
-
-const insertWithForwardShift = (slots: Array<string | null>, index: number, id: string) => {
-  if (index < 0) return
-  ensureSlotCapacity(slots, index)
-  if (index >= slots.length) {
-    slots.push(id)
-    return
-  }
-  if (slots[index] === null) {
-    slots[index] = id
-    return
-  }
-
-  slots.push(null)
-  for (let currentIndex = slots.length - 1; currentIndex > index; currentIndex -= 1) {
-    slots[currentIndex] = slots[currentIndex - 1]
-  }
-  slots[index] = id
+  return applyPagedOuterDrop({
+    slots: nextSlots,
+    items: nextItems,
+    pageSize: safePageSize,
+    columns,
+    dropIndex: candidateDropIndex,
+    dragIds,
+    previewSlots: resolveCommittedBaseSlots(session.workingOrder, dragIds),
+  })
 }
 
 const prioritizeDraggedItems = (items: GridItem[], dragIds: string[]) => {
@@ -215,291 +189,180 @@ const prioritizeDraggedItems = (items: GridItem[], dragIds: string[]) => {
   return [...draggedItems, ...remainingItems]
 }
 
-const getNeighborLocalIndices = ({
-  localIndex,
-  pageSize,
-  columns,
-}: {
-  localIndex: number
-  pageSize: number
-  columns: number
-}) => {
-  const safeColumns = Math.max(1, columns)
-  const neighbors: number[] = []
-  const row = Math.floor(localIndex / safeColumns)
-  const col = localIndex % safeColumns
-  const maxRows = Math.ceil(pageSize / safeColumns)
-
-  if (col > 0) neighbors.push(localIndex - 1)
-  if (col + 1 < safeColumns && localIndex + 1 < pageSize) neighbors.push(localIndex + 1)
-  if (row > 0) neighbors.push(localIndex - safeColumns)
-  if (row + 1 < maxRows && localIndex + safeColumns < pageSize)
-    neighbors.push(localIndex + safeColumns)
-
-  return neighbors
+const resolveCommittedBaseSlots = (
+  slots: Array<string | null>,
+  dragIds: string[]
+): Array<string | null> => {
+  const dragIdSet = new Set(dragIds)
+  return slots.map(slot => {
+    if (slot === DRAG_HOLE_ID) return null
+    return slot && dragIdSet.has(slot) ? null : slot
+  })
 }
 
-const compareLocalIndicesByPreference = ({
-  pageStart,
-  columns,
-  targetLocalIndex,
-  anchorLocalIndex,
-  a,
-  b,
-}: {
-  pageStart: number
-  columns: number
-  targetLocalIndex: number
-  anchorLocalIndex: number
-  a: number
-  b: number
-}) => {
-  const safeColumns = Math.max(1, columns)
-  const aAfterAnchor = a > anchorLocalIndex ? 0 : 1
-  const bAfterAnchor = b > anchorLocalIndex ? 0 : 1
-  if (aAfterAnchor !== bAfterAnchor) return aAfterAnchor - bAfterAnchor
-
-  const distanceToTargetA = getManhattanDistanceBySlotIndex(
-    pageStart + a,
-    pageStart + targetLocalIndex,
-    pageStart,
-    safeColumns
-  )
-  const distanceToTargetB = getManhattanDistanceBySlotIndex(
-    pageStart + b,
-    pageStart + targetLocalIndex,
-    pageStart,
-    safeColumns
-  )
-  if (distanceToTargetA !== distanceToTargetB) return distanceToTargetA - distanceToTargetB
-
-  const distanceToAnchorA = getManhattanDistanceBySlotIndex(
-    pageStart + a,
-    pageStart + anchorLocalIndex,
-    pageStart,
-    safeColumns
-  )
-  const distanceToAnchorB = getManhattanDistanceBySlotIndex(
-    pageStart + b,
-    pageStart + anchorLocalIndex,
-    pageStart,
-    safeColumns
-  )
-  if (distanceToAnchorA !== distanceToAnchorB) return distanceToAnchorA - distanceToAnchorB
-
-  return aAfterAnchor === 0 ? a - b : b - a
+const buildPreferredAnchorByIdFromSlots = (slots: Array<string | null>) => {
+  const preferredAnchorById = new Map<string, number>()
+  slots.forEach((slot, index) => {
+    if (typeof slot !== 'string' || preferredAnchorById.has(slot)) return
+    preferredAnchorById.set(slot, index)
+  })
+  return preferredAnchorById
 }
 
-const resolveTargetLocalIndices = ({
-  pageStart,
+const applyPagedOuterDrop = ({
+  slots,
+  items,
   pageSize,
   columns,
   dropIndex,
-  insertCount,
+  dragIds,
+  previewSlots,
 }: {
-  pageStart: number
+  slots: Array<string | null>
+  items: GridItem[]
   pageSize: number
   columns: number
   dropIndex: number
-  insertCount: number
-}) => {
-  const dropLocalIndex = clampNumber(dropIndex - pageStart, 0, pageSize - 1)
-  const targets: number[] = [dropLocalIndex]
-  if (insertCount <= 1) {
-    return targets
+  dragIds: string[]
+  previewSlots?: Array<string | null>
+}): { items: GridItem[]; slots: Array<string | null> } => {
+  const safePageSize = Math.max(1, pageSize)
+  const safeColumns = Math.max(1, columns)
+  const clampedDropIndex = clampNumber(dropIndex, 0, Number.MAX_SAFE_INTEGER)
+  const pageStart = Math.floor(clampedDropIndex / safePageSize) * safePageSize
+  const insertedSlots = [...slots]
+  insertIntoPageFromAnchor({
+    slots: insertedSlots,
+    pageStart,
+    pageSize: safePageSize,
+    dropIndex: clampedDropIndex,
+    dragIds,
+    previewSlots,
+  })
+  const stabilizedSlots = stabilizeMultiDropPage({
+    sourceSlots: slots,
+    insertedSlots,
+    items,
+    pageStart,
+    pageSize: safePageSize,
+    columns: safeColumns,
+    dragIds,
+  })
+  const backfilledSlots = backfillDisplacedCurrentPageItems({
+    sourceSlots: slots,
+    slots: stabilizedSlots,
+    items,
+    pageStart,
+    pageSize: safePageSize,
+    columns: safeColumns,
+    dragIds,
+  })
+
+  if (backfilledSlots.length === 0) {
+    backfilledSlots.push(...Array.from({ length: safePageSize }, () => null))
+  }
+  const remainder = backfilledSlots.length % safePageSize
+  if (remainder > 0) {
+    backfilledSlots.push(...Array.from({ length: safePageSize - remainder }, () => null))
   }
 
-  for (let localIndex = dropLocalIndex + 1; localIndex < pageSize; localIndex += 1) {
-    if (targets.length >= insertCount) break
-    targets.push(localIndex)
+  return {
+    items,
+    slots: normalizeOuterSlots(backfilledSlots, items, safePageSize, safeColumns, {
+      preferredAnchorById: buildPreferredAnchorByIdFromSlots(backfilledSlots),
+      preserveSourceAnchors: false,
+    }),
   }
-  if (targets.length >= insertCount) {
-    return targets.slice(0, insertCount)
-  }
-
-  const selected = new Set<number>(targets)
-  const visited = new Set<number>([dropLocalIndex])
-  const frontier: number[] = []
-  const sortByPreference = (a: number, b: number) =>
-    compareLocalIndicesByPreference({
-      pageStart,
-      columns,
-      targetLocalIndex: dropLocalIndex,
-      anchorLocalIndex: dropLocalIndex,
-      a,
-      b,
-    })
-
-  const enqueueNeighbors = (localIndex: number) => {
-    getNeighborLocalIndices({
-      localIndex,
-      pageSize,
-      columns,
-    })
-      .sort(sortByPreference)
-      .forEach(neighborLocalIndex => {
-        if (visited.has(neighborLocalIndex)) return
-        visited.add(neighborLocalIndex)
-        frontier.push(neighborLocalIndex)
-      })
-    frontier.sort(sortByPreference)
-  }
-
-  enqueueNeighbors(dropLocalIndex)
-
-  while (frontier.length > 0 && targets.length < insertCount) {
-    const nextLocalIndex = frontier.shift()
-    if (nextLocalIndex === undefined) break
-    enqueueNeighbors(nextLocalIndex)
-    if (selected.has(nextLocalIndex)) continue
-    selected.add(nextLocalIndex)
-    targets.push(nextLocalIndex)
-  }
-
-  return targets.slice(0, insertCount)
 }
-const findGapPropagationPathToEmpty = ({
+
+const placeIdsIntoSlotsRowMajor = ({
+  slots,
+  items,
+  ids,
   pageStart,
   pageSize,
   columns,
-  targetLocalIndex,
-  emptyLocalIndex,
-  blockedLocalIndexSet,
 }: {
+  slots: Array<string | null>
+  items: GridItem[]
+  ids: string[]
   pageStart: number
   pageSize: number
   columns: number
-  targetLocalIndex: number
-  emptyLocalIndex: number
-  blockedLocalIndexSet: Set<number>
 }) => {
-  const queue: number[] = [targetLocalIndex]
-  const visited = new Set<number>([targetLocalIndex])
-  const parentByLocalIndex = new Map<number, number>()
+  const nextSlots = [...slots]
+  const remainingIds = [...ids]
 
-  while (queue.length > 0) {
-    const currentLocalIndex = queue.shift()
-    if (currentLocalIndex === undefined) break
-
-    if (currentLocalIndex === emptyLocalIndex) {
-      const path: number[] = [currentLocalIndex]
-      let cursor = currentLocalIndex
-      while (parentByLocalIndex.has(cursor)) {
-        cursor = parentByLocalIndex.get(cursor) as number
-        path.push(cursor)
-      }
-      return path
+  for (let anchorIndex = pageStart; anchorIndex < pageStart + pageSize && remainingIds.length > 0; anchorIndex += 1) {
+    const itemId = remainingIds[0]
+    const item = items.find(candidate => getId(candidate) === itemId)
+    if (!item) {
+      remainingIds.shift()
+      continue
     }
-
-    const orderedNeighbors = getNeighborLocalIndices({
-      localIndex: currentLocalIndex,
-      pageSize,
-      columns,
-    }).sort((a, b) => {
-      const distanceA = getManhattanDistanceBySlotIndex(
-        pageStart + a,
-        pageStart + emptyLocalIndex,
-        pageStart,
-        Math.max(1, columns)
-      )
-      const distanceB = getManhattanDistanceBySlotIndex(
-        pageStart + b,
-        pageStart + emptyLocalIndex,
-        pageStart,
-        Math.max(1, columns)
-      )
-      if (distanceA !== distanceB) return distanceA - distanceB
-      return a - b
-    })
-
-    orderedNeighbors.forEach(neighborLocalIndex => {
-      if (visited.has(neighborLocalIndex)) return
-      if (blockedLocalIndexSet.has(neighborLocalIndex) && neighborLocalIndex !== emptyLocalIndex) {
-        return
-      }
-      visited.add(neighborLocalIndex)
-      parentByLocalIndex.set(neighborLocalIndex, currentLocalIndex)
-      queue.push(neighborLocalIndex)
-    })
-  }
-
-  return null
-}
-
-const findPreferredGapPropagationPath = ({
-  entries,
-  pageStart,
-  pageSize,
-  columns,
-  targetLocalIndex,
-  anchorLocalIndex,
-  blockedLocalIndexSet,
-}: {
-  entries: Array<string | null>
-  pageStart: number
-  pageSize: number
-  columns: number
-  targetLocalIndex: number
-  anchorLocalIndex: number
-  blockedLocalIndexSet: Set<number>
-}) => {
-  const emptyCandidateLocalIndices = Array.from({ length: pageSize }, (_, localIndex) => localIndex)
-    .filter(localIndex => {
-      if (localIndex === targetLocalIndex) return false
-      if (blockedLocalIndexSet.has(localIndex)) return false
-      return entries[localIndex] === null
-    })
-    .sort((a, b) =>
-      compareLocalIndicesByPreference({
-        pageStart,
+    if (
+      !canPlaceItemAtAnchorIndex(
+        nextSlots,
+        items,
+        anchorIndex,
+        getGridItemSpan(item),
         columns,
-        targetLocalIndex,
-        anchorLocalIndex,
-        a,
-        b,
-      })
-    )
+        pageSize
+      )
+    ) {
+      continue
+    }
+    nextSlots[anchorIndex] = itemId
+    remainingIds.shift()
+  }
 
-  for (const emptyLocalIndex of emptyCandidateLocalIndices) {
-    const path = findGapPropagationPathToEmpty({
-      pageStart,
+  return {
+    slots: nextSlots,
+    remainingIds,
+  }
+}
+
+const placeIdsIntoInsertedPagesRowMajor = ({
+  prefixSlots,
+  items,
+  ids,
+  pageStart,
+  pageSize,
+  columns,
+}: {
+  prefixSlots: Array<string | null>
+  items: GridItem[]
+  ids: string[]
+  pageStart: number
+  pageSize: number
+  columns: number
+}) => {
+  const nextSlots = [...prefixSlots]
+  const remainingIds = [...ids]
+  let targetPageStart = pageStart
+
+  while (remainingIds.length > 0) {
+    while (nextSlots.length < targetPageStart + pageSize) {
+      nextSlots.push(null)
+    }
+    const placement = placeIdsIntoSlotsRowMajor({
+      slots: nextSlots,
+      items,
+      ids: remainingIds,
+      pageStart: targetPageStart,
       pageSize,
       columns,
-      targetLocalIndex,
-      emptyLocalIndex,
-      blockedLocalIndexSet,
     })
-    if (path) {
-      return path
+    nextSlots.splice(0, nextSlots.length, ...placement.slots)
+    if (placement.remainingIds.length === remainingIds.length) {
+      targetPageStart += pageSize
+      continue
     }
+    remainingIds.splice(0, remainingIds.length, ...placement.remainingIds)
+    targetPageStart += pageSize
   }
 
-  return null
-}
-
-const applyGapPropagationPath = (entries: Array<string | null>, path: number[]) => {
-  if (path.length <= 1) return
-  for (let index = 0; index < path.length - 1; index += 1) {
-    entries[path[index]] = entries[path[index + 1]]
-  }
-  entries[path[path.length - 1]] = null
-}
-
-const evictTrailingPageItem = ({
-  entries,
-  targetLocalIndexSet,
-}: {
-  entries: Array<string | null>
-  targetLocalIndexSet: Set<number>
-}) => {
-  for (let localIndex = entries.length - 1; localIndex >= 0; localIndex -= 1) {
-    if (targetLocalIndexSet.has(localIndex)) continue
-    const id = entries[localIndex]
-    if (!id) continue
-    entries[localIndex] = null
-    return { id, localIndex }
-  }
-  return null
+  return nextSlots.slice(prefixSlots.length)
 }
 
 const insertIntoPageFromAnchor = ({
@@ -507,127 +370,67 @@ const insertIntoPageFromAnchor = ({
   pageStart,
   pageSize,
   dropIndex,
-  columns,
   dragIds,
+  previewSlots,
 }: {
   slots: Array<string | null>
   pageStart: number
   pageSize: number
   dropIndex: number
-  columns: number
   dragIds: string[]
+  previewSlots?: Array<string | null>
 }) => {
   const pageEnd = pageStart + pageSize
   while (slots.length < pageEnd) {
     slots.push(null)
   }
 
-  const pageEntries = slots.slice(pageStart, pageEnd)
+  const pageEntries = (
+    previewSlots ? previewSlots.slice(pageStart, pageEnd) : slots.slice(pageStart, pageEnd)
+  ).map(slot => slot ?? null)
   const dropLocalIndex = clampNumber(dropIndex - pageStart, 0, pageSize - 1)
-  const localInsertCount = Math.min(dragIds.length, pageSize)
-
-  if (localInsertCount <= 0) {
-    dragIds.forEach((id, offset) => {
-      insertWithForwardShift(slots, pageEnd + offset, id)
-    })
+  if (dragIds.length === 0) {
     return
   }
 
-  const targetLocalIndices = resolveTargetLocalIndices({
-    pageStart,
-    pageSize,
-    columns,
-    dropIndex,
-    insertCount: localInsertCount,
-  })
-  const targetLocalIndexSet = new Set(targetLocalIndices)
-  const overflowItems: Array<{ id: string; localIndex: number }> = []
-
-  if (localInsertCount === pageSize) {
-    pageEntries.forEach((id, localIndex) => {
-      if (!id) return
-      overflowItems.push({ id, localIndex })
-      pageEntries[localIndex] = null
-    })
-  } else {
-    targetLocalIndices.forEach(targetLocalIndex => {
-      if (pageEntries[targetLocalIndex] === null) return
-
-      const blockedLocalIndexSet = new Set(
-        targetLocalIndices.filter(localIndex => localIndex !== targetLocalIndex)
-      )
-      let path = findPreferredGapPropagationPath({
-        entries: pageEntries,
-        pageStart,
-        pageSize,
-        columns,
-        targetLocalIndex,
-        anchorLocalIndex: dropLocalIndex,
-        blockedLocalIndexSet,
-      })
-
-      if (!path) {
-        const evicted = evictTrailingPageItem({
-          entries: pageEntries,
-          targetLocalIndexSet,
-        })
-        if (evicted) {
-          overflowItems.push(evicted)
-          path = findPreferredGapPropagationPath({
-            entries: pageEntries,
-            pageStart,
-            pageSize,
-            columns,
-            targetLocalIndex,
-            anchorLocalIndex: dropLocalIndex,
-            blockedLocalIndexSet,
-          })
-        }
-      }
-
-      if (!path) {
-        const displacedId = pageEntries[targetLocalIndex]
-        if (displacedId) {
-          overflowItems.push({ id: displacedId, localIndex: targetLocalIndex })
-          pageEntries[targetLocalIndex] = null
-        }
-        return
-      }
-
-      applyGapPropagationPath(pageEntries, path)
-    })
+  const carryIds = [...dragIds]
+  for (let localIndex = dropLocalIndex; localIndex < pageSize && carryIds.length > 0; localIndex += 1) {
+    const nextId = carryIds.shift()
+    if (nextId === undefined) break
+    const displacedId = pageEntries[localIndex]
+    pageEntries[localIndex] = nextId
+    if (displacedId) {
+      carryIds.push(displacedId)
+    }
   }
 
-  targetLocalIndices.forEach((localIndex, offset) => {
-    pageEntries[localIndex] = dragIds[offset]
-  })
+  for (let localIndex = 0; localIndex < pageSize && carryIds.length > 0; localIndex += 1) {
+    if (pageEntries[localIndex] !== null) continue
+    const nextId = carryIds.shift()
+    if (nextId === undefined) break
+    pageEntries[localIndex] = nextId
+  }
 
   for (let localIndex = 0; localIndex < pageSize; localIndex += 1) {
     slots[pageStart + localIndex] = pageEntries[localIndex] ?? null
   }
-
-  const remainingDragIds = dragIds.slice(localInsertCount)
-  const overflowIds = overflowItems.sort((a, b) => a.localIndex - b.localIndex).map(item => item.id)
-
-  remainingDragIds.forEach((id, offset) => {
-    insertWithForwardShift(slots, pageEnd + offset, id)
-  })
-  overflowIds.forEach((id, offset) => {
-    insertWithForwardShift(slots, pageEnd + remainingDragIds.length + offset, id)
-  })
 }
 
 const stabilizeMultiDropPage = ({
   sourceSlots,
   insertedSlots,
+  items,
   pageStart,
   pageSize,
+  columns,
   dragIds,
 }: {
   sourceSlots: Array<string | null>
   insertedSlots: Array<string | null>
+  items: GridItem[]
   pageStart: number
   pageSize: number
+  columns: number
   dragIds: string[]
 }) => {
   const pageEnd = pageStart + pageSize
@@ -646,7 +449,16 @@ const stabilizeMultiDropPage = ({
     .filter(
       (id): id is string => typeof id === 'string' && !dragIdSet.has(id) && !pageIdSet.has(id)
     )
-  const trailingSlots = sourceSlots.slice(pageEnd).map(slot => {
+  const sourceNextPageEntries = sourceSlots.slice(pageEnd, pageEnd + pageSize)
+  const nextPageSlots = sourceNextPageEntries.map(slot => {
+    if (typeof slot !== 'string') return null
+    return dragIdSet.has(slot) ? null : slot
+  })
+  const hasExistingNextPage = sourceNextPageEntries.length > 0
+  while (nextPageSlots.length < pageSize) {
+    nextPageSlots.push(null)
+  }
+  const trailingSlots = sourceSlots.slice(pageEnd + pageSize).map(slot => {
     if (typeof slot !== 'string') return null
     return dragIdSet.has(slot) ? null : slot
   })
@@ -657,18 +469,43 @@ const stabilizeMultiDropPage = ({
   }
   nextSlots.push(...stabilizedPageEntries)
   const insertedPageQueue = [...remainingDragIds, ...displacedCurrentPageIds]
-
-  insertedPageQueue.forEach(id => {
-    const emptyIndex = trailingSlots.indexOf(null)
-    if (emptyIndex >= 0) {
-      trailingSlots[emptyIndex] = id
-      return
+  if (insertedPageQueue.length === 0) {
+    if (hasExistingNextPage) {
+      nextSlots.push(...nextPageSlots)
     }
-    trailingSlots.push(id)
+    nextSlots.push(...trailingSlots)
+    return nextSlots
+  }
+
+  const nextPagePlacement = placeIdsIntoSlotsRowMajor({
+    slots: [...nextSlots, ...nextPageSlots],
+    items,
+    ids: insertedPageQueue,
+    pageStart: pageEnd,
+    pageSize,
+    columns,
   })
 
-  nextSlots.push(...trailingSlots)
+  if (nextPagePlacement.remainingIds.length === 0) {
+    nextSlots.push(...nextPagePlacement.slots.slice(pageEnd, pageEnd + pageSize))
+    nextSlots.push(...trailingSlots)
+    return nextSlots
+  }
 
+  const insertedOverflowPages = placeIdsIntoInsertedPagesRowMajor({
+    prefixSlots: nextSlots,
+    items,
+    ids: insertedPageQueue,
+    pageStart: pageEnd,
+    pageSize,
+    columns,
+  })
+
+  nextSlots.push(...insertedOverflowPages)
+  if (hasExistingNextPage) {
+    nextSlots.push(...nextPageSlots)
+  }
+  nextSlots.push(...trailingSlots)
   return nextSlots
 }
 
@@ -710,45 +547,26 @@ const backfillDisplacedCurrentPageItems = ({
   items.forEach(item => itemById.set(getId(item), item))
   const nextSlots = [...slots]
 
-  const findBestAnchorIndex = (itemId: string, originIndex: number) => {
+  const findBestAnchorIndex = (itemId: string) => {
     const item = itemById.get(itemId)
     if (!item) return null
 
     const span = getGridItemSpan(item)
-    let bestAnchorIndex: number | null = null
-    let bestScore: [number, number, number] | null = null
-
     for (let anchorIndex = pageStart; anchorIndex < pageEnd; anchorIndex += 1) {
       if (!canPlaceItemAtAnchorIndex(nextSlots, items, anchorIndex, span, columns, pageSize)) {
         continue
       }
-
-      const score: [number, number, number] = [
-        getManhattanDistanceBySlotIndex(originIndex, anchorIndex, pageStart, columns),
-        Math.abs(anchorIndex - originIndex),
-        anchorIndex,
-      ]
-      if (
-        !bestScore ||
-        score[0] < bestScore[0] ||
-        (score[0] === bestScore[0] && score[1] < bestScore[1]) ||
-        (score[0] === bestScore[0] && score[1] === bestScore[1] && score[2] < bestScore[2])
-      ) {
-        bestAnchorIndex = anchorIndex
-        bestScore = score
-      }
+      return anchorIndex
     }
 
-    return bestAnchorIndex
+    return null
   }
 
   candidateIds.forEach(itemId => {
     const currentIndex = nextSlots.indexOf(itemId)
     if (currentIndex < pageEnd) return
 
-    const sourceIndex = sourceSlots.indexOf(itemId)
-    const originIndex = sourceIndex >= pageStart && sourceIndex < pageEnd ? sourceIndex : currentIndex
-    const anchorIndex = findBestAnchorIndex(itemId, originIndex)
+    const anchorIndex = findBestAnchorIndex(itemId)
     if (anchorIndex === null) return
 
     if (currentIndex >= 0) {
@@ -768,6 +586,7 @@ export const applyMultiOuterDropFromSession = ({
   columns = 1,
   resolveNearestSlotIndexByContext,
   mode = 'paged',
+  sourceSlots,
 }: ApplyOuterDropFromSessionParams): { items: GridItem[]; slots: Array<string | null> } => {
   const safePageSize = Math.max(1, pageSize)
   const dragIds = session.draggingIds
@@ -776,16 +595,14 @@ export const applyMultiOuterDropFromSession = ({
       base,
       session,
       pageSize,
+      columns,
       resolveNearestSlotIndexByContext,
       mode,
+      sourceSlots,
     })
   }
 
-  const dragIdSet = new Set(dragIds)
-  const nextSlots = session.workingOrder.map(slot => {
-    if (slot === DRAG_HOLE_ID) return null
-    return slot && dragIdSet.has(slot) ? null : slot
-  })
+  const nextSlots = resolveCommittedBaseSlots(sourceSlots ?? session.workingOrder, dragIds)
 
   const nearestDropIndex = resolveNearestSlotIndexByContext(session)
   const sourceFallbackIndex = session.sourceSlotIndex
@@ -805,50 +622,13 @@ export const applyMultiOuterDropFromSession = ({
     compactSlots.splice(dropIndex, 0, ...dragIds)
     return { items: prioritizedItems, slots: compactSlots }
   }
-
-  const dropIndex = clampNumber(candidateDropIndex, 0, Number.MAX_SAFE_INTEGER)
-  const pageStart = Math.floor(dropIndex / safePageSize) * safePageSize
-  const insertedSlots = [...nextSlots]
-  insertIntoPageFromAnchor({
-    slots: insertedSlots,
-    pageStart,
-    pageSize: safePageSize,
-    dropIndex,
-    columns,
-    dragIds,
-  })
-  const stabilizedSlots = stabilizeMultiDropPage({
-    sourceSlots: nextSlots,
-    insertedSlots,
-    pageStart,
-    pageSize: safePageSize,
-    dragIds,
-  })
-  const backfilledSlots = backfillDisplacedCurrentPageItems({
-    sourceSlots: nextSlots,
-    slots: stabilizedSlots,
+  return applyPagedOuterDrop({
+    slots: nextSlots,
     items: prioritizedItems,
-    pageStart,
     pageSize: safePageSize,
     columns,
+    dropIndex: candidateDropIndex,
     dragIds,
   })
-
-  if (backfilledSlots.length === 0) {
-    backfilledSlots.push(...Array.from({ length: safePageSize }, () => null))
-  }
-  const remainder = backfilledSlots.length % safePageSize
-  if (remainder > 0) {
-    backfilledSlots.push(...Array.from({ length: safePageSize - remainder }, () => null))
-  }
-
-  const normalizedSlots = normalizeOuterSlots(
-    backfilledSlots,
-    prioritizedItems,
-    safePageSize,
-    columns
-  )
-
-  return { items: prioritizedItems, slots: normalizedSlots }
 }
 

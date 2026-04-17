@@ -37,12 +37,17 @@ import {
   normalizeOuterSlots,
   resizeSlotPages,
 } from './icon-grid/domain/topLevelLayout'
+import { applyOuterDropFromSession } from './icon-grid/domain/dropPolicy'
 import { DragOverlays } from './icon-grid/views/DragOverlays'
 import { OuterGridView } from './icon-grid/views/OuterGridView'
 import { EdgeGlow } from './icon-grid/views/EdgeGlow'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
 import { DockBar } from './icon-grid/views/DockBar'
-import { getFolderChildSelectionsByIds } from './icon-grid/domain/folderPolicy'
+import {
+  getFolderChildSelectionsByIds,
+  getFolderChildrenById,
+  replaceFolderChildren,
+} from './icon-grid/domain/folderPolicy'
 import {
   resolveLayoutHydrationSource,
   shouldResetPersistedLayoutCache,
@@ -90,6 +95,39 @@ const getDefaultFolderColumnCount = (tileWidth: number) =>
 const filterItemsByIds = (items: GridItem[], ids: string[]): GridItem[] => {
   const idSet = new Set(ids)
   return items.filter(item => idSet.has(getId(item)))
+}
+
+const extractDraggedIconsFromSourceFolders = (
+  base: GridItem[],
+  draggingIds: string[]
+): GridItem[] => {
+  const selectedChildrenByFolderId = getFolderChildSelectionsByIds(base, draggingIds)
+  if (selectedChildrenByFolderId.size === 0) return base
+
+  let nextBase = base
+  const extractedById = new Map<string, IconItem>()
+  selectedChildrenByFolderId.forEach((children, folderId) => {
+    children.forEach(child => {
+      extractedById.set(child.key, child)
+    })
+    const draggedIdSet = new Set(children.map(child => child.key))
+    const nextChildren = getFolderChildrenById(nextBase, folderId).filter(
+      child => !draggedIdSet.has(child.key)
+    )
+    nextBase = replaceFolderChildren(nextBase, folderId, nextChildren, {
+      collapseSingleChild: false,
+    })
+  })
+
+  const existingIds = new Set(nextBase.map(getId))
+  const extractedItems = Array.from(extractedById.values()).filter(
+    child => !existingIds.has(child.key)
+  )
+  if (extractedItems.length === 0) {
+    return nextBase
+  }
+
+  return [...nextBase, ...extractedItems]
 }
 
 const getLayoutNormalizationMetrics = (
@@ -547,9 +585,54 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     return next
   }, [dragState, draggedFolderChildSelections, itemById])
 
+  const outerPreviewSpillOrder = useMemo(() => {
+    if (!dragState || dragState.context !== 'outer') return null
+    if (dragState.draggingIds.length !== 1) return null
+    if (dragState.folderPreviewTargetId !== null) return null
+    if (dragState.previewSlotIndex === null) return null
+
+    const baseForPreview = extractDraggedIconsFromSourceFolders(items, dragState.draggingIds)
+    const projected = applyOuterDropFromSession({
+      base: baseForPreview,
+      session: dragState,
+      pageSize,
+      columns,
+      resolveNearestSlotIndexByContext: () => dragState.previewSlotIndex,
+      mode: 'paged',
+      sourceSlots: outerSlots,
+    })
+    const normalizedWorkingOrder = dragState.workingOrder.map(slot =>
+      slot === DRAG_HOLE_ID ? null : slot
+    )
+    const anchorIndex = dragState.previewSlotIndex
+    const pageStart = Math.floor(anchorIndex / pageSize) * pageSize
+    const pageEnd = pageStart + pageSize
+    const nextLength = Math.max(projected.slots.length, normalizedWorkingOrder.length, pageEnd)
+    const nextOrder = Array.from({ length: nextLength }, (_, index) => projected.slots[index] ?? null)
+    const currentPageIds = new Set<string>()
+
+    for (let index = pageStart; index < pageEnd; index += 1) {
+      const slot = normalizedWorkingOrder[index] ?? null
+      nextOrder[index] = slot
+      if (typeof slot === 'string') {
+        currentPageIds.add(slot)
+      }
+    }
+
+    for (let index = 0; index < nextOrder.length; index += 1) {
+      if (index >= pageStart && index < pageEnd) continue
+      const slot = nextOrder[index]
+      if (typeof slot === 'string' && currentPageIds.has(slot)) {
+        nextOrder[index] = null
+      }
+    }
+
+    return nextOrder
+  }, [columns, dragState, items, outerSlots, pageSize])
+
   const renderOrder = useMemo(() => {
     if (dragState?.context === 'outer') {
-      return dragState.workingOrder
+      return outerPreviewSpillOrder ?? dragState.workingOrder
     }
     const baseOrder = frozenOuterOrder ?? outerSlots
     if (dragState?.context === 'dock' && dragState.draggingIds.length > 0) {
@@ -557,7 +640,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       return baseOrder.map(slot => (slot && dragIdSet.has(slot) ? null : slot))
     }
     return baseOrder
-  }, [dragState, frozenOuterOrder, outerSlots])
+  }, [dragState, frozenOuterOrder, outerPreviewSpillOrder, outerSlots])
 
   useEffect(() => {
     if (!openFolderId) return

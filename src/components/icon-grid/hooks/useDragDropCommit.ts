@@ -543,6 +543,7 @@ export function useDragDropCommit({
           columns,
           resolveNearestSlotIndexByContext,
           mode: targetContext === 'dock' ? 'linear' : 'paged',
+          sourceSlots: originalOuterSlots,
         })
         commitTopLevelSessionResult(
           current,
@@ -637,8 +638,10 @@ export function useDragDropCommit({
           base: baseForDrop,
           session: current,
           pageSize: pageSizeRef.current,
+          columns,
           resolveNearestSlotIndexByContext,
           mode: targetContext === 'dock' ? 'linear' : 'paged',
+          sourceSlots: originalOuterSlots,
         })
         commitTopLevelSessionResult(
           current,
