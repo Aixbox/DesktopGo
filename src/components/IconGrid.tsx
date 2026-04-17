@@ -37,7 +37,10 @@ import {
   normalizeOuterSlots,
   resizeSlotPages,
 } from './icon-grid/domain/topLevelLayout'
-import { applyOuterDropFromSession } from './icon-grid/domain/dropPolicy'
+import {
+  applyMultiOuterDropFromSession,
+  applyOuterDropFromSession,
+} from './icon-grid/domain/dropPolicy'
 import { DragOverlays } from './icon-grid/views/DragOverlays'
 import { OuterGridView } from './icon-grid/views/OuterGridView'
 import { EdgeGlow } from './icon-grid/views/EdgeGlow'
@@ -587,23 +590,42 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
 
   const outerPreviewSpillOrder = useMemo(() => {
     if (!dragState || dragState.context !== 'outer') return null
-    if (dragState.draggingIds.length !== 1) return null
     if (dragState.folderPreviewTargetId !== null) return null
     if (dragState.previewSlotIndex === null) return null
 
     const baseForPreview = extractDraggedIconsFromSourceFolders(items, dragState.draggingIds)
-    const projected = applyOuterDropFromSession({
-      base: baseForPreview,
-      session: dragState,
-      pageSize,
-      columns,
-      resolveNearestSlotIndexByContext: () => dragState.previewSlotIndex,
-      mode: 'paged',
-      sourceSlots: outerSlots,
+    const previewBaseItemIdSet = new Set(resolveOuterItemIds(baseForPreview.map(getId), activeDockKeys))
+    dragState.draggingIds.forEach(id => {
+      previewBaseItemIdSet.add(id)
     })
-    const normalizedWorkingOrder = dragState.workingOrder.map(slot =>
-      slot === DRAG_HOLE_ID ? null : slot
-    )
+    const previewBaseItems = filterItemsByIds(baseForPreview, Array.from(previewBaseItemIdSet))
+    const projected =
+      dragState.draggingIds.length > 1
+        ? applyMultiOuterDropFromSession({
+            base: previewBaseItems,
+            session: dragState,
+            pageSize,
+            columns,
+            resolveNearestSlotIndexByContext: () => dragState.previewSlotIndex,
+            mode: 'paged',
+            sourceSlots: outerSlots,
+          })
+        : applyOuterDropFromSession({
+            base: previewBaseItems,
+            session: dragState,
+            pageSize,
+            columns,
+            resolveNearestSlotIndexByContext: () => dragState.previewSlotIndex,
+            mode: 'paged',
+            sourceSlots: outerSlots,
+          })
+
+    const draggingIdSet = new Set(dragState.draggingIds)
+    const normalizedWorkingOrder = dragState.workingOrder.map(slot => {
+      if (slot === DRAG_HOLE_ID) return null
+      if (typeof slot === 'string' && draggingIdSet.has(slot)) return null
+      return slot
+    })
     const anchorIndex = dragState.previewSlotIndex
     const pageStart = Math.floor(anchorIndex / pageSize) * pageSize
     const pageEnd = pageStart + pageSize
@@ -622,13 +644,13 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     for (let index = 0; index < nextOrder.length; index += 1) {
       if (index >= pageStart && index < pageEnd) continue
       const slot = nextOrder[index]
-      if (typeof slot === 'string' && currentPageIds.has(slot)) {
+      if (typeof slot === 'string' && (currentPageIds.has(slot) || draggingIdSet.has(slot))) {
         nextOrder[index] = null
       }
     }
 
     return nextOrder
-  }, [columns, dragState, items, outerSlots, pageSize])
+  }, [activeDockKeys, columns, dragState, items, outerSlots, pageSize])
 
   const renderOrder = useMemo(() => {
     if (dragState?.context === 'outer') {

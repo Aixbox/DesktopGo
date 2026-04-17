@@ -119,6 +119,7 @@ interface ApplyOuterDropFromSessionParams {
   resolveNearestSlotIndexByContext: (state: DragState) => number | null
   mode?: 'paged' | 'linear'
   sourceSlots?: Array<string | null>
+  previewSlots?: Array<string | null>
 }
 
 export const applyOuterDropFromSession = ({
@@ -129,6 +130,7 @@ export const applyOuterDropFromSession = ({
   resolveNearestSlotIndexByContext,
   mode = 'paged',
   sourceSlots,
+  previewSlots,
 }: ApplyOuterDropFromSessionParams): { items: GridItem[]; slots: Array<string | null> } => {
   const safePageSize = Math.max(1, pageSize)
   const map = new Map<string, GridItem>()
@@ -167,7 +169,7 @@ export const applyOuterDropFromSession = ({
     columns,
     dropIndex: candidateDropIndex,
     dragIds,
-    previewSlots: resolveCommittedBaseSlots(session.workingOrder, dragIds),
+    previewSlots: resolveCommittedBaseSlots(previewSlots ?? session.workingOrder, dragIds),
   })
 }
 
@@ -231,10 +233,13 @@ const applyPagedOuterDrop = ({
   const clampedDropIndex = clampNumber(dropIndex, 0, Number.MAX_SAFE_INTEGER)
   const pageStart = Math.floor(clampedDropIndex / safePageSize) * safePageSize
   const insertedSlots = [...slots]
-  insertIntoPageFromAnchor({
+  const pageOverflowIds = insertIntoPageFromAnchor({
     slots: insertedSlots,
+    sourceSlots: slots,
+    items,
     pageStart,
     pageSize: safePageSize,
+    columns: safeColumns,
     dropIndex: clampedDropIndex,
     dragIds,
     previewSlots,
@@ -246,10 +251,10 @@ const applyPagedOuterDrop = ({
     pageStart,
     pageSize: safePageSize,
     columns: safeColumns,
-    dragIds,
+    pageOverflowIds,
   })
   const backfilledSlots = backfillDisplacedCurrentPageItems({
-    sourceSlots: slots,
+    referenceSlots: previewSlots ?? slots,
     slots: stabilizedSlots,
     items,
     pageStart,
@@ -367,15 +372,21 @@ const placeIdsIntoInsertedPagesRowMajor = ({
 
 const insertIntoPageFromAnchor = ({
   slots,
+  sourceSlots,
+  items,
   pageStart,
   pageSize,
+  columns,
   dropIndex,
   dragIds,
   previewSlots,
 }: {
   slots: Array<string | null>
+  sourceSlots: Array<string | null>
+  items: GridItem[]
   pageStart: number
   pageSize: number
+  columns: number
   dropIndex: number
   dragIds: string[]
   previewSlots?: Array<string | null>
@@ -390,7 +401,7 @@ const insertIntoPageFromAnchor = ({
   ).map(slot => slot ?? null)
   const dropLocalIndex = clampNumber(dropIndex - pageStart, 0, pageSize - 1)
   if (dragIds.length === 0) {
-    return
+    return []
   }
 
   const carryIds = [...dragIds]
@@ -404,18 +415,47 @@ const insertIntoPageFromAnchor = ({
     }
   }
 
-  for (let localIndex = 0; localIndex < pageSize && carryIds.length > 0; localIndex += 1) {
-    if (pageEntries[localIndex] !== null) continue
-    const nextId = carryIds.shift()
-    if (nextId === undefined) break
-    pageEntries[localIndex] = nextId
-  }
+  const sourcePageIds = sourceSlots
+    .slice(pageStart, pageEnd)
+    .filter((id): id is string => typeof id === 'string')
+  const pageEntryIdSet = new Set(
+    pageEntries.filter((id): id is string => typeof id === 'string')
+  )
+  const carryIdSet = new Set(carryIds)
+  sourcePageIds.forEach(id => {
+    if (pageEntryIdSet.has(id) || carryIdSet.has(id)) return
+    carryIds.push(id)
+    carryIdSet.add(id)
+  })
 
   for (let localIndex = 0; localIndex < pageSize; localIndex += 1) {
     slots[pageStart + localIndex] = pageEntries[localIndex] ?? null
   }
-}
 
+  const remainingCarryIds: string[] = []
+  carryIds.forEach(id => {
+    const item = items.find(candidate => getId(candidate) === id)
+    if (!item) return
+    const span = getGridItemSpan(item)
+    let placed = false
+
+    for (let anchorIndex = pageStart; anchorIndex < pageEnd; anchorIndex += 1) {
+      if (!canPlaceItemAtAnchorIndex(slots, items, anchorIndex, span, columns, pageSize)) {
+        continue
+      }
+      slots[anchorIndex] = id
+      placed = true
+      break
+    }
+
+    if (!placed) {
+      remainingCarryIds.push(id)
+    }
+  })
+
+  return remainingCarryIds
+}
+ 
 const stabilizeMultiDropPage = ({
   sourceSlots,
   insertedSlots,
@@ -423,7 +463,7 @@ const stabilizeMultiDropPage = ({
   pageStart,
   pageSize,
   columns,
-  dragIds,
+  pageOverflowIds,
 }: {
   sourceSlots: Array<string | null>
   insertedSlots: Array<string | null>
@@ -431,28 +471,19 @@ const stabilizeMultiDropPage = ({
   pageStart: number
   pageSize: number
   columns: number
-  dragIds: string[]
+  pageOverflowIds: string[]
 }) => {
   const pageEnd = pageStart + pageSize
-  const dragIdSet = new Set(dragIds)
   const insertedPageEntries = insertedSlots.slice(pageStart, pageEnd)
   const stabilizedPageEntries = insertedPageEntries.map(id => id ?? null)
-  const pageIdSet = new Set(
-    stabilizedPageEntries.filter((id): id is string => typeof id === 'string')
-  )
-  const pageDragIdSet = new Set(
-    stabilizedPageEntries.filter((id): id is string => typeof id === 'string' && dragIdSet.has(id))
-  )
-  const remainingDragIds = dragIds.filter(id => !pageDragIdSet.has(id))
-  const displacedCurrentPageIds = sourceSlots
-    .slice(pageStart, pageEnd)
-    .filter(
-      (id): id is string => typeof id === 'string' && !dragIdSet.has(id) && !pageIdSet.has(id)
-    )
+  const reassignedIdSet = new Set<string>([
+    ...stabilizedPageEntries.filter((id): id is string => typeof id === 'string'),
+    ...pageOverflowIds,
+  ])
   const sourceNextPageEntries = sourceSlots.slice(pageEnd, pageEnd + pageSize)
   const nextPageSlots = sourceNextPageEntries.map(slot => {
     if (typeof slot !== 'string') return null
-    return dragIdSet.has(slot) ? null : slot
+    return reassignedIdSet.has(slot) ? null : slot
   })
   const hasExistingNextPage = sourceNextPageEntries.length > 0
   while (nextPageSlots.length < pageSize) {
@@ -460,7 +491,7 @@ const stabilizeMultiDropPage = ({
   }
   const trailingSlots = sourceSlots.slice(pageEnd + pageSize).map(slot => {
     if (typeof slot !== 'string') return null
-    return dragIdSet.has(slot) ? null : slot
+    return reassignedIdSet.has(slot) ? null : slot
   })
 
   const nextSlots = [...sourceSlots.slice(0, pageStart)]
@@ -468,7 +499,7 @@ const stabilizeMultiDropPage = ({
     nextSlots.push(null)
   }
   nextSlots.push(...stabilizedPageEntries)
-  const insertedPageQueue = [...remainingDragIds, ...displacedCurrentPageIds]
+  const insertedPageQueue = [...pageOverflowIds]
   if (insertedPageQueue.length === 0) {
     if (hasExistingNextPage) {
       nextSlots.push(...nextPageSlots)
@@ -510,7 +541,7 @@ const stabilizeMultiDropPage = ({
 }
 
 const backfillDisplacedCurrentPageItems = ({
-  sourceSlots,
+  referenceSlots,
   slots,
   items,
   pageStart,
@@ -518,7 +549,7 @@ const backfillDisplacedCurrentPageItems = ({
   columns,
   dragIds,
 }: {
-  sourceSlots: Array<string | null>
+  referenceSlots: Array<string | null>
   slots: Array<string | null>
   items: GridItem[]
   pageStart: number
@@ -533,7 +564,7 @@ const backfillDisplacedCurrentPageItems = ({
       .slice(pageStart, pageEnd)
       .filter((id): id is string => typeof id === 'string' && !dragIdSet.has(id))
   )
-  const candidateIds = sourceSlots
+  const candidateIds = referenceSlots
     .slice(pageStart, pageEnd)
     .filter(
       (id): id is string =>
@@ -587,6 +618,7 @@ export const applyMultiOuterDropFromSession = ({
   resolveNearestSlotIndexByContext,
   mode = 'paged',
   sourceSlots,
+  previewSlots,
 }: ApplyOuterDropFromSessionParams): { items: GridItem[]; slots: Array<string | null> } => {
   const safePageSize = Math.max(1, pageSize)
   const dragIds = session.draggingIds
@@ -629,6 +661,7 @@ export const applyMultiOuterDropFromSession = ({
     columns,
     dropIndex: candidateDropIndex,
     dragIds,
+    previewSlots: resolveCommittedBaseSlots(previewSlots ?? session.workingOrder, dragIds),
   })
 }
 

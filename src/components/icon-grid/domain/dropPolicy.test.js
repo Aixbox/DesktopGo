@@ -156,6 +156,67 @@ assert(
   '下一页存在被 folder footprint 占住的假空位时，应判定为空位不足并插入新页'
 )
 
+const singleShouldReuseLaterRealHoleOnNextPageResult = applyOuterDropFromSession({
+  base: ['a', 'b', 'c', 'd', 'e', 'f', 'x'].map(makeIcon),
+  session: buildSession({
+    draggingIds: ['x'],
+    workingOrder: [null, 'a', 'b', 'c', 'e', null, null, 'f'],
+    previewSlotIndex: 0,
+    sourceSlotIndex: 5,
+  }),
+  pageSize: 4,
+  columns: 2,
+  resolveNearestSlotIndexByContext: () => 0,
+  mode: 'paged',
+  sourceSlots: ['a', 'b', 'c', 'd', 'e', 'x', null, 'f'],
+})
+
+assert(
+  JSON.stringify(singleShouldReuseLaterRealHoleOnNextPageResult.slots) ===
+    JSON.stringify(['x', 'a', 'b', 'c', 'e', 'd', null, 'f']),
+  "single overflow should reuse the next page's later real hole instead of taking the first occupied slot"
+)
+
+const multiShouldReuseLaterRealHolesOnNextPageResult = applyMultiOuterDropFromSession({
+  base: ['a', 'b', 'c', 'd', 'e', 'f', 'x', 'y'].map(makeIcon),
+  session: buildSession({
+    workingOrder: [null, 'a', 'b', 'c', 'e', null, null, 'f', null, null, null, null],
+    previewSlotIndex: 0,
+    sourceSlotIndex: 5,
+  }),
+  pageSize: 4,
+  columns: 2,
+  resolveNearestSlotIndexByContext: () => 0,
+  mode: 'paged',
+  sourceSlots: ['a', 'b', 'c', 'd', 'e', 'x', null, 'f', 'y', null, null, null],
+})
+
+assert(
+  JSON.stringify(multiShouldReuseLaterRealHolesOnNextPageResult.slots) ===
+    JSON.stringify(['x', 'y', 'a', 'b', 'e', 'c', 'd', 'f']),
+  'multi overflow should reuse later real holes on the next page in row-major order'
+)
+
+const multiPreviewOrderShouldDriveCurrentPageSpillResult = applyMultiOuterDropFromSession({
+  base: ['a', 'b', 'c', 'd', 'e', 'f', 'x', 'y'].map(makeIcon),
+  session: buildSession({
+    workingOrder: ['a', 'c', 'b', 'd', 'e', 'f', null, null, 'x', 'y', null, null],
+    previewSlotIndex: 1,
+    sourceSlotIndex: 8,
+  }),
+  pageSize: 4,
+  columns: 2,
+  resolveNearestSlotIndexByContext: () => 1,
+  mode: 'paged',
+  sourceSlots: ['a', 'b', 'c', 'd', 'e', 'f', null, null, 'x', 'y', null, null],
+})
+
+assert(
+  JSON.stringify(multiPreviewOrderShouldDriveCurrentPageSpillResult.slots) ===
+    JSON.stringify(['a', 'x', 'y', 'c', 'e', 'f', 'b', 'd']),
+  'å¤šå›¾æ ‡æ‹–æ”¾æ—¶ï¼Œå½“å‰é¡µçš„æŒ¤å‡ºç»“æžœåº”è·Ÿéšå½“å‰é¢„è§ˆé¡ºåºï¼Œä¸èƒ½æŠŠå•æ´žé¢„è§ˆå½“æˆåŽç»­é¡µçš„åŸºçº¿'
+)
+
 const singleFullVisualPageShouldSpillActualLastItemResult = applyOuterDropFromSession({
   base: [makeFolder('tower', '2x1'), makeIcon('a'), makeIcon('b'), makeIcon('x')],
   session: buildSession({
