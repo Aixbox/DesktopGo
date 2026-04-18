@@ -14,7 +14,9 @@
       "WebFetch(domain:qclaw.qq.com)",
       "WebSearch",
       "Bash(cargo check:*)",
-      "Bash(node --experimental-strip-types src/components/icon-grid/domain/topLevelLayout.test.js)"
+      "Bash(node --experimental-strip-types src/components/icon-grid/domain/topLevelLayout.test.js)",
+      "Bash(node --loader ./scripts/ts-test-loader.mjs --test src/components/icon-grid/domain/dropPolicy.test.js)",
+      "Bash(node --experimental-strip-types --import ./scripts/register-ts-test-loader.mjs src/components/icon-grid/domain/dropPolicy.test.js)"
     ]
   }
 }

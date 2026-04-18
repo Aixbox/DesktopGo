@@ -1485,28 +1485,46 @@ const attemptFootprintEvasion = ({
 
 const applyForwardSpillEvasion = (
   order: Array<string | null>,
-  targetIndex: number
+  targetIndex: number,
+  pageSize: number
 ): Array<string | null> => {
   if (targetIndex < 0 || targetIndex >= order.length) return order
 
+  const safePageSize = Math.max(1, pageSize)
+  const pageStart = Math.floor(Math.max(0, targetIndex) / safePageSize) * safePageSize
+  const pageEndExclusive = pageStart + safePageSize
   const next = [...order]
-  let spillIndex = -1
-  for (let index = targetIndex + 1; index < next.length; index += 1) {
+  while (next.length < pageEndExclusive) next.push(null)
+
+  for (let index = targetIndex + 1; index < pageEndExclusive; index += 1) {
     if (next[index] === null) {
-      spillIndex = index
-      break
+      for (let cursor = index; cursor > targetIndex; cursor -= 1) {
+        next[cursor] = next[cursor - 1]
+      }
+      next[targetIndex] = null
+      return next
     }
   }
 
-  if (spillIndex < 0) {
-    spillIndex = next.length
-    next.push(null)
-  }
-
-  for (let index = spillIndex; index > targetIndex; index -= 1) {
-    next[index] = next[index - 1]
+  const lastInPage = pageEndExclusive - 1
+  if (lastInPage < targetIndex) return next
+  const spilledId = next[lastInPage]
+  for (let cursor = lastInPage; cursor > targetIndex; cursor -= 1) {
+    next[cursor] = next[cursor - 1]
   }
   next[targetIndex] = null
+  if (!spilledId) return next
+
+  for (let index = pageEndExclusive; index < next.length; index += 1) {
+    if (next[index] === null) {
+      next[index] = spilledId
+      return next
+    }
+  }
+
+  const newPage: Array<string | null> = Array.from({ length: safePageSize }, () => null)
+  newPage[0] = spilledId
+  next.splice(pageEndExclusive, 0, ...newPage)
   return next
 }
 
@@ -1627,7 +1645,7 @@ export const applyOuterEvasionPolicy = (
   if (fallbackIndex === null) {
     if (options?.items) {
       return {
-        order: applyForwardSpillEvasion(order, hit.targetIndex),
+        order: applyForwardSpillEvasion(order, hit.targetIndex, safePageSize),
         direction: null,
       }
     }

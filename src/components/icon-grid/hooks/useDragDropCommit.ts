@@ -543,7 +543,7 @@ export function useDragDropCommit({
           columns,
           resolveNearestSlotIndexByContext,
           mode: targetContext === 'dock' ? 'linear' : 'paged',
-          sourceSlots: originalOuterSlots,
+          sourceSlots: targetContext === 'dock' ? originalDockKeys : originalOuterSlots,
         })
         commitTopLevelSessionResult(
           current,
@@ -641,7 +641,7 @@ export function useDragDropCommit({
           columns,
           resolveNearestSlotIndexByContext,
           mode: targetContext === 'dock' ? 'linear' : 'paged',
-          sourceSlots: originalOuterSlots,
+          sourceSlots: targetContext === 'dock' ? originalDockKeys : originalOuterSlots,
         })
         commitTopLevelSessionResult(
           current,
