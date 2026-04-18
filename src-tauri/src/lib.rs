@@ -11,13 +11,13 @@ mod updater;
 use commands::{
     activate_main_window, activate_settings_window, apply_window_style, check_for_app_update,
     close_settings_window, delete_desktop_icons, get_default_customapp_dir, get_desktop_icons,
-    get_icon_manager_items, get_import_mode_enabled, get_launch_on_startup_enabled,
+    get_drag_preview_icon, get_icon_manager_items, get_launch_on_startup_enabled,
     get_main_window_always_on_top_enabled,
     get_layout_payload, get_layout_payloads, get_search_preview, get_search_runtime_status,
     get_updater_configuration_status, hide_desktop_icons, import_dropped_paths, install_app_update,
     launch_app, notify_main_window_ready, record_search_result_run, search_files,
     set_main_window_always_on_top_enabled,
-    set_import_mode_enabled, set_layout_payload, set_layout_payloads, set_window_mode,
+    set_layout_payload, set_layout_payloads, set_window_mode,
     show_shell_context_menu, start_search_runtime, sync_full_customapp_icons,
     sync_full_desktop_icons, sync_new_customapp_icons, sync_new_desktop_icons,
     sync_window_persistent_state, toggle_window, unhide_desktop_icons,
@@ -92,7 +92,6 @@ struct MainWindowState {
     ready: AtomicBool,
     pending_show: AtomicBool,
     suppress_blur: AtomicBool,
-    import_mode_enabled: AtomicBool,
     window_persistent_enabled: AtomicBool,
     transparent_surface_enabled: AtomicBool,
     manual_always_on_top_enabled: AtomicBool,
@@ -159,7 +158,6 @@ impl Default for MainWindowState {
             ready: AtomicBool::new(false),
             pending_show: AtomicBool::new(false),
             suppress_blur: AtomicBool::new(false),
-            import_mode_enabled: AtomicBool::new(false),
             window_persistent_enabled: AtomicBool::new(false),
             transparent_surface_enabled: AtomicBool::new(true),
             manual_always_on_top_enabled: AtomicBool::new(false),
@@ -341,8 +339,6 @@ pub fn run() {
             launch_app,
             show_shell_context_menu,
             set_window_mode,
-            get_import_mode_enabled,
-            set_import_mode_enabled,
             sync_new_desktop_icons,
             sync_full_desktop_icons,
             sync_new_customapp_icons,
@@ -368,6 +364,7 @@ pub fn run() {
             get_updater_configuration_status,
             check_for_app_update,
             install_app_update,
+            get_drag_preview_icon,
             update_launchpad_shortcut,
             close_settings_window,
             sync_window_persistent_state,
@@ -689,33 +686,8 @@ fn clear_main_window_blur_guard(state: &MainWindowState) {
     }
 }
 
-pub(crate) fn set_main_window_import_mode_enabled(
-    app: &tauri::AppHandle,
-    state: &MainWindowState,
-    enabled: bool,
-) {
-    state.import_mode_enabled.store(enabled, Ordering::SeqCst);
-    if enabled {
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.set_always_on_top(true);
-        }
-        set_main_window_blur_guard(state, MAIN_WINDOW_BLUR_GUARD_MS);
-    } else {
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.set_always_on_top(main_window_should_always_on_top(state));
-            let _ = window.center();
-        }
-        clear_main_window_blur_guard(state);
-    }
-}
-
-pub(crate) fn main_window_import_mode_enabled(state: &MainWindowState) -> bool {
-    state.import_mode_enabled.load(Ordering::SeqCst)
-}
-
 fn main_window_should_always_on_top(state: &MainWindowState) -> bool {
-    state.import_mode_enabled.load(Ordering::SeqCst)
-        || !state.window_persistent_enabled.load(Ordering::SeqCst)
+    !state.window_persistent_enabled.load(Ordering::SeqCst)
         || state.manual_always_on_top_enabled.load(Ordering::SeqCst)
 }
 
@@ -1399,7 +1371,6 @@ pub(crate) fn show_main_window(app: &tauri::AppHandle) {
 
 pub(crate) fn hide_main_window(app: &tauri::AppHandle) {
     let state = app.state::<MainWindowState>();
-    state.import_mode_enabled.store(false, Ordering::SeqCst);
     clear_main_window_blur_guard(&state);
 
     if let Some(window) = app.get_webview_window("main") {
@@ -1567,9 +1538,6 @@ fn attach_blur_handler(app: &tauri::AppHandle) {
                 let state = app_handle.state::<MainWindowState>();
                 if main_window_persistent_enabled(&state) {
                     schedule_main_window_style_refresh(app_handle.clone(), 30);
-                }
-                if state.import_mode_enabled.load(Ordering::SeqCst) {
-                    return;
                 }
                 if main_window_persistent_enabled(&state) {
                     return;

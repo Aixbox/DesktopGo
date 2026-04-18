@@ -350,17 +350,9 @@ const EN_MESSAGES: Record<string, string> = {
   '搜索桌面图标...': 'Search desktop icons...',
   搜索文件: 'Search files',
   搜索桌面图标: 'Search desktop icons',
-  导入模式: 'Import mode',
-  退出导入模式: 'Exit import mode',
-  '更新导入模式失败：{error}': 'Failed to update import mode: {error}',
   '拖入导入失败：{error}': 'Failed to import dropped items: {error}',
   '导入完成：新增 {imported} 项，重复 {duplicate} 项，无效 {invalid} 项。':
     'Import completed: added {imported}, duplicates {duplicate}, invalid {invalid}.',
-  '导入模式已开启，主窗口会保持显示。按 Esc 或再次点击按钮即可退出。':
-    'Import mode is on. The main window stays visible. Press Esc or click the button again to exit.',
-  当前为导入模式: 'Import mode active',
-  '拖入程序、文件夹、文件或快捷方式到窗口中即可导入，按 Esc 或右键菜单可退出。':
-    'Drag apps, folders, files, or shortcuts into the window to import them. Press Esc or use the context menu to exit.',
   '正在导入...': 'Importing...',
   拖到这里即可导入: 'Drop here to import',
   '支持拖入快捷方式、程序、文件夹和普通文件，内容会保存到当前自定义应用目录。':

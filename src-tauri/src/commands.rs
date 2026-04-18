@@ -193,24 +193,6 @@ pub fn close_settings_window(
     Ok(())
 }
 
-#[tauri::command]
-pub fn get_import_mode_enabled(
-    main_window_state: tauri::State<'_, MainWindowState>,
-) -> Result<bool, String> {
-    Ok(crate::main_window_import_mode_enabled(
-        main_window_state.inner(),
-    ))
-}
-
-#[tauri::command]
-pub fn set_import_mode_enabled(
-    app_handle: tauri::AppHandle,
-    main_window_state: tauri::State<'_, MainWindowState>,
-    enabled: bool,
-) -> Result<bool, String> {
-    crate::set_main_window_import_mode_enabled(&app_handle, main_window_state.inner(), enabled);
-    Ok(enabled)
-}
 
 #[tauri::command]
 pub fn sync_window_persistent_state(
@@ -537,4 +519,16 @@ pub async fn install_app_update(
     pending_update: tauri::State<'_, PendingUpdate>,
 ) -> Result<(), String> {
     updater::install_app_update(app_handle, pending_update).await
+}
+
+#[tauri::command]
+pub async fn get_drag_preview_icon(path: String, icon_size: i32) -> Result<String, String> {
+    let trimmed = path.trim().to_string();
+    if trimmed.is_empty() {
+        return Ok(String::new());
+    }
+    let size = if icon_size <= 0 { 32 } else { icon_size };
+    tauri::async_runtime::spawn_blocking(move || icons::get_path_icon_base64(&trimmed, size))
+        .await
+        .map_err(|e| format!("Failed to extract drag preview icon: {}", e))
 }

@@ -898,16 +898,19 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     const activePage = clampNumber(currentPageRef.current, 0, Number.MAX_SAFE_INTEGER)
     const currentPageStart = activePage * safePageSize
     const currentPageEnd = currentPageStart + safePageSize
-    const workingSlots = outerSlotsRef.current.map(slot =>
+    let workingSlots: Array<string | null> = outerSlotsRef.current.map(slot =>
       typeof slot === 'string' && importedIdSet.has(slot) ? null : slot
     )
     const preferredAnchorById = new Map<string, number>()
+    const displacedIdSet = new Set<string>()
+    let tailFillIndex = currentPageEnd - 1
 
     for (const id of importedIds) {
       const item = outerItems.find(entry => getId(entry) === id)
       if (!item) continue
 
       const span = getGridItemSpan(item)
+      let placed = false
       for (let anchorIndex = currentPageStart; anchorIndex < currentPageEnd; anchorIndex += 1) {
         if (
           !canPlaceItemAtAnchorIndex(
@@ -924,13 +927,55 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
 
         preferredAnchorById.set(id, anchorIndex)
         workingSlots[anchorIndex] = id
+        placed = true
         break
+      }
+      if (placed) continue
+
+      if (span.cols > 1 || span.rows > 1) continue
+
+      while (tailFillIndex >= currentPageStart) {
+        const occupant = workingSlots[tailFillIndex]
+        if (typeof occupant === 'string' && importedIdSet.has(occupant)) {
+          tailFillIndex -= 1
+          continue
+        }
+        if (typeof occupant === 'string') {
+          displacedIdSet.add(occupant)
+        }
+        preferredAnchorById.set(id, tailFillIndex)
+        workingSlots[tailFillIndex] = id
+        tailFillIndex -= 1
+        placed = true
+        break
+      }
+    }
+
+    const fallbackOriginAnchorById = new Map<string, number>()
+    displacedIdSet.forEach(id => {
+      fallbackOriginAnchorById.set(id, currentPageEnd)
+    })
+
+    if (displacedIdSet.size > 0) {
+      let nextPageVacant = 0
+      for (let i = currentPageEnd; i < currentPageEnd + safePageSize; i += 1) {
+        const slot = workingSlots[i]
+        if (slot === undefined || slot === null) nextPageVacant += 1
+      }
+      if (displacedIdSet.size > nextPageVacant) {
+        workingSlots = [
+          ...workingSlots.slice(0, currentPageEnd),
+          ...Array.from({ length: safePageSize }, () => null as string | null),
+          ...workingSlots.slice(currentPageEnd),
+        ]
       }
     }
 
     const nextSlots = compactEmptyPages(
       normalizeOuterSlots(workingSlots, outerItems, safePageSize, safeColumns, {
         preferredAnchorById,
+        fallbackOriginAnchorById:
+          fallbackOriginAnchorById.size > 0 ? fallbackOriginAnchorById : undefined,
         spillStrategy: 'row-major-forward',
       }),
       safePageSize

@@ -12,7 +12,7 @@ import {
 import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
-import { Check, ChevronDown, Download, Minus, Pin, X } from 'lucide-react'
+import { Check, ChevronDown, Download, FileIcon, Minus, Pin, X } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
 import { getSetting } from '@/lib/settingsStore'
 import { applyTheme, getSavedTheme } from '@/lib/theme'
@@ -217,11 +217,16 @@ export function Launchpad() {
   const [searchPreviewLoading, setSearchPreviewLoading] = useState(false)
   const [searchPreviewError, setSearchPreviewError] = useState<string | null>(null)
   const [layoutResetToken, setLayoutResetToken] = useState(0)
-  const [isImportModeEnabled, setIsImportModeEnabled] = useState(false)
   const [windowPersistentEnabled, setWindowPersistentEnabled] = useState(false)
   const [mainWindowAlwaysOnTopEnabled, setMainWindowAlwaysOnTopEnabled] = useState(false)
   const [isExternalDragActive, setIsExternalDragActive] = useState(false)
   const [isImportingDrop, setIsImportingDrop] = useState(false)
+  const [dragPreview, setDragPreview] = useState<{
+    paths: string[]
+    x: number
+    y: number
+  } | null>(null)
+  const [dragPreviewIcon, setDragPreviewIcon] = useState<string | null>(null)
   const [importPlacementRequest, setImportPlacementRequest] = useState<{
     token: number
     iconKeys: string[]
@@ -230,6 +235,7 @@ export function Launchpad() {
     ReturnType<typeof getSearchPreview>
   > | null>(null)
   const importPlacementTokenRef = useRef(0)
+  const dragPreviewIconTokenRef = useRef(0)
   const searchFilterOptions = useMemo(() => {
     void language
     return getSearchFilterOptions()
@@ -249,19 +255,6 @@ export function Launchpad() {
       .slice(0, ICON_SEARCH_LIMIT)
   }, [icons, normalizedKeyword, searchSource])
   const isSearchPanelVisible = searchSource === 'everything' && isSearchPanelOpen
-
-  const syncImportModeState = useCallback(async () => {
-    try {
-      const enabled = await invoke<boolean>('get_import_mode_enabled')
-      setIsImportModeEnabled(enabled)
-      if (!enabled) {
-        setIsExternalDragActive(false)
-        setIsImportingDrop(false)
-      }
-    } catch (error) {
-      console.error('Failed to sync import mode state:', error)
-    }
-  }, [])
 
   const syncWindowPersistentState = useCallback(async () => {
     try {
@@ -302,7 +295,6 @@ export function Launchpad() {
       try {
         await hydrateSettings()
         await fetchIcons()
-        await syncImportModeState()
         await syncWindowPersistentState()
         await syncMainWindowAlwaysOnTopState()
         const { windowMode: currentWindowMode, applyWindowMode } = useIconStore.getState()
@@ -319,7 +311,6 @@ export function Launchpad() {
   }, [
     fetchIcons,
     hydrateSettings,
-    syncImportModeState,
     syncMainWindowAlwaysOnTopState,
     syncWindowAppearance,
     syncWindowPersistentState,
@@ -331,7 +322,6 @@ export function Launchpad() {
       state.clearSelection()
       await state.hydrateSettings()
       await state.fetchIcons()
-      await syncImportModeState()
       await syncWindowPersistentState()
       await syncMainWindowAlwaysOnTopState()
       await reloadSearchSettings()
@@ -341,35 +331,10 @@ export function Launchpad() {
     }
   }, [
     reloadSearchSettings,
-    syncImportModeState,
     syncMainWindowAlwaysOnTopState,
     syncWindowAppearance,
     syncWindowPersistentState,
   ])
-
-  const setImportModeEnabled = useCallback(
-    async (enabled: boolean) => {
-      try {
-        const nextEnabled = await invoke<boolean>('set_import_mode_enabled', { enabled })
-        setIsImportModeEnabled(nextEnabled)
-        if (!nextEnabled) {
-          setIsExternalDragActive(false)
-        }
-      } catch (error) {
-        console.error('Failed to update import mode state:', error)
-        toast.error(
-          translate('更新导入模式失败：{error}', {
-            error: String(error),
-          }),
-          {
-            key: 'launchpad-import-mode',
-            title: translate('启动台'),
-          }
-        )
-      }
-    },
-    [toast]
-  )
 
   useEffect(() => {
     let disposed = false
@@ -377,13 +342,21 @@ export function Launchpad() {
 
     void getCurrentWindow()
       .onDragDropEvent(event => {
-        if (!isImportModeEnabled) {
-          return
-        }
-
         const payload = event.payload
         if (payload.type === 'enter' || payload.type === 'over') {
           setIsExternalDragActive(true)
+          const pos = (payload as { position?: { x: number; y: number } }).position
+          if (pos) {
+            const dpr = window.devicePixelRatio || 1
+            setDragPreview(prev => ({
+              paths:
+                'paths' in payload && Array.isArray(payload.paths)
+                  ? payload.paths
+                  : (prev?.paths ?? []),
+              x: pos.x / dpr,
+              y: pos.y / dpr,
+            }))
+          }
           return
         }
 
@@ -391,6 +364,7 @@ export function Launchpad() {
           if (!isImportingDrop) {
             setIsExternalDragActive(false)
           }
+          setDragPreview(null)
           return
         }
 
@@ -399,6 +373,7 @@ export function Launchpad() {
         }
 
         setIsExternalDragActive(false)
+        setDragPreview(null)
         setIsImportingDrop(true)
 
         void (async () => {
@@ -476,7 +451,7 @@ export function Launchpad() {
       disposed = true
       unlisten?.()
     }
-  }, [fetchIcons, isImportModeEnabled, isImportingDrop, toast])
+  }, [fetchIcons, isImportingDrop, toast])
 
   const applyLaunchpadOpenFocus = useCallback(async () => {
     try {
@@ -498,6 +473,26 @@ export function Launchpad() {
       console.error('Failed to apply launchpad open focus target:', error)
     }
   }, [])
+
+  useEffect(() => {
+    const primaryPath = dragPreview?.paths[0] ?? null
+    if (!primaryPath) {
+      dragPreviewIconTokenRef.current += 1
+      setDragPreviewIcon(null)
+      return
+    }
+    const token = ++dragPreviewIconTokenRef.current
+    void invoke<string>('get_drag_preview_icon', { path: primaryPath, iconSize: 32 })
+      .then(result => {
+        if (token !== dragPreviewIconTokenRef.current) return
+        setDragPreviewIcon(typeof result === 'string' && result.length > 0 ? result : null)
+      })
+      .catch(error => {
+        if (token !== dragPreviewIconTokenRef.current) return
+        console.error('Failed to fetch drag preview icon:', error)
+        setDragPreviewIcon(null)
+      })
+  }, [dragPreview?.paths[0]])
 
   useEffect(() => {
     const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
@@ -680,11 +675,6 @@ export function Launchpad() {
       setIsSearchPanelOpen(true)
     }
   }, [hasSearchKeyword, searchSource])
-
-  useEffect(() => {
-    if (isImportModeEnabled) return
-    setIsExternalDragActive(false)
-  }, [isImportModeEnabled])
 
   useEffect(() => {
     if (searchSource !== 'icons' || !isSearchPanelOpen || iconSearchResults.length === 0) {
@@ -916,10 +906,6 @@ export function Launchpad() {
             setIsSearchPanelOpen(false)
             return
           }
-          if (isImportModeEnabled) {
-            void setImportModeEnabled(false)
-            return
-          }
           requestCloseLaunchpad()
         }
         return
@@ -970,10 +956,6 @@ export function Launchpad() {
       if (key === 'Escape') {
         preventDefault()
         if (isSearchPanelVisible && !hasSearchKeyword) {
-          if (isImportModeEnabled) {
-            void setImportModeEnabled(false)
-            return
-          }
           requestCloseLaunchpad()
           return
         }
@@ -983,10 +965,6 @@ export function Launchpad() {
         }
         if (hasSearchKeyword) {
           clearSearch()
-          return
-        }
-        if (isImportModeEnabled) {
-          void setImportModeEnabled(false)
           return
         }
         requestCloseLaunchpad()
@@ -1007,11 +985,9 @@ export function Launchpad() {
       selectedIconResultIndex,
       selectedIndex,
       submitSearch,
-      isImportModeEnabled,
       launchIconItem,
       launchSearchItem,
       requestCloseLaunchpad,
-      setImportModeEnabled,
     ]
   )
 
@@ -1067,11 +1043,6 @@ export function Launchpad() {
       if (target?.closest('[data-dock-menu="true"]')) return
       if (document.querySelector('[data-folder-modal="true"]')) return
       if (isSearchPanelVisible || hasSearchKeyword) return
-      if (isImportModeEnabled) {
-        event.preventDefault()
-        void setImportModeEnabled(false)
-        return
-      }
 
       requestCloseLaunchpad()
     }
@@ -1082,10 +1053,8 @@ export function Launchpad() {
     }
   }, [
     hasSearchKeyword,
-    isImportModeEnabled,
     isSearchPanelVisible,
     requestCloseLaunchpad,
-    setImportModeEnabled,
   ])
 
   const handleBackgroundClick = (e: ReactMouseEvent) => {
@@ -1119,7 +1088,6 @@ export function Launchpad() {
     if (
       windowMode === 'fullscreen' &&
       !hasSearchKeyword &&
-      !isImportModeEnabled &&
       !windowPersistentEnabled
     ) {
       if (isTrueBackgroundClick) {
@@ -1148,9 +1116,6 @@ export function Launchpad() {
   }
 
   const openSettings = async () => {
-    if (isImportModeEnabled) {
-      await setImportModeEnabled(false)
-    }
     const existing = await WebviewWindow.getByLabel('settings')
     if (existing) {
       await existing.destroy().catch(closeError => {
@@ -1235,7 +1200,7 @@ export function Launchpad() {
             </div>
           ) : null}
 
-          {isImportModeEnabled || windowPersistentEnabled ? (
+          {windowPersistentEnabled ? (
             <div
               className="absolute inset-x-0 top-0 z-20 h-14"
               onPointerDown={handleWindowTopDragStart}
@@ -1411,61 +1376,52 @@ export function Launchpad() {
             </div>
           ) : null}
 
-          {isImportModeEnabled ? (
-            <div
-              className="absolute left-5 top-5 z-30 max-w-[280px]"
-            >
-              <div
-                className="launchpad-glass-panel-strong pointer-events-auto flex items-start gap-2.5 rounded-[22px] border border-blue-500/20 px-3 py-2.5 shadow-xl"
-                onPointerDown={handleWindowTopDragStart}
-                onClick={event => {
-                  event.stopPropagation()
-                }}
-              >
-                <div className="rounded-xl border border-blue-500/25 bg-blue-500/10 p-2 text-blue-700 dark:text-blue-300">
-                  <Download className="h-4 w-4" />
+          {isExternalDragActive || isImportingDrop ? (
+            <div className="pointer-events-none absolute inset-x-0 top-20 z-30 flex justify-center px-6">
+              <div className="launchpad-glass-panel-strong pointer-events-auto flex items-center gap-2.5 rounded-full border border-blue-500/25 px-4 py-2 shadow-xl">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full border border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300">
+                  {isImportingDrop ? (
+                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-500/40 border-t-blue-600 dark:border-blue-300/50 dark:border-t-blue-200" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
                 </div>
-                <div className="min-w-0 flex-1 space-y-1">
-                  <p className="text-xs font-semibold text-foreground">
-                    {translate('当前为导入模式')}
-                  </p>
-                  <p className="text-[11px] leading-4 text-foreground/72">
-                    {translate(
-                      '拖入程序、文件夹、文件或快捷方式到窗口中即可导入，按 Esc 或右键菜单可退出。'
-                    )}
-                  </p>
-                  <button
-                    type="button"
-                    data-no-window-drag="true"
-                    className="launchpad-glass-button inline-flex h-7 items-center rounded-full px-3 text-[11px] font-medium text-foreground/86 transition-colors"
-                    onClick={() => {
-                      void setImportModeEnabled(false)
-                    }}
-                  >
-                    {translate('退出导入模式')}
-                  </button>
-                </div>
+                <span className="text-xs font-medium text-foreground">
+                  {isImportingDrop ? translate('正在导入...') : translate('拖到这里即可导入')}
+                </span>
               </div>
             </div>
           ) : null}
 
-          {isImportModeEnabled && (isExternalDragActive || isImportingDrop) ? (
-            <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center px-6">
-              <div className="launchpad-overlay-backdrop absolute inset-0" />
-              <div className="launchpad-glass-panel-strong relative flex w-full max-w-lg flex-col items-center gap-3 rounded-[28px] px-8 py-10 text-center shadow-2xl">
-                <div className="rounded-full border border-blue-500/25 bg-blue-500/10 p-3 text-blue-700 dark:text-blue-300">
-                  <Download className="h-6 w-6" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-lg font-semibold text-foreground">
-                    {isImportingDrop ? translate('正在导入...') : translate('拖到这里即可导入')}
-                  </p>
-                  <p className="text-sm leading-6 text-foreground/72">
-                    {translate(
-                      '支持拖入快捷方式、程序、文件夹和普通文件，内容会保存到当前自定义应用目录。'
-                    )}
-                  </p>
-                </div>
+          {dragPreview && dragPreview.paths.length > 0 ? (
+            <div
+              className="pointer-events-none fixed z-50"
+              style={{
+                left: dragPreview.x + 14,
+                top: dragPreview.y + 14,
+                transform: 'translate3d(0,0,0)',
+              }}
+            >
+              <div className="launchpad-glass-panel-strong flex max-w-[260px] items-center gap-2 rounded-xl border border-blue-500/30 px-2.5 py-1.5 shadow-2xl">
+                {dragPreviewIcon ? (
+                  <img
+                    src={dragPreviewIcon}
+                    alt=""
+                    className="h-5 w-5 flex-none object-contain"
+                    draggable={false}
+                  />
+                ) : (
+                  <FileIcon className="h-4 w-4 flex-none text-foreground/70" />
+                )}
+                <span className="truncate text-xs text-foreground">
+                  {dragPreview.paths[0].split(/[\\/]/).filter(Boolean).pop() ??
+                    dragPreview.paths[0]}
+                </span>
+                {dragPreview.paths.length > 1 ? (
+                  <span className="ml-1 flex-none rounded-full bg-blue-500/12 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300">
+                    +{dragPreview.paths.length - 1}
+                  </span>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -1541,14 +1497,6 @@ export function Launchpad() {
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => enterSelectionMode()}>
           {translate('编辑图标')}
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          onSelect={() => {
-            void setImportModeEnabled(!isImportModeEnabled)
-          }}
-        >
-          {isImportModeEnabled ? translate('退出导入模式') : translate('导入模式')}
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={openSettings}>{translate('设置')}</ContextMenuItem>
