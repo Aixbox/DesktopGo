@@ -651,23 +651,13 @@ export const resizeSlotPages = (
   const safePrevCols = Math.max(1, prevColumns)
   const safeNextCols = Math.max(1, nextColumns)
 
-  if (safePrevPS === safeNextPS && safePrevCols === safeNextCols) {
-    // Folder span changes can invalidate anchors without changing page geometry.
-    // Re-normalize so stale placements are repaired instead of preserved.
-    return normalizeOuterSlots(slots, items, safeNextPS, safeNextCols)
-  }
-
   if (safePrevPS === 1 && safeNextPS > 1) {
     // Recover from an abnormal one-slot page layout by rebuilding the layout
     // against the current page geometry instead of preserving stale page boundaries.
     return normalizeOuterSlots(slots, items, safeNextPS, safeNextCols)
   }
 
-  if (
-    stableCoordinates &&
-    stableCoordinates.length > 0 &&
-    (safeNextPS < safePrevPS || safeNextCols < safePrevCols)
-  ) {
+  if (stableCoordinates && stableCoordinates.length > 0) {
     const itemById = buildItemMap(items)
     const anchorCoordinateById = buildAnchorCoordinateById(stableCoordinates, items)
     const result: Array<string | null> = []
@@ -761,6 +751,11 @@ export const resizeSlotPages = (
     }
 
     return result
+  }
+
+  if (safePrevPS === safeNextPS && safePrevCols === safeNextCols) {
+    // Same geometry without coordinates: preserve slots as-is through a light normalize pass.
+    return normalizeOuterSlots(slots, items, safeNextPS, safeNextCols)
   }
 
   const preferredAnchorById = buildPreferredAnchorByIdFromCoordinates(
