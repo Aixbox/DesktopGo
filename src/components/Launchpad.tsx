@@ -1491,7 +1491,7 @@ export function Launchpad() {
                   )}
                 </div>
                 <span className="text-xs font-medium text-foreground">
-                  {isImportingDrop ? translate('正在导入...') : translate('拖到这里即可导入')}
+                  {isImportingDrop ? translate('正在导入...') : translate('松开即可导入')}
                 </span>
               </div>
             </div>

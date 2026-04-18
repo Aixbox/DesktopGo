@@ -354,7 +354,7 @@ const EN_MESSAGES: Record<string, string> = {
   '导入完成：新增 {imported} 项，重复 {duplicate} 项，无效 {invalid} 项。':
     'Import completed: added {imported}, duplicates {duplicate}, invalid {invalid}.',
   '正在导入...': 'Importing...',
-  拖到这里即可导入: 'Drop here to import',
+  松开即可导入: 'Release to import',
   '支持拖入快捷方式、程序、文件夹和普通文件，内容会保存到当前自定义应用目录。':
     'Shortcuts, apps, folders, and files are supported. Imported items are saved to the current custom app directory.',
   '已选择：{count}': 'Selected: {count}',
