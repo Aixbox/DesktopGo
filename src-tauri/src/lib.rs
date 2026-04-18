@@ -580,11 +580,12 @@ fn resolve_main_window_backdrop(style: &str, persistent_enabled: bool) -> MainWi
 }
 
 #[cfg(windows)]
-fn main_window_should_use_transparent_surface(style: &str, persistent_enabled: bool) -> bool {
-    !matches!(
-        resolve_main_window_backdrop(style, persistent_enabled),
-        MainWindowBackdrop::Mica
-    )
+fn main_window_should_use_transparent_surface(_style: &str, _persistent_enabled: bool) -> bool {
+    // 所有 backdrop 都需要 webview 透明:
+    // - Default 依赖 CSS `.launchpad-bg` 半透明层
+    // - Acrylic 依赖 window_vibrancy 原生合成
+    // - Mica 依赖 DWM 在窗口装饰层绘制,webview 必须透明才能透出
+    true
 }
 
 fn resolve_main_window_background_color(
