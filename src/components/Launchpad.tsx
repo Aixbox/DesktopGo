@@ -156,6 +156,7 @@ export function Launchpad() {
     clearSelection,
     hideSelectedIcons,
     deleteSelectedIcons,
+    setSelectedIconKeys,
   } = useIconStore()
 
   const [searchSource, setSearchSource] = useState<SearchSource>('everything')
@@ -227,6 +228,19 @@ export function Launchpad() {
     y: number
   } | null>(null)
   const [dragPreviewIcon, setDragPreviewIcon] = useState<string | null>(null)
+  const [marquee, setMarquee] = useState<{
+    startX: number
+    startY: number
+    currentX: number
+    currentY: number
+  } | null>(null)
+  const marqueeStateRef = useRef<{
+    initialKeys: Set<string>
+    additive: boolean
+    active: boolean
+    pointerId: number
+  } | null>(null)
+  const marqueeJustEndedRef = useRef(false)
   const [importPlacementRequest, setImportPlacementRequest] = useState<{
     token: number
     iconKeys: string[]
@@ -493,6 +507,67 @@ export function Launchpad() {
         setDragPreviewIcon(null)
       })
   }, [dragPreview?.paths[0]])
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const state = marqueeStateRef.current
+      if (!state?.active || state.pointerId !== event.pointerId) return
+      setMarquee(prev => {
+        if (!prev) return prev
+        if (prev.currentX === event.clientX && prev.currentY === event.clientY) return prev
+        return { ...prev, currentX: event.clientX, currentY: event.clientY }
+      })
+    }
+
+    const handlePointerUp = (event: PointerEvent) => {
+      const state = marqueeStateRef.current
+      if (!state?.active || state.pointerId !== event.pointerId) return
+      state.active = false
+      marqueeStateRef.current = null
+      marqueeJustEndedRef.current = true
+      window.setTimeout(() => {
+        marqueeJustEndedRef.current = false
+      }, 60)
+      setMarquee(null)
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('pointercancel', handlePointerUp)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('pointercancel', handlePointerUp)
+    }
+  }, [])
+
+  useEffect(() => {
+    const state = marqueeStateRef.current
+    if (!state || !marquee) return
+    const left = Math.min(marquee.startX, marquee.currentX)
+    const right = Math.max(marquee.startX, marquee.currentX)
+    const top = Math.min(marquee.startY, marquee.currentY)
+    const bottom = Math.max(marquee.startY, marquee.currentY)
+    const nodes = document.querySelectorAll<HTMLElement>('[data-selection-key]')
+    const hits: string[] = []
+    nodes.forEach(node => {
+      const key = node.getAttribute('data-selection-key')
+      if (!key) return
+      const rect = node.getBoundingClientRect()
+      if (rect.right < left || rect.left > right || rect.bottom < top || rect.top > bottom) return
+      hits.push(key)
+    })
+    const hitSet = new Set(hits)
+    let nextKeys: string[]
+    if (state.additive) {
+      const merged = new Set(state.initialKeys)
+      hits.forEach(key => merged.add(key))
+      nextKeys = Array.from(merged)
+    } else {
+      nextKeys = Array.from(hitSet)
+    }
+    setSelectedIconKeys(nextKeys)
+  }, [marquee, setSelectedIconKeys])
 
   useEffect(() => {
     const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
@@ -784,6 +859,21 @@ export function Launchpad() {
     const target = e.target as HTMLElement
     const startedOnBackground = isBackgroundInteraction(target)
     backgroundPointerStartedRef.current = e.button === 0 && startedOnBackground
+    if (selectionMode && e.button === 0 && startedOnBackground) {
+      marqueeStateRef.current = {
+        initialKeys: new Set(selectedIconKeys),
+        additive: e.ctrlKey || e.shiftKey,
+        active: true,
+        pointerId: e.pointerId,
+      }
+      setMarquee({
+        startX: e.clientX,
+        startY: e.clientY,
+        currentX: e.clientX,
+        currentY: e.clientY,
+      })
+      return
+    }
     if (selectionMode || e.button !== 0 || hasSearchKeyword) return
     if (!startedOnBackground) return
 
@@ -1058,6 +1148,11 @@ export function Launchpad() {
   ])
 
   const handleBackgroundClick = (e: ReactMouseEvent) => {
+    if (marqueeJustEndedRef.current) {
+      marqueeJustEndedRef.current = false
+      backgroundPointerStartedRef.current = false
+      return
+    }
     if (longPressTriggeredRef.current) {
       longPressTriggeredRef.current = false
       backgroundPointerStartedRef.current = false
@@ -1391,6 +1486,18 @@ export function Launchpad() {
                 </span>
               </div>
             </div>
+          ) : null}
+
+          {marquee ? (
+            <div
+              className="pointer-events-none fixed z-40 rounded-sm border border-blue-500/60 bg-blue-500/15 shadow-sm"
+              style={{
+                left: Math.min(marquee.startX, marquee.currentX),
+                top: Math.min(marquee.startY, marquee.currentY),
+                width: Math.abs(marquee.currentX - marquee.startX),
+                height: Math.abs(marquee.currentY - marquee.startY),
+              }}
+            />
           ) : null}
 
           {dragPreview && dragPreview.paths.length > 0 ? (

@@ -133,6 +133,7 @@ export function Icon({
   return (
     <button
       data-icon
+      data-selection-key={selectionKey}
       data-selection-mode={selectionMode ? 'on' : 'off'}
       className={`icon-item relative flex flex-col items-center justify-start rounded-2xl border-none px-3 shadow-none transition-all duration-200 cursor-pointer group ${buttonStateClass} ${layerClass} ${
         highlighted ? 'launchpad-import-highlight-edge' : ''

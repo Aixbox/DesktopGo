@@ -48,6 +48,7 @@ interface IconStore {
   setCustomName: (path: string, name: string) => void
   clearCustomName: (path: string) => void
   clearRenameTrigger: () => void
+  setSelectedIconKeys: (keys: string[]) => void
 }
 
 export const useIconStore = create<IconStore>((set, get) => ({
@@ -332,5 +333,26 @@ export const useIconStore = create<IconStore>((set, get) => ({
 
   clearRenameTrigger: () => {
     set({ renameTriggerPath: null })
+  },
+
+  setSelectedIconKeys: (keys: string[]) => {
+    set(state => {
+      if (!state.selectionMode) return {}
+      const selectableKeySet = resolveSelectableIconKeySet(state.icons)
+      const seen = new Set<string>()
+      const nextSelectedKeys: string[] = []
+      for (const key of keys) {
+        if (!selectableKeySet.has(key) || seen.has(key)) continue
+        seen.add(key)
+        nextSelectedKeys.push(key)
+      }
+      if (
+        nextSelectedKeys.length === state.selectedIconKeys.length &&
+        nextSelectedKeys.every((k, i) => k === state.selectedIconKeys[i])
+      ) {
+        return {}
+      }
+      return { selectedIconKeys: nextSelectedKeys }
+    })
   },
 }))
