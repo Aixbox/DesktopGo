@@ -276,6 +276,7 @@ const applyPagedOuterDrop = ({
     slots: normalizeOuterSlots(backfilledSlots, items, safePageSize, safeColumns, {
       preferredAnchorById: buildPreferredAnchorByIdFromSlots(backfilledSlots),
       preserveSourceAnchors: false,
+      spillStrategy: 'row-major-forward',
     }),
   }
 }

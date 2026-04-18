@@ -1274,43 +1274,10 @@ const attemptCurrentPageFootprintEvasion = ({
   return best
 }
 
-const findFirstLegalAnchor = ({
-  span,
-  startIndex,
-  searchEndExclusive,
-  columns,
-  pageSize,
-  reservedSet,
-  occupied,
-}: {
-  span: GridSpan
-  startIndex: number
-  searchEndExclusive: number
-  columns: number
-  pageSize: number
-  reservedSet: Set<number>
-  occupied: Set<number>
-}): PlacementCandidate | null => {
-  for (
-    let anchorIndex = Math.max(0, startIndex);
-    anchorIndex < searchEndExclusive;
-    anchorIndex += 1
-  ) {
-    const footprint = getFootprintIndices(anchorIndex, span, columns, pageSize)
-    if (!footprint) continue
-    if (footprint.some(index => reservedSet.has(index))) continue
-    if (!canOccupyFootprint(occupied, footprint)) continue
-    return { anchorIndex, footprint, score: 0 }
-  }
-
-  return null
-}
-
 const attemptStableSuffixReflow = ({
   order,
   entries,
   reservedFootprint,
-  targetIndex,
   pageStart,
   pageSize,
   columns,
@@ -1325,79 +1292,95 @@ const attemptStableSuffixReflow = ({
 }): FootprintEvasionResult | null => {
   if (entries.length === 0) return null
 
-  const overlapAnchors = entries
-    .filter(entry => entry.overlapsReserved)
-    .map(entry => entry.anchorIndex)
-  const suffixStart =
-    overlapAnchors.length > 0 ? Math.min(targetIndex, ...overlapAnchors) : targetIndex
-  const fixedAssignments = new Map<string, number>()
+  const safePageSize = Math.max(1, pageSize)
+  const safeColumns = Math.max(1, columns)
+  const currentPageEnd = pageStart + safePageSize
+  const nextPageEnd = currentPageEnd + safePageSize
   const reservedSet = new Set(reservedFootprint)
-  const occupied = new Set<number>(reservedFootprint)
-  const movableEntries: PagePlacementEntry[] = []
 
+  const fixedEntries: PagePlacementEntry[] = []
+  const displacedEntries: PagePlacementEntry[] = []
   for (const entry of entries) {
-    if (entry.anchorIndex < suffixStart) {
-      entry.footprint.forEach(index => occupied.add(index))
-      fixedAssignments.set(entry.id, entry.anchorIndex)
-      continue
-    }
-    movableEntries.push(entry)
+    if (entry.overlapsReserved) displacedEntries.push(entry)
+    else fixedEntries.push(entry)
   }
 
+  if (displacedEntries.length === 0) return null
+
+  let nextPageVacant = 0
+  for (let i = currentPageEnd; i < nextPageEnd; i += 1) {
+    const slot = order[i]
+    if (slot === null || slot === undefined) nextPageVacant += 1
+  }
+
+  const displacedNeed = displacedEntries.reduce((sum, e) => sum + e.footprint.length, 0)
+  const shouldInsertNewPage = displacedNeed > nextPageVacant
+
+  let workingOrder: Array<string | null> = [...order]
+  let orderExtension = 0
+
+  if (shouldInsertNewPage) {
+    workingOrder = [
+      ...workingOrder.slice(0, currentPageEnd),
+      ...Array.from({ length: safePageSize }, () => null as string | null),
+      ...workingOrder.slice(currentPageEnd),
+    ]
+    orderExtension = safePageSize
+  }
+
+  const shiftIndex = (index: number): number =>
+    orderExtension > 0 && index >= currentPageEnd ? index + orderExtension : index
+
+  entries.forEach(entry => {
+    const shifted = shiftIndex(entry.anchorIndex)
+    while (workingOrder.length <= shifted) workingOrder.push(null)
+    workingOrder[shifted] = null
+  })
+
+  const occupied = new Set<number>(reservedFootprint)
   const assignments = new Map<string, number>()
   let totalScore = 0
-  let nextAnchorStart = Math.max(pageStart, suffixStart)
-  const baseSearchEndExclusive = Math.max(order.length, pageStart + pageSize)
-  let searchEndExclusive = baseSearchEndExclusive
-  const hardSearchEndExclusive =
-    baseSearchEndExclusive + Math.max(2, movableEntries.length + 2) * pageSize
 
-  for (const entry of movableEntries) {
-    const currentPageEnd = pageStart + Math.max(1, pageSize)
-    const entryStartIndex =
-      entry.anchorIndex < currentPageEnd
-        ? nextAnchorStart
-        : Math.max(nextAnchorStart, entry.anchorIndex)
-    let placement: PlacementCandidate | null = null
-    while (!placement) {
-      placement = findFirstLegalAnchor({
-        span: entry.span,
-        startIndex: entryStartIndex,
-        searchEndExclusive,
-        columns,
-        pageSize,
-        reservedSet,
-        occupied,
-      })
-      if (placement) break
-      if (searchEndExclusive >= hardSearchEndExclusive) return null
-      searchEndExclusive += pageSize
+  fixedEntries.forEach(entry => {
+    const newAnchor = shiftIndex(entry.anchorIndex)
+    const footprint = getFootprintIndices(newAnchor, entry.span, safeColumns, safePageSize)
+    if (footprint) footprint.forEach(idx => occupied.add(idx))
+    while (workingOrder.length <= newAnchor) workingOrder.push(null)
+    workingOrder[newAnchor] = entry.id
+    assignments.set(entry.id, newAnchor)
+  })
+
+  const absoluteSearchEnd = workingOrder.length + safePageSize * (displacedEntries.length + 2)
+
+  for (const entry of displacedEntries) {
+    let anchor = -1
+    for (let i = pageStart; i < absoluteSearchEnd; i += 1) {
+      while (workingOrder.length <= i) workingOrder.push(null)
+      if (reservedSet.has(i)) continue
+      if (occupied.has(i)) continue
+      if (workingOrder[i]) continue
+      const footprint = getFootprintIndices(i, entry.span, safeColumns, safePageSize)
+      if (!footprint) continue
+      if (footprint.some(idx => occupied.has(idx) || reservedSet.has(idx))) continue
+      anchor = i
+      break
     }
-
-    placement.footprint.forEach(index => occupied.add(index))
-    assignments.set(entry.id, placement.anchorIndex)
-    totalScore += scorePlacementCandidate(
-      entry,
-      placement.anchorIndex,
-      pageStart,
-      pageSize,
-      columns
-    )
-    nextAnchorStart = placement.anchorIndex + 1
+    if (anchor < 0) return null
+    const footprint = getFootprintIndices(anchor, entry.span, safeColumns, safePageSize)!
+    footprint.forEach(idx => occupied.add(idx))
+    workingOrder[anchor] = entry.id
+    assignments.set(entry.id, anchor)
+    totalScore += scorePlacementCandidate(entry, anchor, pageStart, safePageSize, safeColumns)
   }
 
-  return {
-    order: buildOrderWithAssignments(
-      order,
-      pageStart,
-      searchEndExclusive,
-      entries,
-      fixedAssignments,
-      { assignments, totalScore },
-      pageStart + Math.max(1, pageSize)
-    ),
-    totalScore,
+  while (
+    workingOrder.length > pageStart + safePageSize &&
+    workingOrder[workingOrder.length - 1] === null
+  ) {
+    workingOrder.pop()
   }
+
+  return { order: workingOrder, totalScore }
 }
 
 const attemptFootprintEvasion = ({

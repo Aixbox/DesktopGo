@@ -931,6 +931,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     const nextSlots = compactEmptyPages(
       normalizeOuterSlots(workingSlots, outerItems, safePageSize, safeColumns, {
         preferredAnchorById,
+        spillStrategy: 'row-major-forward',
       }),
       safePageSize
     )

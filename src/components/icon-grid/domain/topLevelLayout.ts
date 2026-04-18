@@ -780,6 +780,7 @@ export const resizeSlotPages = (
       preferredAnchorById,
       fallbackOriginAnchorById,
       preserveSourceAnchors: false,
+      spillStrategy: 'row-major-forward',
     })
   }
 
