@@ -12,6 +12,7 @@ import {
 } from 'react'
 import type { DesktopIcon } from '../../../types'
 import { translate, useI18n } from '@/lib/i18n'
+import { useIconStore } from '@/stores/iconStore'
 import type { GridItem } from '../model'
 import {
   ContextMenu,
@@ -183,6 +184,7 @@ export function DockBar({
   onRemoveItem,
 }: DockBarProps) {
   useI18n()
+  const customNames = useIconStore(state => state.customNames)
 
   const panelRef = useRef<HTMLDivElement | null>(null)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
@@ -641,7 +643,7 @@ export function DockBar({
                       >
                         <button
                           type="button"
-                          title={item.icon.name}
+                          title={customNames[item.icon.path] ?? item.icon.name}
                           className={`relative flex cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
                             selectionMode ? '' : 'hover:-translate-y-0.5 active:translate-y-0'
                           }`}
@@ -676,7 +678,7 @@ export function DockBar({
                             {item.icon.icon_base64 ? (
                               <img
                                 src={item.icon.icon_base64}
-                                alt={item.icon.name}
+                                alt={customNames[item.icon.path] ?? item.icon.name}
                                 className="icon-image object-contain"
                                 style={{ width: iconImageSize, height: iconImageSize }}
                                 draggable={false}

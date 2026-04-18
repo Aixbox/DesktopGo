@@ -10,6 +10,7 @@ import type {
 import { ICON_SIZE_CONFIG, WINDOW_SIZE_CONFIG } from '../types'
 import { shouldRefreshAfterShellMenuVerb } from '../lib/shellContextMenu'
 import { getSetting, setSetting } from '../lib/settingsStore'
+import { loadCustomNames, saveCustomNames } from '../lib/customNamesStore'
 
 export const buildIconSelectionKey = (icon: Pick<DesktopIcon, 'id' | 'source'>): string =>
   `${icon.source}:${icon.id}`
@@ -27,6 +28,8 @@ interface IconStore {
   dockEnabled: boolean
   selectionMode: boolean
   selectedIconKeys: string[]
+  customNames: Record<string, string>
+  renameTriggerPath: string | null
   fetchIcons: () => Promise<void>
   launchApp: (path: string) => Promise<void>
   setIconSize: (size: IconSize) => void
@@ -42,6 +45,9 @@ interface IconStore {
   showShellContextMenu: (icon: DesktopIcon) => Promise<void>
   applyWindowMode: (mode: WindowMode) => Promise<void>
   hydrateSettings: () => Promise<void>
+  setCustomName: (path: string, name: string) => void
+  clearCustomName: (path: string) => void
+  clearRenameTrigger: () => void
 }
 
 export const useIconStore = create<IconStore>((set, get) => ({
@@ -54,6 +60,8 @@ export const useIconStore = create<IconStore>((set, get) => ({
   dockEnabled: true,
   selectionMode: false,
   selectedIconKeys: [],
+  customNames: {},
+  renameTriggerPath: null,
 
   fetchIcons: async () => {
     if (get().icons.length === 0) {
@@ -225,7 +233,14 @@ export const useIconStore = create<IconStore>((set, get) => ({
       const selectedVerb = await invoke<string | null>('show_shell_context_menu', {
         path: icon.path,
       })
-      if (selectedVerb === null || !shouldRefreshAfterShellMenuVerb(selectedVerb)) {
+      if (selectedVerb === null) {
+        return
+      }
+      if (selectedVerb.toLowerCase() === 'rename') {
+        set({ renameTriggerPath: icon.path })
+        return
+      }
+      if (!shouldRefreshAfterShellMenuVerb(selectedVerb)) {
         return
       }
 
@@ -258,11 +273,12 @@ export const useIconStore = create<IconStore>((set, get) => ({
   },
 
   hydrateSettings: async () => {
-    const [iconSize, windowMode, titleLineCount, dockEnabled] = await Promise.all([
+    const [iconSize, windowMode, titleLineCount, dockEnabled, customNames] = await Promise.all([
       getSetting('iconSize'),
       getSetting('windowMode'),
       getSetting('titleLineCount'),
       getSetting('dockEnabled'),
+      loadCustomNames(),
     ])
     const current = get()
     const nextState: Partial<IconStore> = {}
@@ -279,9 +295,42 @@ export const useIconStore = create<IconStore>((set, get) => ({
     if (current.dockEnabled !== dockEnabled) {
       nextState.dockEnabled = dockEnabled
     }
+    nextState.customNames = customNames
 
     if (Object.keys(nextState).length > 0) {
       set(nextState)
     }
+  },
+
+  setCustomName: (path: string, name: string) => {
+    const trimmed = name.trim()
+    set(state => {
+      const next = { ...state.customNames }
+      if (trimmed.length === 0) {
+        delete next[path]
+      } else {
+        next[path] = trimmed
+      }
+      void saveCustomNames(next).catch(e => {
+        console.error('Failed to persist custom names:', e)
+      })
+      return { customNames: next }
+    })
+  },
+
+  clearCustomName: (path: string) => {
+    set(state => {
+      if (!(path in state.customNames)) return {}
+      const next = { ...state.customNames }
+      delete next[path]
+      void saveCustomNames(next).catch(e => {
+        console.error('Failed to persist custom names:', e)
+      })
+      return { customNames: next }
+    })
+  },
+
+  clearRenameTrigger: () => {
+    set({ renameTriggerPath: null })
   },
 }))

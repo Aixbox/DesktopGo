@@ -7,7 +7,14 @@ import {
 } from '../types'
 import { useIconStore } from '../stores/iconStore'
 import { AppWindow, Check } from 'lucide-react'
-import type { MouseEvent as ReactMouseEvent } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from 'react'
 
 interface IconProps {
   icon: DesktopIcon
@@ -28,12 +35,43 @@ export function Icon({
   onActivate,
   highlighted = false,
 }: IconProps) {
-  const { launchApp, iconSize, titleLineCount, showShellContextMenu } = useIconStore()
+  const {
+    launchApp,
+    iconSize,
+    titleLineCount,
+    showShellContextMenu,
+    customNames,
+    setCustomName,
+    clearCustomName,
+    renameTriggerPath,
+    clearRenameTrigger,
+  } = useIconStore()
   const config = ICON_SIZE_CONFIG[iconSize]
   const tileHeight = getIconGridRowHeight(iconSize)
   const isSingleLineTitle = titleLineCount === 'one'
+  const displayName = customNames[icon.path] ?? icon.name
+
+  const [isRenaming, setIsRenaming] = useState(false)
+  const [draftName, setDraftName] = useState(displayName)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    if (renameTriggerPath && renameTriggerPath === icon.path) {
+      setDraftName(displayName)
+      setIsRenaming(true)
+      clearRenameTrigger()
+    }
+  }, [renameTriggerPath, icon.path, displayName, clearRenameTrigger])
+
+  useEffect(() => {
+    if (isRenaming && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [isRenaming])
 
   const handleClick = () => {
+    if (isRenaming) return
     if (selectionMode) {
       onToggleSelect(selectionKey)
       return
@@ -50,18 +88,47 @@ export function Icon({
   const handleContextMenu = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
     event.stopPropagation()
-    if (selectionMode) {
-      return
-    }
-
+    if (selectionMode || isRenaming) return
     void showShellContextMenu(icon)
+  }
+
+  const commitRename = () => {
+    if (!isRenaming) return
+    const trimmed = draftName.trim()
+    if (trimmed.length === 0 || trimmed === icon.name) {
+      clearCustomName(icon.path)
+    } else if (trimmed !== displayName) {
+      setCustomName(icon.path, trimmed)
+    }
+    setIsRenaming(false)
+  }
+
+  const cancelRename = () => {
+    setIsRenaming(false)
+    setDraftName(displayName)
+  }
+
+  const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setDraftName(event.target.value)
+  }
+
+  const handleInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    event.stopPropagation()
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      commitRename()
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      cancelRename()
+    }
   }
 
   const buttonStateClass = selectionMode
     ? 'bg-transparent'
     : 'bg-transparent hover:bg-foreground/6 active:bg-foreground/10 dark:hover:bg-white/10 dark:active:bg-white/20'
   const layerClass = selectionMode ? (selected ? 'z-30' : 'z-10') : 'z-10 hover:z-20'
-  const imageMotionClass = selectionMode ? '' : 'group-hover:scale-105 group-active:scale-95'
+  const imageMotionClass =
+    selectionMode || isRenaming ? '' : 'group-hover:scale-105 group-active:scale-95'
 
   return (
     <button
@@ -79,7 +146,7 @@ export function Icon({
       }}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
-      title={icon.name}
+      title={displayName}
       aria-pressed={selectionMode ? selected : undefined}
     >
       {selectionMode ? (
@@ -101,7 +168,7 @@ export function Icon({
         {icon.icon_base64 ? (
           <img
             src={icon.icon_base64}
-            alt={icon.name}
+            alt={displayName}
             style={{ width: config.imgSize, height: config.imgSize }}
             className="object-contain"
             draggable={false}
@@ -110,22 +177,43 @@ export function Icon({
           <AppWindow className="w-8 h-8 text-foreground/60" />
         )}
       </div>
-      <span
-        className="icon-label text-[11px] text-center leading-[13px] text-foreground drop-shadow-md"
-        style={{
-          maxWidth: config.containerWidth - 10,
-          height: isSingleLineTitle ? 13 : 26,
-          display: isSingleLineTitle ? 'block' : '-webkit-box',
-          WebkitLineClamp: isSingleLineTitle ? 1 : 2,
-          WebkitBoxOrient: isSingleLineTitle ? undefined : 'vertical',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: isSingleLineTitle ? 'nowrap' : 'normal',
-          overflowWrap: 'anywhere',
-        }}
-      >
-        {icon.name}
-      </span>
+      {isRenaming ? (
+        <input
+          ref={inputRef}
+          type="text"
+          value={draftName}
+          onChange={handleInputChange}
+          onKeyDown={handleInputKeyDown}
+          onBlur={commitRename}
+          onClick={event => event.stopPropagation()}
+          onPointerDown={event => event.stopPropagation()}
+          onContextMenu={event => event.stopPropagation()}
+          className="icon-label-input rounded-md border border-border/60 bg-background/95 px-1 py-[1px] text-[11px] leading-[13px] text-center text-foreground shadow-sm outline-none focus:border-blue-500 dark:border-white/30 dark:bg-black/60"
+          style={{
+            maxWidth: config.containerWidth - 4,
+            width: config.containerWidth - 4,
+            height: isSingleLineTitle ? 15 : 28,
+          }}
+          maxLength={64}
+        />
+      ) : (
+        <span
+          className="icon-label text-[11px] text-center leading-[13px] text-foreground drop-shadow-md"
+          style={{
+            maxWidth: config.containerWidth - 10,
+            height: isSingleLineTitle ? 13 : 26,
+            display: isSingleLineTitle ? 'block' : '-webkit-box',
+            WebkitLineClamp: isSingleLineTitle ? 1 : 2,
+            WebkitBoxOrient: isSingleLineTitle ? undefined : 'vertical',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: isSingleLineTitle ? 'nowrap' : 'normal',
+            overflowWrap: 'anywhere',
+          }}
+        >
+          {displayName}
+        </span>
+      )}
     </button>
   )
 }

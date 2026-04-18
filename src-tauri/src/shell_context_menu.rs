@@ -381,6 +381,14 @@ fn show_shell_context_menu_on_main_thread(
         as usize;
     let selected_verb = resolve_command_verb(&context_menu, command_offset);
 
+    if selected_verb.eq_ignore_ascii_case("rename") {
+        crate::apply_main_window_runtime_mode(
+            app_handle,
+            app_handle.state::<crate::MainWindowState>().inner(),
+        );
+        return Ok(Some(selected_verb));
+    }
+
     let invoke = CMINVOKECOMMANDINFOEX {
         cbSize: size_of::<CMINVOKECOMMANDINFOEX>() as u32,
         fMask: CMIC_MASK_UNICODE | CMIC_MASK_PTINVOKE,
