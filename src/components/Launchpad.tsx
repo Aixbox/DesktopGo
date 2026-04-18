@@ -239,6 +239,8 @@ export function Launchpad() {
     additive: boolean
     active: boolean
     pointerId: number
+    startX: number
+    startY: number
   } | null>(null)
   const marqueeJustEndedRef = useRef(false)
   const [importPlacementRequest, setImportPlacementRequest] = useState<{
@@ -523,11 +525,16 @@ export function Launchpad() {
       const state = marqueeStateRef.current
       if (!state?.active || state.pointerId !== event.pointerId) return
       state.active = false
+      const dx = Math.abs(event.clientX - state.startX)
+      const dy = Math.abs(event.clientY - state.startY)
+      const moved = dx > 2 || dy > 2
       marqueeStateRef.current = null
-      marqueeJustEndedRef.current = true
-      window.setTimeout(() => {
-        marqueeJustEndedRef.current = false
-      }, 60)
+      if (moved) {
+        marqueeJustEndedRef.current = true
+        window.setTimeout(() => {
+          marqueeJustEndedRef.current = false
+        }, 60)
+      }
       setMarquee(null)
     }
 
@@ -865,6 +872,8 @@ export function Launchpad() {
         additive: e.ctrlKey || e.shiftKey,
         active: true,
         pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
       }
       setMarquee({
         startX: e.clientX,
