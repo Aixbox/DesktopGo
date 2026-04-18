@@ -1084,8 +1084,43 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       preferredAnchorIndex < Math.max(safePS, baseOuterSlots.length)
         ? new Map([[resizedFolderEntryId, preferredAnchorIndex]])
         : undefined
-    const nextOuterSlots = normalizeOuterSlots(baseOuterSlots, outerItems, safePS, safeCols, {
+
+    let effectiveBaseOuterSlots: Array<string | null> = baseOuterSlots
+    const finalAnchorIndex = preferredAnchorIndex ?? originalAnchorIndex
+    if (finalAnchorIndex >= 0) {
+      const newSpan = getGridItemSpan({ ...prevFolder, size })
+      const footprint = getFootprintIndices(finalAnchorIndex, newSpan, safeCols, safePS)
+      if (footprint) {
+        const footprintSet = new Set(footprint)
+        const folderPageStart = Math.floor(finalAnchorIndex / safePS) * safePS
+        const folderPageEnd = folderPageStart + safePS
+
+        let displacedCount = 0
+        for (let i = folderPageStart; i < folderPageEnd; i += 1) {
+          if (!footprintSet.has(i)) continue
+          const slot = effectiveBaseOuterSlots[i]
+          if (slot && slot !== resizedFolderEntryId) displacedCount += 1
+        }
+
+        let nextPageVacant = 0
+        for (let i = folderPageEnd; i < folderPageEnd + safePS; i += 1) {
+          const slot = effectiveBaseOuterSlots[i]
+          if (slot === undefined || slot === null) nextPageVacant += 1
+        }
+
+        if (displacedCount > nextPageVacant) {
+          effectiveBaseOuterSlots = [
+            ...effectiveBaseOuterSlots.slice(0, folderPageEnd),
+            ...Array.from({ length: safePS }, () => null as string | null),
+            ...effectiveBaseOuterSlots.slice(folderPageEnd),
+          ]
+        }
+      }
+    }
+
+    const nextOuterSlots = normalizeOuterSlots(effectiveBaseOuterSlots, outerItems, safePS, safeCols, {
       preferredAnchorById,
+      spillStrategy: 'row-major-forward',
     })
 
     const compactedOuterSlots = compactEmptyPages(nextOuterSlots, safePS)

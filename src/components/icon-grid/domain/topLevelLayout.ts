@@ -27,6 +27,7 @@ interface NormalizeOuterSlotsOptions {
   preferredAnchorById?: Map<string, number>
   fallbackOriginAnchorById?: Map<string, number>
   preserveSourceAnchors?: boolean
+  spillStrategy?: 'nearest' | 'row-major-forward'
 }
 
 interface ResizeAnchorCandidate {
@@ -490,6 +491,19 @@ export const normalizeOuterSlots = (
     }
   }
 
+  const findForwardAvailableAnchorIndex = (span: GridSpan, originIndex: number): number => {
+    let searchIndex = Math.max(0, originIndex)
+    for (;;) {
+      ensureAnchorCapacity(searchIndex)
+      if (!anchors[searchIndex] && canPlaceAtIndex(occupied, searchIndex, span, safeColumns, safePageSize)) {
+        return searchIndex
+      }
+      searchIndex += 1
+    }
+  }
+
+  const spillStrategy = options?.spillStrategy ?? 'nearest'
+
   options?.preferredAnchorById?.forEach((anchorIndex, id) => {
     tryPlaceAtAnchor(id, anchorIndex)
   })
@@ -511,8 +525,13 @@ export const normalizeOuterSlots = (
     if (!item) return
     const span = getGridItemSpan(item)
     const originIndex = sourceAnchorIndexById.get(id) ?? -1
-    let anchorIndex =
-      originIndex >= 0 ? findNearestAvailableAnchorIndex(span, originIndex) : findAppendAnchorIndex(span)
+    let anchorIndex: number | null
+    if (spillStrategy === 'row-major-forward' && originIndex >= 0) {
+      anchorIndex = findForwardAvailableAnchorIndex(span, originIndex)
+    } else {
+      anchorIndex =
+        originIndex >= 0 ? findNearestAvailableAnchorIndex(span, originIndex) : findAppendAnchorIndex(span)
+    }
     if (anchorIndex === null) {
       for (let index = 0; anchorIndex === null; index += 1) {
         ensureAnchorCapacity(index)
