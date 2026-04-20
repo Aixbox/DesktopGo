@@ -72,6 +72,22 @@ const SETTINGS_WINDOW_HEIGHT = 600
 const SEARCH_FLOATING_MENU_SELECTOR = '[data-search-floating-menu="true"]'
 const EXTERNAL_SHOW_CLICK_GUARD_MS = 350
 
+const waitForWindowGeometrySync = async () => {
+  await new Promise<void>(resolve => {
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timeoutId)
+      resolve()
+    }
+    const timeoutId = window.setTimeout(finish, 50)
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(finish)
+    })
+  })
+}
+
 async function ensureSettingsWindowMinSize(settingsWindow: WebviewWindow) {
   const minSize = new LogicalSize(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
   await settingsWindow.setMinSize(minSize)
@@ -310,11 +326,12 @@ export function Launchpad() {
     void (async () => {
       try {
         await hydrateSettings()
+        const { windowMode: currentWindowMode, applyWindowMode } = useIconStore.getState()
+        await applyWindowMode(currentWindowMode)
+        await waitForWindowGeometrySync()
         await fetchIcons()
         await syncWindowPersistentState()
         await syncMainWindowAlwaysOnTopState()
-        const { windowMode: currentWindowMode, applyWindowMode } = useIconStore.getState()
-        await applyWindowMode(currentWindowMode)
         await syncWindowAppearance()
       } catch (e) {
         console.error('Failed to initialize launchpad settings:', e)
