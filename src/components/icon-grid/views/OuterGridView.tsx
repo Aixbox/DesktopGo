@@ -154,6 +154,10 @@ export function OuterGridView({
 
     const direction = currentPage > prevPage ? 1 : -1
 
+    // Only clip while a page slide is in-flight; otherwise let icon/folder
+    // shadows extend beyond the grid edges instead of being cut off.
+    clipContainer.style.overflow = 'hidden'
+
     // Create snapshot clone of the old page
     const clone = document.createElement('div')
     clone.className = grid.className
@@ -192,6 +196,7 @@ export function OuterGridView({
       clone.remove()
       snapshotCloneRef.current = null
       slideTimerRef.current = null
+      clipContainer.style.overflow = ''
     }, PAGE_SLIDE_MS + 40)
   }, [currentPage, gridWidth, gridRef])
 
@@ -205,7 +210,7 @@ export function OuterGridView({
         maxHeight: '100%',
       }}
     >
-      <div ref={gridClipRef} className="relative h-full w-full overflow-hidden">
+      <div ref={gridClipRef} className="relative h-full w-full">
         <div
           ref={gridRef}
           className="grid h-full w-full content-start"
