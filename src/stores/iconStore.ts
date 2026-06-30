@@ -11,9 +11,9 @@ import { ICON_SIZE_CONFIG, WINDOW_SIZE_CONFIG } from '../types'
 import { shouldRefreshAfterShellMenuVerb } from '../lib/shellContextMenu'
 import { getSetting, setSetting } from '../lib/settingsStore'
 import { loadCustomNames, saveCustomNames } from '../lib/customNamesStore'
+import { buildIconSelectionKey } from '../lib/iconKey'
 
-export const buildIconSelectionKey = (icon: Pick<DesktopIcon, 'id' | 'source'>): string =>
-  `${icon.source}:${icon.id}`
+export { buildIconSelectionKey }
 
 const resolveSelectableIconKeySet = (icons: DesktopIcon[]) =>
   new Set(icons.map(icon => buildIconSelectionKey(icon)))

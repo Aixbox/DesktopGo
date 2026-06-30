@@ -45,6 +45,7 @@ import { useToast } from '@/components/ui/toast'
 import { buildIconSelectionKey, useIconStore } from '@/stores/iconStore'
 import type { DesktopIcon, IconSize, TitleLineCount, WindowMode } from '@/types'
 import { IconGrid } from './IconGrid'
+import { AiOrganizePanel } from './ai/AiOrganizePanel'
 
 const LAUNCHPAD_SHOWN_EVENT = 'launchpad:shown'
 const ICON_SIZE_OPTIONS: { label: string; value: IconSize }[] = [
@@ -173,7 +174,10 @@ export function Launchpad() {
     hideSelectedIcons,
     deleteSelectedIcons,
     setSelectedIconKeys,
+    customNames,
   } = useIconStore()
+
+  const [isAiOrganizeOpen, setIsAiOrganizeOpen] = useState(false)
 
   const [searchSource, setSearchSource] = useState<SearchSource>('everything')
 
@@ -600,8 +604,7 @@ export function Launchpad() {
           bypassNextFocusGuardRef.current = false
           suppressBackgroundClickUntilRef.current = 0
         } else {
-          suppressBackgroundClickUntilRef.current =
-            performance.now() + EXTERNAL_SHOW_CLICK_GUARD_MS
+          suppressBackgroundClickUntilRef.current = performance.now() + EXTERNAL_SHOW_CLICK_GUARD_MS
         }
         void syncExternalState()
       }
@@ -1167,11 +1170,7 @@ export function Launchpad() {
     return () => {
       window.removeEventListener('keydown', handlePageEscape)
     }
-  }, [
-    hasSearchKeyword,
-    isSearchPanelVisible,
-    requestCloseLaunchpad,
-  ])
+  }, [hasSearchKeyword, isSearchPanelVisible, requestCloseLaunchpad])
 
   const handleBackgroundClick = (e: ReactMouseEvent) => {
     if (marqueeJustEndedRef.current) {
@@ -1206,11 +1205,7 @@ export function Launchpad() {
       return
     }
 
-    if (
-      windowMode === 'fullscreen' &&
-      !hasSearchKeyword &&
-      !windowPersistentEnabled
-    ) {
+    if (windowMode === 'fullscreen' && !hasSearchKeyword && !windowPersistentEnabled) {
       if (isTrueBackgroundClick) {
         if (performance.now() < suppressBackgroundClickUntilRef.current) {
           return
@@ -1290,9 +1285,7 @@ export function Launchpad() {
               <div className="launchpad-glass-panel-strong flex items-center rounded-xl border border-border/80 px-1.5 py-1 shadow-lg">
                 <WindowControlButton
                   label={
-                    mainWindowAlwaysOnTopEnabled
-                      ? translate('取消置顶')
-                      : translate('置顶窗口')
+                    mainWindowAlwaysOnTopEnabled ? translate('取消置顶') : translate('置顶窗口')
                   }
                   onClick={handleToggleAlwaysOnTop}
                 >
@@ -1304,10 +1297,7 @@ export function Launchpad() {
                 </WindowControlButton>
               </div>
               <div className="launchpad-glass-panel-strong flex items-center gap-1 rounded-xl border border-border/80 px-1.5 py-1 shadow-lg">
-                <WindowControlButton
-                  label={translate('最小化')}
-                  onClick={handleMinimizeWindow}
-                >
+                <WindowControlButton label={translate('最小化')} onClick={handleMinimizeWindow}>
                   <Minus className="h-4 w-4" />
                 </WindowControlButton>
                 <WindowControlButton
@@ -1631,9 +1621,25 @@ export function Launchpad() {
         <ContextMenuItem onSelect={() => enterSelectionMode()}>
           {translate('编辑图标')}
         </ContextMenuItem>
+        <ContextMenuItem onSelect={() => setIsAiOrganizeOpen(true)}>
+          {translate('AI 智能整理')}
+        </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={openSettings}>{translate('设置')}</ContextMenuItem>
       </ContextMenuContent>
+
+      <AiOrganizePanel
+        open={isAiOrganizeOpen}
+        icons={icons}
+        customNames={customNames}
+        onClose={() => setIsAiOrganizeOpen(false)}
+        onApplied={async () => {
+          // 与设置页「重置布局」一致：递增令牌强制 IconGrid 丢弃旧内存布局，
+          // 重新从磁盘 hydrate 出 AI 整理后的结果。
+          setLayoutResetToken(current => current + 1)
+          await fetchIcons()
+        }}
+      />
     </ContextMenu>
   )
 }

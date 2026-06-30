@@ -16,7 +16,21 @@
       "Bash(cargo check:*)",
       "Bash(node --experimental-strip-types src/components/icon-grid/domain/topLevelLayout.test.js)",
       "Bash(node --loader ./scripts/ts-test-loader.mjs --test src/components/icon-grid/domain/dropPolicy.test.js)",
-      "Bash(node --experimental-strip-types --import ./scripts/register-ts-test-loader.mjs src/components/icon-grid/domain/dropPolicy.test.js)"
+      "Bash(node --experimental-strip-types --import ./scripts/register-ts-test-loader.mjs src/components/icon-grid/domain/dropPolicy.test.js)",
+      "Bash(cargo build *)",
+      "Bash(node --experimental-strip-types --import ./scripts/register-ts-test-loader.mjs src/lib/aiOrganize.test.ts)",
+      "Read(//c/Users/aixbox/.cargo/**)",
+      "Bash(pnpm test *)",
+      "Read(//d/Project/SelfProject/DesktopGo/node_modules/typescript/**)",
+      "Read(//d/Project/SelfProject/DesktopGo/node_modules/typescript/lib/**)",
+      "Bash(echo \"EXIT $?\")",
+      "Bash(echo \"G exists: $?\")",
+      "Read(//g//**)",
+      "Bash(command -v pnpm corepack)",
+      "Read(//d/sdk/nodejs/**)",
+      "Bash(/d/sdk/nodejs/corepack --version)",
+      "Bash(git mv *)",
+      "Bash(mv src/lib/aiOrganize.test.ts src/lib/aiOrganize.test.js)"
     ]
   }
 }

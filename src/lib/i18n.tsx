@@ -491,6 +491,51 @@ const EN_MESSAGES: Record<string, string> = {
   '基于目标 {target}{dateSuffix}': 'Target {target}{dateSuffix}',
   '，发布时间 {date}': ', released {date}',
   '当前更新没有附带发布说明。': 'This update does not include release notes.',
+  'AI 助手': 'AI Assistant',
+  'AI 智能整理': 'AI Smart Organize',
+  '由 AI 按用途分组，预览确认后再应用。':
+    'AI groups icons by purpose. Preview and confirm before applying.',
+  'AI 正在分析图标...': 'AI is analyzing icons...',
+  '尚未配置 AI 模型。': 'No AI model configured yet.',
+  '请先到「设置 → AI 助手」填写接口地址、密钥和模型。':
+    'Go to Settings → AI Assistant to set the endpoint, API key, and model first.',
+  重试: 'Retry',
+  'AI 没有给出可用的分组建议。': 'AI did not return any usable grouping suggestions.',
+  分组名称: 'Group name',
+  解散: 'Disband',
+  移出分组: 'Remove from group',
+  '不足 2 个图标，应用时会被忽略。': 'Fewer than 2 icons; this group will be ignored when applied.',
+  '将新建 {count} 个分组文件夹。': 'Will create {count} group folder(s).',
+  '应用中...': 'Applying...',
+  应用整理: 'Apply organization',
+  '没有可应用的分组。': 'No groups available to apply.',
+  '已应用 AI 整理：新建 {count} 个分组文件夹。':
+    'AI organization applied: {count} group folder(s) created.',
+  '配置一个兼容 OpenAI 接口的模型，之后可在启动台右键菜单使用「AI 智能整理」，让 AI 按用途把图标归类到文件夹。':
+    'Configure an OpenAI-compatible model, then use "AI Smart Organize" from the launchpad right-click menu to let AI sort icons into folders by purpose.',
+  模型接入配置: 'Model connection',
+  '支持任意兼容 OpenAI Chat Completions 的服务，例如 OpenAI、DeepSeek、Moonshot 或本地 Ollama。':
+    'Works with any OpenAI Chat Completions-compatible service such as OpenAI, DeepSeek, Moonshot, or local Ollama.',
+  '接口地址（Base URL）': 'Endpoint (Base URL)',
+  模型名称: 'Model name',
+  '自定义分类提示词（可选）': 'Custom classification prompt (optional)',
+  '例如：把所有游戏单独归到「游戏」文件夹。':
+    'For example: put all games into a dedicated "Games" folder.',
+  保存配置: 'Save config',
+  测试连接: 'Test connection',
+  '测试中...': 'Testing...',
+  'AI 配置已保存。': 'AI config saved.',
+  '加载 AI 配置失败：{error}': 'Failed to load AI config: {error}',
+  '保存 AI 配置失败：{error}': 'Failed to save AI config: {error}',
+  '请先填写接口地址、API Key 和模型名称。': 'Fill in the endpoint, API key, and model name first.',
+  '连接成功，AI 配置可用。': 'Connected. The AI config is working.',
+  '连接失败：{error}': 'Connection failed: {error}',
+  安全提示: 'Security notice',
+  'API Key 以明文保存在本地配置文件中，请勿在不信任的设备上填写。整理时仅向模型发送图标名称、目标程序名和类型，不会上传完整文件路径。':
+    'The API key is stored in plain text in a local config file; do not enter it on untrusted devices. Only icon names, target program names, and types are sent to the model—never full file paths.',
+  '调用已配置的 AI 模型，按用途把图标归类到文件夹。会先弹出预览，确认后再写入主窗口布局。':
+    'Use the configured AI model to sort icons into folders by purpose. A preview appears first; the main window layout is updated only after you confirm.',
+  '开始 AI 整理': 'Start AI organize',
 }
 
 const MESSAGES: Record<AppLanguage, Record<string, string>> = {

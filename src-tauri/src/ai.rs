@@ -1,0 +1,363 @@
+use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
+
+const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 45;
+const CHAT_COMPLETIONS_PATH: &str = "chat/completions";
+
+/// 用户在设置页配置的 AI 接入信息。请求集中在 Rust 侧发出，
+/// 这样既能绕过 webview 的 CORS 限制，也避免把 api_key 暴露在前端页面上下文里。
+#[derive(Debug, Deserialize)]
+pub struct AiConfig {
+    pub base_url: String,
+    pub api_key: String,
+    pub model: String,
+    #[serde(default)]
+    pub custom_prompt: Option<String>,
+    #[serde(default)]
+    pub temperature: Option<f32>,
+}
+
+/// 传给模型的单个图标信息。只暴露名称、目标叶子名和类型，
+/// 不外传完整磁盘路径，既控制 token 也减少敏感信息外泄。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AiIconInput {
+    pub key: String,
+    pub name: String,
+    #[serde(default)]
+    pub target_leaf: String,
+    #[serde(default)]
+    pub item_type: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AiGroup {
+    pub folder_name: String,
+    pub icon_keys: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AiClassifyResult {
+    pub groups: Vec<AiGroup>,
+    pub leftover: Vec<String>,
+}
+
+// --- OpenAI 兼容请求/响应结构 ---
+
+#[derive(Serialize)]
+struct ChatMessage<'a> {
+    role: &'a str,
+    content: String,
+}
+
+#[derive(Serialize)]
+struct ResponseFormat {
+    #[serde(rename = "type")]
+    kind: &'static str,
+}
+
+#[derive(Serialize)]
+struct ChatRequest<'a> {
+    model: &'a str,
+    messages: Vec<ChatMessage<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
+    response_format: ResponseFormat,
+}
+
+#[derive(Deserialize)]
+struct ChatResponseMessage {
+    #[serde(default)]
+    content: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ChatResponseChoice {
+    #[serde(default)]
+    message: Option<ChatResponseMessage>,
+}
+
+#[derive(Deserialize)]
+struct ChatResponse {
+    #[serde(default)]
+    choices: Vec<ChatResponseChoice>,
+}
+
+/// 模型按约定返回的 JSON 结构。
+#[derive(Deserialize)]
+struct ModelGroupsPayload {
+    #[serde(default)]
+    groups: Vec<ModelGroup>,
+}
+
+#[derive(Deserialize)]
+struct ModelGroup {
+    #[serde(default, alias = "folderName", alias = "name")]
+    folder_name: String,
+    #[serde(default, alias = "iconKeys", alias = "keys")]
+    icon_keys: Vec<String>,
+}
+
+fn build_system_prompt(custom_prompt: Option<&str>) -> String {
+    let base = "你是一个桌面图标整理助手。用户会给你一个图标清单（JSON 数组），每个元素有 key、name、target_leaf、item_type。\
+请按照软件的用途/类别把这些图标分组（例如：浏览器、开发工具、办公、社交、游戏、媒体、系统工具等）。\
+分组要求：\
+1. 只能使用清单里出现过的 key，不要编造 key；\
+2. 每个 key 最多只能出现在一个分组里；\
+3. 每个分组至少包含 2 个图标，单独的图标不要建组；\
+4. folderName 用简短的中文类别名；\
+5. 不确定归类的图标可以不放进任何分组。\
+只输出 JSON 对象，格式为：{\"groups\":[{\"folderName\":\"类别名\",\"iconKeys\":[\"key1\",\"key2\"]}]}，不要输出任何额外文字或解释。";
+
+    match custom_prompt {
+        Some(extra) if !extra.trim().is_empty() => {
+            format!("{base}\n\n用户附加要求：{}", extra.trim())
+        }
+        _ => base.to_string(),
+    }
+}
+
+fn normalize_base_url(base_url: &str) -> Result<String, String> {
+    let trimmed = base_url.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return Err("AI 接口地址（Base URL）不能为空。".to_string());
+    }
+    if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
+        return Err("AI 接口地址必须以 http:// 或 https:// 开头。".to_string());
+    }
+    Ok(format!("{trimmed}/{CHAT_COMPLETIONS_PATH}"))
+}
+
+/// 从模型返回文本里提取 JSON。优先直接解析，失败再尝试截取首尾大括号之间的内容，
+/// 兼容个别模型在 JSON 外面包了多余文字的情况。
+fn parse_model_payload(content: &str) -> Result<ModelGroupsPayload, String> {
+    let trimmed = content.trim();
+    if let Ok(parsed) = serde_json::from_str::<ModelGroupsPayload>(trimmed) {
+        return Ok(parsed);
+    }
+
+    let start = trimmed.find('{');
+    let end = trimmed.rfind('}');
+    if let (Some(start), Some(end)) = (start, end) {
+        if end > start {
+            if let Ok(parsed) = serde_json::from_str::<ModelGroupsPayload>(&trimmed[start..=end]) {
+                return Ok(parsed);
+            }
+        }
+    }
+
+    Err("AI 返回的内容不是预期的 JSON 分组格式，请重试或更换模型。".to_string())
+}
+
+/// 校验并清洗模型返回的分组：去除非法 key、去重、过滤不足 2 项的分组，
+/// 未被分组的 key 收集到 leftover。
+fn sanitize_groups(payload: ModelGroupsPayload, icons: &[AiIconInput]) -> AiClassifyResult {
+    let valid_keys: std::collections::HashSet<&str> =
+        icons.iter().map(|icon| icon.key.as_str()).collect();
+    let mut consumed: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut groups: Vec<AiGroup> = Vec::new();
+
+    for group in payload.groups {
+        let mut icon_keys: Vec<String> = Vec::new();
+        for key in group.icon_keys {
+            if !valid_keys.contains(key.as_str()) {
+                continue;
+            }
+            if consumed.contains(&key) {
+                continue;
+            }
+            consumed.insert(key.clone());
+            icon_keys.push(key);
+        }
+
+        if icon_keys.len() < 2 {
+            // 不足 2 项的分组解散，成员退回 leftover。
+            for key in icon_keys {
+                consumed.remove(&key);
+            }
+            continue;
+        }
+
+        let folder_name = if group.folder_name.trim().is_empty() {
+            "未命名分组".to_string()
+        } else {
+            group.folder_name.trim().to_string()
+        };
+
+        groups.push(AiGroup {
+            folder_name,
+            icon_keys,
+        });
+    }
+
+    let leftover: Vec<String> = icons
+        .iter()
+        .map(|icon| icon.key.clone())
+        .filter(|key| !consumed.contains(key))
+        .collect();
+
+    AiClassifyResult { groups, leftover }
+}
+
+#[tauri::command]
+pub async fn ai_classify_icons(
+    config: AiConfig,
+    icons: Vec<AiIconInput>,
+) -> Result<AiClassifyResult, String> {
+    if config.api_key.trim().is_empty() {
+        return Err("尚未配置 API Key，请先在设置页填写 AI 配置。".to_string());
+    }
+    if config.model.trim().is_empty() {
+        return Err("尚未配置模型名称，请先在设置页填写 AI 配置。".to_string());
+    }
+    if icons.is_empty() {
+        return Ok(AiClassifyResult {
+            groups: Vec::new(),
+            leftover: Vec::new(),
+        });
+    }
+
+    let endpoint = normalize_base_url(&config.base_url)?;
+    let system_prompt = build_system_prompt(config.custom_prompt.as_deref());
+    let user_payload = serde_json::to_string(&icons)
+        .map_err(|error| format!("序列化图标清单失败：{error}"))?;
+
+    let request_body = ChatRequest {
+        model: config.model.trim(),
+        messages: vec![
+            ChatMessage {
+                role: "system",
+                content: system_prompt,
+            },
+            ChatMessage {
+                role: "user",
+                content: format!("图标清单：\n{user_payload}"),
+            },
+        ],
+        temperature: config.temperature,
+        response_format: ResponseFormat {
+            kind: "json_object",
+        },
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(DEFAULT_REQUEST_TIMEOUT_SECS))
+        .build()
+        .map_err(|error| format!("初始化网络客户端失败：{error}"))?;
+
+    let response = client
+        .post(&endpoint)
+        .bearer_auth(config.api_key.trim())
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|error| format!("请求 AI 接口失败：{error}"))?;
+
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|error| format!("读取 AI 接口响应失败：{error}"))?;
+
+    if !status.is_success() {
+        // 不回显完整 body 里可能包含的敏感细节，仅给出状态码与截断信息。
+        let snippet: String = body.chars().take(300).collect();
+        return Err(format!(
+            "AI 接口返回错误状态 {}：{}",
+            status.as_u16(),
+            snippet
+        ));
+    }
+
+    let parsed: ChatResponse = serde_json::from_str(&body)
+        .map_err(|error| format!("解析 AI 接口响应失败：{error}"))?;
+
+    let content = parsed
+        .choices
+        .into_iter()
+        .next()
+        .and_then(|choice| choice.message)
+        .and_then(|message| message.content)
+        .ok_or_else(|| "AI 接口未返回有效内容。".to_string())?;
+
+    let payload = parse_model_payload(&content)?;
+    Ok(sanitize_groups(payload, &icons))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn icon(key: &str) -> AiIconInput {
+        AiIconInput {
+            key: key.to_string(),
+            name: key.to_string(),
+            target_leaf: String::new(),
+            item_type: String::new(),
+        }
+    }
+
+    #[test]
+    fn normalize_base_url_appends_path() {
+        assert_eq!(
+            normalize_base_url("https://api.openai.com/v1/").unwrap(),
+            "https://api.openai.com/v1/chat/completions"
+        );
+    }
+
+    #[test]
+    fn normalize_base_url_rejects_non_http() {
+        assert!(normalize_base_url("ftp://example.com").is_err());
+        assert!(normalize_base_url("  ").is_err());
+    }
+
+    #[test]
+    fn parse_model_payload_handles_wrapped_text() {
+        let content = "好的，结果如下：{\"groups\":[{\"folderName\":\"浏览器\",\"iconKeys\":[\"a\",\"b\"]}]}";
+        let payload = parse_model_payload(content).unwrap();
+        assert_eq!(payload.groups.len(), 1);
+        assert_eq!(payload.groups[0].folder_name, "浏览器");
+    }
+
+    #[test]
+    fn sanitize_drops_invalid_keys_and_small_groups() {
+        let icons = vec![icon("a"), icon("b"), icon("c"), icon("d")];
+        let payload = ModelGroupsPayload {
+            groups: vec![
+                ModelGroup {
+                    folder_name: "组1".to_string(),
+                    icon_keys: vec![
+                        "a".to_string(),
+                        "b".to_string(),
+                        "ghost".to_string(),
+                        "a".to_string(),
+                    ],
+                },
+                ModelGroup {
+                    folder_name: "组2".to_string(),
+                    icon_keys: vec!["c".to_string()], // 不足 2 项，应解散
+                },
+            ],
+        };
+
+        let result = sanitize_groups(payload, &icons);
+        assert_eq!(result.groups.len(), 1);
+        assert_eq!(result.groups[0].icon_keys, vec!["a", "b"]);
+        let mut leftover = result.leftover.clone();
+        leftover.sort();
+        assert_eq!(leftover, vec!["c".to_string(), "d".to_string()]);
+    }
+
+    #[test]
+    fn sanitize_uses_fallback_folder_name() {
+        let icons = vec![icon("a"), icon("b")];
+        let payload = ModelGroupsPayload {
+            groups: vec![ModelGroup {
+                folder_name: "   ".to_string(),
+                icon_keys: vec!["a".to_string(), "b".to_string()],
+            }],
+        };
+        let result = sanitize_groups(payload, &icons);
+        assert_eq!(result.groups[0].folder_name, "未命名分组");
+    }
+}
