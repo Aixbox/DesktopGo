@@ -1,7 +1,7 @@
-import type { DesktopIcon } from '../types'
-import { buildIconSelectionKey } from './iconKey'
-import type { GridItem, IconItem } from '../components/icon-grid/model'
-import { makeFolderId } from '../components/icon-grid/model'
+import type { DesktopIcon } from '../types.ts'
+import { buildIconSelectionKey } from './iconKey.ts'
+import type { GridItem, IconItem } from '../components/icon-grid/model.ts'
+import { makeFolderId } from '../components/icon-grid/model.ts'
 
 export interface AiIconInput {
   key: string
