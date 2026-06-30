@@ -75,8 +75,8 @@ const fallbackResizeResult = resizeSlotPages(
 
 assert(
   JSON.stringify(fallbackResizeResult) ===
-    JSON.stringify(['a', 'b', 'c', 'd', 'e', null, null, 'f']),
-  '坐标失效时，应基于投影后的坐标原点处理失败项，而不是把旧索引误解释成新布局坐标'
+    JSON.stringify(['a', 'b', 'c', 'd', 'e', 'f', null, null]),
+  '坐标失效时，失败项按页内从左到右、从上到下补到第一个空位，而不是误解释越界坐标'
 )
 
 const shrinkItems = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(makeIcon)
