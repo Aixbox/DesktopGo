@@ -58,6 +58,9 @@ export interface PersistedLayout {
   pageSize?: number
   columns?: number
   coordinates?: PersistedItemCoordinates[]
+  // 网格几何锁定标识，形如 `${windowMode}:${iconSize}:${dockEnabled}`。
+  // 只有该三元组变化时才重新测量列数/行数，避免 DPI/分辨率切换导致图标重排。
+  geometryKey?: string
 }
 
 export const getId = (item: GridItem): string =>
