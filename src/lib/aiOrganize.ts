@@ -1,4 +1,4 @@
-import type { DesktopIcon } from '../types.ts'
+import type { DesktopIcon } from '../types'
 import { buildIconSelectionKey } from './iconKey.ts'
 import type { GridItem, IconItem } from '../components/icon-grid/model.ts'
 import { makeFolderId } from '../components/icon-grid/model.ts'
