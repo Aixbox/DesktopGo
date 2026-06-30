@@ -16,7 +16,17 @@
       "Bash(cargo check:*)",
       "Bash(node --experimental-strip-types src/components/icon-grid/domain/topLevelLayout.test.js)",
       "Bash(node --loader ./scripts/ts-test-loader.mjs --test src/components/icon-grid/domain/dropPolicy.test.js)",
-      "Bash(node --experimental-strip-types --import ./scripts/register-ts-test-loader.mjs src/components/icon-grid/domain/dropPolicy.test.js)"
+      "Bash(node --experimental-strip-types --import ./scripts/register-ts-test-loader.mjs src/components/icon-grid/domain/dropPolicy.test.js)",
+      "Bash(grep -iA3 \"decorat\\\\|fullscreen\\\\|\\\\\"width\\\\\"\\\\|\\\\\"height\\\\\"\\\\|transparent\")",
+      "Bash(echo \"=== TSC EXIT: $? ===\")",
+      "Bash(echo \"=== TEST EXIT: $? ===\")",
+      "Bash(node --experimental-strip-types src/components/icon-grid/domain/layoutHydrationPolicy.test.js)",
+      "Bash(echo \"=== EXIT: $? ===\")",
+      "Bash(npx eslint *)",
+      "Bash(echo \"=== LINT EXIT: $? ===\")",
+      "Bash(npx vite *)",
+      "Bash(echo \"=== BUILD EXIT: $? ===\")",
+      "Bash(npx prettier *)"
     ]
   }
 }

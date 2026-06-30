@@ -102,6 +102,16 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
           columns?: number
           coordinates?: unknown
         }
+      | {
+          version: 7
+          items: PersistedItem[]
+          slots: unknown[]
+          dockKeys: unknown[]
+          pageSize?: number
+          columns?: number
+          coordinates?: unknown
+          geometryKey?: unknown
+        }
     if (!Array.isArray(parsed.items)) return null
     if (parsed.version === 1) return { items: parsed.items, slots: null, dockKeys: [] }
     if (parsed.version === 2 && Array.isArray(parsed.slots)) {
@@ -115,7 +125,8 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
       (parsed.version !== 3 &&
         parsed.version !== 4 &&
         parsed.version !== 5 &&
-        parsed.version !== 6) ||
+        parsed.version !== 6 &&
+        parsed.version !== 7) ||
       !Array.isArray(parsed.slots) ||
       !Array.isArray(parsed.dockKeys)
     ) {
@@ -135,6 +146,14 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
       if (typeof parsed.columns === 'number' && parsed.columns > 0) result.columns = parsed.columns
       result.coordinates = normalizePersistedItemCoordinates(parsed.coordinates)
     }
+    if (parsed.version === 7) {
+      if (typeof parsed.pageSize === 'number' && parsed.pageSize > 0) result.pageSize = parsed.pageSize
+      if (typeof parsed.columns === 'number' && parsed.columns > 0) result.columns = parsed.columns
+      result.coordinates = normalizePersistedItemCoordinates(parsed.coordinates)
+      if (typeof parsed.geometryKey === 'string' && parsed.geometryKey.length > 0) {
+        result.geometryKey = parsed.geometryKey
+      }
+    }
     return result
   } catch {
     return null
@@ -147,7 +166,8 @@ export const writeLayout = async (
   slots: Array<string | null>,
   dockKeys: Array<string | null>,
   pageSize?: number,
-  columns?: number
+  columns?: number,
+  geometryKey?: string
 ) => {
   const coordinates =
     typeof pageSize === 'number' &&
@@ -157,13 +177,14 @@ export const writeLayout = async (
       ? buildPersistedItemCoordinates(slots, items, pageSize, columns)
       : undefined
   const payload = {
-    version: 6,
+    version: 7,
     items: serializeItems(items),
     slots,
     dockKeys,
     pageSize,
     columns,
     coordinates,
+    geometryKey,
   }
   await invoke('set_layout_payload', { key: LAYOUT_KEY, payload: JSON.stringify(payload) })
 }

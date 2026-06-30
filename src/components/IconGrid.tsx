@@ -87,6 +87,10 @@ const fitCount = (container: number, item: number) => {
   if (item <= 0 || container <= item) return 1
   return Math.floor((container - item) / (item + GRID_GAP)) + 1
 }
+// 网格几何锁定标识：窗口模式 + 图标大小 + Dock 开关。
+// 这三者不变时，列数/行数保持锁定，DPI/分辨率切换不会触发重排。
+const buildGeometryKey = (windowMode: string, iconSize: string, dockEnabled: boolean) =>
+  `${windowMode}:${iconSize}:${dockEnabled}`
 const getFolderModalMaxAvailableWidth = () => {
   const maxWidth =
     typeof window === 'undefined' ? FOLDER_MODAL_MAX_WIDTH : Math.min(FOLDER_MODAL_MAX_WIDTH, window.innerWidth * 0.92)
@@ -160,6 +164,7 @@ const isSuspiciousSingleCellPageGeometry = ({
 export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: IconGridProps) {
   const {
     iconSize,
+    windowMode,
     dockEnabled,
     selectionMode,
     selectedIconKeys,
@@ -192,6 +197,10 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   const layoutBaselineRef = useRef(false)
   const persistedDimsRef = useRef<{ pageSize: number; columns: number } | null>(null)
   const persistedCoordinatesRef = useRef<PersistedLayout['coordinates']>(undefined)
+  // 已锁定的几何：记录锁定时的 geometryKey 与对应列数/行数。
+  // 当前 geometryKey 与之一致时，测量回调丢弃实测值，保持锁定几何。
+  const lockedGeometryRef = useRef<{ key: string; columns: number; rows: number } | null>(null)
+  const persistedGeometryKeyRef = useRef<string | null>(null)
   const persistedLayoutRef = useRef<PersistedLayout | null>(null)
   const persistedLayoutLoadedRef = useRef(false)
   const persistedLayoutLoadPromiseRef = useRef<Promise<PersistedLayout | null> | null>(null)
@@ -214,9 +223,12 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   const columnWidth = ICON_SIZE_CONFIG[iconSize].columnWidth
   const layoutRowHeight = getIconGridLayoutRowHeight(iconSize)
   const rowHeight = getIconGridRowHeight(iconSize)
+  const geometryKey = buildGeometryKey(windowMode, iconSize, dockEnabled)
 
   const [columns, setColumns] = useState(1)
   const [rows, setRows] = useState(1)
+  // 水合完成后自增，强制几何测量回调重跑一次，从而应用持久化/锁定几何。
+  const [layoutHydrationTick, setLayoutHydrationTick] = useState(0)
   const [currentPage, setCurrentPage] = useState(0)
   const [hoverPage, setHoverPage] = useState<number | null>(null)
   const [itemWidth, setItemWidth] = useState<number>(columnWidth)
@@ -323,6 +335,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
             prevPageSizeRef.current,
             prevColumnsRef.current
           ),
+          geometryKey: persistedGeometryKeyRef.current ?? undefined,
         }
       } else {
         if (
@@ -360,6 +373,24 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
         ? { pageSize: persisted!.pageSize!, columns: persisted!.columns! }
         : null
       persistedCoordinatesRef.current = persisted?.coordinates
+      persistedGeometryKeyRef.current = persisted?.geometryKey ?? null
+      // 若持久化的几何标识与当前一致，且存有有效列数/行数，则直接锁定该几何，
+      // 让测量回调不再用实测值覆盖它——这正是抵御 DPI/分辨率切换的关键。
+      // 仅在从持久化水合时重建锁；内存水合（icons 刷新）保留会话内已建立的锁，
+      // 避免把 DPI 漂移期的实测值重新锁入。
+      if (hydrationSource !== 'memory') {
+        if (hasDims && persisted?.geometryKey && persisted.geometryKey === geometryKey) {
+          const lockedColumns = persisted!.columns!
+          const lockedRows = Math.max(1, Math.round(persisted!.pageSize! / lockedColumns))
+          lockedGeometryRef.current = {
+            key: persisted!.geometryKey!,
+            columns: lockedColumns,
+            rows: lockedRows,
+          }
+        } else {
+          lockedGeometryRef.current = null
+        }
+      }
       layoutBaselineRef.current = false
 
       itemsRef.current = nextItems
@@ -370,6 +401,8 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       setDockKeys(nextDockKeys)
       hydratedRef.current = true
       hydratedLayoutResetTokenRef.current = layoutResetToken
+      // 强制几何测量回调重跑，使锁定几何（若有）在本次水合后立即生效。
+      setLayoutHydrationTick(tick => tick + 1)
     }
 
     void hydrate()
@@ -398,12 +431,15 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     if (nextPageSize === 1 && nextColumns === 1) {
       return
     }
+    const nextGeometryKey = lockedGeometryRef.current?.key ?? geometryKey
     layoutWriteQueueRef.current = layoutWriteQueueRef.current
-      .then(() => writeLayout(nextItems, nextSlots, nextDockKeys, nextPageSize, nextColumns))
+      .then(() =>
+        writeLayout(nextItems, nextSlots, nextDockKeys, nextPageSize, nextColumns, nextGeometryKey)
+      )
       .catch(e => {
         console.error('Failed to persist launchpad layout:', e)
       })
-  }, [dockKeys, items, outerSlots])
+  }, [dockKeys, items, outerSlots, geometryKey])
 
   useEffect(() => {
     currentPageRef.current = currentPage
@@ -703,20 +739,37 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       const nextColumns = Math.max(hasWideItems ? 2 : 1, fitCount(width, tileWidth))
       const nextPageSize = Math.max(1, nextColumns * resolvedRows)
 
-      if (
-        isSuspiciousSingleCellPageGeometry({
-          columns: nextColumns,
-          rows: resolvedRows,
-          pageSize: nextPageSize,
-        })
-      ) {
-        return
+      const locked = lockedGeometryRef.current
+      const isLockedForCurrentGeometry = locked !== null && locked.key === geometryKey
+
+      let finalColumns: number
+      let finalRows: number
+      if (isLockedForCurrentGeometry) {
+        // 几何已锁定：丢弃实测值（DPI/分辨率切换会让实测值漂移甚至瞬时归零），
+        // 始终沿用锁定的列数/行数，保证图标位置绝对不动。
+        finalColumns = locked!.columns
+        finalRows = locked!.rows
+      } else {
+        // 未锁定（首次运行，或窗口模式/图标大小/Dock 主动变更）：采用实测值。
+        // 此时实测的异常单格几何应被忽略，避免把坏值锁进去。
+        if (
+          isSuspiciousSingleCellPageGeometry({
+            columns: nextColumns,
+            rows: resolvedRows,
+            pageSize: nextPageSize,
+          })
+        ) {
+          return
+        }
+        finalColumns = nextColumns
+        finalRows = resolvedRows
+        lockedGeometryRef.current = { key: geometryKey, columns: finalColumns, rows: finalRows }
       }
 
       setItemWidth(tileWidth)
       setItemHeight(tileHeight)
-      setColumns(nextColumns)
-      setRows(resolvedRows)
+      setColumns(finalColumns)
+      setRows(finalRows)
       layoutReadyRef.current = true
     }
     const schedule = () => {
@@ -734,7 +787,16 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       observer.disconnect()
       window.removeEventListener('resize', schedule)
     }
-  }, [columnWidth, dockEnabled, layoutRowHeight, rowHeight, itemLayoutSignature, currentPage])
+  }, [
+    columnWidth,
+    dockEnabled,
+    layoutRowHeight,
+    rowHeight,
+    itemLayoutSignature,
+    currentPage,
+    geometryKey,
+    layoutHydrationTick,
+  ])
 
   useEffect(() => {
     const container = folderGridContainerRef.current
