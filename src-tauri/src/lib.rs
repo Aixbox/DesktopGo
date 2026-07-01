@@ -1,4 +1,5 @@
 mod autostart;
+mod agent;
 mod ai;
 mod commands;
 mod everything;
@@ -24,6 +25,7 @@ use commands::{
     sync_window_persistent_state, toggle_window, unhide_desktop_icons,
     update_launch_on_startup_enabled, update_launchpad_shortcut,
 };
+use agent::icon_agent::{ai_organize_icons_agent, ai_organize_record_apply};
 use ai::ai_classify_icons;
 #[cfg(windows)]
 use once_cell::sync::OnceCell;
@@ -372,7 +374,9 @@ pub fn run() {
             sync_window_persistent_state,
             get_launch_on_startup_enabled,
             update_launch_on_startup_enabled,
-            ai_classify_icons
+            ai_classify_icons,
+            ai_organize_icons_agent,
+            ai_organize_record_apply
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

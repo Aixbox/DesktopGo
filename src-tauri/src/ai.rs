@@ -2,12 +2,12 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 45;
+pub(crate) const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 45;
 const CHAT_COMPLETIONS_PATH: &str = "chat/completions";
 
 /// 用户在设置页配置的 AI 接入信息。请求集中在 Rust 侧发出，
 /// 这样既能绕过 webview 的 CORS 限制，也避免把 api_key 暴露在前端页面上下文里。
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct AiConfig {
     pub base_url: String,
     pub api_key: String,
@@ -30,13 +30,13 @@ pub struct AiIconInput {
     pub item_type: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AiGroup {
     pub folder_name: String,
     pub icon_keys: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AiClassifyResult {
     pub groups: Vec<AiGroup>,
     pub leftover: Vec<String>,
@@ -85,20 +85,20 @@ struct ChatResponse {
 
 /// 模型按约定返回的 JSON 结构。
 #[derive(Deserialize)]
-struct ModelGroupsPayload {
+pub(crate) struct ModelGroupsPayload {
     #[serde(default)]
-    groups: Vec<ModelGroup>,
+    pub(crate) groups: Vec<ModelGroup>,
 }
 
 #[derive(Deserialize)]
-struct ModelGroup {
+pub(crate) struct ModelGroup {
     #[serde(default, alias = "folderName", alias = "name")]
-    folder_name: String,
+    pub(crate) folder_name: String,
     #[serde(default, alias = "iconKeys", alias = "keys")]
-    icon_keys: Vec<String>,
+    pub(crate) icon_keys: Vec<String>,
 }
 
-fn build_system_prompt(custom_prompt: Option<&str>) -> String {
+pub(crate) fn build_system_prompt(custom_prompt: Option<&str>) -> String {
     let base = "你是一个桌面图标整理助手。用户会给你一个图标清单（JSON 数组），每个元素有 key、name、target_leaf、item_type。\
 请按照软件的用途/类别把这些图标分组（例如：浏览器、开发工具、办公、社交、游戏、媒体、系统工具等）。\
 分组要求：\
@@ -117,7 +117,7 @@ fn build_system_prompt(custom_prompt: Option<&str>) -> String {
     }
 }
 
-fn normalize_base_url(base_url: &str) -> Result<String, String> {
+pub(crate) fn normalize_base_url(base_url: &str) -> Result<String, String> {
     let trimmed = base_url.trim().trim_end_matches('/');
     if trimmed.is_empty() {
         return Err("AI 接口地址（Base URL）不能为空。".to_string());
@@ -125,12 +125,16 @@ fn normalize_base_url(base_url: &str) -> Result<String, String> {
     if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
         return Err("AI 接口地址必须以 http:// 或 https:// 开头。".to_string());
     }
-    Ok(format!("{trimmed}/{CHAT_COMPLETIONS_PATH}"))
+    if trimmed.ends_with(CHAT_COMPLETIONS_PATH) {
+        Ok(trimmed.to_string())
+    } else {
+        Ok(format!("{trimmed}/{CHAT_COMPLETIONS_PATH}"))
+    }
 }
 
 /// 从模型返回文本里提取 JSON。优先直接解析，失败再尝试截取首尾大括号之间的内容，
 /// 兼容个别模型在 JSON 外面包了多余文字的情况。
-fn parse_model_payload(content: &str) -> Result<ModelGroupsPayload, String> {
+pub(crate) fn parse_model_payload(content: &str) -> Result<ModelGroupsPayload, String> {
     let trimmed = content.trim();
     if let Ok(parsed) = serde_json::from_str::<ModelGroupsPayload>(trimmed) {
         return Ok(parsed);
@@ -151,7 +155,10 @@ fn parse_model_payload(content: &str) -> Result<ModelGroupsPayload, String> {
 
 /// 校验并清洗模型返回的分组：去除非法 key、去重、过滤不足 2 项的分组，
 /// 未被分组的 key 收集到 leftover。
-fn sanitize_groups(payload: ModelGroupsPayload, icons: &[AiIconInput]) -> AiClassifyResult {
+pub(crate) fn sanitize_groups(
+    payload: ModelGroupsPayload,
+    icons: &[AiIconInput],
+) -> AiClassifyResult {
     let valid_keys: std::collections::HashSet<&str> =
         icons.iter().map(|icon| icon.key.as_str()).collect();
     let mut consumed: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -219,8 +226,8 @@ pub async fn ai_classify_icons(
 
     let endpoint = normalize_base_url(&config.base_url)?;
     let system_prompt = build_system_prompt(config.custom_prompt.as_deref());
-    let user_payload = serde_json::to_string(&icons)
-        .map_err(|error| format!("序列化图标清单失败：{error}"))?;
+    let user_payload =
+        serde_json::to_string(&icons).map_err(|error| format!("序列化图标清单失败：{error}"))?;
 
     let request_body = ChatRequest {
         model: config.model.trim(),
@@ -269,8 +276,8 @@ pub async fn ai_classify_icons(
         ));
     }
 
-    let parsed: ChatResponse = serde_json::from_str(&body)
-        .map_err(|error| format!("解析 AI 接口响应失败：{error}"))?;
+    let parsed: ChatResponse =
+        serde_json::from_str(&body).map_err(|error| format!("解析 AI 接口响应失败：{error}"))?;
 
     let content = parsed
         .choices
@@ -306,6 +313,14 @@ mod tests {
     }
 
     #[test]
+    fn normalize_base_url_accepts_full_chat_endpoint() {
+        assert_eq!(
+            normalize_base_url("https://gateway.example.com/v1/chat/completions").unwrap(),
+            "https://gateway.example.com/v1/chat/completions"
+        );
+    }
+
+    #[test]
     fn normalize_base_url_rejects_non_http() {
         assert!(normalize_base_url("ftp://example.com").is_err());
         assert!(normalize_base_url("  ").is_err());
@@ -313,7 +328,8 @@ mod tests {
 
     #[test]
     fn parse_model_payload_handles_wrapped_text() {
-        let content = "好的，结果如下：{\"groups\":[{\"folderName\":\"浏览器\",\"iconKeys\":[\"a\",\"b\"]}]}";
+        let content =
+            "好的，结果如下：{\"groups\":[{\"folderName\":\"浏览器\",\"iconKeys\":[\"a\",\"b\"]}]}";
         let payload = parse_model_payload(content).unwrap();
         assert_eq!(payload.groups.len(), 1);
         assert_eq!(payload.groups[0].folder_name, "浏览器");
