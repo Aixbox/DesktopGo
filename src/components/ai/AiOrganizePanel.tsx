@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   AlertCircle,
   Bot,
@@ -42,7 +43,11 @@ type RunStatus = 'idle' | 'running' | 'success' | 'failed' | 'notConfigured' | '
 const AI_ORGANIZE_AGENT_EVENT = 'ai-organize:agent-event'
 const MAX_AGENT_EVENTS = 80
 const STREAM_FLUSH_INTERVAL_MS = 48
-const STREAM_FLUSH_MIN_CHARS = 240
+const STREAM_FLUSH_SOFT_CHARS = 56
+const STREAM_FLUSH_MIN_CHARS = 280
+const STREAM_FLUSH_CATCH_UP_CHARS = 1200
+const STREAM_FLUSH_MAX_HOLD_MS = 180
+const MAX_STREAM_CHUNKS = 220
 
 interface EditableGroup {
   id: string
@@ -52,6 +57,11 @@ interface EditableGroup {
 
 interface AiAgentRunResult extends AiClassifyResult {
   run_id: string
+}
+
+interface StreamChunk {
+  id: number
+  text: string
 }
 
 interface AiAgentEvent {
@@ -248,22 +258,24 @@ function AiRunStatusBar({
 
 function AgentTracePanel({
   events,
-  streamedText,
+  streamChunks,
   isStreaming,
 }: {
   events: AiAgentEvent[]
-  streamedText: string
+  streamChunks: StreamChunk[]
   isStreaming: boolean
 }) {
-  const outputRef = useRef<HTMLPreElement | null>(null)
+  const outputRef = useRef<HTMLDivElement | null>(null)
+  const prefersReducedMotion = useReducedMotion()
   const latestUsage = [...events].reverse().find(event => event.usage)?.usage
   const visibleEvents = events.filter(event => event.phase !== 'token')
+  const hasStreamOutput = streamChunks.length > 0
 
   useEffect(() => {
     const output = outputRef.current
     if (!output) return
     output.scrollTop = output.scrollHeight
-  }, [streamedText])
+  }, [streamChunks])
 
   return (
     <div className="shrink-0 border-t border-border/70 bg-muted/20 px-5 py-3">
@@ -327,18 +339,46 @@ function AgentTracePanel({
           )}
         </div>
         <div className="flex min-h-0 flex-col rounded-md border border-border/70 bg-background px-3 py-2">
-          <div className="mb-1 text-[11px] font-medium text-muted-foreground">
+          <div className="mb-1 flex items-center justify-between gap-2 text-[11px] font-medium text-muted-foreground">
             {translate('原始模型输出')}
-          </div>
-          <pre
-            ref={outputRef}
-            className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-foreground/85"
-          >
-            {streamedText || translate('等待原始模型输出...')}
-            {isStreaming && streamedText ? (
-              <span className="ml-0.5 animate-pulse text-blue-500">|</span>
+            {isStreaming ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-normal text-blue-600 dark:text-blue-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500 motion-safe:animate-pulse" />
+                {translate('接收中')}
+              </span>
             ) : null}
-          </pre>
+          </div>
+          <div
+            ref={outputRef}
+            className="min-h-0 flex-1 overflow-y-auto rounded-sm bg-muted/20 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-foreground/85"
+          >
+            {hasStreamOutput ? (
+              <pre className="whitespace-pre-wrap break-words">
+                <AnimatePresence initial={false}>
+                  {streamChunks.map(chunk => (
+                    <motion.span
+                      key={chunk.id}
+                      initial={prefersReducedMotion ? false : { opacity: 0 }}
+                      animate={prefersReducedMotion ? undefined : { opacity: 1 }}
+                      transition={{ duration: 0.1, ease: [0.22, 1, 0.36, 1] }}
+                    >
+                      {chunk.text}
+                    </motion.span>
+                  ))}
+                </AnimatePresence>
+                {isStreaming ? <span className="ml-0.5 text-blue-500">|</span> : null}
+              </pre>
+            ) : isStreaming ? (
+              <div className="flex h-full min-h-20 flex-col justify-center gap-2 text-muted-foreground">
+                <div className="h-2 w-28 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full w-10 rounded-full bg-blue-500/70 motion-safe:animate-[ai-stream-wait_1.1s_cubic-bezier(0.22,1,0.36,1)_infinite]" />
+                </div>
+                <span>{translate('正在等待首段模型输出...')}</span>
+              </div>
+            ) : (
+              <span className="text-muted-foreground">{translate('等待原始模型输出...')}</span>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -358,14 +398,16 @@ export function AiOrganizePanel({
   const [notConfigured, setNotConfigured] = useState(false)
   const [groups, setGroups] = useState<EditableGroup[]>([])
   const [agentEvents, setAgentEvents] = useState<AiAgentEvent[]>([])
-  const [streamedText, setStreamedText] = useState('')
+  const [streamChunks, setStreamChunks] = useState<StreamChunk[]>([])
   const [runId, setRunId] = useState<string | null>(null)
   const [runStartedAt, setRunStartedAt] = useState<number | null>(null)
   const [runFinishedAt, setRunFinishedAt] = useState<number | null>(null)
   const [elapsedMs, setElapsedMs] = useState(0)
   const runSeqRef = useRef(0)
+  const streamChunkSeqRef = useRef(0)
   const streamBufferRef = useRef('')
   const streamFlushTimerRef = useRef<number | null>(null)
+  const streamFirstBufferedAtRef = useRef<number | null>(null)
 
   const iconByKey = useMemo(() => {
     const map = new Map<string, DesktopIcon>()
@@ -395,7 +437,13 @@ export function AiOrganizePanel({
     const buffered = streamBufferRef.current
     if (!buffered) return
     streamBufferRef.current = ''
-    setStreamedText(currentText => `${currentText}${buffered}`)
+    streamFirstBufferedAtRef.current = null
+    streamChunkSeqRef.current += 1
+    const nextChunk: StreamChunk = {
+      id: streamChunkSeqRef.current,
+      text: buffered,
+    }
+    setStreamChunks(currentChunks => [...currentChunks, nextChunk].slice(-MAX_STREAM_CHUNKS))
   }, [])
 
   const flushPendingStream = useCallback(() => {
@@ -405,15 +453,27 @@ export function AiOrganizePanel({
 
   const resetStreamOutput = useCallback(() => {
     clearStreamFlushTimer()
+    streamChunkSeqRef.current = 0
     streamBufferRef.current = ''
-    setStreamedText('')
+    streamFirstBufferedAtRef.current = null
+    setStreamChunks([])
   }, [clearStreamFlushTimer])
 
   const appendStreamDelta = useCallback(
     (delta: string) => {
       streamBufferRef.current = `${streamBufferRef.current}${delta}`
+      streamFirstBufferedAtRef.current ??= Date.now()
+      const buffered = streamBufferRef.current
+      const elapsedSinceFirstDelta = Date.now() - streamFirstBufferedAtRef.current
+      const shouldCommitSoftChunk =
+        buffered.length >= STREAM_FLUSH_SOFT_CHARS && /[\n,}\]]$/.test(buffered.trimEnd())
 
-      if (streamBufferRef.current.length >= STREAM_FLUSH_MIN_CHARS) {
+      if (
+        buffered.length >= STREAM_FLUSH_CATCH_UP_CHARS ||
+        buffered.length >= STREAM_FLUSH_MIN_CHARS ||
+        shouldCommitSoftChunk ||
+        elapsedSinceFirstDelta >= STREAM_FLUSH_MAX_HOLD_MS
+      ) {
         flushPendingStream()
         return
       }
@@ -610,7 +670,7 @@ export function AiOrganizePanel({
     }
     return null
   }, [agentEvents])
-  const isStreaming = phase === 'loading' && streamedText.length > 0
+  const isStreaming = phase === 'loading'
 
   const runStatus = useMemo<RunStatus>(() => {
     if (phase === 'applying') return 'applying'
@@ -840,7 +900,7 @@ export function AiOrganizePanel({
 
         <AgentTracePanel
           events={agentEvents}
-          streamedText={streamedText}
+          streamChunks={streamChunks}
           isStreaming={isStreaming}
         />
 

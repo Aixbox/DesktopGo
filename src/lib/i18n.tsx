@@ -559,6 +559,8 @@ const EN_MESSAGES: Record<string, string> = {
   '等待模型输出...': 'Waiting for model output...',
   原始模型输出: 'Raw model output',
   '等待原始模型输出...': 'Waiting for raw model output...',
+  接收中: 'Receiving',
+  '正在等待首段模型输出...': 'Waiting for the first model output chunk...',
   '输入 {count}': 'Input {count}',
   '输出 {count}': 'Output {count}',
   '缓存 {count}': 'Cached {count}',

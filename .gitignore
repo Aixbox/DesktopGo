@@ -25,3 +25,5 @@ dist-ssr
 
 updater-env.ps1
 build-script/
+
+helloagents/

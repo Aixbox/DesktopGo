@@ -490,6 +490,22 @@ body {
   animation: launchpad-import-highlight-edge-fade 2.8s cubic-bezier(0.22, 1, 0.36, 1) 1 both;
 }
 
+@keyframes ai-stream-wait {
+  0% {
+    transform: translateX(-120%);
+    opacity: 0.45;
+  }
+
+  45% {
+    opacity: 0.9;
+  }
+
+  100% {
+    transform: translateX(300%);
+    opacity: 0.45;
+  }
+}
+
 .search-control-group {
   border: 1px solid color-mix(in oklch, var(--foreground) 11%, transparent);
   background: color-mix(in oklch, var(--background) 58%, transparent);
