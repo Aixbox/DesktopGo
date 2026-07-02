@@ -12,7 +12,7 @@ import {
 import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
-import { Check, ChevronDown, Download, FileIcon, Minus, Pin, X } from 'lucide-react'
+import { Bot, Check, ChevronDown, Download, FileIcon, Minus, Pin, X } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
 import { getSetting } from '@/lib/settingsStore'
 import { applyTheme, getSavedTheme } from '@/lib/theme'
@@ -45,7 +45,7 @@ import { useToast } from '@/components/ui/toast'
 import { buildIconSelectionKey, useIconStore } from '@/stores/iconStore'
 import type { DesktopIcon, IconSize, TitleLineCount, WindowMode } from '@/types'
 import { IconGrid } from './IconGrid'
-import { AiOrganizePanel } from './ai/AiOrganizePanel'
+import { AiOrganizePanel, type AiOrganizePanelRunState } from './ai/AiOrganizePanel'
 
 const LAUNCHPAD_SHOWN_EVENT = 'launchpad:shown'
 const ICON_SIZE_OPTIONS: { label: string; value: IconSize }[] = [
@@ -114,11 +114,13 @@ function WindowControlButton({
   label,
   onClick,
   tone = 'default',
+  active = false,
   children,
 }: {
   label: string
   onClick: () => void
   tone?: 'default' | 'danger'
+  active?: boolean
   children: ReactNode
 }) {
   return (
@@ -134,9 +136,11 @@ function WindowControlButton({
         onClick()
       }}
       className={`flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-sm transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 ${
-        tone === 'danger'
-          ? 'text-muted-foreground hover:bg-red-500/12 hover:text-red-500 dark:hover:text-red-300'
-          : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+        active
+          ? 'border-blue-500/25 bg-blue-500/12 text-blue-600 dark:text-blue-300'
+          : tone === 'danger'
+            ? 'text-muted-foreground hover:bg-red-500/12 hover:text-red-500 dark:hover:text-red-300'
+            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
       }`}
     >
       <span className="flex h-4 w-4 items-center justify-center">{children}</span>
@@ -177,7 +181,14 @@ export function Launchpad() {
     customNames,
   } = useIconStore()
 
-  const [isAiOrganizeOpen, setIsAiOrganizeOpen] = useState(false)
+  const [isAiOrganizeMode, setIsAiOrganizeMode] = useState(false)
+  const [isAiOrganizeSidebarOpen, setIsAiOrganizeSidebarOpen] = useState(false)
+  const [aiOrganizeApplyRequestToken, setAiOrganizeApplyRequestToken] = useState(0)
+  const [aiOrganizeRunState, setAiOrganizeRunState] = useState<AiOrganizePanelRunState>({
+    canApply: false,
+    applying: false,
+    hasPreview: false,
+  })
 
   const [searchSource, setSearchSource] = useState<SearchSource>('everything')
 
@@ -270,6 +281,42 @@ export function Launchpad() {
   const [searchPreview, setSearchPreview] = useState<Awaited<
     ReturnType<typeof getSearchPreview>
   > | null>(null)
+
+  const resetAiOrganizeRunState = useCallback(() => {
+    setAiOrganizeRunState({
+      canApply: false,
+      applying: false,
+      hasPreview: false,
+    })
+  }, [])
+
+  const enterAiOrganizeMode = useCallback(() => {
+    clearSelection()
+    setIsSearchPanelOpen(false)
+    setIsFilterMenuOpen(false)
+    setIsAiOrganizeMode(true)
+    setIsAiOrganizeSidebarOpen(true)
+  }, [clearSelection])
+
+  const toggleAiOrganizeSidebar = useCallback(() => {
+    if (!isAiOrganizeMode) {
+      resetAiOrganizeRunState()
+      enterAiOrganizeMode()
+      return
+    }
+    setIsAiOrganizeSidebarOpen(open => !open)
+  }, [enterAiOrganizeMode, isAiOrganizeMode, resetAiOrganizeRunState])
+
+  const exitAiOrganizeMode = useCallback(() => {
+    setIsAiOrganizeSidebarOpen(false)
+    setIsAiOrganizeMode(false)
+    resetAiOrganizeRunState()
+  }, [resetAiOrganizeRunState])
+
+  const requestApplyAiOrganizePreview = useCallback(() => {
+    setIsAiOrganizeSidebarOpen(true)
+    setAiOrganizeApplyRequestToken(token => token + 1)
+  }, [])
   const importPlacementTokenRef = useRef(0)
   const dragPreviewIconTokenRef = useRef(0)
   const searchFilterOptions = useMemo(() => {
@@ -488,7 +535,7 @@ export function Launchpad() {
       disposed = true
       unlisten?.()
     }
-  }, [fetchIcons, isImportingDrop, toast])
+  }, [fetchIcons, icons, isImportingDrop, toast])
 
   const applyLaunchpadOpenFocus = useCallback(async () => {
     try {
@@ -511,8 +558,10 @@ export function Launchpad() {
     }
   }, [])
 
+  const dragPreviewPrimaryPath = dragPreview?.paths[0] ?? null
+
   useEffect(() => {
-    const primaryPath = dragPreview?.paths[0] ?? null
+    const primaryPath = dragPreviewPrimaryPath
     if (!primaryPath) {
       dragPreviewIconTokenRef.current += 1
       setDragPreviewIcon(null)
@@ -529,7 +578,7 @@ export function Launchpad() {
         console.error('Failed to fetch drag preview icon:', error)
         setDragPreviewIcon(null)
       })
-  }, [dragPreview?.paths[0]])
+  }, [dragPreviewPrimaryPath])
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -880,7 +929,9 @@ export function Launchpad() {
     !target.closest('[data-search-placeholder]') &&
     !target.closest(SEARCH_FLOATING_MENU_SELECTOR) &&
     !target.closest('[data-pagination]') &&
-    !target.closest('[data-selection-toolbar]')
+    !target.closest('[data-selection-toolbar]') &&
+    !target.closest('[data-ai-organize-toolbar]') &&
+    !target.closest('[data-ai-organize-sidebar]')
 
   const handleBackgroundPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement
@@ -903,7 +954,7 @@ export function Launchpad() {
       })
       return
     }
-    if (selectionMode || e.button !== 0 || hasSearchKeyword) return
+    if (isAiOrganizeMode || selectionMode || e.button !== 0 || hasSearchKeyword) return
     if (!startedOnBackground) return
 
     longPressTriggeredRef.current = false
@@ -1205,6 +1256,10 @@ export function Launchpad() {
       return
     }
 
+    if (isAiOrganizeMode) {
+      return
+    }
+
     if (windowMode === 'fullscreen' && !hasSearchKeyword && !windowPersistentEnabled) {
       if (isTrueBackgroundClick) {
         if (performance.now() < suppressBackgroundClickUntilRef.current) {
@@ -1277,39 +1332,54 @@ export function Launchpad() {
           onPointerLeave={handleBackgroundPointerLeave}
           onClick={handleBackgroundClick}
         >
-          {windowPersistentEnabled ? (
-            <div
-              data-no-window-drag="true"
-              className="absolute right-5 top-5 z-40 flex items-center gap-2"
-            >
-              <div className="launchpad-glass-panel-strong flex items-center rounded-xl border border-border/80 px-1.5 py-1 shadow-lg">
-                <WindowControlButton
-                  label={
-                    mainWindowAlwaysOnTopEnabled ? translate('取消置顶') : translate('置顶窗口')
-                  }
-                  onClick={handleToggleAlwaysOnTop}
-                >
-                  <Pin
-                    className={`h-4 w-4 ${
-                      mainWindowAlwaysOnTopEnabled ? 'text-blue-500 dark:text-blue-300' : ''
-                    }`}
-                  />
-                </WindowControlButton>
-              </div>
-              <div className="launchpad-glass-panel-strong flex items-center gap-1 rounded-xl border border-border/80 px-1.5 py-1 shadow-lg">
-                <WindowControlButton label={translate('最小化')} onClick={handleMinimizeWindow}>
-                  <Minus className="h-4 w-4" />
-                </WindowControlButton>
-                <WindowControlButton
-                  label={translate('关闭窗口')}
-                  tone="danger"
-                  onClick={requestCloseLaunchpad}
-                >
-                  <X className="h-4 w-4" />
-                </WindowControlButton>
-              </div>
+          <div
+            data-no-window-drag="true"
+            className="absolute right-5 top-5 z-40 flex items-center gap-2"
+          >
+            <div className="launchpad-glass-panel-strong flex items-center rounded-xl border border-border/80 px-1.5 py-1 shadow-lg">
+              <WindowControlButton
+                label={
+                  isAiOrganizeMode && isAiOrganizeSidebarOpen
+                    ? translate('收起 AI 整理')
+                    : translate('打开 AI 整理')
+                }
+                active={isAiOrganizeMode}
+                onClick={toggleAiOrganizeSidebar}
+              >
+                <Bot className="h-4 w-4" />
+              </WindowControlButton>
             </div>
-          ) : null}
+            {windowPersistentEnabled ? (
+              <>
+                <div className="launchpad-glass-panel-strong flex items-center rounded-xl border border-border/80 px-1.5 py-1 shadow-lg">
+                  <WindowControlButton
+                    label={
+                      mainWindowAlwaysOnTopEnabled ? translate('取消置顶') : translate('置顶窗口')
+                    }
+                    onClick={handleToggleAlwaysOnTop}
+                  >
+                    <Pin
+                      className={`h-4 w-4 ${
+                        mainWindowAlwaysOnTopEnabled ? 'text-blue-500 dark:text-blue-300' : ''
+                      }`}
+                    />
+                  </WindowControlButton>
+                </div>
+                <div className="launchpad-glass-panel-strong flex items-center gap-1 rounded-xl border border-border/80 px-1.5 py-1 shadow-lg">
+                  <WindowControlButton label={translate('最小化')} onClick={handleMinimizeWindow}>
+                    <Minus className="h-4 w-4" />
+                  </WindowControlButton>
+                  <WindowControlButton
+                    label={translate('关闭窗口')}
+                    tone="danger"
+                    onClick={requestCloseLaunchpad}
+                  >
+                    <X className="h-4 w-4" />
+                  </WindowControlButton>
+                </div>
+              </>
+            ) : null}
+          </div>
 
           {windowPersistentEnabled ? (
             <div
@@ -1454,6 +1524,48 @@ export function Launchpad() {
               void launchSearchItem(item.path)
             }}
           />
+
+          {isAiOrganizeMode ? (
+            <div
+              data-ai-organize-toolbar
+              className="launchpad-glass-panel-strong absolute left-1/2 top-20 z-30 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-full border border-blue-500/20 px-3 py-2 text-sm text-foreground/90 shadow-xl"
+            >
+              <span className="flex items-center gap-2 px-1.5 font-medium">
+                <Bot className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+                {translate('AI 整理模式')}
+              </span>
+              <span className="hidden text-xs text-muted-foreground md:inline">
+                {aiOrganizeRunState.applying
+                  ? translate('正在保存 AI 预览...')
+                  : aiOrganizeRunState.hasPreview
+                    ? translate('预览已生成，可保存或不保存退出。')
+                    : translate('从右侧选择预设或输入要求开始整理。')}
+              </span>
+              <button
+                type="button"
+                onClick={toggleAiOrganizeSidebar}
+                className="launchpad-glass-button rounded-full px-3 py-1 text-xs transition-colors"
+              >
+                {isAiOrganizeSidebarOpen ? translate('收起侧栏') : translate('展开侧栏')}
+              </button>
+              <button
+                type="button"
+                onClick={requestApplyAiOrganizePreview}
+                disabled={!aiOrganizeRunState.canApply || aiOrganizeRunState.applying}
+                className="rounded-full border border-blue-500/30 bg-blue-500/12 px-3 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-500/18 disabled:cursor-not-allowed disabled:opacity-45 dark:text-blue-200 dark:hover:bg-blue-500/25"
+              >
+                {aiOrganizeRunState.applying ? translate('保存中...') : translate('保存预览')}
+              </button>
+              <button
+                type="button"
+                onClick={exitAiOrganizeMode}
+                disabled={aiOrganizeRunState.applying}
+                className="launchpad-glass-button rounded-full px-3 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {translate('不保存退出')}
+              </button>
+            </div>
+          ) : null}
 
           {selectionMode ? (
             <div
@@ -1621,18 +1733,20 @@ export function Launchpad() {
         <ContextMenuItem onSelect={() => enterSelectionMode()}>
           {translate('编辑图标')}
         </ContextMenuItem>
-        <ContextMenuItem onSelect={() => setIsAiOrganizeOpen(true)}>
-          {translate('AI 智能整理')}
-        </ContextMenuItem>
+        <ContextMenuItem onSelect={enterAiOrganizeMode}>{translate('AI 智能整理')}</ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={openSettings}>{translate('设置')}</ContextMenuItem>
       </ContextMenuContent>
 
       <AiOrganizePanel
-        open={isAiOrganizeOpen}
+        open={isAiOrganizeMode}
+        visible={isAiOrganizeSidebarOpen}
         icons={icons}
         customNames={customNames}
-        onClose={() => setIsAiOrganizeOpen(false)}
+        applyRequestToken={aiOrganizeApplyRequestToken}
+        onRunStateChange={setAiOrganizeRunState}
+        onCollapse={() => setIsAiOrganizeSidebarOpen(false)}
+        onClose={exitAiOrganizeMode}
         onApplied={async () => {
           // 与设置页「重置布局」一致：递增令牌强制 IconGrid 丢弃旧内存布局，
           // 重新从磁盘 hydrate 出 AI 整理后的结果。
