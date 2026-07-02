@@ -1,5 +1,5 @@
 use crate::agent::event::{emit_agent_event, AgentEvent, AgentEventPhase};
-use crate::agent::llm::{emit_content_as_tokens, LlmClient, LlmMessage};
+use crate::agent::llm::{LlmClient, LlmMessage};
 use crate::agent::memory;
 use crate::agent::tool::{AgentTool, ToolResponse};
 use crate::ai::{self, AiConfig, AiGroup, AiIconInput};
@@ -67,7 +67,10 @@ impl IconOrganizerAgent {
         icons: Vec<AiIconInput>,
     ) -> Result<AiAgentRunResult, String> {
         self.emit(AgentEventPhase::Started, "AI Agent 已开始整理图标。");
-        self.validate_request(&config)?;
+        if let Err(error) = self.validate_request(&config) {
+            self.emit_detail(AgentEventPhase::Failed, "AI 配置校验失败。", &error, None);
+            return Err(error);
+        }
 
         if icons.is_empty() {
             self.emit(AgentEventPhase::Done, "没有可整理的图标。");
@@ -79,7 +82,18 @@ impl IconOrganizerAgent {
         }
 
         let app_handle = self.window.app_handle().clone();
-        let memory = memory::load_memory(&app_handle)?;
+        let memory = match memory::load_memory(&app_handle) {
+            Ok(memory) => memory,
+            Err(error) => {
+                self.emit_detail(
+                    AgentEventPhase::Failed,
+                    "读取 AI 上下文失败。",
+                    &error,
+                    None,
+                );
+                return Err(error);
+            }
+        };
         let memory_summary = memory::build_preference_summary(&memory);
         self.emit_detail(
             AgentEventPhase::Context,
@@ -100,50 +114,66 @@ impl IconOrganizerAgent {
             None,
         );
 
-        let messages = build_agent_messages(&config, &icons, memory_summary.as_deref())?;
+        let messages = match build_agent_messages(&config, &icons, memory_summary.as_deref()) {
+            Ok(messages) => messages,
+            Err(error) => {
+                self.emit_detail(
+                    AgentEventPhase::Failed,
+                    "构建 AI 请求内容失败。",
+                    &error,
+                    None,
+                );
+                return Err(error);
+            }
+        };
         self.emit(AgentEventPhase::Reasoning, "正在规划整理策略。");
         self.emit(AgentEventPhase::Model, "正在请求模型生成整理草稿。");
-        let mut streamed_tokens = true;
         let model_response = match model_client
-            .complete_json_streaming(&config, messages.clone(), &self.window, &self.run_id)
+            .complete_json_observed(
+                &config,
+                messages.clone(),
+                true,
+                &self.window,
+                &self.run_id,
+                "严格 JSON 流式请求",
+            )
             .await
         {
             Ok(response) => response,
-            Err(stream_error) => {
-                streamed_tokens = false;
+            Err(strict_error) => {
                 self.emit_detail(
                     AgentEventPhase::Fallback,
-                    "流式请求失败，正在降级为普通严格 JSON 请求。",
-                    &stream_error,
+                    "严格 JSON 流式请求失败，正在使用宽松 JSON 流式请求重试。",
+                    &strict_error,
                     None,
                 );
                 match model_client
-                    .complete_json(&config, messages.clone(), true)
+                    .complete_json_observed(
+                        &config,
+                        messages,
+                        false,
+                        &self.window,
+                        &self.run_id,
+                        "宽松 JSON 流式请求",
+                    )
                     .await
                 {
                     Ok(response) => response,
-                    Err(strict_error) => {
+                    Err(loose_error) => {
+                        let error = format!(
+                            "严格 JSON 流式请求失败：{strict_error}；宽松 JSON 流式请求失败：{loose_error}"
+                        );
                         self.emit_detail(
-                            AgentEventPhase::Fallback,
-                            "普通严格 JSON 请求失败，正在去掉 response_format 重试。",
-                            &strict_error,
+                            AgentEventPhase::Failed,
+                            "AI Agent 请求失败。",
+                            &error,
                             None,
                         );
-                        model_client
-                            .complete_json(&config, messages, false)
-                            .await
-                            .map_err(|loose_error| {
-                                format!(
-                                    "{stream_error}；严格普通请求失败：{strict_error}；宽松普通请求也失败：{loose_error}"
-                                )
-                            })?
+                        return Err(error);
                     }
                 }
             }
         };
-        if !streamed_tokens {
-            emit_content_as_tokens(&self.window, &self.run_id, &model_response.content);
-        }
         self.emit_detail(
             AgentEventPhase::Model,
             "模型响应已返回。",
@@ -171,7 +201,18 @@ impl IconOrganizerAgent {
             ),
             Some(self.validate_tool.name()),
         );
-        let payload = ai::parse_model_payload(&model_response.content)?;
+        let payload = match ai::parse_model_payload(&model_response.content) {
+            Ok(payload) => payload,
+            Err(error) => {
+                self.emit_detail(
+                    AgentEventPhase::Failed,
+                    "AI 返回格式无法解析。",
+                    &error,
+                    None,
+                );
+                return Err(error);
+            }
+        };
         let result = ai::sanitize_groups(payload, &icons);
         let validation = ToolResponse::success(
             "已校验 AI 分组结果。",
@@ -226,6 +267,7 @@ impl IconOrganizerAgent {
         if config.model.trim().is_empty() {
             return Err("尚未配置模型名称，请先在设置页填写 AI 配置。".to_string());
         }
+        ai::validate_base_url(&config.base_url)?;
         Ok(())
     }
 

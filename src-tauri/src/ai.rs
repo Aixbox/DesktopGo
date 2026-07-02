@@ -3,7 +3,8 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 pub(crate) const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 45;
-const CHAT_COMPLETIONS_PATH: &str = "chat/completions";
+pub(crate) const CHAT_COMPLETIONS_PATH: &str = "chat/completions";
+pub(crate) const RESPONSES_PATH: &str = "responses";
 
 /// 用户在设置页配置的 AI 接入信息。请求集中在 Rust 侧发出，
 /// 这样既能绕过 webview 的 CORS 限制，也避免把 api_key 暴露在前端页面上下文里。
@@ -117,7 +118,7 @@ pub(crate) fn build_system_prompt(custom_prompt: Option<&str>) -> String {
     }
 }
 
-pub(crate) fn normalize_base_url(base_url: &str) -> Result<String, String> {
+fn normalize_endpoint_url(base_url: &str, endpoint_path: &str) -> Result<String, String> {
     let trimmed = base_url.trim().trim_end_matches('/');
     if trimmed.is_empty() {
         return Err("AI 接口地址（Base URL）不能为空。".to_string());
@@ -126,10 +127,32 @@ pub(crate) fn normalize_base_url(base_url: &str) -> Result<String, String> {
         return Err("AI 接口地址必须以 http:// 或 https:// 开头。".to_string());
     }
     if trimmed.ends_with(CHAT_COMPLETIONS_PATH) {
-        Ok(trimmed.to_string())
+        Ok(format!(
+            "{}{}",
+            trimmed.trim_end_matches(CHAT_COMPLETIONS_PATH),
+            endpoint_path
+        ))
+    } else if trimmed.ends_with(RESPONSES_PATH) {
+        Ok(format!(
+            "{}{}",
+            trimmed.trim_end_matches(RESPONSES_PATH),
+            endpoint_path
+        ))
     } else {
-        Ok(format!("{trimmed}/{CHAT_COMPLETIONS_PATH}"))
+        Ok(format!("{trimmed}/{endpoint_path}"))
     }
+}
+
+pub(crate) fn normalize_chat_completions_url(base_url: &str) -> Result<String, String> {
+    normalize_endpoint_url(base_url, CHAT_COMPLETIONS_PATH)
+}
+
+pub(crate) fn normalize_responses_url(base_url: &str) -> Result<String, String> {
+    normalize_endpoint_url(base_url, RESPONSES_PATH)
+}
+
+pub(crate) fn validate_base_url(base_url: &str) -> Result<(), String> {
+    normalize_endpoint_url(base_url, RESPONSES_PATH).map(|_| ())
 }
 
 /// 从模型返回文本里提取 JSON。优先直接解析，失败再尝试截取首尾大括号之间的内容，
@@ -224,7 +247,7 @@ pub async fn ai_classify_icons(
         });
     }
 
-    let endpoint = normalize_base_url(&config.base_url)?;
+    let endpoint = normalize_chat_completions_url(&config.base_url)?;
     let system_prompt = build_system_prompt(config.custom_prompt.as_deref());
     let user_payload =
         serde_json::to_string(&icons).map_err(|error| format!("序列化图标清单失败：{error}"))?;
@@ -305,25 +328,34 @@ mod tests {
     }
 
     #[test]
-    fn normalize_base_url_appends_path() {
+    fn normalize_chat_url_appends_path() {
         assert_eq!(
-            normalize_base_url("https://api.openai.com/v1/").unwrap(),
+            normalize_chat_completions_url("https://api.openai.com/v1/").unwrap(),
             "https://api.openai.com/v1/chat/completions"
         );
     }
 
     #[test]
-    fn normalize_base_url_accepts_full_chat_endpoint() {
+    fn normalize_chat_url_accepts_full_chat_endpoint() {
         assert_eq!(
-            normalize_base_url("https://gateway.example.com/v1/chat/completions").unwrap(),
+            normalize_chat_completions_url("https://gateway.example.com/v1/chat/completions")
+                .unwrap(),
             "https://gateway.example.com/v1/chat/completions"
         );
     }
 
     #[test]
-    fn normalize_base_url_rejects_non_http() {
-        assert!(normalize_base_url("ftp://example.com").is_err());
-        assert!(normalize_base_url("  ").is_err());
+    fn normalize_responses_url_rewrites_full_chat_endpoint() {
+        assert_eq!(
+            normalize_responses_url("https://gateway.example.com/v1/chat/completions").unwrap(),
+            "https://gateway.example.com/v1/responses"
+        );
+    }
+
+    #[test]
+    fn normalize_endpoint_url_rejects_non_http() {
+        assert!(normalize_chat_completions_url("ftp://example.com").is_err());
+        assert!(normalize_responses_url("  ").is_err());
     }
 
     #[test]
