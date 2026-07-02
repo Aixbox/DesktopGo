@@ -358,9 +358,12 @@ function AgentTracePanel({
                   {streamChunks.map(chunk => (
                     <motion.span
                       key={chunk.id}
-                      initial={prefersReducedMotion ? false : { opacity: 0 }}
-                      animate={prefersReducedMotion ? undefined : { opacity: 1 }}
-                      transition={{ duration: 0.1, ease: [0.22, 1, 0.36, 1] }}
+                      initial={prefersReducedMotion ? false : { opacity: 0.7, filter: 'blur(3px)' }}
+                      animate={
+                        prefersReducedMotion ? undefined : { opacity: 1, filter: 'blur(0px)' }
+                      }
+                      transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+                      style={prefersReducedMotion ? undefined : { willChange: 'filter, opacity' }}
                     >
                       {chunk.text}
                     </motion.span>
