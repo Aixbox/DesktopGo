@@ -214,8 +214,6 @@ const formatSessionTime = (value: number) =>
     minute: '2-digit',
   }).format(new Date(value))
 
-const getLast = <T,>(items: T[]): T | undefined => items[items.length - 1]
-
 const buildConversationPrompt = ({
   basePrompt,
   instruction,
@@ -314,7 +312,7 @@ const isNearScrollBottom = (element: HTMLElement, threshold = 48) =>
   element.scrollHeight - element.scrollTop - element.clientHeight <= threshold
 
 const getComposerCommandLabel = (command: ComposerCommand) =>
-  command.kind === 'edit' ? translate('编辑布局') : translate('整理图标')
+  command.kind === 'edit' ? translate('修改布局') : translate('整理图标')
 
 function AssistantRunInline({
   status,
@@ -672,17 +670,41 @@ export function AiOrganizePanel({
     []
   )
 
+  const activateSnapshotContextOnly = useCallback(
+    (session: AiOrganizeSession, snapshot: AiOrganizeSnapshot) => {
+      activeSessionIdRef.current = session.id
+      activeSnapshotIdRef.current = snapshot.id
+      setActiveSessionId(session.id)
+      setActiveSnapshotId(snapshot.id)
+      setGroups(toEditableGroups(snapshot.groups))
+      setRunId(snapshot.runId ?? null)
+      setError(null)
+      setNotConfigured(false)
+    },
+    []
+  )
+
+  const activateSessionOnly = useCallback((session: AiOrganizeSession) => {
+    activeSessionIdRef.current = session.id
+    activeSnapshotIdRef.current = null
+    setActiveSessionId(session.id)
+    setActiveSnapshotId(null)
+    setEditingSnapshotId(null)
+    setGroups([])
+    setPhase('idle')
+    setRunId(null)
+    setError(null)
+    setNotConfigured(false)
+  }, [])
+
   const handleSelectSession = useCallback(
     (session: AiOrganizeSession) => {
       shouldStickToBottomRef.current = true
       setShowScrollToBottom(false)
-      const snapshot =
-        session.snapshots.find(item => item.id === session.activeSnapshotId) ??
-        getLast(session.snapshots)
-      activateSnapshot(session, snapshot)
+      activateSessionOnly(session)
       setHistoryExpanded(false)
     },
-    [activateSnapshot]
+    [activateSessionOnly]
   )
 
   const handleDeleteSession = useCallback(
@@ -701,10 +723,7 @@ export function AiOrganizePanel({
 
       const nextSession = nextSessions[0] ?? null
       if (nextSession) {
-        const snapshot =
-          nextSession.snapshots.find(item => item.id === nextSession.activeSnapshotId) ??
-          getLast(nextSession.snapshots)
-        activateSnapshot(nextSession, snapshot)
+        activateSessionOnly(nextSession)
         return
       }
 
@@ -719,7 +738,7 @@ export function AiOrganizePanel({
       setNotConfigured(false)
       setRunId(null)
     },
-    [activateSnapshot, isBusy]
+    [activateSessionOnly, isBusy]
   )
 
   const handleSelectSnapshot = useCallback(
@@ -793,15 +812,21 @@ export function AiOrganizePanel({
           updatedAt: Date.now(),
           activeSnapshotId: snapshot.id,
         }
-        activateSnapshot(nextSession, snapshot)
+        activateSnapshotContextOnly(nextSession, snapshot)
         setEditingSnapshotId(snapshot.id)
         void commitSession(nextSession)
       }
       insertComposerCommand({ kind: 'edit', snapshotId: snapshot.id }, translate('参考此版布局继续优化。'))
-      await applyLayoutPreview(snapshot.groups)
     },
-    [activeSession, activateSnapshot, applyLayoutPreview, commitSession, insertComposerCommand]
+    [activeSession, activateSnapshotContextOnly, commitSession, insertComposerCommand]
   )
+
+  const handleExitEditSnapshot = useCallback((snapshotId: string) => {
+    setEditingSnapshotId(current => (current === snapshotId ? null : current))
+    setComposerCommand(current =>
+      current?.kind === 'edit' && current.snapshotId === snapshotId ? null : current
+    )
+  }, [])
 
   const persistCurrentPreview = useCallback(
     (nextGroups: EditableGroup[]) => {
@@ -1270,10 +1295,7 @@ export function AiOrganizePanel({
         setSessions(loadedSessions)
         const firstSession = loadedSessions[0]
         if (firstSession) {
-          const snapshot =
-            firstSession.snapshots.find(item => item.id === firstSession.activeSnapshotId) ??
-            getLast(firstSession.snapshots)
-          activateSnapshot(firstSession, snapshot)
+          activateSessionOnly(firstSession)
         } else {
           const session = createAiOrganizeSession(translate('新的整理对话'))
           sessionsRef.current = [session]
@@ -1357,7 +1379,7 @@ export function AiOrganizePanel({
       setElapsedMs(0)
       appliedRef.current = false
     }
-  }, [activateSnapshot, appendStreamDelta, open, resetStreamOutput])
+  }, [activateSessionOnly, appendStreamDelta, open, resetStreamOutput])
 
   useEffect(() => {
     if (!runStartedAt) {
@@ -1383,6 +1405,9 @@ export function AiOrganizePanel({
     )
     setGroups(nextGroups)
     persistCurrentPreview(nextGroups)
+    if (phase === 'preview') {
+      void applyLayoutPreview(toAiGroups(nextGroups))
+    }
   }
 
   const handleRemoveIcon = (groupId: string, key: string) => {
@@ -1391,12 +1416,18 @@ export function AiOrganizePanel({
     )
     setGroups(nextGroups)
     persistCurrentPreview(nextGroups)
+    if (phase === 'preview') {
+      void applyLayoutPreview(toAiGroups(nextGroups))
+    }
   }
 
   const handleDropGroup = (groupId: string) => {
     const nextGroups = groups.filter(group => group.id !== groupId)
     setGroups(nextGroups)
     persistCurrentPreview(nextGroups)
+    if (phase === 'preview') {
+      void applyLayoutPreview(toAiGroups(nextGroups))
+    }
   }
 
   // 只有至少包含 2 个图标的分组才有意义。
@@ -1659,27 +1690,37 @@ export function AiOrganizePanel({
                     void handleInsertEditCommand(snapshot)
                   }}
                   disabled={previewDisabled}
-                  title={translate('插入编辑指令')}
+                  title={translate('将此布局加入修改上下文')}
                   className="rounded-md border border-blue-500/25 bg-blue-500/10 px-2 py-1 text-[11px] text-blue-700 transition-colors hover:bg-blue-500/15 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-200"
                 >
-                  {translate('编辑此版')}
+                  {translate('修改布局')}
                 </button>
               </>
             ) : isEditingSnapshot ? (
-              <span className="rounded-md bg-blue-500/10 px-2 py-1 text-[11px] text-blue-700 dark:text-blue-200">
-                {translate('编辑中')}
-              </span>
+              <>
+                <span className="rounded-md bg-blue-500/10 px-2 py-1 text-[11px] text-blue-700 dark:text-blue-200">
+                  {translate('修改中')}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleExitEditSnapshot(snapshot.id)}
+                  disabled={previewDisabled}
+                  className="rounded-md border border-border/75 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {translate('退出修改')}
+                </button>
+              </>
             ) : (
               <button
                 type="button"
                 onClick={() => {
-                  setEditingSnapshotId(snapshot.id)
-                  void applyLayoutPreview(toAiGroups(groups))
+                  void handleInsertEditCommand(snapshot)
                 }}
                 disabled={previewDisabled}
+                title={translate('将此布局加入修改上下文')}
                 className="rounded-md border border-blue-500/25 bg-blue-500/10 px-2 py-1 text-[11px] text-blue-700 transition-colors hover:bg-blue-500/15 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-200"
               >
-                {translate('编辑')}
+                {translate('修改布局')}
               </button>
             )}
           </div>
