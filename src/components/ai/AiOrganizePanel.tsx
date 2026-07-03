@@ -11,9 +11,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   AlertCircle,
+  ArrowDown,
   Bot,
-  ChevronDown,
-  ChevronUp,
   CheckCircle2,
   FolderClosed,
   History,
@@ -22,6 +21,7 @@ import {
   Plus,
   SendHorizontal,
   Sparkles,
+  Trash2,
   X,
 } from 'lucide-react'
 import { translate } from '@/lib/i18n'
@@ -123,10 +123,20 @@ interface QueuedPrompt {
   id: string
   prompt: string
   label?: string
+  command?: ComposerCommand
+}
+
+interface ComposerCommand {
+  kind: 'organize' | 'edit'
+  snapshotId?: string
 }
 
 interface AiAgentRunResult extends AiClassifyResult {
   run_id: string
+}
+
+interface AiChatResult {
+  content: string
 }
 
 export interface AiOrganizePanelRunState {
@@ -300,6 +310,12 @@ const formatElapsed = (elapsedMs: number): string => {
   return `${seconds}s`
 }
 
+const isNearScrollBottom = (element: HTMLElement, threshold = 48) =>
+  element.scrollHeight - element.scrollTop - element.clientHeight <= threshold
+
+const getComposerCommandLabel = (command: ComposerCommand) =>
+  command.kind === 'edit' ? translate('编辑布局') : translate('整理图标')
+
 function AssistantRunInline({
   status,
   title,
@@ -465,11 +481,13 @@ export function AiOrganizePanel({
   const [activeSnapshotId, setActiveSnapshotId] = useState<string | null>(null)
   const [editingSnapshotId, setEditingSnapshotId] = useState<string | null>(null)
   const [composerValue, setComposerValue] = useState('')
+  const [composerCommand, setComposerCommand] = useState<ComposerCommand | null>(null)
   const [sessionsLoaded, setSessionsLoaded] = useState(false)
   const [sessionSaveError, setSessionSaveError] = useState<string | null>(null)
   const [historyExpanded, setHistoryExpanded] = useState(false)
   const [presetsExpanded, setPresetsExpanded] = useState(false)
   const [queuedPrompts, setQueuedPrompts] = useState<QueuedPrompt[]>([])
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const runSeqRef = useRef(0)
   const lastApplyRequestTokenRef = useRef(applyRequestToken)
   const streamChunkSeqRef = useRef(0)
@@ -479,7 +497,13 @@ export function AiOrganizePanel({
   const sessionsRef = useRef<AiOrganizeSession[]>([])
   const activeSessionIdRef = useRef<string | null>(null)
   const activeSnapshotIdRef = useRef<string | null>(null)
+  const shouldStickToBottomRef = useRef(true)
   const transcriptRef = useRef<HTMLDivElement | null>(null)
+  const composerRef = useRef<HTMLTextAreaElement | null>(null)
+  const historyButtonRef = useRef<HTMLButtonElement | null>(null)
+  const historyMenuRef = useRef<HTMLDivElement | null>(null)
+  const presetsButtonRef = useRef<HTMLButtonElement | null>(null)
+  const presetsMenuRef = useRef<HTMLDivElement | null>(null)
   const previewBaselineLayoutRef = useRef<Awaited<ReturnType<typeof readLayout>> | null>(null)
   const previewBaselineCapturedRef = useRef(false)
   const previewDirtyRef = useRef(false)
@@ -489,6 +513,45 @@ export function AiOrganizePanel({
   useEffect(() => {
     onPreviewedRef.current = onPreviewed
   }, [onPreviewed])
+
+  useEffect(() => {
+    if (!historyExpanded && !presetsExpanded) return
+
+    const isInside = (node: Node, elements: Array<HTMLElement | null>) =>
+      elements.some(element => element?.contains(node))
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+
+      if (
+        historyExpanded &&
+        !isInside(target, [historyButtonRef.current, historyMenuRef.current])
+      ) {
+        setHistoryExpanded(false)
+      }
+
+      if (
+        presetsExpanded &&
+        !isInside(target, [presetsButtonRef.current, presetsMenuRef.current])
+      ) {
+        setPresetsExpanded(false)
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setHistoryExpanded(false)
+      setPresetsExpanded(false)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown, true)
+    document.addEventListener('keydown', handleKeyDown, true)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true)
+      document.removeEventListener('keydown', handleKeyDown, true)
+    }
+  }, [historyExpanded, presetsExpanded])
 
   const iconByKey = useMemo(() => {
     const map = new Map<string, DesktopIcon>()
@@ -514,6 +577,7 @@ export function AiOrganizePanel({
   )
 
   const activeSnapshots = activeSession?.snapshots ?? []
+  const isBusy = phase === 'loading' || phase === 'applying'
 
   useEffect(() => {
     sessionsRef.current = sessions
@@ -530,8 +594,29 @@ export function AiOrganizePanel({
   useEffect(() => {
     const transcript = transcriptRef.current
     if (!transcript) return
+    if (!shouldStickToBottomRef.current) {
+      setShowScrollToBottom(!isNearScrollBottom(transcript))
+      return
+    }
     transcript.scrollTop = transcript.scrollHeight
+    setShowScrollToBottom(false)
   }, [activeSession?.messages.length, phase, streamChunks.length, agentEvents.length])
+
+  const scrollTranscriptToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const transcript = transcriptRef.current
+    if (!transcript) return
+    shouldStickToBottomRef.current = true
+    transcript.scrollTo({ top: transcript.scrollHeight, behavior })
+    setShowScrollToBottom(false)
+  }, [])
+
+  const handleTranscriptScroll = useCallback(() => {
+    const transcript = transcriptRef.current
+    if (!transcript) return
+    const isAtBottom = isNearScrollBottom(transcript)
+    shouldStickToBottomRef.current = isAtBottom
+    setShowScrollToBottom(!isAtBottom)
+  }, [])
 
   const commitSessions = useCallback(
     async (nextSessions: AiOrganizeSession[], nextActiveSessionId = activeSessionIdRef.current) => {
@@ -589,6 +674,8 @@ export function AiOrganizePanel({
 
   const handleSelectSession = useCallback(
     (session: AiOrganizeSession) => {
+      shouldStickToBottomRef.current = true
+      setShowScrollToBottom(false)
       const snapshot =
         session.snapshots.find(item => item.id === session.activeSnapshotId) ??
         getLast(session.snapshots)
@@ -596,6 +683,43 @@ export function AiOrganizePanel({
       setHistoryExpanded(false)
     },
     [activateSnapshot]
+  )
+
+  const handleDeleteSession = useCallback(
+    async (sessionId: string) => {
+      if (isBusy) return
+      const session = sessionsRef.current.find(item => item.id === sessionId)
+      if (!session) return
+      if (!window.confirm(translate('确定删除这个会话吗？'))) return
+
+      const nextSessions = sessionsRef.current.filter(item => item.id !== sessionId)
+      sessionsRef.current = nextSessions
+      setSessions(nextSessions)
+      await saveAiOrganizeSessions(nextSessions)
+
+      if (activeSessionIdRef.current !== sessionId) return
+
+      const nextSession = nextSessions[0] ?? null
+      if (nextSession) {
+        const snapshot =
+          nextSession.snapshots.find(item => item.id === nextSession.activeSnapshotId) ??
+          getLast(nextSession.snapshots)
+        activateSnapshot(nextSession, snapshot)
+        return
+      }
+
+      activeSessionIdRef.current = null
+      activeSnapshotIdRef.current = null
+      setActiveSessionId(null)
+      setActiveSnapshotId(null)
+      setEditingSnapshotId(null)
+      setGroups([])
+      setPhase('idle')
+      setError(null)
+      setNotConfigured(false)
+      setRunId(null)
+    },
+    [activateSnapshot, isBusy]
   )
 
   const handleSelectSnapshot = useCallback(
@@ -640,29 +764,43 @@ export function AiOrganizePanel({
     await onPreviewedRef.current?.()
   }, [])
 
-  const handleEditSnapshot = useCallback(
-    async (snapshot: AiOrganizeSnapshot) => {
-      if (!activeSession) return
-      const now = Date.now()
-      const nextSession: AiOrganizeSession = {
-        ...activeSession,
-        updatedAt: now,
-        activeSnapshotId: snapshot.id,
-      }
-      activateSnapshot(nextSession, snapshot)
-      setEditingSnapshotId(snapshot.id)
-      void commitSession(nextSession)
-      await applyLayoutPreview(snapshot.groups)
-    },
-    [activeSession, activateSnapshot, applyLayoutPreview, commitSession]
-  )
-
   const handlePreviewSnapshot = useCallback(
     async (snapshot: AiOrganizeSnapshot) => {
       handleSelectSnapshot(snapshot)
       await applyLayoutPreview(snapshot.groups)
     },
     [applyLayoutPreview, handleSelectSnapshot]
+  )
+
+  const insertComposerCommand = useCallback((command: ComposerCommand, fallbackInstruction: string) => {
+    setComposerCommand(command)
+    setComposerValue(current => {
+      const trimmed = current.trim()
+      return trimmed || fallbackInstruction
+    })
+    window.requestAnimationFrame(() => composerRef.current?.focus())
+  }, [])
+
+  const handleInsertOrganizeCommand = useCallback(() => {
+    insertComposerCommand({ kind: 'organize' }, translate('按用途整理当前桌面图标。'))
+  }, [insertComposerCommand])
+
+  const handleInsertEditCommand = useCallback(
+    async (snapshot: AiOrganizeSnapshot) => {
+      if (activeSession) {
+        const nextSession: AiOrganizeSession = {
+          ...activeSession,
+          updatedAt: Date.now(),
+          activeSnapshotId: snapshot.id,
+        }
+        activateSnapshot(nextSession, snapshot)
+        setEditingSnapshotId(snapshot.id)
+        void commitSession(nextSession)
+      }
+      insertComposerCommand({ kind: 'edit', snapshotId: snapshot.id }, translate('参考此版布局继续优化。'))
+      await applyLayoutPreview(snapshot.groups)
+    },
+    [activeSession, activateSnapshot, applyLayoutPreview, commitSession, insertComposerCommand]
   )
 
   const persistCurrentPreview = useCallback(
@@ -754,6 +892,8 @@ export function AiOrganizePanel({
   )
 
   const handleNewSession = useCallback(() => {
+    shouldStickToBottomRef.current = true
+    setShowScrollToBottom(false)
     const session = createAiOrganizeSession(translate('新的整理对话'))
     const nextSessions = upsertAiOrganizeSession(sessionsRef.current, session)
     sessionsRef.current = nextSessions
@@ -765,6 +905,7 @@ export function AiOrganizePanel({
     setEditingSnapshotId(null)
     setGroups([])
     setComposerValue('')
+    setComposerCommand(null)
     setError(null)
     setNotConfigured(false)
     setPhase('idle')
@@ -776,6 +917,136 @@ export function AiOrganizePanel({
     setElapsedMs(0)
     setHistoryExpanded(false)
   }, [resetStreamOutput])
+
+  const runChat = useCallback(
+    async (instruction: string) => {
+      const normalizedInstruction = instruction.trim()
+      if (!normalizedInstruction || phase === 'loading' || phase === 'applying') return
+
+      const sequence = runSeqRef.current + 1
+      runSeqRef.current = sequence
+      const isCurrentRun = () => runSeqRef.current === sequence
+      const now = Date.now()
+      const existingSession =
+        sessionsRef.current.find(session => session.id === activeSessionIdRef.current) ?? null
+      const session =
+        existingSession ?? createAiOrganizeSession(createAiOrganizeSessionTitle(normalizedInstruction, now))
+      const userMessage: AiOrganizeMessage = {
+        id: createAiOrganizeId('ai-message'),
+        role: 'user',
+        content: normalizedInstruction,
+        createdAt: now,
+        status: 'success',
+      }
+      const runningMessage: AiOrganizeMessage = {
+        id: createAiOrganizeId('ai-message'),
+        role: 'assistant',
+        content: translate('正在回复...'),
+        createdAt: now + 1,
+        status: 'running',
+      }
+      const runningSession: AiOrganizeSession = {
+        ...session,
+        title:
+          session.messages.length === 0 && session.snapshots.length === 0
+            ? createAiOrganizeSessionTitle(normalizedInstruction, now)
+            : session.title,
+        updatedAt: now,
+        messages: [...session.messages, userMessage, runningMessage],
+      }
+
+      setPhase('loading')
+      await commitSession(runningSession)
+      setActiveSessionId(runningSession.id)
+      setError(null)
+      setNotConfigured(false)
+      setAgentEvents([])
+      resetStreamOutput()
+      setRunId(null)
+      setRunStartedAt(now)
+      setRunFinishedAt(null)
+      setElapsedMs(0)
+
+      try {
+        const config = await loadAiConfig()
+        if (!isCurrentRun()) return
+
+        if (!isAiConfigReady(config)) {
+          const failedSession: AiOrganizeSession = {
+            ...runningSession,
+            updatedAt: Date.now(),
+            messages: runningSession.messages.map(message =>
+              message.id === runningMessage.id
+                ? {
+                    ...message,
+                    content: translate('AI 配置不完整，请先到设置页填写接口地址、密钥和模型。'),
+                    status: 'failed',
+                    error: translate('AI 配置不完整'),
+                  }
+                : message
+            ),
+          }
+          await commitSession(failedSession)
+          setNotConfigured(true)
+          setPhase('idle')
+          setRunFinishedAt(Date.now())
+          return
+        }
+
+        const messages = runningSession.messages
+          .filter(message => message.id !== runningMessage.id && message.status !== 'running')
+          .slice(-MAX_CONVERSATION_CONTEXT_MESSAGES)
+          .map(message => ({
+            role: message.role,
+            content: message.content,
+          }))
+        const result = await invoke<AiChatResult>('ai_chat', {
+          config: buildAiConfigPayload(config),
+          messages,
+        })
+        if (!isCurrentRun()) return
+
+        const successSession: AiOrganizeSession = {
+          ...runningSession,
+          updatedAt: Date.now(),
+          messages: runningSession.messages.map(message =>
+            message.id === runningMessage.id
+              ? {
+                  ...message,
+                  content: result.content,
+                  status: 'success',
+                }
+              : message
+          ),
+        }
+        await commitSession(successSession)
+        setPhase(groups.length > 0 ? 'preview' : 'idle')
+        setRunFinishedAt(Date.now())
+      } catch (e) {
+        if (!isCurrentRun()) return
+        const message = String(e)
+        const failedSession: AiOrganizeSession = {
+          ...runningSession,
+          updatedAt: Date.now(),
+          messages: runningSession.messages.map(currentMessage =>
+            currentMessage.id === runningMessage.id
+              ? {
+                  ...currentMessage,
+                  content: translate('这次回复失败了，可以稍后重试。'),
+                  status: 'failed',
+                  error: message,
+                }
+              : currentMessage
+          ),
+        }
+        await commitSession(failedSession)
+        setError(message)
+        setPhase(groups.length > 0 ? 'preview' : 'idle')
+        setRunFinishedAt(Date.now())
+      }
+    },
+    [commitSession, groups.length, phase, resetStreamOutput]
+  )
 
   const runClassification = useCallback(
     async (instruction: string, promptLabel?: string) => {
@@ -1077,6 +1348,7 @@ export function AiOrganizePanel({
       setSessionsLoaded(false)
       setSessionSaveError(null)
       setComposerValue('')
+      setComposerCommand(null)
       setQueuedPrompts([])
       setPresetsExpanded(false)
       setRunId(null)
@@ -1202,12 +1474,37 @@ export function AiOrganizePanel({
     })
   }, [applicableGroups.length, groups.length, onRunStateChange, phase])
 
+  const dispatchPrompt = useCallback(
+    (prompt: string, command?: ComposerCommand | null, label?: string) => {
+      const normalizedPrompt = prompt.trim()
+      if (command) {
+        const instruction =
+          normalizedPrompt ||
+          (command.kind === 'edit'
+            ? translate('参考此版布局继续优化。')
+            : translate('按用途整理当前桌面图标。'))
+        void runClassification(
+          instruction,
+          label ?? getComposerCommandLabel(command)
+        )
+        return
+      }
+
+      void runChat(normalizedPrompt)
+    },
+    [runChat, runClassification]
+  )
+
   const sendPrompt = useCallback(
     (prompt: string, label?: string) => {
       const normalizedPrompt = prompt.trim()
-      if (!normalizedPrompt) return
+      const command = composerCommand
+      if (!normalizedPrompt && !command) return
       if (!sessionsLoaded || phase === 'applying') return
+      shouldStickToBottomRef.current = true
+      setShowScrollToBottom(false)
       setComposerValue('')
+      setComposerCommand(null)
       if (phase === 'loading') {
         setQueuedPrompts(current => [
           ...current,
@@ -1215,13 +1512,14 @@ export function AiOrganizePanel({
             id: createAiOrganizeId('queued-prompt'),
             prompt: normalizedPrompt,
             label,
+            command: command ?? undefined,
           },
         ])
         return
       }
-      void runClassification(normalizedPrompt, label)
+      dispatchPrompt(normalizedPrompt, command, label)
     },
-    [phase, runClassification, sessionsLoaded]
+    [composerCommand, dispatchPrompt, phase, sessionsLoaded]
   )
 
   useEffect(() => {
@@ -1230,16 +1528,31 @@ export function AiOrganizePanel({
 
     const [nextPrompt, ...remainingPrompts] = queuedPrompts
     setQueuedPrompts(remainingPrompts)
-    void runClassification(nextPrompt.prompt, nextPrompt.label)
-  }, [open, phase, queuedPrompts, runClassification, sessionsLoaded])
+    dispatchPrompt(nextPrompt.prompt, nextPrompt.command, nextPrompt.label)
+  }, [dispatchPrompt, open, phase, queuedPrompts, sessionsLoaded])
 
   const handleComposerKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key === 'Backspace' && composerValue.length === 0 && composerCommand) {
+        event.preventDefault()
+        setComposerCommand(null)
+        return
+      }
       if (event.key !== 'Enter' || !event.ctrlKey) return
       event.preventDefault()
       sendPrompt(composerValue)
     },
-    [composerValue, sendPrompt]
+    [composerCommand, composerValue, sendPrompt]
+  )
+
+  const handleSelectPreset = useCallback(
+    (prompt: string) => {
+      setComposerCommand({ kind: 'organize' })
+      setComposerValue(prompt)
+      setPresetsExpanded(false)
+      window.requestAnimationFrame(() => composerRef.current?.focus())
+    },
+    []
   )
 
   const handleApply = useCallback(async () => {
@@ -1343,9 +1656,10 @@ export function AiOrganizePanel({
                 <button
                   type="button"
                   onClick={() => {
-                    void handleEditSnapshot(snapshot)
+                    void handleInsertEditCommand(snapshot)
                   }}
                   disabled={previewDisabled}
+                  title={translate('插入编辑指令')}
                   className="rounded-md border border-blue-500/25 bg-blue-500/10 px-2 py-1 text-[11px] text-blue-700 transition-colors hover:bg-blue-500/15 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-200"
                 >
                   {translate('编辑此版')}
@@ -1453,9 +1767,8 @@ export function AiOrganizePanel({
   if (!visible) return null
 
   const collapseOrClose = onCollapse ?? onClose
-  const isBusy = phase === 'loading' || phase === 'applying'
   const hasComposerText = composerValue.trim().length > 0
-  const canSend = hasComposerText && sessionsLoaded && phase !== 'applying'
+  const canSend = (hasComposerText || Boolean(composerCommand)) && sessionsLoaded && phase !== 'applying'
   const canUsePresets = sessionsLoaded && phase !== 'applying'
 
   return (
@@ -1491,6 +1804,7 @@ export function AiOrganizePanel({
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <button
+              ref={historyButtonRef}
               type="button"
               aria-label={translate('会话历史')}
               title={translate('会话历史')}
@@ -1526,6 +1840,7 @@ export function AiOrganizePanel({
           <AnimatePresence initial={false}>
             {historyExpanded ? (
               <motion.div
+                ref={historyMenuRef}
                 initial={prefersReducedMotion ? false : { opacity: 0, y: -6, scale: 0.98 }}
                 animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
                 exit={prefersReducedMotion ? undefined : { opacity: 0, y: -6, scale: 0.98 }}
@@ -1558,27 +1873,44 @@ export function AiOrganizePanel({
                     </div>
                   ) : (
                     <div className="space-y-1">
-                      {sessions.map(session => (
-                        <button
-                          key={session.id}
-                          type="button"
-                          onClick={() => handleSelectSession(session)}
-                          disabled={isBusy}
-                          className={`w-full rounded-md px-2.5 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                            session.id === activeSessionId
-                              ? 'bg-blue-500/10 text-foreground'
-                              : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                          }`}
-                        >
-                          <div className="truncate text-xs font-medium">{session.title}</div>
-                          <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
-                            <span>{formatSessionTime(session.updatedAt)}</span>
-                            <span>
-                              {translate('{count} 版', { count: session.snapshots.length })}
-                            </span>
+                      {sessions.map(session => {
+                        const isActiveSession = session.id === activeSessionId
+                        return (
+                          <div
+                            key={session.id}
+                            className={`group flex items-stretch rounded-md transition-colors ${
+                              isActiveSession
+                                ? 'bg-blue-500/10 text-foreground'
+                                : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleSelectSession(session)}
+                              disabled={isBusy}
+                              className="min-w-0 flex-1 rounded-l-md px-2.5 py-2 text-left disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <div className="truncate text-xs font-medium">{session.title}</div>
+                              <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
+                                <span>{formatSessionTime(session.updatedAt)}</span>
+                                <span>
+                                  {translate('{count} 版', { count: session.snapshots.length })}
+                                </span>
+                              </div>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSession(session.id)}
+                              disabled={isBusy}
+                              aria-label={translate('删除会话')}
+                              title={translate('删除会话')}
+                              className="flex w-9 shrink-0 items-center justify-center rounded-r-md text-muted-foreground opacity-70 transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 group-hover:opacity-100 dark:hover:text-red-300"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
                           </div>
-                        </button>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </div>
@@ -1588,16 +1920,20 @@ export function AiOrganizePanel({
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden">
-          <div className="flex h-full min-h-0 flex-col">
+          <div className="relative flex h-full min-h-0 flex-col px-4">
             {sessionSaveError ? (
-              <div className="shrink-0 border-b border-border/70 px-4 py-2">
+              <div className="shrink-0 py-2">
                 <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-200">
                   {translate('会话保存失败：{error}', { error: sessionSaveError })}
                 </div>
               </div>
             ) : null}
 
-            <div ref={transcriptRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            <div
+              ref={transcriptRef}
+              onScroll={handleTranscriptScroll}
+              className="min-h-0 flex-1 overflow-y-auto py-4"
+            >
               <div className="space-y-3">
                 {activeSession?.messages.length ? (
                   activeSession.messages.map(message => {
@@ -1673,60 +2009,34 @@ export function AiOrganizePanel({
               </div>
             </div>
 
-            <div className="shrink-0 border-t border-border/80 px-4 py-3">
-              <div className="mb-2">
-                <button
-                  type="button"
-                  onClick={() => setPresetsExpanded(expanded => !expanded)}
-                  className="flex h-8 w-full items-center justify-between rounded-md px-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                >
-                  <span className="inline-flex items-center gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5 text-blue-600 dark:text-blue-300" />
-                    {translate('快捷提示')}
-                  </span>
-                  {presetsExpanded ? (
-                    <ChevronUp className="h-3.5 w-3.5" />
-                  ) : (
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  )}
-                </button>
-                <AnimatePresence initial={false}>
-                  {presetsExpanded ? (
-                    <motion.div
-                      initial={prefersReducedMotion ? false : { opacity: 0, y: -4 }}
-                      animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
-                      exit={prefersReducedMotion ? undefined : { opacity: 0, y: -4 }}
-                      transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-                      className="mt-1.5 grid grid-cols-2 gap-1.5"
-                    >
-                      {PROMPT_PRESETS.map(preset => (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          onClick={() => sendPrompt(preset.prompt, translate(preset.label))}
-                          disabled={!canUsePresets}
-                          title={translate(preset.description)}
-                          className="rounded-md border border-border/75 bg-muted/25 px-2.5 py-2 text-left transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <div className="text-xs font-medium text-foreground">
-                            {translate(preset.label)}
-                          </div>
-                          <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                            {translate(preset.description)}
-                          </div>
-                        </button>
-                      ))}
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
-              </div>
-
+            <div className="relative shrink-0 pb-3 pt-1">
+              <AnimatePresence initial={false}>
+                {showScrollToBottom ? (
+                  <motion.button
+                    type="button"
+                    onClick={() => scrollTranscriptToBottom()}
+                    aria-label={translate('滚动到底部')}
+                    title={translate('滚动到底部')}
+                    initial={prefersReducedMotion ? false : { opacity: 0, y: 6, scale: 0.96 }}
+                    animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
+                    exit={prefersReducedMotion ? undefined : { opacity: 0, y: 6, scale: 0.96 }}
+                    transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+                    className="absolute -top-10 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-border/80 bg-background/95 text-muted-foreground shadow-lg backdrop-blur transition-colors hover:bg-accent hover:text-foreground"
+                  >
+                    <ArrowDown className="h-4 w-4" />
+                  </motion.button>
+                ) : null}
+              </AnimatePresence>
               {queuedPrompts.length > 0 ? (
                 <div className="mb-2 flex items-center justify-between gap-2 rounded-md border border-blue-500/20 bg-blue-500/[0.08] px-2.5 py-1.5 text-xs text-blue-700 dark:text-blue-200">
                   <span className="min-w-0 truncate">
                     {translate('已排队 {count} 条：{prompt}', {
                       count: queuedPrompts.length,
-                      prompt: queuedPrompts[0].label ?? queuedPrompts[0].prompt,
+                      prompt:
+                        queuedPrompts[0].label ??
+                        (queuedPrompts[0].command
+                          ? getComposerCommandLabel(queuedPrompts[0].command)
+                          : queuedPrompts[0].prompt),
                     })}
                   </span>
                   <button
@@ -1739,35 +2049,113 @@ export function AiOrganizePanel({
                 </div>
               ) : null}
 
-              <div className="relative">
+              <div className="relative rounded-lg border border-input bg-background transition-[border-color,box-shadow] focus-within:ring-2 focus-within:ring-ring/40">
                 <textarea
+                  ref={composerRef}
                   value={composerValue}
                   onChange={event => setComposerValue(event.target.value)}
                   onKeyDown={handleComposerKeyDown}
                   placeholder={
                     phase === 'loading'
                       ? translate('可以继续输入，发送后会排队执行')
-                      : translate('输入整理要求，Ctrl+Enter 发送')
+                      : translate('输入对话；需要整理时先点击下方整理图标')
                   }
                   aria-label={translate('输入整理要求')}
                   rows={3}
                   disabled={phase === 'applying'}
-                  className="max-h-28 min-h-20 w-full resize-none rounded-lg border border-input bg-background px-3 py-2 pb-10 pr-12 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="h-[76px] max-h-[76px] min-h-[76px] w-full resize-none rounded-t-lg border-0 bg-transparent px-3 py-2 text-sm leading-5 text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
                 />
-                <button
-                  type="button"
-                  onClick={() => sendPrompt(composerValue)}
-                  disabled={!canSend}
-                  aria-label={phase === 'loading' ? translate('加入队列') : translate('发送')}
-                  title={phase === 'loading' ? translate('加入队列') : translate('发送')}
-                  className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
-                >
-                  {phase === 'loading' && !hasComposerText ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <SendHorizontal className="h-4 w-4" />
-                  )}
-                </button>
+                <div className="flex min-h-8 items-center justify-between gap-2 px-2 pb-1.5 pt-0">
+                  <div className="flex min-w-0 flex-1 items-center">
+                    {composerCommand ? (
+                      <span className="inline-flex max-w-full shrink-0 items-center gap-1 rounded-md border border-blue-500/25 bg-blue-500/10 px-1.5 py-0 text-[11px] font-medium leading-5 text-blue-700 dark:text-blue-200">
+                        {composerCommand.kind === 'edit' ? (
+                          <Sparkles className="h-3 w-3 shrink-0" />
+                        ) : (
+                          <FolderClosed className="h-3 w-3 shrink-0" />
+                        )}
+                        <span className="truncate">
+                          {getComposerCommandLabel(composerCommand)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setComposerCommand(null)}
+                          aria-label={translate('移除指令')}
+                          title={translate('移除指令')}
+                          className="-mr-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded text-blue-700/80 transition-colors hover:bg-blue-500/15 hover:text-blue-800 dark:text-blue-200"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={handleInsertOrganizeCommand}
+                      disabled={!canUsePresets}
+                      aria-label={translate('插入整理图标指令')}
+                      title={translate('插入整理图标指令')}
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <FolderClosed className="h-4 w-4" />
+                    </button>
+                    <button
+                      ref={presetsButtonRef}
+                      type="button"
+                      onClick={() => setPresetsExpanded(expanded => !expanded)}
+                      disabled={!canUsePresets}
+                      aria-label={translate('快捷提示')}
+                      title={translate('快捷提示')}
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => sendPrompt(composerValue)}
+                      disabled={!canSend}
+                      aria-label={phase === 'loading' ? translate('加入队列') : translate('发送')}
+                      title={phase === 'loading' ? translate('加入队列') : translate('发送')}
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+                    >
+                      {phase === 'loading' && !hasComposerText ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <SendHorizontal className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <AnimatePresence initial={false}>
+                  {presetsExpanded ? (
+                    <motion.div
+                      ref={presetsMenuRef}
+                      initial={prefersReducedMotion ? false : { opacity: 0, y: 4, scale: 0.98 }}
+                      animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
+                      exit={prefersReducedMotion ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
+                      transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+                      className="absolute bottom-[calc(100%+0.5rem)] right-0 z-20 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-lg border border-border/85 bg-background p-1.5 shadow-xl"
+                    >
+                      {PROMPT_PRESETS.map(preset => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => handleSelectPreset(preset.prompt)}
+                          title={translate(preset.description)}
+                          className="block w-full rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent hover:text-foreground"
+                        >
+                          <div className="text-xs font-medium text-foreground">
+                            {translate(preset.label)}
+                          </div>
+                          <div className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-muted-foreground">
+                            {translate(preset.description)}
+                          </div>
+                        </button>
+                      ))}
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
               </div>
             </div>
           </div>

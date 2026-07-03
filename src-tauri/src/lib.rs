@@ -26,7 +26,7 @@ use commands::{
     update_launch_on_startup_enabled, update_launchpad_shortcut,
 };
 use agent::icon_agent::{ai_organize_icons_agent, ai_organize_record_apply};
-use ai::ai_classify_icons;
+use ai::{ai_chat, ai_classify_icons};
 #[cfg(windows)]
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
@@ -375,6 +375,7 @@ pub fn run() {
             get_launch_on_startup_enabled,
             update_launch_on_startup_enabled,
             ai_classify_icons,
+            ai_chat,
             ai_organize_icons_agent,
             ai_organize_record_apply
         ])

@@ -45,6 +45,17 @@ pub struct AiClassifyResult {
     pub leftover: Vec<String>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct AiChatMessageInput {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AiChatResult {
+    pub content: String,
+}
+
 // --- OpenAI 兼容请求/响应结构 ---
 
 #[derive(Serialize)]
@@ -65,7 +76,8 @@ struct ChatRequest<'a> {
     messages: Vec<ChatMessage<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
-    response_format: ResponseFormat,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<ResponseFormat>,
 }
 
 #[derive(Deserialize)]
@@ -279,9 +291,9 @@ pub async fn ai_classify_icons(
             },
         ],
         temperature: config.temperature,
-        response_format: ResponseFormat {
+        response_format: Some(ResponseFormat {
             kind: "json_object",
-        },
+        }),
     };
 
     let client = reqwest::Client::builder()
@@ -326,6 +338,102 @@ pub async fn ai_classify_icons(
 
     let payload = parse_model_payload(&content)?;
     Ok(sanitize_groups(payload, &icons))
+}
+
+#[tauri::command]
+pub async fn ai_chat(
+    config: AiConfig,
+    messages: Vec<AiChatMessageInput>,
+) -> Result<AiChatResult, String> {
+    if config.api_key.trim().is_empty() {
+        return Err("尚未配置 API Key，请先在设置页填写 AI 配置。".to_string());
+    }
+    if config.model.trim().is_empty() {
+        return Err("尚未配置模型名称，请先在设置页填写 AI 配置。".to_string());
+    }
+
+    let endpoint = normalize_chat_completions_url(&config.base_url)?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(DEFAULT_REQUEST_TIMEOUT_SECS))
+        .build()
+        .map_err(|error| format!("初始化 AI 客户端失败：{error}"))?;
+
+    let mut request_messages = vec![ChatMessage {
+        role: "system",
+        content: "你是 DesktopGo 的桌面整理助手。默认进行自然、简洁的上下文对话；不要擅自生成图标布局或声称已经整理桌面。只有用户明确使用整理图标指令时，应用才会进入整理流程。"
+            .to_string(),
+    }];
+
+    if let Some(extra) = config.custom_prompt.as_deref().filter(|value| !value.trim().is_empty()) {
+        request_messages.push(ChatMessage {
+            role: "system",
+            content: format!("用户对助手的附加偏好：{}", extra.trim()),
+        });
+    }
+
+    for message in messages
+        .into_iter()
+        .filter(|message| !message.content.trim().is_empty())
+        .rev()
+        .take(12)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+    {
+        let role = if message.role == "assistant" {
+            "assistant"
+        } else {
+            "user"
+        };
+        request_messages.push(ChatMessage {
+            role,
+            content: message.content.trim().to_string(),
+        });
+    }
+
+    let request_body = ChatRequest {
+        model: config.model.trim(),
+        messages: request_messages,
+        temperature: config.temperature,
+        response_format: None,
+    };
+
+    let response = client
+        .post(&endpoint)
+        .bearer_auth(config.api_key.trim())
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|error| format!("请求 AI 接口失败：{error}"))?;
+
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|error| format!("读取 AI 接口响应失败：{error}"))?;
+
+    if !status.is_success() {
+        let snippet: String = body.chars().take(300).collect();
+        return Err(format!(
+            "AI 接口返回错误状态 {}：{}",
+            status.as_u16(),
+            snippet
+        ));
+    }
+
+    let parsed: ChatResponse =
+        serde_json::from_str(&body).map_err(|error| format!("解析 AI 接口响应失败：{error}"))?;
+    let content = parsed
+        .choices
+        .into_iter()
+        .next()
+        .and_then(|choice| choice.message)
+        .and_then(|message| message.content)
+        .map(|content| content.trim().to_string())
+        .filter(|content| !content.is_empty())
+        .ok_or_else(|| "AI 接口未返回有效内容。".to_string())?;
+
+    Ok(AiChatResult { content })
 }
 
 #[cfg(test)]
