@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AiGroup } from './aiOrganize'
+import { normalizeAiFolderSize, type AiGroup } from './aiOrganize'
 
 const AI_ORGANIZE_SESSIONS_KEY = 'desktopgo.ai.organize.sessions.v1'
 const MAX_AI_ORGANIZE_SESSIONS = 18
@@ -98,13 +98,18 @@ const normalizeGroups = (value: unknown): AiGroup[] => {
     .filter(isRecord)
     .map(group => {
       const rawIconKeys = group.icon_keys ?? group.iconKeys
+      const iconKeys = Array.isArray(rawIconKeys)
+        ? rawIconKeys.filter(
+            (key): key is string => typeof key === 'string' && key.trim().length > 0
+          )
+        : []
       return {
         folder_name: asString(group.folder_name ?? group.folderName).trim(),
-        icon_keys: Array.isArray(rawIconKeys)
-          ? rawIconKeys.filter(
-              (key): key is string => typeof key === 'string' && key.trim().length > 0
-            )
-          : [],
+        icon_keys: iconKeys,
+        folder_size: normalizeAiFolderSize(
+          group.folder_size ?? group.folderSize ?? group.size,
+          iconKeys.length
+        ),
       }
     })
     .filter(group => group.folder_name.length > 0 && group.icon_keys.length > 0)

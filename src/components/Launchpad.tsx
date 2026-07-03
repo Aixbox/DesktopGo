@@ -1747,6 +1747,10 @@ export function Launchpad() {
         onRunStateChange={setAiOrganizeRunState}
         onCollapse={() => setIsAiOrganizeSidebarOpen(false)}
         onClose={exitAiOrganizeMode}
+        onPreviewed={async () => {
+          setLayoutResetToken(current => current + 1)
+          await fetchIcons()
+        }}
         onApplied={async () => {
           // 与设置页「重置布局」一致：递增令牌强制 IconGrid 丢弃旧内存布局，
           // 重新从磁盘 hydrate 出 AI 整理后的结果。

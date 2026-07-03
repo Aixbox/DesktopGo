@@ -28,6 +28,8 @@ pub(crate) enum AgentRunStatus {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AgentRunGroup {
     pub folder_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder_size: Option<String>,
     #[serde(default)]
     pub icon_keys: Vec<String>,
     #[serde(default)]
@@ -94,6 +96,7 @@ pub(crate) fn save_draft(
             .iter()
             .map(|group| AgentRunGroup {
                 folder_name: group.folder_name.clone(),
+                folder_size: group.folder_size.clone(),
                 icon_keys: group.icon_keys.clone(),
                 icon_names: group
                     .icon_keys
@@ -141,6 +144,7 @@ pub(crate) fn mark_applied(
         .into_iter()
         .map(|group| AgentRunGroup {
             folder_name: group.folder_name,
+            folder_size: group.folder_size,
             icon_names: group
                 .icon_keys
                 .iter()
@@ -176,9 +180,9 @@ pub(crate) fn build_preference_summary(memory: &AgentMemory) -> Option<String> {
                     .collect::<Vec<_>>()
                     .join("、");
                 if names.is_empty() {
-                    group.folder_name.clone()
+                    format_group_summary_label(group)
                 } else {
-                    format!("{}：{}", group.folder_name, names)
+                    format!("{}：{}", format_group_summary_label(group), names)
                 }
             })
             .collect();
@@ -199,6 +203,13 @@ pub(crate) fn build_preference_summary(memory: &AgentMemory) -> Option<String> {
     }
 }
 
+fn format_group_summary_label(group: &AgentRunGroup) -> String {
+    match group.folder_size.as_deref() {
+        Some(size) => format!("{}({size})", group.folder_name),
+        None => group.folder_name.clone(),
+    }
+}
+
 pub(crate) fn trim_memory(memory: &mut AgentMemory) {
     memory.runs.sort_by_key(|record| record.updated_at);
     if memory.runs.len() > MAX_MEMORY_RUNS {
@@ -214,6 +225,7 @@ mod tests {
     fn group(name: &str, icon_names: &[&str]) -> AgentRunGroup {
         AgentRunGroup {
             folder_name: name.to_string(),
+            folder_size: None,
             icon_keys: icon_names
                 .iter()
                 .map(|name| format!("desktop:{name}"))

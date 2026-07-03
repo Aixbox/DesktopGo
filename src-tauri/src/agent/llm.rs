@@ -299,12 +299,16 @@ fn build_responses_request(config: &AiConfig, messages: &[LlmMessage], strict_js
                             "items": {
                                 "type": "object",
                                 "additionalProperties": false,
-                                "required": ["folderName", "iconKeys"],
+                                "required": ["folderName", "iconKeys", "folderSize"],
                                 "properties": {
                                     "folderName": { "type": "string" },
                                     "iconKeys": {
                                         "type": "array",
                                         "items": { "type": "string" }
+                                    },
+                                    "folderSize": {
+                                        "type": "string",
+                                        "enum": ["1x1", "1x2", "2x1", "2x2"]
                                     }
                                 }
                             }

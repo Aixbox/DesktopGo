@@ -35,6 +35,8 @@ pub struct AiIconInput {
 pub struct AiGroup {
     pub folder_name: String,
     pub icon_keys: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "folderSize", alias = "size")]
+    pub folder_size: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -97,6 +99,8 @@ pub(crate) struct ModelGroup {
     pub(crate) folder_name: String,
     #[serde(default, alias = "iconKeys", alias = "keys")]
     pub(crate) icon_keys: Vec<String>,
+    #[serde(default, alias = "folderSize", alias = "size")]
+    pub(crate) folder_size: Option<String>,
 }
 
 pub(crate) fn build_system_prompt(custom_prompt: Option<&str>) -> String {
@@ -107,8 +111,9 @@ pub(crate) fn build_system_prompt(custom_prompt: Option<&str>) -> String {
 2. 每个 key 最多只能出现在一个分组里；\
 3. 每个分组至少包含 2 个图标，单独的图标不要建组；\
 4. folderName 用简短的中文类别名；\
-5. 不确定归类的图标可以不放进任何分组。\
-只输出 JSON 对象，格式为：{\"groups\":[{\"folderName\":\"类别名\",\"iconKeys\":[\"key1\",\"key2\"]}]}，不要输出任何额外文字或解释。";
+5. 每个分组必须给出 folderSize，只能是 \"1x1\"、\"1x2\"、\"2x1\"、\"2x2\"。请根据分组重要性、图标数量和用户要求选择视觉尺寸：小而确定的组用 1x1，纵向/流程类可用 1x2，横向常用组可用 2x1，大型或高优先级组用 2x2；\
+6. 不确定归类的图标可以不放进任何分组。\
+只输出 JSON 对象，格式为：{\"groups\":[{\"folderName\":\"类别名\",\"iconKeys\":[\"key1\",\"key2\"],\"folderSize\":\"1x1\"}]}，不要输出任何额外文字或解释。";
 
     match custom_prompt {
         Some(extra) if !extra.trim().is_empty() => {
@@ -176,6 +181,14 @@ pub(crate) fn parse_model_payload(content: &str) -> Result<ModelGroupsPayload, S
     Err("AI 返回的内容不是预期的 JSON 分组格式，请重试或更换模型。".to_string())
 }
 
+pub(crate) fn normalize_folder_size(value: Option<String>) -> Option<String> {
+    let value = value?.trim().to_string();
+    match value.as_str() {
+        "1x1" | "1x2" | "2x1" | "2x2" => Some(value),
+        _ => None,
+    }
+}
+
 /// 校验并清洗模型返回的分组：去除非法 key、去重、过滤不足 2 项的分组，
 /// 未被分组的 key 收集到 leftover。
 pub(crate) fn sanitize_groups(
@@ -217,6 +230,7 @@ pub(crate) fn sanitize_groups(
         groups.push(AiGroup {
             folder_name,
             icon_keys,
+            folder_size: normalize_folder_size(group.folder_size),
         });
     }
 
@@ -365,6 +379,14 @@ mod tests {
         let payload = parse_model_payload(content).unwrap();
         assert_eq!(payload.groups.len(), 1);
         assert_eq!(payload.groups[0].folder_name, "浏览器");
+        assert_eq!(payload.groups[0].folder_size, None);
+    }
+
+    #[test]
+    fn parse_model_payload_accepts_folder_size() {
+        let content = "{\"groups\":[{\"folderName\":\"开发工具\",\"iconKeys\":[\"a\",\"b\"],\"folderSize\":\"2x1\"}]}";
+        let payload = parse_model_payload(content).unwrap();
+        assert_eq!(payload.groups[0].folder_size, Some("2x1".to_string()));
     }
 
     #[test]
@@ -380,10 +402,12 @@ mod tests {
                         "ghost".to_string(),
                         "a".to_string(),
                     ],
+                    folder_size: Some("2x1".to_string()),
                 },
                 ModelGroup {
                     folder_name: "组2".to_string(),
                     icon_keys: vec!["c".to_string()], // 不足 2 项，应解散
+                    folder_size: Some("2x2".to_string()),
                 },
             ],
         };
@@ -391,6 +415,7 @@ mod tests {
         let result = sanitize_groups(payload, &icons);
         assert_eq!(result.groups.len(), 1);
         assert_eq!(result.groups[0].icon_keys, vec!["a", "b"]);
+        assert_eq!(result.groups[0].folder_size, Some("2x1".to_string()));
         let mut leftover = result.leftover.clone();
         leftover.sort();
         assert_eq!(leftover, vec!["c".to_string(), "d".to_string()]);
@@ -403,9 +428,11 @@ mod tests {
             groups: vec![ModelGroup {
                 folder_name: "   ".to_string(),
                 icon_keys: vec!["a".to_string(), "b".to_string()],
+                folder_size: Some("huge".to_string()),
             }],
         };
         let result = sanitize_groups(payload, &icons);
         assert_eq!(result.groups[0].folder_name, "未命名分组");
+        assert_eq!(result.groups[0].folder_size, None);
     }
 }

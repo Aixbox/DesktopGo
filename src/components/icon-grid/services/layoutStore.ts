@@ -189,6 +189,25 @@ export const writeLayout = async (
   await invoke('set_layout_payload', { key: LAYOUT_KEY, payload: JSON.stringify(payload) })
 }
 
+export const writePersistedLayout = async (layout: PersistedLayout | null) => {
+  if (!layout) {
+    await writeLayout([], [], [])
+    return
+  }
+
+  const payload = {
+    version: 7,
+    items: layout.items,
+    slots: layout.slots ?? [],
+    dockKeys: layout.dockKeys ?? [],
+    pageSize: layout.pageSize,
+    columns: layout.columns,
+    coordinates: layout.coordinates,
+    geometryKey: layout.geometryKey,
+  }
+  await invoke('set_layout_payload', { key: LAYOUT_KEY, payload: JSON.stringify(payload) })
+}
+
 export const resetLaunchpadLayout = async () => {
   await writeLayout([], [], [])
 }

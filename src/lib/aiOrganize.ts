@@ -1,6 +1,6 @@
 import type { DesktopIcon } from '../types'
 import { buildIconSelectionKey } from './iconKey.ts'
-import type { GridItem, IconItem } from '../components/icon-grid/model.ts'
+import type { FolderSize, GridItem, IconItem } from '../components/icon-grid/model.ts'
 import { makeFolderId } from '../components/icon-grid/model.ts'
 
 export interface AiIconInput {
@@ -13,6 +13,7 @@ export interface AiIconInput {
 export interface AiGroup {
   folder_name: string
   icon_keys: string[]
+  folder_size?: FolderSize
 }
 
 export interface AiClassifyResult {
@@ -63,6 +64,24 @@ const collectIconItems = (items: GridItem[]): Map<string, IconItem> => {
   return map
 }
 
+export const inferAiFolderSize = (childCount: number): FolderSize => {
+  if (childCount >= 7) return '2x2'
+  if (childCount >= 4) return '2x1'
+  return '1x1'
+}
+
+const AI_FOLDER_SIZES = new Set<FolderSize>(['1x1', '1x2', '2x1', '2x2'])
+
+export const normalizeAiFolderSize = (
+  value: unknown,
+  fallbackChildCount: number
+): FolderSize => {
+  if (typeof value === 'string' && AI_FOLDER_SIZES.has(value as FolderSize)) {
+    return value as FolderSize
+  }
+  return inferAiFolderSize(fallbackChildCount)
+}
+
 /**
  * 把 AI 返回的分组应用到当前布局，生成新的顶层 GridItem 列表：
  * - 每个有效分组（>=2 个能匹配到的图标）合并为一个新文件夹；
@@ -94,7 +113,7 @@ export function applyAiGroupsToLayout(items: GridItem[], groups: AiGroup[]): Gri
         kind: 'folder',
         id: makeFolderId(),
         name,
-        size: '1x1',
+        size: normalizeAiFolderSize(group.folder_size, children.length),
         children,
       })
     } else {

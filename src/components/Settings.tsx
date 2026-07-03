@@ -2129,6 +2129,12 @@ function IconManagerPanel() {
         icons={allIcons.filter(icon => !icon.hidden)}
         customNames={customNames}
         onClose={() => setAiOrganizeOpen(false)}
+        onPreviewed={async () => {
+          const mainWindow = await WebviewWindow.getByLabel('main')
+          if (mainWindow) {
+            await mainWindow.emit(LAUNCHPAD_LAYOUT_RESET_EVENT)
+          }
+        }}
         onApplied={async () => {
           // 设置窗口里完成写回后，通知主窗口重新 hydrate 布局，与「重置图标」一致。
           const mainWindow = await WebviewWindow.getByLabel('main')

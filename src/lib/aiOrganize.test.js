@@ -1,4 +1,9 @@
-import { applyAiGroupsToLayout, buildAiIconInputs } from './aiOrganize.ts'
+import {
+  applyAiGroupsToLayout,
+  buildAiIconInputs,
+  inferAiFolderSize,
+  normalizeAiFolderSize,
+} from './aiOrganize.ts'
 
 function assert(condition, message) {
   if (!condition) {
@@ -42,9 +47,62 @@ const makeIcon = (id, name, opts = {}) => ({
   const folder = result.find(item => item.kind === 'folder')
   assert(folder && folder.name === '浏览器', '文件夹名应来自分组')
   assert(folder.children.length === 2, '文件夹应包含 2 个图标')
+  assert(folder.size === '1x1', '2 个图标的 AI 文件夹应保持小尺寸')
   assert(result[0].kind === 'folder', '新文件夹应排在最前')
   const leftover = result.find(item => item.kind === 'icon')
   assert(leftover && leftover.key === 'desktop:3', '未分组图标应保留')
+}
+
+// --- inferAiFolderSize: 根据分组数量适配文件夹尺寸 ---
+{
+  assert(inferAiFolderSize(2) === '1x1', '2 个图标应使用小文件夹')
+  assert(inferAiFolderSize(4) === '2x1', '4-6 个图标应使用横向大文件夹')
+  assert(inferAiFolderSize(6) === '2x1', '4-6 个图标应保持横向大文件夹')
+  assert(inferAiFolderSize(7) === '2x2', '7 个及以上图标应使用大文件夹')
+  assert(normalizeAiFolderSize('1x2', 4) === '1x2', 'AI 指定的合法尺寸应优先保留')
+  assert(normalizeAiFolderSize('bad', 7) === '2x2', '非法尺寸应回退到本地兜底')
+}
+
+// --- applyAiGroupsToLayout: 优先使用 AI 返回的文件夹尺寸 ---
+{
+  const items = Array.from({ length: 7 }, (_, index) => {
+    const id = String(index + 1)
+    return { kind: 'icon', key: `desktop:${id}`, icon: makeIcon(id, `App${id}`) }
+  })
+  const result = applyAiGroupsToLayout(items, [
+    {
+      folder_name: '中型组',
+      icon_keys: items.slice(0, 4).map(item => item.key),
+      folder_size: '1x2',
+    },
+  ])
+  const mediumFolder = result.find(item => item.kind === 'folder' && item.name === '中型组')
+
+  assert(mediumFolder && mediumFolder.size === '1x2', '应使用 AI 指定的 1x2 尺寸')
+
+  const largeItems = items.map(item => ({ ...item }))
+  const largeResult = applyAiGroupsToLayout(largeItems, [
+    {
+      folder_name: '大型组',
+      icon_keys: largeItems.map(item => item.key),
+      folder_size: '2x2',
+    },
+  ])
+  const onlyLargeFolder = largeResult.find(item => item.kind === 'folder')
+  assert(onlyLargeFolder && onlyLargeFolder.size === '2x2', '应使用 AI 指定的 2x2 尺寸')
+}
+
+// --- applyAiGroupsToLayout: 旧模型未返回尺寸时使用兜底规则 ---
+{
+  const items = Array.from({ length: 4 }, (_, index) => {
+    const id = String(index + 1)
+    return { kind: 'icon', key: `desktop:${id}`, icon: makeIcon(id, `Legacy${id}`) }
+  })
+  const result = applyAiGroupsToLayout(items, [
+    { folder_name: '旧模型组', icon_keys: items.map(item => item.key) },
+  ])
+  const folder = result.find(item => item.kind === 'folder')
+  assert(folder && folder.size === '2x1', '缺少 AI 尺寸时才按数量兜底')
 }
 
 // --- applyAiGroupsToLayout: 忽略非法 key 与不足 2 项的分组 ---

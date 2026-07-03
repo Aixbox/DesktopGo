@@ -12,6 +12,8 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   AlertCircle,
   Bot,
+  ChevronDown,
+  ChevronUp,
   CheckCircle2,
   FolderClosed,
   History,
@@ -29,6 +31,7 @@ import { loadAiConfig, isAiConfigReady, type AiConfig } from '@/lib/aiConfigStor
 import {
   applyAiGroupsToLayout,
   buildAiIconInputs,
+  normalizeAiFolderSize,
   type AiClassifyResult,
   type AiGroup,
 } from '@/lib/aiOrganize'
@@ -43,8 +46,14 @@ import {
   type AiOrganizeSession,
   type AiOrganizeSnapshot,
 } from '@/lib/aiOrganizeSessions'
-import { hydrateItems, readLayout, writeLayout } from '@/components/icon-grid/services/layoutStore'
+import {
+  hydrateItems,
+  readLayout,
+  writeLayout,
+  writePersistedLayout,
+} from '@/components/icon-grid/services/layoutStore'
 import type { DesktopIcon } from '@/types'
+import type { FolderSize } from '@/components/icon-grid/model'
 
 interface AiOrganizePanelProps {
   open: boolean
@@ -55,6 +64,8 @@ interface AiOrganizePanelProps {
   onRunStateChange?: (state: AiOrganizePanelRunState) => void
   onCollapse?: () => void
   onClose: () => void
+  /** 临时预览写入布局后由调用方负责刷新主窗口。 */
+  onPreviewed?: () => void | Promise<void>
   /** 应用成功后由调用方负责通知主窗口刷新布局。 */
   onApplied: () => void | Promise<void>
 }
@@ -105,6 +116,13 @@ interface EditableGroup {
   id: string
   folderName: string
   iconKeys: string[]
+  folderSize: FolderSize
+}
+
+interface QueuedPrompt {
+  id: string
+  prompt: string
+  label?: string
 }
 
 interface AiAgentRunResult extends AiClassifyResult {
@@ -150,12 +168,14 @@ const toEditableGroups = (aiGroups: AiGroup[]): EditableGroup[] =>
     id: `ai-group-${index}-${createAiOrganizeId('edit')}`,
     folderName: group.folder_name,
     iconKeys: group.icon_keys,
+    folderSize: normalizeAiFolderSize(group.folder_size, group.icon_keys.length),
   }))
 
 const toAiGroups = (editableGroups: EditableGroup[]): AiGroup[] =>
   editableGroups.map(group => ({
     folder_name: group.folderName,
     icon_keys: group.iconKeys,
+    folder_size: group.folderSize,
   }))
 
 const summarizeGroups = (aiGroups: AiGroup[]) => {
@@ -425,6 +445,7 @@ export function AiOrganizePanel({
   onRunStateChange,
   onCollapse,
   onClose,
+  onPreviewed,
   onApplied,
 }: AiOrganizePanelProps) {
   const toast = useToast()
@@ -442,10 +463,13 @@ export function AiOrganizePanel({
   const [sessions, setSessions] = useState<AiOrganizeSession[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [activeSnapshotId, setActiveSnapshotId] = useState<string | null>(null)
+  const [editingSnapshotId, setEditingSnapshotId] = useState<string | null>(null)
   const [composerValue, setComposerValue] = useState('')
   const [sessionsLoaded, setSessionsLoaded] = useState(false)
   const [sessionSaveError, setSessionSaveError] = useState<string | null>(null)
   const [historyExpanded, setHistoryExpanded] = useState(false)
+  const [presetsExpanded, setPresetsExpanded] = useState(false)
+  const [queuedPrompts, setQueuedPrompts] = useState<QueuedPrompt[]>([])
   const runSeqRef = useRef(0)
   const lastApplyRequestTokenRef = useRef(applyRequestToken)
   const streamChunkSeqRef = useRef(0)
@@ -456,6 +480,15 @@ export function AiOrganizePanel({
   const activeSessionIdRef = useRef<string | null>(null)
   const activeSnapshotIdRef = useRef<string | null>(null)
   const transcriptRef = useRef<HTMLDivElement | null>(null)
+  const previewBaselineLayoutRef = useRef<Awaited<ReturnType<typeof readLayout>> | null>(null)
+  const previewBaselineCapturedRef = useRef(false)
+  const previewDirtyRef = useRef(false)
+  const appliedRef = useRef(false)
+  const onPreviewedRef = useRef(onPreviewed)
+
+  useEffect(() => {
+    onPreviewedRef.current = onPreviewed
+  }, [onPreviewed])
 
   const iconByKey = useMemo(() => {
     const map = new Map<string, DesktopIcon>()
@@ -534,6 +567,7 @@ export function AiOrganizePanel({
       if (!snapshot) {
         activeSnapshotIdRef.current = null
         setActiveSnapshotId(null)
+        setEditingSnapshotId(null)
         setGroups([])
         setPhase('idle')
         setRunId(null)
@@ -574,9 +608,61 @@ export function AiOrganizePanel({
         activeSnapshotId: snapshot.id,
       }
       activateSnapshot(nextSession, snapshot)
+      setEditingSnapshotId(null)
       void commitSession(nextSession)
     },
     [activeSession, activateSnapshot, commitSession]
+  )
+
+  const applyLayoutPreview = useCallback(
+    async (aiGroups: AiGroup[]) => {
+      if (!previewBaselineCapturedRef.current) {
+        previewBaselineLayoutRef.current = await readLayout()
+        previewBaselineCapturedRef.current = true
+      }
+
+      const baselineLayout = previewBaselineLayoutRef.current
+      const currentItems = hydrateItems(icons, baselineLayout?.items ?? null)
+      const nextItems = applyAiGroupsToLayout(currentItems, aiGroups)
+      await writeLayout(nextItems, [], [])
+      previewDirtyRef.current = true
+      await onPreviewedRef.current?.()
+    },
+    [icons]
+  )
+
+  const restoreLayoutPreview = useCallback(async () => {
+    if (!previewDirtyRef.current || appliedRef.current) return
+    await writePersistedLayout(previewBaselineLayoutRef.current)
+    previewDirtyRef.current = false
+    previewBaselineLayoutRef.current = null
+    previewBaselineCapturedRef.current = false
+    await onPreviewedRef.current?.()
+  }, [])
+
+  const handleEditSnapshot = useCallback(
+    async (snapshot: AiOrganizeSnapshot) => {
+      if (!activeSession) return
+      const now = Date.now()
+      const nextSession: AiOrganizeSession = {
+        ...activeSession,
+        updatedAt: now,
+        activeSnapshotId: snapshot.id,
+      }
+      activateSnapshot(nextSession, snapshot)
+      setEditingSnapshotId(snapshot.id)
+      void commitSession(nextSession)
+      await applyLayoutPreview(snapshot.groups)
+    },
+    [activeSession, activateSnapshot, applyLayoutPreview, commitSession]
+  )
+
+  const handlePreviewSnapshot = useCallback(
+    async (snapshot: AiOrganizeSnapshot) => {
+      handleSelectSnapshot(snapshot)
+      await applyLayoutPreview(snapshot.groups)
+    },
+    [applyLayoutPreview, handleSelectSnapshot]
   )
 
   const persistCurrentPreview = useCallback(
@@ -676,6 +762,7 @@ export function AiOrganizePanel({
     activeSnapshotIdRef.current = null
     setActiveSessionId(session.id)
     setActiveSnapshotId(null)
+    setEditingSnapshotId(null)
     setGroups([])
     setComposerValue('')
     setError(null)
@@ -723,14 +810,14 @@ export function AiOrganizePanel({
         title:
           session.messages.length === 0 && session.snapshots.length === 0
             ? createAiOrganizeSessionTitle(normalizedInstruction, now)
-            : session.title,
+          : session.title,
         updatedAt: now,
         messages: [...session.messages, userMessage, runningMessage],
       }
 
+      setPhase('loading')
       await commitSession(runningSession)
       setActiveSessionId(runningSession.id)
-      setPhase('loading')
       setError(null)
       setNotConfigured(false)
       setAgentEvents([])
@@ -794,6 +881,7 @@ export function AiOrganizePanel({
           }
           await commitSession(emptySession)
           activateSnapshot(emptySession, snapshot)
+          setEditingSnapshotId(snapshot.id)
           setRunFinishedAt(Date.now())
           return
         }
@@ -839,6 +927,10 @@ export function AiOrganizePanel({
         await commitSession(successSession)
         setRunId(result.run_id)
         activateSnapshot(successSession, snapshot)
+        setEditingSnapshotId(snapshot.id)
+        if (result.groups.length > 0) {
+          await applyLayoutPreview(result.groups)
+        }
         flushPendingStream()
         setRunFinishedAt(Date.now())
       } catch (e) {
@@ -882,6 +974,7 @@ export function AiOrganizePanel({
     },
     [
       activateSnapshot,
+      applyLayoutPreview,
       commitSession,
       customNames,
       flushPendingStream,
@@ -964,6 +1057,7 @@ export function AiOrganizePanel({
     return () => {
       active = false
       runSeqRef.current += 1
+      void restoreLayoutPreview()
       if (unlisten) {
         unlisten()
       }
@@ -979,13 +1073,17 @@ export function AiOrganizePanel({
       setSessions([])
       setActiveSessionId(null)
       setActiveSnapshotId(null)
+      setEditingSnapshotId(null)
       setSessionsLoaded(false)
       setSessionSaveError(null)
       setComposerValue('')
+      setQueuedPrompts([])
+      setPresetsExpanded(false)
       setRunId(null)
       setRunStartedAt(null)
       setRunFinishedAt(null)
       setElapsedMs(0)
+      appliedRef.current = false
     }
   }, [activateSnapshot, appendStreamDelta, open, resetStreamOutput])
 
@@ -1108,11 +1206,32 @@ export function AiOrganizePanel({
     (prompt: string, label?: string) => {
       const normalizedPrompt = prompt.trim()
       if (!normalizedPrompt) return
+      if (!sessionsLoaded || phase === 'applying') return
       setComposerValue('')
+      if (phase === 'loading') {
+        setQueuedPrompts(current => [
+          ...current,
+          {
+            id: createAiOrganizeId('queued-prompt'),
+            prompt: normalizedPrompt,
+            label,
+          },
+        ])
+        return
+      }
       void runClassification(normalizedPrompt, label)
     },
-    [runClassification]
+    [phase, runClassification, sessionsLoaded]
   )
+
+  useEffect(() => {
+    if (!open || !sessionsLoaded || queuedPrompts.length === 0) return
+    if (phase === 'loading' || phase === 'applying') return
+
+    const [nextPrompt, ...remainingPrompts] = queuedPrompts
+    setQueuedPrompts(remainingPrompts)
+    void runClassification(nextPrompt.prompt, nextPrompt.label)
+  }, [open, phase, queuedPrompts, runClassification, sessionsLoaded])
 
   const handleComposerKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -1139,10 +1258,15 @@ export function AiOrganizePanel({
       const aiGroups: AiGroup[] = applicableGroups.map(group => ({
         folder_name: group.folderName,
         icon_keys: group.iconKeys,
+        folder_size: group.folderSize,
       }))
       const nextItems = applyAiGroupsToLayout(currentItems, aiGroups)
       // 与「重置布局」一致：清空 slots/dock，交给 IconGrid 重新 hydrate。
       await writeLayout(nextItems, [], [])
+      appliedRef.current = true
+      previewDirtyRef.current = false
+      previewBaselineLayoutRef.current = null
+      previewBaselineCapturedRef.current = false
       if (runId) {
         await invoke('ai_organize_record_apply', { runId, groups: aiGroups }).catch(e => {
           console.warn('Failed to record AI organize apply:', e)
@@ -1176,13 +1300,163 @@ export function AiOrganizePanel({
     void handleApply()
   }, [applyRequestToken, handleApply, open])
 
+  const renderLayoutPreview = (snapshot: AiOrganizeSnapshot, snapshotIndex: number) => {
+    const isActiveSnapshot = snapshot.id === activeSnapshotId
+    const previewGroups: EditableGroup[] = isActiveSnapshot
+      ? groups
+      : snapshot.groups.map((group, index) => ({
+          id: `snapshot-${snapshot.id}-${index}`,
+          folderName: group.folder_name,
+          iconKeys: group.icon_keys,
+          folderSize: normalizeAiFolderSize(group.folder_size, group.icon_keys.length),
+        }))
+    const previewDisabled = phase === 'loading' || phase === 'applying'
+    const isEditingSnapshot = isActiveSnapshot && editingSnapshotId === snapshot.id
+    const canEdit = isEditingSnapshot && !previewDisabled
+
+    return (
+      <div className="mt-2 w-[min(100%,390px)] rounded-lg border border-border/85 bg-background/82 p-3 shadow-sm">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
+            <FolderClosed className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
+            <span className="truncate">{translate('布局预览')}</span>
+            <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              {translate('第 {index} 版', { index: snapshotIndex + 1 })}
+            </span>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span className="text-[11px] text-muted-foreground">
+              {formatSessionTime(snapshot.createdAt)}
+            </span>
+            {!isActiveSnapshot ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handlePreviewSnapshot(snapshot)
+                  }}
+                  disabled={previewDisabled}
+                  className="rounded-md border border-border/75 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {translate('预览此版')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleEditSnapshot(snapshot)
+                  }}
+                  disabled={previewDisabled}
+                  className="rounded-md border border-blue-500/25 bg-blue-500/10 px-2 py-1 text-[11px] text-blue-700 transition-colors hover:bg-blue-500/15 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-200"
+                >
+                  {translate('编辑此版')}
+                </button>
+              </>
+            ) : isEditingSnapshot ? (
+              <span className="rounded-md bg-blue-500/10 px-2 py-1 text-[11px] text-blue-700 dark:text-blue-200">
+                {translate('编辑中')}
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingSnapshotId(snapshot.id)
+                  void applyLayoutPreview(toAiGroups(groups))
+                }}
+                disabled={previewDisabled}
+                className="rounded-md border border-blue-500/25 bg-blue-500/10 px-2 py-1 text-[11px] text-blue-700 transition-colors hover:bg-blue-500/15 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-200"
+              >
+                {translate('编辑')}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {previewGroups.length === 0 ? (
+          <div className="rounded-md border border-dashed border-border/75 bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
+            {translate('这次没有生成可用分组。')}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {previewGroups.map(group => (
+              <div key={group.id} className="rounded-md border border-border/75 bg-card/70 p-2.5">
+                <div className="mb-2 flex items-center gap-2">
+                  <FolderClosed className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
+                  {canEdit ? (
+                    <Input
+                      value={group.folderName}
+                      onChange={e => handleRenameGroup(group.id, e.target.value)}
+                      className="h-8 flex-1"
+                      aria-label={translate('分组名称')}
+                    />
+                  ) : (
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                      {group.folderName}
+                    </span>
+                  )}
+                  <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                    {group.folderSize} / {group.iconKeys.length}
+                  </span>
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      onClick={() => handleDropGroup(group.id)}
+                      className="shrink-0 rounded-md px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300"
+                    >
+                      {translate('解散')}
+                    </button>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {group.iconKeys.map(key => {
+                    const icon = iconByKey.get(key)
+                    return (
+                      <span
+                        key={key}
+                        className="group inline-flex min-w-0 items-center gap-1.5 rounded-md border border-border/70 bg-background py-1 pl-1.5 pr-1 text-xs"
+                      >
+                        {icon?.icon_base64 ? (
+                          <img
+                            src={icon.icon_base64}
+                            alt=""
+                            className="h-4 w-4 shrink-0 object-contain"
+                          />
+                        ) : null}
+                        <span className="max-w-[138px] truncate">{resolveIconName(key)}</span>
+                        {canEdit ? (
+                          <button
+                            type="button"
+                            aria-label={translate('移出分组')}
+                            onClick={() => handleRemoveIcon(group.id, key)}
+                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-500/15 hover:text-red-600 dark:hover:text-red-300"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        ) : null}
+                      </span>
+                    )
+                  })}
+                </div>
+                {group.iconKeys.length < 2 ? (
+                  <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-300">
+                    {translate('不足 2 个图标，应用时会被忽略。')}
+                  </p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   if (!open) return null
   if (!visible) return null
 
   const collapseOrClose = onCollapse ?? onClose
   const isBusy = phase === 'loading' || phase === 'applying'
-  const canSend = composerValue.trim().length > 0 && sessionsLoaded && !isBusy
-  const currentSnapshot = activeSnapshots.find(snapshot => snapshot.id === activeSnapshotId) ?? null
+  const hasComposerText = composerValue.trim().length > 0
+  const canSend = hasComposerText && sessionsLoaded && phase !== 'applying'
+  const canUsePresets = sessionsLoaded && phase !== 'applying'
 
   return (
     <div
@@ -1330,48 +1604,57 @@ export function AiOrganizePanel({
                     const isUser = message.role === 'user'
                     const failed = message.status === 'failed'
                     const running = message.status === 'running'
+                    const snapshotIndex =
+                      !isUser && message.snapshotId
+                        ? activeSnapshots.findIndex(snapshot => snapshot.id === message.snapshotId)
+                        : -1
+                    const messageSnapshot =
+                      snapshotIndex >= 0 ? activeSnapshots[snapshotIndex] : null
                     return (
                       <div
                         key={message.id}
                         className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
                       >
-                        <div
-                          className={`max-w-[88%] rounded-lg border px-3 py-2 text-sm leading-5 ${
-                            isUser
-                              ? 'border-blue-500/25 bg-blue-500/12 text-foreground'
-                              : failed
-                                ? 'border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-200'
-                                : 'border-border/80 bg-muted/35 text-foreground'
-                          }`}
-                        >
-                          <div className="flex items-start gap-2">
-                            {!isUser ? (
-                              running ? (
-                                <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-blue-600 dark:text-blue-300" />
-                              ) : (
-                                <MessageSquareText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-300" />
-                              )
-                            ) : null}
-                            <div className="min-w-0 flex-1">
-                              <p className="whitespace-pre-wrap break-words">{message.content}</p>
-                              {message.error ? (
-                                <p className="mt-1 break-words text-xs opacity-80">
-                                  {message.error}
-                                </p>
+                        <div className={`flex max-w-[92%] flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+                          <div
+                            className={`rounded-lg border px-3 py-2 text-sm leading-5 ${
+                              isUser
+                                ? 'border-blue-500/25 bg-blue-500/12 text-foreground'
+                                : failed
+                                  ? 'border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-200'
+                                  : 'border-border/80 bg-muted/35 text-foreground'
+                            }`}
+                          >
+                            <div className="flex items-start gap-2">
+                              {!isUser ? (
+                                running ? (
+                                  <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-blue-600 dark:text-blue-300" />
+                                ) : (
+                                  <MessageSquareText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-300" />
+                                )
                               ) : null}
-                              {running || (failed && message.error) ? (
-                                <AssistantRunInline
-                                  status={runStatus}
-                                  title={statusTitle}
-                                  detail={statusDetail}
-                                  elapsedMs={elapsedMs}
-                                  events={agentEvents}
-                                  streamChunks={streamChunks}
-                                  isStreaming={isStreaming}
-                                />
-                              ) : null}
+                              <div className="min-w-0 flex-1">
+                                <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                                {message.error ? (
+                                  <p className="mt-1 break-words text-xs opacity-80">
+                                    {message.error}
+                                  </p>
+                                ) : null}
+                                {running || (failed && message.error) ? (
+                                  <AssistantRunInline
+                                    status={runStatus}
+                                    title={statusTitle}
+                                    detail={statusDetail}
+                                    elapsedMs={elapsedMs}
+                                    events={agentEvents}
+                                    streamChunks={streamChunks}
+                                    isStreaming={isStreaming}
+                                  />
+                                ) : null}
+                              </div>
                             </div>
                           </div>
+                          {messageSnapshot ? renderLayoutPreview(messageSnapshot, snapshotIndex) : null}
                         </div>
                       </div>
                     )
@@ -1388,150 +1671,98 @@ export function AiOrganizePanel({
                   </div>
                 )}
               </div>
-
-              {activeSnapshots.length > 0 ? (
-                <div className="mt-4 flex flex-wrap gap-1.5">
-                  {activeSnapshots.map((snapshot, index) => (
-                    <button
-                      key={snapshot.id}
-                      type="button"
-                      onClick={() => handleSelectSnapshot(snapshot)}
-                      disabled={isBusy}
-                      className={`rounded-md border px-2 py-1 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                        snapshot.id === activeSnapshotId
-                          ? 'border-blue-500/35 bg-blue-500/12 text-blue-700 dark:text-blue-200'
-                          : 'border-border/70 bg-background text-muted-foreground hover:bg-accent hover:text-foreground'
-                      }`}
-                    >
-                      {translate('第 {index} 版', { index: index + 1 })}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-
-              <div className="mt-4 space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
-                    <FolderClosed className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
-                    <span className="truncate">{translate('布局预览')}</span>
-                  </div>
-                  {currentSnapshot ? (
-                    <span className="rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
-                      {formatSessionTime(currentSnapshot.createdAt)}
-                    </span>
-                  ) : null}
-                </div>
-
-                {groups.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 px-3 py-5 text-center text-sm text-muted-foreground">
-                    {phase === 'loading'
-                      ? translate('正在等待新的布局预览...')
-                      : translate('发送一个要求，AI 会生成可保存的布局预览。')}
-                  </div>
-                ) : (
-                  groups.map(group => (
-                    <div key={group.id} className="rounded-lg border border-border/85 bg-card p-3">
-                      <div className="mb-2 flex items-center gap-2">
-                        <FolderClosed className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
-                        <Input
-                          value={group.folderName}
-                          onChange={e => handleRenameGroup(group.id, e.target.value)}
-                          className="h-8 flex-1"
-                          aria-label={translate('分组名称')}
-                          disabled={isBusy}
-                        />
-                        <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
-                          {group.iconKeys.length}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleDropGroup(group.id)}
-                          disabled={isBusy}
-                          className="shrink-0 rounded-md px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:text-red-300"
-                        >
-                          {translate('解散')}
-                        </button>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {group.iconKeys.map(key => {
-                          const icon = iconByKey.get(key)
-                          return (
-                            <span
-                              key={key}
-                              className="group inline-flex min-w-0 items-center gap-1.5 rounded-md border border-border/70 bg-background py-1 pl-1.5 pr-1 text-xs"
-                            >
-                              {icon?.icon_base64 ? (
-                                <img
-                                  src={icon.icon_base64}
-                                  alt=""
-                                  className="h-4 w-4 shrink-0 object-contain"
-                                />
-                              ) : null}
-                              <span className="max-w-[138px] truncate">{resolveIconName(key)}</span>
-                              <button
-                                type="button"
-                                aria-label={translate('移出分组')}
-                                onClick={() => handleRemoveIcon(group.id, key)}
-                                disabled={isBusy}
-                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-500/15 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:text-red-300"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </span>
-                          )
-                        })}
-                      </div>
-                      {group.iconKeys.length < 2 ? (
-                        <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-300">
-                          {translate('不足 2 个图标，应用时会被忽略。')}
-                        </p>
-                      ) : null}
-                    </div>
-                  ))
-                )}
-              </div>
             </div>
 
             <div className="shrink-0 border-t border-border/80 px-4 py-3">
-              <div className="mb-2 grid grid-cols-2 gap-1.5">
-                {PROMPT_PRESETS.map(preset => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => sendPrompt(preset.prompt, translate(preset.label))}
-                    disabled={isBusy || !sessionsLoaded}
-                    title={translate(preset.description)}
-                    className="rounded-lg border border-border/75 bg-muted/25 px-2.5 py-2 text-left transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <div className="text-xs font-medium text-foreground">
-                      {translate(preset.label)}
-                    </div>
-                    <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                      {translate(preset.description)}
-                    </div>
-                  </button>
-                ))}
+              <div className="mb-2">
+                <button
+                  type="button"
+                  onClick={() => setPresetsExpanded(expanded => !expanded)}
+                  className="flex h-8 w-full items-center justify-between rounded-md px-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-blue-600 dark:text-blue-300" />
+                    {translate('快捷提示')}
+                  </span>
+                  {presetsExpanded ? (
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  )}
+                </button>
+                <AnimatePresence initial={false}>
+                  {presetsExpanded ? (
+                    <motion.div
+                      initial={prefersReducedMotion ? false : { opacity: 0, y: -4 }}
+                      animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+                      exit={prefersReducedMotion ? undefined : { opacity: 0, y: -4 }}
+                      transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+                      className="mt-1.5 grid grid-cols-2 gap-1.5"
+                    >
+                      {PROMPT_PRESETS.map(preset => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => sendPrompt(preset.prompt, translate(preset.label))}
+                          disabled={!canUsePresets}
+                          title={translate(preset.description)}
+                          className="rounded-md border border-border/75 bg-muted/25 px-2.5 py-2 text-left transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <div className="text-xs font-medium text-foreground">
+                            {translate(preset.label)}
+                          </div>
+                          <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                            {translate(preset.description)}
+                          </div>
+                        </button>
+                      ))}
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
               </div>
 
-              <div className="grid grid-cols-[1fr_auto] gap-2">
+              {queuedPrompts.length > 0 ? (
+                <div className="mb-2 flex items-center justify-between gap-2 rounded-md border border-blue-500/20 bg-blue-500/[0.08] px-2.5 py-1.5 text-xs text-blue-700 dark:text-blue-200">
+                  <span className="min-w-0 truncate">
+                    {translate('已排队 {count} 条：{prompt}', {
+                      count: queuedPrompts.length,
+                      prompt: queuedPrompts[0].label ?? queuedPrompts[0].prompt,
+                    })}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setQueuedPrompts([])}
+                    className="shrink-0 rounded px-1.5 py-0.5 text-[11px] transition-colors hover:bg-blue-500/10"
+                  >
+                    {translate('清空')}
+                  </button>
+                </div>
+              ) : null}
+
+              <div className="relative">
                 <textarea
                   value={composerValue}
                   onChange={event => setComposerValue(event.target.value)}
                   onKeyDown={handleComposerKeyDown}
-                  placeholder={translate('输入整理要求，Ctrl+Enter 发送')}
+                  placeholder={
+                    phase === 'loading'
+                      ? translate('可以继续输入，发送后会排队执行')
+                      : translate('输入整理要求，Ctrl+Enter 发送')
+                  }
                   aria-label={translate('输入整理要求')}
                   rows={3}
-                  disabled={isBusy}
-                  className="max-h-28 min-h-20 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={phase === 'applying'}
+                  className="max-h-28 min-h-20 w-full resize-none rounded-lg border border-input bg-background px-3 py-2 pb-10 pr-12 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-60"
                 />
                 <button
                   type="button"
                   onClick={() => sendPrompt(composerValue)}
                   disabled={!canSend}
-                  aria-label={translate('发送')}
-                  className="flex h-20 w-10 items-center justify-center rounded-lg bg-blue-600 text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+                  aria-label={phase === 'loading' ? translate('加入队列') : translate('发送')}
+                  title={phase === 'loading' ? translate('加入队列') : translate('发送')}
+                  className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
                 >
-                  {phase === 'loading' ? (
+                  {phase === 'loading' && !hasComposerText ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <SendHorizontal className="h-4 w-4" />
