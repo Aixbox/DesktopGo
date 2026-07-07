@@ -21,6 +21,7 @@ export interface IconMutationTarget {
 
 export type IconSize = 'large' | 'medium' | 'small'
 export type TitleLineCount = 'one' | 'two'
+export type LaunchpadGridViewMode = 'paged' | 'scroll'
 
 export const ICON_SIZE_CONFIG = {
   large: { logicalSize: 72, columnWidth: 100, imgSize: 72, containerWidth: 100 },

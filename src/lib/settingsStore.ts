@@ -3,6 +3,7 @@ import type {
   AppLanguage,
   IconManagerViewMode,
   IconSize,
+  LaunchpadGridViewMode,
   LaunchpadOpenFocusTarget,
   ThemeMode,
   TitleLineCount,
@@ -21,6 +22,7 @@ type SettingKey =
   | 'iconSize'
   | 'windowMode'
   | 'titleLineCount'
+  | 'launchpadGridViewMode'
   | 'themeMode'
   | 'windowStyle'
   | 'language'
@@ -36,6 +38,7 @@ type SettingValueMap = {
   iconSize: IconSize
   windowMode: WindowMode
   titleLineCount: TitleLineCount
+  launchpadGridViewMode: LaunchpadGridViewMode
   themeMode: ThemeMode
   windowStyle: WindowStyle
   language: AppLanguage
@@ -48,12 +51,13 @@ type SettingValueMap = {
   customAppDir: string
 }
 
-const SETTINGS_STORE_VERSION = 9
+const SETTINGS_STORE_VERSION = 10
 const SETTINGS_VERSION_KEY = 'settingsVersion'
 const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'iconSize',
   'windowMode',
   'titleLineCount',
+  'launchpadGridViewMode',
   'themeMode',
   'windowStyle',
   'language',
@@ -70,6 +74,7 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   iconSize: 'medium',
   windowMode: 'medium',
   titleLineCount: 'two',
+  launchpadGridViewMode: 'paged',
   themeMode: 'system',
   windowStyle: 'default',
   language: 'zh',
@@ -96,6 +101,9 @@ const isWindowMode = (value: unknown): value is WindowMode =>
 const isTitleLineCount = (value: unknown): value is TitleLineCount =>
   value === 'one' || value === 'two'
 
+const isLaunchpadGridViewMode = (value: unknown): value is LaunchpadGridViewMode =>
+  value === 'paged' || value === 'scroll'
+
 const isThemeMode = (value: unknown): value is ThemeMode =>
   value === 'system' || value === 'dark' || value === 'light'
 
@@ -120,6 +128,7 @@ const validators: {
   iconSize: isIconSize,
   windowMode: isWindowMode,
   titleLineCount: isTitleLineCount,
+  launchpadGridViewMode: isLaunchpadGridViewMode,
   themeMode: isThemeMode,
   windowStyle: isWindowStyle,
   language: isAppLanguage,

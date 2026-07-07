@@ -1,4 +1,6 @@
 import {
+  Suspense,
+  lazy,
   useCallback,
   useEffect,
   useMemo,
@@ -43,7 +45,7 @@ import {
 } from '@/components/ui/context-menu'
 import { useToast } from '@/components/ui/toast'
 import { buildIconSelectionKey, useIconStore } from '@/stores/iconStore'
-import type { DesktopIcon, IconSize, TitleLineCount, WindowMode } from '@/types'
+import type { DesktopIcon, IconSize, LaunchpadGridViewMode, TitleLineCount, WindowMode } from '@/types'
 import { IconGrid } from './IconGrid'
 import { AiOrganizePanel, type AiOrganizePanelRunState } from './ai/AiOrganizePanel'
 
@@ -65,6 +67,15 @@ const TITLE_LINE_OPTIONS: { label: string; value: TitleLineCount }[] = [
   { label: '单行标题', value: 'one' },
   { label: '双行标题', value: 'two' },
 ]
+
+const GRID_VIEW_MODE_OPTIONS: { label: string; value: LaunchpadGridViewMode }[] = [
+  { label: '分页网格', value: 'paged' },
+  { label: '侧栏滚动', value: 'scroll' },
+]
+
+const ScrollableIconGrid = lazy(() =>
+  import('./ScrollableIconGrid').then(module => ({ default: module.ScrollableIconGrid }))
+)
 
 const LONG_PRESS_MS = 420
 const ICON_SEARCH_LIMIT = 48
@@ -170,6 +181,8 @@ export function Launchpad() {
     setWindowMode,
     titleLineCount,
     setTitleLineCount,
+    launchpadGridViewMode,
+    setLaunchpadGridViewMode,
     selectionMode,
     selectedIconKeys,
     launchApp,
@@ -929,6 +942,7 @@ export function Launchpad() {
     !target.closest('[data-search-placeholder]') &&
     !target.closest(SEARCH_FLOATING_MENU_SELECTOR) &&
     !target.closest('[data-pagination]') &&
+    !target.closest('[data-grid-mode-nav]') &&
     !target.closest('[data-selection-toolbar]') &&
     !target.closest('[data-ai-organize-toolbar]') &&
     !target.closest('[data-ai-organize-sidebar]')
@@ -1670,6 +1684,21 @@ export function Launchpad() {
             <div className="text-lg text-foreground/50">
               {translate('No desktop shortcuts found')}
             </div>
+          ) : launchpadGridViewMode === 'scroll' ? (
+            <Suspense
+              fallback={
+                <div className="flex items-center gap-3">
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/40 border-t-foreground" />
+                  <span className="text-lg text-foreground/70">{translate('Loading...')}</span>
+                </div>
+              }
+            >
+              <ScrollableIconGrid
+                icons={icons}
+                layoutResetToken={layoutResetToken}
+                importPlacementRequest={importPlacementRequest}
+              />
+            </Suspense>
           ) : (
             <IconGrid
               icons={icons}
@@ -1721,6 +1750,22 @@ export function Launchpad() {
               onValueChange={value => setTitleLineCount(value as TitleLineCount)}
             >
               {TITLE_LINE_OPTIONS.map(option => (
+                <ContextMenuRadioItem key={option.value} value={option.value}>
+                  {translate(option.label)}
+                </ContextMenuRadioItem>
+              ))}
+            </ContextMenuRadioGroup>
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>{translate('网格模式')}</ContextMenuSubTrigger>
+          <ContextMenuSubContent className="w-44">
+            <ContextMenuRadioGroup
+              value={launchpadGridViewMode}
+              onValueChange={value => setLaunchpadGridViewMode(value as LaunchpadGridViewMode)}
+            >
+              {GRID_VIEW_MODE_OPTIONS.map(option => (
                 <ContextMenuRadioItem key={option.value} value={option.value}>
                   {translate(option.label)}
                 </ContextMenuRadioItem>

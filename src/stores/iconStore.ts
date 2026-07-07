@@ -4,6 +4,7 @@ import type {
   DesktopIcon,
   IconMutationTarget,
   IconSize,
+  LaunchpadGridViewMode,
   TitleLineCount,
   WindowMode,
 } from '../types'
@@ -25,6 +26,7 @@ interface IconStore {
   iconSize: IconSize
   windowMode: WindowMode
   titleLineCount: TitleLineCount
+  launchpadGridViewMode: LaunchpadGridViewMode
   dockEnabled: boolean
   selectionMode: boolean
   selectedIconKeys: string[]
@@ -35,6 +37,7 @@ interface IconStore {
   setIconSize: (size: IconSize) => void
   setWindowMode: (mode: WindowMode) => void
   setTitleLineCount: (count: TitleLineCount) => void
+  setLaunchpadGridViewMode: (mode: LaunchpadGridViewMode) => void
   setDockEnabled: (enabled: boolean) => void
   enterSelectionMode: (initialKey?: string) => void
   toggleSelectIcon: (key: string) => void
@@ -58,6 +61,7 @@ export const useIconStore = create<IconStore>((set, get) => ({
   iconSize: 'medium',
   windowMode: 'medium',
   titleLineCount: 'two',
+  launchpadGridViewMode: 'paged',
   dockEnabled: true,
   selectionMode: false,
   selectedIconKeys: [],
@@ -119,6 +123,13 @@ export const useIconStore = create<IconStore>((set, get) => ({
     set({ titleLineCount: count })
     void setSetting('titleLineCount', count).catch(e => {
       console.error('Failed to persist title line count:', e)
+    })
+  },
+
+  setLaunchpadGridViewMode: (mode: LaunchpadGridViewMode) => {
+    set({ launchpadGridViewMode: mode, selectionMode: false, selectedIconKeys: [] })
+    void setSetting('launchpadGridViewMode', mode).catch(e => {
+      console.error('Failed to persist launchpad grid view mode:', e)
     })
   },
 
@@ -274,10 +285,18 @@ export const useIconStore = create<IconStore>((set, get) => ({
   },
 
   hydrateSettings: async () => {
-    const [iconSize, windowMode, titleLineCount, dockEnabled, customNames] = await Promise.all([
+    const [
+      iconSize,
+      windowMode,
+      titleLineCount,
+      launchpadGridViewMode,
+      dockEnabled,
+      customNames,
+    ] = await Promise.all([
       getSetting('iconSize'),
       getSetting('windowMode'),
       getSetting('titleLineCount'),
+      getSetting('launchpadGridViewMode'),
       getSetting('dockEnabled'),
       loadCustomNames(),
     ])
@@ -292,6 +311,9 @@ export const useIconStore = create<IconStore>((set, get) => ({
     }
     if (current.titleLineCount !== titleLineCount) {
       nextState.titleLineCount = titleLineCount
+    }
+    if (current.launchpadGridViewMode !== launchpadGridViewMode) {
+      nextState.launchpadGridViewMode = launchpadGridViewMode
     }
     if (current.dockEnabled !== dockEnabled) {
       nextState.dockEnabled = dockEnabled
