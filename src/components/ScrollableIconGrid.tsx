@@ -64,6 +64,8 @@ import {
 interface IconGridProps {
   icons: DesktopIcon[]
   layoutResetToken: number
+  sidebarCompact?: boolean
+  onToggleSidebarCompact?: () => void
   addIconDisabled?: boolean
   onAddIcon?: () => void
   importPlacementRequest?: {
@@ -207,6 +209,8 @@ const isSuspiciousSingleCellPageGeometry = ({
 export function ScrollableIconGrid({
   icons,
   layoutResetToken,
+  sidebarCompact = false,
+  onToggleSidebarCompact = () => {},
   addIconDisabled = false,
   onAddIcon,
   importPlacementRequest,
@@ -1831,6 +1835,8 @@ export function ScrollableIconGrid({
           <ScrollableOuterGridView
             containerRef={containerRef}
             dockEnabled={dockEnabled}
+            sidebarCompact={sidebarCompact}
+            onToggleSidebarCompact={onToggleSidebarCompact}
             gridWidth={gridWidth}
             columns={columns}
             itemWidth={itemWidth}

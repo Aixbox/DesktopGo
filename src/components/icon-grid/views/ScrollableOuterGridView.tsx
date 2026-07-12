@@ -1,4 +1,4 @@
-import { AppWindow, Folder as FolderIcon, Plus, Trash2 } from 'lucide-react'
+import { AppWindow, Folder as FolderIcon, PanelLeftClose, PanelLeftOpen, Plus } from 'lucide-react'
 import {
   useEffect,
   useMemo,
@@ -19,6 +19,12 @@ import type { FolderSize, GridItem } from '../model'
 import type { PageAnchorEntry } from '../domain/topLevelLayout'
 import { FolderCreatePreview } from './FolderVisuals'
 import { OuterFolderTile } from './OuterFolderTile'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '../../ui/context-menu'
 
 interface IconConfigLike {
   imgSize: number
@@ -34,6 +40,8 @@ export interface ScrollGridSection {
 interface ScrollableOuterGridViewProps {
   containerRef: MutableRefObject<HTMLDivElement | null>
   dockEnabled: boolean
+  sidebarCompact: boolean
+  onToggleSidebarCompact: () => void
   gridWidth: number
   columns: number
   itemWidth: number
@@ -99,7 +107,7 @@ function GroupPreviewGlyph({ item, compact = false }: { item: GridItem; compact?
 function GroupPreviewIcon({ items }: { items: GridItem[] }) {
   if (items.length === 0) {
     return (
-      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-foreground/6 text-muted-foreground dark:bg-white/8">
+      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-foreground/6 text-muted-foreground dark:bg-white/8">
         <AppWindow className="h-3.5 w-3.5" />
       </span>
     )
@@ -107,14 +115,14 @@ function GroupPreviewIcon({ items }: { items: GridItem[] }) {
 
   if (items.length === 1) {
     return (
-      <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-md bg-foreground/6 dark:bg-white/8">
+      <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-md bg-foreground/6 dark:bg-white/8">
         <GroupPreviewGlyph item={items[0]} />
       </span>
     )
   }
 
   return (
-    <span className="grid h-8 w-8 grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-md bg-foreground/6 p-1 dark:bg-white/8">
+    <span className="grid h-7 w-7 grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-md bg-foreground/6 p-1 dark:bg-white/8">
       {items.map(item => (
         <span key={item.kind === 'folder' ? item.id : item.key} className="overflow-hidden">
           <GroupPreviewGlyph item={item} compact />
@@ -127,6 +135,8 @@ function GroupPreviewIcon({ items }: { items: GridItem[] }) {
 export function ScrollableOuterGridView({
   containerRef,
   dockEnabled,
+  sidebarCompact,
+  onToggleSidebarCompact,
   gridWidth,
   columns,
   itemWidth,
@@ -197,14 +207,23 @@ export function ScrollableOuterGridView({
   }, [currentPage])
 
   return (
-    <div className="grid h-full w-full min-w-0 grid-cols-[var(--scroll-grid-sidebar-width)_minmax(0,1fr)] overflow-hidden">
+    <div className="scroll-grid-layout grid h-full w-full min-w-0 grid-cols-[var(--scroll-grid-sidebar-width)_minmax(0,1fr)] overflow-hidden">
       <aside
         data-grid-mode-nav
         data-no-window-drag="true"
         className="scroll-grid-sidebar flex h-full min-h-0 flex-col border-r"
       >
-        <div className="scroll-grid-sidebar-header flex h-12 shrink-0 items-center justify-between border-b px-3">
-          <span className="truncate text-[13px] font-semibold text-foreground/82">
+        <div
+          className={[
+            'scroll-grid-sidebar-header flex h-12 shrink-0 items-center border-b',
+            sidebarCompact ? 'justify-center px-1' : 'justify-between px-3',
+          ].join(' ')}
+        >
+          <span
+            className={
+              sidebarCompact ? 'sr-only' : 'truncate text-[13px] font-semibold text-foreground/82'
+            }
+          >
             {translate('网格分组')}
           </span>
           <button
@@ -219,63 +238,104 @@ export function ScrollableOuterGridView({
           </button>
         </div>
 
-        <div className="scroll-grid-sidebar-scroll min-h-0 flex-1 overflow-y-auto px-2 py-2.5">
-          <div className="grid gap-1.5">
+        <div
+          className={[
+            'scroll-grid-sidebar-scroll min-h-0 flex-1 overflow-y-auto py-1.5',
+            sidebarCompact ? 'px-1.5' : 'px-2',
+          ].join(' ')}
+        >
+          <div className={sidebarCompact ? 'grid gap-0.5' : 'grid gap-1'}>
             {sections.map(section => {
               const active = currentPage === section.index
               return (
-                <div
-                  key={section.index}
-                  ref={node => {
-                    if (node) groupItemRefs.current.set(section.index, node)
-                    else groupItemRefs.current.delete(section.index)
-                  }}
-                  data-grid-mode-nav
-                  data-scroll-group-target={section.index}
-                  className={`group flex min-h-12 items-center rounded-md transition-colors ${
-                    active
-                      ? 'scroll-grid-group-active'
-                      : 'text-foreground/72 hover:bg-accent/85 hover:text-foreground'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    data-grid-mode-nav
-                    aria-current={active ? 'page' : undefined}
-                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2.5 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
-                    onClick={() => selectSection(section.index)}
-                  >
-                    <GroupPreviewIcon items={section.previewItems} />
-                    <span className="min-w-0">
-                      <span className="block truncate text-[13px] font-medium leading-4">
-                        {translate('网格 {index}', { index: section.index + 1 })}
-                      </span>
-                      <span
-                        data-scroll-group-count
-                        className="mt-0.5 block text-[11px] leading-3.5 text-muted-foreground"
+                <ContextMenu key={section.index}>
+                  <ContextMenuTrigger asChild>
+                    <div
+                      ref={node => {
+                        if (node) groupItemRefs.current.set(section.index, node)
+                        else groupItemRefs.current.delete(section.index)
+                      }}
+                      data-grid-mode-nav
+                      data-scroll-group-target={section.index}
+                      className={[
+                        'relative flex items-center rounded-md transition-colors',
+                        sidebarCompact ? 'aspect-square min-h-0 w-full' : 'min-h-11',
+                        active
+                          ? 'scroll-grid-group-active'
+                          : 'text-foreground/72 hover:bg-accent/85 hover:text-foreground',
+                      ].join(' ')}
+                    >
+                      <button
+                        type="button"
+                        data-grid-mode-nav
+                        aria-current={active ? 'page' : undefined}
+                        className={[
+                          'flex min-w-0 flex-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45',
+                          sidebarCompact
+                            ? 'flex-col items-center justify-center gap-1 px-1 py-1.5 text-center'
+                            : 'items-center gap-2 px-2.5 py-1.5 text-left',
+                        ].join(' ')}
+                        onClick={() => selectSection(section.index)}
                       >
-                        {translate('{count} 项', { count: section.itemCount })}
-                      </span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    data-grid-mode-nav
-                    aria-label={translate('删除分组')}
-                    title={translate('删除分组')}
-                    disabled={sections.length <= 1}
-                    className={[
-                      'mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-red-500/12 hover:text-red-600 disabled:pointer-events-none disabled:opacity-0 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/35 dark:hover:text-red-300',
-                      active ? 'opacity-55 hover:opacity-100' : 'opacity-0 group-hover:opacity-75',
-                    ].join(' ')}
-                    onClick={() => onDeleteGroup(section.index)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                        <GroupPreviewIcon items={section.previewItems} />
+                        <span className={sidebarCompact ? 'w-full min-w-0' : 'min-w-0'}>
+                          <span
+                            title={translate('网格 {index}', { index: section.index + 1 })}
+                            className={[
+                              'block truncate font-medium',
+                              sidebarCompact ? 'text-[11px] leading-3.5' : 'text-[13px] leading-4',
+                            ].join(' ')}
+                          >
+                            {translate('网格 {index}', { index: section.index + 1 })}
+                          </span>
+                          {!sidebarCompact ? (
+                            <span
+                              data-scroll-group-count
+                              className="mt-0.5 block text-[11px] leading-3.5 text-muted-foreground"
+                            >
+                              {translate('{count} 项', { count: section.itemCount })}
+                            </span>
+                          ) : null}
+                        </span>
+                      </button>
+                    </div>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent className="w-40">
+                    <ContextMenuItem
+                      disabled={sections.length <= 1}
+                      className="rounded-md text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/20 dark:focus:text-red-100"
+                      onSelect={() => onDeleteGroup(section.index)}
+                    >
+                      {translate('删除分组')}
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
               )
             })}
           </div>
+        </div>
+
+        <div
+          className={[
+            'scroll-grid-sidebar-footer flex h-12 shrink-0 items-center border-t',
+            sidebarCompact ? 'justify-center px-1' : 'justify-end px-3',
+          ].join(' ')}
+        >
+          <button
+            type="button"
+            data-grid-mode-nav
+            aria-label={translate(sidebarCompact ? '展开侧栏' : '收起侧栏')}
+            title={translate(sidebarCompact ? '展开侧栏' : '收起侧栏')}
+            aria-pressed={sidebarCompact}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+            onClick={onToggleSidebarCompact}
+          >
+            {sidebarCompact ? (
+              <PanelLeftOpen className="h-4 w-4" />
+            ) : (
+              <PanelLeftClose className="h-4 w-4" />
+            )}
+          </button>
         </div>
       </aside>
 

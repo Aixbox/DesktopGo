@@ -203,6 +203,7 @@ export function Launchpad() {
 
   const [isAiOrganizeMode, setIsAiOrganizeMode] = useState(false)
   const [isAiOrganizeSidebarOpen, setIsAiOrganizeSidebarOpen] = useState(false)
+  const [isScrollSidebarCompact, setIsScrollSidebarCompact] = useState(false)
   const [aiOrganizeApplyRequestToken, setAiOrganizeApplyRequestToken] = useState(0)
   const [aiOrganizeRunState, setAiOrganizeRunState] = useState<AiOrganizePanelRunState>({
     canApply: false,
@@ -1421,9 +1422,13 @@ export function Launchpad() {
         <div
           ref={launchpadSurfaceRef}
           tabIndex={-1}
-          className={`launchpad-bg relative flex h-screen w-screen select-none flex-col items-center justify-center ${
-            launchpadGridViewMode === 'scroll' ? 'launchpad-scroll-layout' : ''
-          }`}
+          className={[
+            'launchpad-bg relative flex h-screen w-screen select-none flex-col items-center justify-center',
+            launchpadGridViewMode === 'scroll' ? 'launchpad-scroll-layout' : '',
+            launchpadGridViewMode === 'scroll' && isScrollSidebarCompact
+              ? 'launchpad-scroll-sidebar-compact'
+              : '',
+          ].join(' ')}
           onPointerDownCapture={handleSurfacePointerDownCapture}
           onPointerDown={handleBackgroundPointerDown}
           onPointerUp={handleBackgroundPointerUp}
@@ -1781,6 +1786,8 @@ export function Launchpad() {
               <ScrollableIconGrid
                 icons={icons}
                 layoutResetToken={layoutResetToken}
+                sidebarCompact={isScrollSidebarCompact}
+                onToggleSidebarCompact={() => setIsScrollSidebarCompact(current => !current)}
                 importPlacementRequest={importPlacementRequest}
                 addIconDisabled={isImportingDrop}
                 onAddIcon={handleAddIcons}
