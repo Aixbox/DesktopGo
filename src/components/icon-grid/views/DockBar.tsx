@@ -32,6 +32,7 @@ import {
 } from './FolderVisuals'
 
 interface DockBarProps {
+  alignToContentColumn?: boolean
   displaySlots: Array<string | null>
   itemById: Map<string, GridItem>
   dockPreviewIndex: number | null
@@ -155,6 +156,7 @@ const resolveIndicatorMetrics = (
 }
 
 export function DockBar({
+  alignToContentColumn = false,
   displaySlots,
   itemById,
   dockPreviewIndex,
@@ -573,13 +575,17 @@ export function DockBar({
     <div
       ref={bindDockContainerRef}
       data-dock
-      className="pointer-events-auto absolute bottom-5 left-1/2 z-20 -translate-x-1/2"
+      className={`pointer-events-auto absolute bottom-5 z-20 ${
+        alignToContentColumn ? 'scroll-grid-dock' : 'left-1/2 -translate-x-1/2'
+      }`}
     >
       <div
         ref={panelRef}
         className="launchpad-glass-panel relative overflow-hidden rounded-[28px] px-4 py-3 shadow-[0_20px_60px_rgba(15,23,42,0.18)] transition-[width] duration-[220ms] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]"
         style={{
-          maxWidth: `calc(100vw - ${DOCK_PANEL_VIEWPORT_MARGIN * 2}px)`,
+          maxWidth: alignToContentColumn
+            ? `calc(100vw - var(--scroll-grid-sidebar-width) - ${DOCK_PANEL_VIEWPORT_MARGIN * 2}px)`
+            : `calc(100vw - ${DOCK_PANEL_VIEWPORT_MARGIN * 2}px)`,
           transitionTimingFunction: DOCK_CONTAINER_EASING,
         }}
       >
@@ -736,11 +742,15 @@ export function DockBar({
                               >
                                 <motion.div
                                   layoutId={
-                                    sharedLayoutActive ? getFolderSharedLayoutId(item.id) : undefined
+                                    sharedLayoutActive
+                                      ? getFolderSharedLayoutId(item.id)
+                                      : undefined
                                   }
                                   transition={FOLDER_SHARED_LAYOUT_TRANSITION}
                                   className={`${DOCK_FOLDER_SURFACE_CLASS} flex items-center justify-center transition-all duration-150 ${
-                                    folderPreview || folderOpen ? DOCK_FOLDER_SURFACE_ACTIVE_CLASS : ''
+                                    folderPreview || folderOpen
+                                      ? DOCK_FOLDER_SURFACE_ACTIVE_CLASS
+                                      : ''
                                   }`}
                                   style={{
                                     width: `${singleSlotFolderMetrics.surfaceSize}px`,

@@ -1433,15 +1433,15 @@ export function ScrollableIconGrid({
       const itemCount = pageSlots.filter(
         slot => typeof slot === 'string' && slot !== DRAG_HOLE_ID
       ).length
-      const previewId = pageSlots.find(
-        (slot): slot is string => typeof slot === 'string' && slot !== DRAG_HOLE_ID
-      )
-
       return {
         index,
         itemCount,
         entries,
-        previewItem: previewId ? (outerViewItemById.get(previewId) ?? null) : null,
+        previewItems: pageSlots
+          .filter((slot): slot is string => typeof slot === 'string' && slot !== DRAG_HOLE_ID)
+          .map(id => outerViewItemById.get(id))
+          .filter((item): item is GridItem => Boolean(item))
+          .slice(0, 4),
       }
     })
   }, [
@@ -1822,7 +1822,7 @@ export function ScrollableIconGrid({
       <div
         className={
           launchpadGridViewMode === 'scroll'
-            ? 'relative h-full w-full'
+            ? 'scroll-grid-shell relative h-full w-full'
             : `relative h-full w-full px-16 pt-24 ${dockEnabled ? 'pb-32' : 'pb-12'}`
         }
         onWheel={launchpadGridViewMode === 'paged' ? handleWheelPageSwitch : undefined}
@@ -1960,6 +1960,7 @@ export function ScrollableIconGrid({
 
         {dockEnabled ? (
           <DockBar
+            alignToContentColumn={launchpadGridViewMode === 'scroll'}
             displaySlots={dockRenderSlots}
             itemById={outerViewItemById}
             dockPreviewIndex={dragState?.dockPreviewIndex ?? null}

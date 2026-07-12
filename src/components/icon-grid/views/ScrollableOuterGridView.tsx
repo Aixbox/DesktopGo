@@ -1,5 +1,7 @@
 import { AppWindow, Folder as FolderIcon, Plus, Trash2 } from 'lucide-react'
 import {
+  useEffect,
+  useMemo,
   useRef,
   type MouseEvent as ReactMouseEvent,
   type MutableRefObject,
@@ -26,7 +28,7 @@ export interface ScrollGridSection {
   index: number
   entries: PageAnchorEntry[]
   itemCount: number
-  previewItem: GridItem | null
+  previewItems: GridItem[]
 }
 
 interface ScrollableOuterGridViewProps {
@@ -67,35 +69,57 @@ interface ScrollableOuterGridViewProps {
   reorderAnimationMs: number
 }
 
-function GroupPreviewIcon({ item }: { item: GridItem | null }) {
-  if (!item) {
+function GroupPreviewGlyph({ item, compact = false }: { item: GridItem; compact?: boolean }) {
+  const iconClassName = compact ? 'h-2.5 w-2.5' : 'h-4 w-4'
+  const imageClassName = compact ? 'h-3 w-3 object-contain' : 'h-5 w-5 object-contain'
+
+  if (item.kind === 'folder') {
     return (
-      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-foreground/6 text-muted-foreground dark:bg-white/8">
-        <AppWindow className="h-3.5 w-3.5" />
+      <span className="flex h-full w-full items-center justify-center text-blue-600 dark:text-blue-200">
+        <FolderIcon className={iconClassName} />
       </span>
     )
   }
 
-  if (item.kind === 'folder') {
+  if (item.icon.icon_base64) {
     return (
-      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-500/10 text-blue-600 dark:bg-blue-400/15 dark:text-blue-200">
-        <FolderIcon className="h-3.5 w-3.5" />
+      <span className="flex h-full w-full items-center justify-center">
+        <img src={item.icon.icon_base64} alt="" className={imageClassName} draggable={false} />
       </span>
     )
   }
 
   return (
-    <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-md bg-foreground/6 dark:bg-white/8">
-      {item.icon.icon_base64 ? (
-        <img
-          src={item.icon.icon_base64}
-          alt=""
-          className="h-5 w-5 object-contain"
-          draggable={false}
-        />
-      ) : (
-        <AppWindow className="h-3.5 w-3.5 text-muted-foreground" />
-      )}
+    <span className="flex h-full w-full items-center justify-center text-muted-foreground">
+      <AppWindow className={iconClassName} />
+    </span>
+  )
+}
+
+function GroupPreviewIcon({ items }: { items: GridItem[] }) {
+  if (items.length === 0) {
+    return (
+      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-foreground/6 text-muted-foreground dark:bg-white/8">
+        <AppWindow className="h-3.5 w-3.5" />
+      </span>
+    )
+  }
+
+  if (items.length === 1) {
+    return (
+      <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-md bg-foreground/6 dark:bg-white/8">
+        <GroupPreviewGlyph item={items[0]} />
+      </span>
+    )
+  }
+
+  return (
+    <span className="grid h-8 w-8 grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-md bg-foreground/6 p-1 dark:bg-white/8">
+      {items.map(item => (
+        <span key={item.kind === 'folder' ? item.id : item.key} className="overflow-hidden">
+          <GroupPreviewGlyph item={item} compact />
+        </span>
+      ))}
     </span>
   )
 }
@@ -137,8 +161,11 @@ export function ScrollableOuterGridView({
   bindGridPageRef,
   reorderAnimationMs,
 }: ScrollableOuterGridViewProps) {
-  const highlightedOuterItemIdSet = useRef(new Set<string>())
-  highlightedOuterItemIdSet.current = new Set(highlightedOuterItemIds)
+  const groupItemRefs = useRef(new Map<number, HTMLDivElement>())
+  const highlightedOuterItemIdSet = useMemo(
+    () => new Set(highlightedOuterItemIds),
+    [highlightedOuterItemIds]
+  )
   const titleLineCount = useIconStore(state => state.titleLineCount)
   const addIconTitleMetrics = getIconGridTitleMetrics(titleLineCount)
   const addIconLabel = translate('\u6dfb\u52a0\u56fe\u6807')
@@ -162,15 +189,22 @@ export function ScrollableOuterGridView({
     containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      groupItemRefs.current.get(currentPage)?.scrollIntoView({ block: 'nearest' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [currentPage])
+
   return (
-    <div className="grid h-full w-full min-w-0 grid-cols-[11rem_minmax(0,1fr)] overflow-hidden">
+    <div className="grid h-full w-full min-w-0 grid-cols-[var(--scroll-grid-sidebar-width)_minmax(0,1fr)] overflow-hidden">
       <aside
         data-grid-mode-nav
         data-no-window-drag="true"
-        className="flex h-full min-h-0 flex-col border-r border-border/60 bg-background/28 dark:border-white/12 dark:bg-black/14"
+        className="scroll-grid-sidebar flex h-full min-h-0 flex-col border-r"
       >
-        <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/45 px-3 dark:border-white/10">
-          <span className="truncate text-xs font-semibold text-foreground/78">
+        <div className="scroll-grid-sidebar-header flex h-12 shrink-0 items-center justify-between border-b px-3">
+          <span className="truncate text-[13px] font-semibold text-foreground/82">
             {translate('网格分组')}
           </span>
           <button
@@ -178,40 +212,48 @@ export function ScrollableOuterGridView({
             data-grid-mode-nav
             aria-label={translate('添加分组')}
             title={translate('添加分组')}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
             onClick={onAddGroup}
           >
             <Plus className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-          <div className="grid gap-1">
+        <div className="scroll-grid-sidebar-scroll min-h-0 flex-1 overflow-y-auto px-2 py-2.5">
+          <div className="grid gap-1.5">
             {sections.map(section => {
               const active = currentPage === section.index
               return (
                 <div
                   key={section.index}
+                  ref={node => {
+                    if (node) groupItemRefs.current.set(section.index, node)
+                    else groupItemRefs.current.delete(section.index)
+                  }}
                   data-grid-mode-nav
                   data-scroll-group-target={section.index}
-                  className={`group flex min-h-11 items-center rounded-md border-l-2 transition-colors ${
+                  className={`group flex min-h-12 items-center rounded-md transition-colors ${
                     active
-                      ? 'border-blue-500 bg-blue-500/10 text-blue-700 dark:border-blue-300 dark:bg-blue-400/12 dark:text-blue-200'
-                      : 'border-transparent text-foreground/72 hover:bg-accent hover:text-foreground'
+                      ? 'scroll-grid-group-active'
+                      : 'text-foreground/72 hover:bg-accent/85 hover:text-foreground'
                   }`}
                 >
                   <button
                     type="button"
                     data-grid-mode-nav
-                    className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+                    aria-current={active ? 'page' : undefined}
+                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2.5 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
                     onClick={() => selectSection(section.index)}
                   >
-                    <GroupPreviewIcon item={section.previewItem} />
+                    <GroupPreviewIcon items={section.previewItems} />
                     <span className="min-w-0">
-                      <span className="block truncate text-xs font-medium">
+                      <span className="block truncate text-[13px] font-medium leading-4">
                         {translate('网格 {index}', { index: section.index + 1 })}
                       </span>
-                      <span className="block text-[10px] text-muted-foreground">
+                      <span
+                        data-scroll-group-count
+                        className="mt-0.5 block text-[11px] leading-3.5 text-muted-foreground"
+                      >
                         {translate('{count} 项', { count: section.itemCount })}
                       </span>
                     </span>
@@ -222,7 +264,10 @@ export function ScrollableOuterGridView({
                     aria-label={translate('删除分组')}
                     title={translate('删除分组')}
                     disabled={sections.length <= 1}
-                    className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-red-500/12 hover:text-red-600 disabled:pointer-events-none disabled:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/35 dark:hover:text-red-300"
+                    className={[
+                      'mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-red-500/12 hover:text-red-600 disabled:pointer-events-none disabled:opacity-0 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/35 dark:hover:text-red-300',
+                      active ? 'opacity-55 hover:opacity-100' : 'opacity-0 group-hover:opacity-75',
+                    ].join(' ')}
                     onClick={() => onDeleteGroup(section.index)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -236,7 +281,7 @@ export function ScrollableOuterGridView({
 
       <div
         ref={containerRef}
-        className={`min-h-0 min-w-0 overflow-x-hidden overflow-y-auto px-6 pt-24 [scrollbar-gutter:stable] ${
+        className={`scroll-grid-content-scroll min-h-0 min-w-0 overflow-x-hidden overflow-y-auto px-6 pt-24 ${
           dockEnabled ? 'pb-32' : 'pb-12'
         }`}
       >
@@ -258,7 +303,7 @@ export function ScrollableOuterGridView({
           >
             {entries.map(entry => {
               const hideItem = hiddenOuterItemIds.includes(entry.id)
-              const highlightedItem = highlightedOuterItemIdSet.current.has(entry.id)
+              const highlightedItem = highlightedOuterItemIdSet.has(entry.id)
               const folderPreview =
                 (dragContext === 'outer' && dragFolderPreviewTargetId === entry.id) ||
                 folderPreviewFreezeTargetId === entry.id ||

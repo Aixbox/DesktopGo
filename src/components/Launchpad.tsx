@@ -1421,7 +1421,9 @@ export function Launchpad() {
         <div
           ref={launchpadSurfaceRef}
           tabIndex={-1}
-          className="launchpad-bg relative flex h-screen w-screen select-none flex-col items-center justify-center"
+          className={`launchpad-bg relative flex h-screen w-screen select-none flex-col items-center justify-center ${
+            launchpadGridViewMode === 'scroll' ? 'launchpad-scroll-layout' : ''
+          }`}
           onPointerDownCapture={handleSurfacePointerDownCapture}
           onPointerDown={handleBackgroundPointerDown}
           onPointerUp={handleBackgroundPointerUp}
@@ -1487,7 +1489,7 @@ export function Launchpad() {
 
           <div
             data-search-placeholder
-            className="absolute inset-x-0 top-6 z-40 mx-auto w-full max-w-2xl px-6"
+            className="launchpad-search-shell absolute top-6 z-40 mx-auto w-full max-w-2xl px-6"
           >
             <div className="relative min-w-0">
               <input
