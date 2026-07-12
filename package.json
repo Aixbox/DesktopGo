@@ -11,6 +11,7 @@
     "build:installers": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-installers.ps1",
     "preview": "vite preview",
     "tauri": "tauri",
+    "pretest": "node --experimental-strip-types --import ./scripts/register-ts-test-loader.mjs src/components/icon-grid/scroll/scrollTopLevelLayout.test.js",
     "test": "node --experimental-strip-types src/lib/iconManager.test.js && node --experimental-strip-types src/lib/theme.test.js && node --experimental-strip-types src/lib/shellContextMenu.test.js && node --experimental-strip-types src/lib/launchpadOpenFocus.test.js && node --experimental-strip-types src/components/icon-grid/domain/dockDragPolicy.test.js && node --experimental-strip-types src/components/icon-grid/hooks/dragPointerCapture.test.js && node --experimental-strip-types src/components/icon-grid/domain/layoutHydrationPolicy.test.js && node --experimental-strip-types src/components/icon-grid/domain/topLevelLayout.test.js && node --experimental-strip-types --import ./scripts/register-ts-test-loader.mjs src/components/icon-grid/domain/dropPolicy.test.js && node --experimental-strip-types --import ./scripts/register-ts-test-loader.mjs src/lib/aiOrganize.test.js",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "lint:fix": "eslint . --ext ts,tsx --fix",

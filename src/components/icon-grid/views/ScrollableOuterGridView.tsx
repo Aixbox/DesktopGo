@@ -7,6 +7,12 @@ import {
 } from 'react'
 import { Icon } from '../../Icon'
 import { translate } from '../../../lib/i18n'
+import { useIconStore } from '../../../stores/iconStore'
+import {
+  getIconGridTitleMetrics,
+  ICON_GRID_TILE_PADDING_Y,
+  ICON_GRID_TITLE_GAP,
+} from '../../../types'
 import type { FolderSize, GridItem } from '../model'
 import type { PageAnchorEntry } from '../domain/topLevelLayout'
 import { FolderCreatePreview } from './FolderVisuals'
@@ -47,6 +53,8 @@ interface ScrollableOuterGridViewProps {
   activeFolderSharedLayoutId: string | null
   onActivePageChange: (page: number) => void
   onAddGroup: () => void
+  addIconDisabled: boolean
+  onAddIcon?: () => void
   onDeleteGroup: (page: number) => void
   onToggleSelectIcon: (key: string) => void
   onTilePointerDown: (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => void
@@ -79,7 +87,12 @@ function GroupPreviewIcon({ item }: { item: GridItem | null }) {
   return (
     <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-md bg-foreground/6 dark:bg-white/8">
       {item.icon.icon_base64 ? (
-        <img src={item.icon.icon_base64} alt="" className="h-5 w-5 object-contain" draggable={false} />
+        <img
+          src={item.icon.icon_base64}
+          alt=""
+          className="h-5 w-5 object-contain"
+          draggable={false}
+        />
       ) : (
         <AppWindow className="h-3.5 w-3.5 text-muted-foreground" />
       )}
@@ -111,6 +124,8 @@ export function ScrollableOuterGridView({
   activeFolderSharedLayoutId,
   onActivePageChange,
   onAddGroup,
+  addIconDisabled,
+  onAddIcon,
   onDeleteGroup,
   onToggleSelectIcon,
   onTilePointerDown,
@@ -124,10 +139,21 @@ export function ScrollableOuterGridView({
 }: ScrollableOuterGridViewProps) {
   const highlightedOuterItemIdSet = useRef(new Set<string>())
   highlightedOuterItemIdSet.current = new Set(highlightedOuterItemIds)
+  const titleLineCount = useIconStore(state => state.titleLineCount)
+  const addIconTitleMetrics = getIconGridTitleMetrics(titleLineCount)
+  const addIconLabel = translate('\u6dfb\u52a0\u56fe\u6807')
   const entries = activeSection?.entries ?? []
+  const showAddIcon = activeSection !== null
+  const addIconSlotIndex = entries.reduce((lastIndex, entry) => {
+    const footprintEnd = (entry.row + entry.span.rows - 1) * columns + entry.col + entry.span.cols
+    return Math.max(lastIndex, footprintEnd)
+  }, 0)
+  const addIconRow = Math.floor(addIconSlotIndex / Math.max(1, columns))
+  const addIconCol = addIconSlotIndex % Math.max(1, columns)
   const gridRows = Math.max(
     1,
-    entries.reduce((maxRow, entry) => Math.max(maxRow, entry.row + entry.span.rows), 1)
+    entries.reduce((maxRow, entry) => Math.max(maxRow, entry.row + entry.span.rows), 1),
+    showAddIcon ? addIconRow + 1 : 1
   )
   const gridHeight = gridRows * itemHeight + Math.max(0, gridRows - 1) * gridGap
 
@@ -244,7 +270,9 @@ export function ScrollableOuterGridView({
                   ref={node => {
                     bindTileRef(entry.id, node)
                   }}
-                  className="relative justify-self-center self-start"
+                  className={`relative justify-self-center self-start transition-opacity duration-150 ${
+                    hideItem ? 'opacity-0' : 'opacity-100'
+                  }`}
                   style={{
                     gridColumn: `${entry.col + 1} / span ${entry.span.cols}`,
                     gridRow: `${entry.row + 1} / span ${entry.span.rows}`,
@@ -254,9 +282,7 @@ export function ScrollableOuterGridView({
                 >
                   {entry.item.kind === 'icon' ? (
                     <div
-                      className={`relative touch-none transition-opacity duration-150 ${
-                        hideItem ? 'opacity-0' : 'opacity-100'
-                      }`}
+                      className="relative touch-none"
                       onPointerDown={event => onTilePointerDown(event, entry.id)}
                       onClickCapture={onTileClickCapture}
                     >
@@ -304,6 +330,58 @@ export function ScrollableOuterGridView({
                 </div>
               )
             })}
+            {showAddIcon ? (
+              <button
+                type="button"
+                data-no-window-drag="true"
+                aria-label={addIconLabel}
+                title={addIconLabel}
+                disabled={addIconDisabled || !onAddIcon}
+                className="icon-item group relative flex flex-col items-center justify-start justify-self-center self-start rounded-2xl border-none px-3 text-muted-foreground shadow-none transition-all duration-200 hover:bg-foreground/6 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 active:bg-foreground/10 disabled:pointer-events-none disabled:opacity-45 dark:hover:bg-white/10 dark:active:bg-white/20"
+                style={{
+                  gridColumn: addIconCol + 1,
+                  gridRow: addIconRow + 1,
+                  width: `${itemWidth}px`,
+                  height: `${itemHeight}px`,
+                  paddingTop: ICON_GRID_TILE_PADDING_Y,
+                  paddingBottom: ICON_GRID_TILE_PADDING_Y,
+                  rowGap: ICON_GRID_TITLE_GAP,
+                }}
+                onPointerDown={event => event.stopPropagation()}
+                onClick={onAddIcon}
+              >
+                <span
+                  className="icon-image flex flex-1 items-center justify-center overflow-hidden"
+                  style={{ width: iconConfig.imgSize, height: iconConfig.imgSize }}
+                >
+                  <span
+                    className="flex shrink-0 items-center justify-center rounded-md border border-dashed border-border/80 bg-foreground/3 transition-colors group-hover:border-foreground/35 group-hover:bg-accent dark:border-white/18 dark:bg-white/4"
+                    style={{
+                      width: iconConfig.imgSize,
+                      height: iconConfig.imgSize,
+                    }}
+                  >
+                    <Plus className="h-5 w-5" />
+                  </span>
+                </span>
+                <span
+                  className="icon-label text-center text-[11px] leading-[13px] text-foreground drop-shadow-md"
+                  style={{
+                    maxWidth: itemWidth - 10,
+                    height: addIconTitleMetrics.height,
+                    display: addIconTitleMetrics.singleLine ? 'block' : '-webkit-box',
+                    WebkitLineClamp: addIconTitleMetrics.lineClamp,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: addIconTitleMetrics.singleLine ? 'nowrap' : 'normal',
+                    overflowWrap: 'anywhere',
+                  }}
+                >
+                  {addIconLabel}
+                </span>
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

@@ -64,6 +64,8 @@ import {
 interface IconGridProps {
   icons: DesktopIcon[]
   layoutResetToken: number
+  addIconDisabled?: boolean
+  onAddIcon?: () => void
   importPlacementRequest?: {
     token: number
     iconKeys: string[]
@@ -88,6 +90,20 @@ const REORDER_ANIMATION_MS = 220
 const FOLDER_SHARED_LAYOUT_WINDOW_MS = 320
 const IMPORT_HIGHLIGHT_MS = 4200
 const REORDER_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
+const readCurrentTranslate = (node: HTMLElement): { x: number; y: number } => {
+  const transform = window.getComputedStyle(node).transform
+  if (!transform || transform === 'none') return { x: 0, y: 0 }
+
+  try {
+    const matrix = new DOMMatrixReadOnly(transform)
+    return {
+      x: Number.isFinite(matrix.m41) ? matrix.m41 : 0,
+      y: Number.isFinite(matrix.m42) ? matrix.m42 : 0,
+    }
+  } catch {
+    return { x: 0, y: 0 }
+  }
+}
 const fitCount = (container: number, item: number) => {
   if (item <= 0 || container <= item) return 1
   return Math.floor((container - item) / (item + GRID_GAP)) + 1
@@ -191,6 +207,8 @@ const isSuspiciousSingleCellPageGeometry = ({
 export function ScrollableIconGrid({
   icons,
   layoutResetToken,
+  addIconDisabled = false,
+  onAddIcon,
   importPlacementRequest,
 }: IconGridProps) {
   const {
@@ -815,11 +833,9 @@ export function ScrollableIconGrid({
       if (launchpadGridViewMode === 'scroll') {
         const style = window.getComputedStyle(el)
         const horizontalPadding =
-          Number.parseFloat(style.paddingLeft || '0') +
-          Number.parseFloat(style.paddingRight || '0')
+          Number.parseFloat(style.paddingLeft || '0') + Number.parseFloat(style.paddingRight || '0')
         const verticalPadding =
-          Number.parseFloat(style.paddingTop || '0') +
-          Number.parseFloat(style.paddingBottom || '0')
+          Number.parseFloat(style.paddingTop || '0') + Number.parseFloat(style.paddingBottom || '0')
         width = Math.max(0, width - horizontalPadding)
         height = Math.max(0, height - verticalPadding)
       }
@@ -1526,9 +1542,12 @@ export function ScrollableIconGrid({
         tileAnimationTimerRef.current.delete(id)
       }
 
+      const currentTranslate = readCurrentTranslate(node)
+      const startX = deltaX + currentTranslate.x
+      const startY = deltaY + currentTranslate.y
       node.style.transition = 'none'
       node.style.willChange = 'transform'
-      node.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0px)`
+      node.style.transform = `translate3d(${startX}px, ${startY}px, 0px)`
       void node.offsetWidth
       node.style.transition = `transform ${REORDER_ANIMATION_MS}ms ${REORDER_EASING}`
       node.style.transform = 'translate3d(0px, 0px, 0px)'
@@ -1833,6 +1852,8 @@ export function ScrollableIconGrid({
             activeFolderSharedLayoutId={activeFolderSharedLayoutId}
             onActivePageChange={handleScrollGridActivePageChange}
             onAddGroup={handleAddScrollGroup}
+            addIconDisabled={addIconDisabled}
+            onAddIcon={onAddIcon}
             onDeleteGroup={handleDeleteScrollGroup}
             onToggleSelectIcon={toggleSelectIcon}
             onTilePointerDown={handleTilePointerDown}

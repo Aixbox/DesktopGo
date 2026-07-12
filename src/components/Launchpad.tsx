@@ -12,6 +12,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import { Bot, Check, ChevronDown, Download, FileIcon, Minus, Pin, X } from 'lucide-react'
@@ -45,7 +46,13 @@ import {
 } from '@/components/ui/context-menu'
 import { useToast } from '@/components/ui/toast'
 import { buildIconSelectionKey, useIconStore } from '@/stores/iconStore'
-import type { DesktopIcon, IconSize, LaunchpadGridViewMode, TitleLineCount, WindowMode } from '@/types'
+import type {
+  DesktopIcon,
+  IconSize,
+  LaunchpadGridViewMode,
+  TitleLineCount,
+  WindowMode,
+} from '@/types'
 import { IconGrid } from './IconGrid'
 import { AiOrganizePanel, type AiOrganizePanelRunState } from './ai/AiOrganizePanel'
 
@@ -432,6 +439,82 @@ export function Launchpad() {
     syncWindowAppearance,
     syncWindowPersistentState,
   ])
+
+  const handleAddIcons = useCallback(async () => {
+    try {
+      const selected = await openDialog({
+        multiple: true,
+        directory: false,
+        title: translate('\u6dfb\u52a0\u56fe\u6807'),
+      })
+      if (!selected) return
+      const paths = Array.isArray(selected) ? selected : [selected]
+      if (paths.length === 0) return
+
+      setIsImportingDrop(true)
+      const previousIconKeySet = new Set(icons.map(buildIconSelectionKey))
+      try {
+        const savedCustomAppDir = (await getSetting('customAppDir')).trim()
+        const result = await invoke<ImportDroppedPathsResult>('import_dropped_paths', {
+          paths,
+          customAppDir: savedCustomAppDir || null,
+        })
+        await fetchIcons()
+
+        if (result.imported_count > 0) {
+          const nextIcons = useIconStore.getState().icons
+          const importedIconKeys = nextIcons
+            .map(icon => buildIconSelectionKey(icon))
+            .filter(key => !previousIconKeySet.has(key))
+
+          if (importedIconKeys.length > 0) {
+            importPlacementTokenRef.current += 1
+            setImportPlacementRequest({
+              token: importPlacementTokenRef.current,
+              iconKeys: importedIconKeys,
+            })
+          }
+        }
+
+        const message = translate(
+          '\u5bfc\u5165\u5b8c\u6210\uff1a\u65b0\u589e {imported} \u9879\uff0c\u91cd\u590d {duplicate} \u9879\uff0c\u65e0\u6548 {invalid} \u9879\u3002',
+          {
+            imported: result.imported_count,
+            duplicate: result.duplicate_count,
+            invalid: result.invalid_count,
+          }
+        )
+        const notify = result.imported_count > 0 ? toast.success : toast.info
+        notify(message, {
+          key: 'launchpad-add-icons',
+          title: translate('\u542f\u52a8\u53f0'),
+          duration: result.imported_count > 0 ? 3600 : 3200,
+        })
+      } catch (error) {
+        console.error('Failed to import selected paths:', error)
+        toast.error(
+          translate('\u5bfc\u5165\u5931\u8d25\uff1a{error}', {
+            error: String(error),
+          }),
+          {
+            key: 'launchpad-add-icons',
+            title: translate('\u542f\u52a8\u53f0'),
+          }
+        )
+      } finally {
+        setIsImportingDrop(false)
+      }
+    } catch (error) {
+      console.error('Failed to choose icon paths:', error)
+      toast.error(
+        translate('\u9009\u62e9\u6587\u4ef6\u5931\u8d25\uff1a{error}', { error: String(error) }),
+        {
+          key: 'launchpad-add-icons',
+          title: translate('\u542f\u52a8\u53f0'),
+        }
+      )
+    }
+  }, [fetchIcons, icons, toast])
 
   useEffect(() => {
     let disposed = false
@@ -1697,6 +1780,8 @@ export function Launchpad() {
                 icons={icons}
                 layoutResetToken={layoutResetToken}
                 importPlacementRequest={importPlacementRequest}
+                addIconDisabled={isImportingDrop}
+                onAddIcon={handleAddIcons}
               />
             </Suspense>
           ) : (

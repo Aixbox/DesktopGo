@@ -257,7 +257,9 @@ export function OuterGridView({
               ref={node => {
                 bindTileRef(entry.id, node)
               }}
-              className="relative justify-self-center self-start"
+              className={`relative justify-self-center self-start transition-opacity duration-150 ${
+                hideItem ? 'opacity-0' : 'opacity-100'
+              }`}
               style={{
                 gridColumn: `${entry.col + 1} / span ${entry.span.cols}`,
                 gridRow: `${entry.row + 1} / span ${entry.span.rows}`,
@@ -267,9 +269,7 @@ export function OuterGridView({
             >
               {entry.item.kind === 'icon' ? (
                 <div
-                  className={`relative touch-none transition-opacity duration-150 ${
-                    hideItem ? 'opacity-0' : 'opacity-100'
-                  }`}
+                  className="relative touch-none"
                   onPointerDown={event => onTilePointerDown(event, entry.id)}
                   onClickCapture={onTileClickCapture}
                 >

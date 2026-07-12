@@ -35,7 +35,10 @@ import {
   getFolderPreviewSlotSize,
 } from '../views/FolderVisuals'
 import { normalizeOuterSlots } from '../domain/topLevelLayout'
-import { compactOuterSlotsWithinPages } from './scrollTopLevelLayout'
+import {
+  compactOuterSlotsWithinPages,
+  preserveCompactPreviewOrderForCommit,
+} from './scrollTopLevelLayout'
 
 interface IconConfigLike {
   imgSize: number
@@ -440,6 +443,22 @@ export function useScrollableDragDropCommit({
     setFrozenOuterOrder(null)
   }
 
+  const resolveCompactPreviewResult = (
+    base: GridItem[],
+    session: DragState
+  ): { items: GridItem[]; slots: Array<string | null> } | null => {
+    if (outerDropMode !== 'compact-page' || session.previewSlotIndex === null) return null
+    const draggingIds = session.draggingIds.length > 0 ? session.draggingIds : [session.draggingId]
+    if (!draggingIds.every(id => session.workingOrder.includes(id))) return null
+
+    const previewSlots = preserveCompactPreviewOrderForCommit(session.workingOrder, base)
+    if (!previewSlots) return null
+
+    return {
+      items: base,
+      slots: previewSlots,
+    }
+  }
   const finishDrag = (pointerId: number): boolean => {
     const current = dragRef.current
     if (!current || current.pointerId !== pointerId) return false
@@ -502,7 +521,9 @@ export function useScrollableDragDropCommit({
 
       const addToFolderTargetId =
         current.folderPreviewTargetId ??
-        (current.hoverTargetId && current.hoverIou >= OUTER_DRAG_RULES.folderOverlapThreshold
+        (current.hoverTargetId &&
+        current.hoverZone === 'center' &&
+        current.hoverIou >= OUTER_DRAG_RULES.folderOverlapThreshold
           ? current.hoverTargetId
           : null)
       const existingFolderTarget = addToFolderTargetId ? topLevelMap.get(addToFolderTargetId) : null
@@ -522,6 +543,8 @@ export function useScrollableDragDropCommit({
       const originalOuterSlots = outerSlotsRef.current
       const originalDockKeys = dockKeysRef.current
       const baseForDrop = extractDraggedIconsFromSourceFolders(originalItems, current)
+      const compactPreviewResult =
+        targetContext === 'outer' ? resolveCompactPreviewResult(baseForDrop, current) : null
 
       if (canAddToExistingFolder) {
         setFolderPreviewFreezeTargetId(null)
@@ -550,16 +573,18 @@ export function useScrollableDragDropCommit({
         } else {
           setHiddenOuterItemIds([])
         }
-        const result = applyMultiOuterDropFromSession({
-          base: baseForDrop,
-          session: current,
-          pageSize: pageSizeRef.current,
-          columns,
-          resolveNearestSlotIndexByContext,
-          mode: targetContext === 'dock' ? 'linear' : outerDropMode,
-          sourceSlots: targetContext === 'dock' ? originalDockKeys : originalOuterSlots,
-          minPageCount: targetContext === 'outer' ? getOuterMinPageCount?.() : undefined,
-        })
+        const result =
+          compactPreviewResult ??
+          applyMultiOuterDropFromSession({
+            base: baseForDrop,
+            session: current,
+            pageSize: pageSizeRef.current,
+            columns,
+            resolveNearestSlotIndexByContext,
+            mode: targetContext === 'dock' ? 'linear' : outerDropMode,
+            sourceSlots: targetContext === 'dock' ? originalDockKeys : originalOuterSlots,
+            minPageCount: targetContext === 'outer' ? getOuterMinPageCount?.() : undefined,
+          })
         commitTopLevelSessionResult(
           current,
           originalItems,
@@ -649,16 +674,18 @@ export function useScrollableDragDropCommit({
         scheduleFolderCreateTransition(null)
         setHiddenOuterItemIds([])
         setFrozenOuterOrder(null)
-        const result = applyOuterDropFromSession({
-          base: baseForDrop,
-          session: current,
-          pageSize: pageSizeRef.current,
-          columns,
-          resolveNearestSlotIndexByContext,
-          mode: targetContext === 'dock' ? 'linear' : outerDropMode,
-          sourceSlots: targetContext === 'dock' ? originalDockKeys : originalOuterSlots,
-          minPageCount: targetContext === 'outer' ? getOuterMinPageCount?.() : undefined,
-        })
+        const result =
+          compactPreviewResult ??
+          applyOuterDropFromSession({
+            base: baseForDrop,
+            session: current,
+            pageSize: pageSizeRef.current,
+            columns,
+            resolveNearestSlotIndexByContext,
+            mode: targetContext === 'dock' ? 'linear' : outerDropMode,
+            sourceSlots: targetContext === 'dock' ? originalDockKeys : originalOuterSlots,
+            minPageCount: targetContext === 'outer' ? getOuterMinPageCount?.() : undefined,
+          })
         commitTopLevelSessionResult(
           current,
           originalItems,
