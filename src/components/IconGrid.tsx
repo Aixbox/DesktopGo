@@ -93,7 +93,9 @@ const buildGeometryKey = (windowMode: string, iconSize: string, dockEnabled: boo
   `${windowMode}:${iconSize}:${dockEnabled}`
 const getFolderModalMaxAvailableWidth = () => {
   const maxWidth =
-    typeof window === 'undefined' ? FOLDER_MODAL_MAX_WIDTH : Math.min(FOLDER_MODAL_MAX_WIDTH, window.innerWidth * 0.92)
+    typeof window === 'undefined'
+      ? FOLDER_MODAL_MAX_WIDTH
+      : Math.min(FOLDER_MODAL_MAX_WIDTH, window.innerWidth * 0.92)
   return Math.max(0, maxWidth - 40)
 }
 const getDefaultFolderColumnCount = (tileWidth: number) =>
@@ -202,6 +204,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   const lockedGeometryRef = useRef<{ key: string; columns: number; rows: number } | null>(null)
   const persistedGeometryKeyRef = useRef<string | null>(null)
   const persistedLayoutRef = useRef<PersistedLayout | null>(null)
+  const persistedScrollGroupsRef = useRef<PersistedLayout['scrollGroups']>(undefined)
   const persistedLayoutLoadedRef = useRef(false)
   const persistedLayoutLoadPromiseRef = useRef<Promise<PersistedLayout | null> | null>(null)
   const hydratedLayoutResetTokenRef = useRef(layoutResetToken)
@@ -374,6 +377,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
         : null
       persistedCoordinatesRef.current = persisted?.coordinates
       persistedGeometryKeyRef.current = persisted?.geometryKey ?? null
+      persistedScrollGroupsRef.current = persisted?.scrollGroups
       // 若持久化的几何标识与当前一致，且存有有效列数/行数，则直接锁定该几何，
       // 让测量回调不再用实测值覆盖它——这正是抵御 DPI/分辨率切换的关键。
       // 仅在从持久化水合时重建锁；内存水合（icons 刷新）保留会话内已建立的锁，
@@ -434,7 +438,15 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     const nextGeometryKey = lockedGeometryRef.current?.key ?? geometryKey
     layoutWriteQueueRef.current = layoutWriteQueueRef.current
       .then(() =>
-        writeLayout(nextItems, nextSlots, nextDockKeys, nextPageSize, nextColumns, nextGeometryKey)
+        writeLayout(
+          nextItems,
+          nextSlots,
+          nextDockKeys,
+          nextPageSize,
+          nextColumns,
+          nextGeometryKey,
+          persistedScrollGroupsRef.current
+        )
       )
       .catch(e => {
         console.error('Failed to persist launchpad layout:', e)
@@ -630,7 +642,9 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     if (dragState.previewSlotIndex === null) return null
 
     const baseForPreview = extractDraggedIconsFromSourceFolders(items, dragState.draggingIds)
-    const previewBaseItemIdSet = new Set(resolveOuterItemIds(baseForPreview.map(getId), activeDockKeys))
+    const previewBaseItemIdSet = new Set(
+      resolveOuterItemIds(baseForPreview.map(getId), activeDockKeys)
+    )
     dragState.draggingIds.forEach(id => {
       previewBaseItemIdSet.add(id)
     })
@@ -666,7 +680,10 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     const pageStart = Math.floor(anchorIndex / pageSize) * pageSize
     const pageEnd = pageStart + pageSize
     const nextLength = Math.max(projected.slots.length, normalizedWorkingOrder.length, pageEnd)
-    const nextOrder = Array.from({ length: nextLength }, (_, index) => projected.slots[index] ?? null)
+    const nextOrder = Array.from(
+      { length: nextLength },
+      (_, index) => projected.slots[index] ?? null
+    )
     const currentPageIds = new Set<string>()
 
     for (let index = pageStart; index < pageEnd; index += 1) {
@@ -1049,7 +1066,9 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       slot => typeof slot === 'string' && importedIdSet.has(slot)
     )
     const targetPage =
-      firstImportedAnchorIndex >= 0 ? Math.floor(firstImportedAnchorIndex / safePageSize) : activePage
+      firstImportedAnchorIndex >= 0
+        ? Math.floor(firstImportedAnchorIndex / safePageSize)
+        : activePage
 
     appliedImportPlacementTokenRef.current = request.token
     outerSlotsRef.current = nextSlots
@@ -1226,10 +1245,16 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       }
     }
 
-    const nextOuterSlots = normalizeOuterSlots(effectiveBaseOuterSlots, outerItems, safePS, safeCols, {
-      preferredAnchorById,
-      spillStrategy: 'row-major-forward',
-    })
+    const nextOuterSlots = normalizeOuterSlots(
+      effectiveBaseOuterSlots,
+      outerItems,
+      safePS,
+      safeCols,
+      {
+        preferredAnchorById,
+        spillStrategy: 'row-major-forward',
+      }
+    )
 
     const compactedOuterSlots = compactEmptyPages(nextOuterSlots, safePS)
 

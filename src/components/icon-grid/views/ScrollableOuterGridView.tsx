@@ -1,12 +1,31 @@
-import { AppWindow, Folder as FolderIcon, PanelLeftClose, PanelLeftOpen, Plus } from 'lucide-react'
+import {
+  AppWindow,
+  BookOpen,
+  Briefcase,
+  Check,
+  Code2,
+  Folder as FolderIcon,
+  Gamepad2,
+  Grid2X2,
+  Music2,
+  Palette,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  Star,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
 import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type MouseEvent as ReactMouseEvent,
   type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { Icon } from '../../Icon'
 import { translate } from '../../../lib/i18n'
 import { useIconStore } from '../../../stores/iconStore'
@@ -15,7 +34,7 @@ import {
   ICON_GRID_TILE_PADDING_Y,
   ICON_GRID_TITLE_GAP,
 } from '../../../types'
-import type { FolderSize, GridItem } from '../model'
+import type { FolderSize, GridItem, ScrollGroupIcon, ScrollGroupMeta } from '../model'
 import type { PageAnchorEntry } from '../domain/topLevelLayout'
 import { FolderCreatePreview } from './FolderVisuals'
 import { OuterFolderTile } from './OuterFolderTile'
@@ -35,6 +54,7 @@ export interface ScrollGridSection {
   entries: PageAnchorEntry[]
   itemCount: number
   previewItems: GridItem[]
+  meta?: ScrollGroupMeta
 }
 
 interface ScrollableOuterGridViewProps {
@@ -62,7 +82,8 @@ interface ScrollableOuterGridViewProps {
   openFolderId: string | null
   activeFolderSharedLayoutId: string | null
   onActivePageChange: (page: number) => void
-  onAddGroup: () => void
+  onAddGroup: (meta: ScrollGroupMeta) => void
+  onEditGroup: (page: number, meta: ScrollGroupMeta) => void
   addIconDisabled: boolean
   onAddIcon?: () => void
   onDeleteGroup: (page: number) => void
@@ -75,6 +96,39 @@ interface ScrollableOuterGridViewProps {
   bindTileRef: (id: string, node: HTMLDivElement | null) => void
   bindGridPageRef: (page: number, node: HTMLDivElement | null) => void
   reorderAnimationMs: number
+}
+
+const GROUP_ICON_OPTIONS: Array<{
+  value: ScrollGroupIcon
+  label: string
+  preset: string
+  icon: LucideIcon
+}> = [
+  { value: 'briefcase', label: '工作', preset: '工作', icon: Briefcase },
+  { value: 'code', label: '开发', preset: '开发', icon: Code2 },
+  { value: 'gamepad', label: '游戏', preset: '游戏', icon: Gamepad2 },
+  { value: 'palette', label: '设计', preset: '设计', icon: Palette },
+  { value: 'book', label: '学习', preset: '学习', icon: BookOpen },
+  { value: 'music', label: '影音', preset: '影音', icon: Music2 },
+  { value: 'star', label: '收藏', preset: '收藏', icon: Star },
+  { value: 'grid', label: '其他', preset: '其他', icon: Grid2X2 },
+]
+
+const GROUP_ICON_COMPONENTS: Record<ScrollGroupIcon, LucideIcon> = Object.fromEntries(
+  GROUP_ICON_OPTIONS.map(option => [option.value, option.icon])
+) as Record<ScrollGroupIcon, LucideIcon>
+
+function CustomGroupIcon({ icon, compact = false }: { icon: ScrollGroupIcon; compact?: boolean }) {
+  const Glyph = GROUP_ICON_COMPONENTS[icon]
+  return (
+    <span
+      className={`flex items-center justify-center rounded-md bg-blue-500/10 text-blue-700 dark:bg-blue-400/12 dark:text-blue-200 ${
+        compact ? 'h-7 w-7' : 'h-8 w-8'
+      }`}
+    >
+      <Glyph className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+    </span>
+  )
 }
 
 function GroupPreviewGlyph({ item, compact = false }: { item: GridItem; compact?: boolean }) {
@@ -158,6 +212,7 @@ export function ScrollableOuterGridView({
   activeFolderSharedLayoutId,
   onActivePageChange,
   onAddGroup,
+  onEditGroup,
   addIconDisabled,
   onAddIcon,
   onDeleteGroup,
@@ -179,6 +234,10 @@ export function ScrollableOuterGridView({
   const titleLineCount = useIconStore(state => state.titleLineCount)
   const addIconTitleMetrics = getIconGridTitleMetrics(titleLineCount)
   const addIconLabel = translate('\u6dfb\u52a0\u56fe\u6807')
+  const [groupComposerOpen, setGroupComposerOpen] = useState(false)
+  const [editingGroupIndex, setEditingGroupIndex] = useState<number | null>(null)
+  const [selectedGroupIcon, setSelectedGroupIcon] = useState<ScrollGroupIcon>('briefcase')
+  const [groupName, setGroupName] = useState(() => translate('工作'))
   const entries = activeSection?.entries ?? []
   const showAddIcon = activeSection !== null
   const addIconSlotIndex = entries.reduce((lastIndex, entry) => {
@@ -199,12 +258,64 @@ export function ScrollableOuterGridView({
     containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const openGroupComposer = () => {
+    setEditingGroupIndex(null)
+    setSelectedGroupIcon('briefcase')
+    setGroupName(translate('工作'))
+    setGroupComposerOpen(true)
+  }
+
+  const openGroupEditor = (section: ScrollGridSection) => {
+    setEditingGroupIndex(section.index)
+    setSelectedGroupIcon(section.meta?.icon ?? 'grid')
+    setGroupName(section.meta?.name ?? translate('网格 {index}', { index: section.index + 1 }))
+    setGroupComposerOpen(true)
+  }
+
+  const closeGroupComposer = () => {
+    setGroupComposerOpen(false)
+    setEditingGroupIndex(null)
+  }
+
+  const selectGroupIcon = (option: (typeof GROUP_ICON_OPTIONS)[number]) => {
+    const previousPreset = GROUP_ICON_OPTIONS.find(item => item.value === selectedGroupIcon)?.preset
+    setSelectedGroupIcon(option.value)
+    setGroupName(current =>
+      !current.trim() || current === translate(previousPreset ?? '')
+        ? translate(option.preset)
+        : current
+    )
+  }
+
+  const submitGroup = () => {
+    const name = groupName.trim()
+    if (!name) return
+    const meta = { name, icon: selectedGroupIcon }
+    if (editingGroupIndex === null) onAddGroup(meta)
+    else onEditGroup(editingGroupIndex, meta)
+    closeGroupComposer()
+    setSelectedGroupIcon('briefcase')
+    setGroupName(translate('工作'))
+  }
+
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       groupItemRefs.current.get(currentPage)?.scrollIntoView({ block: 'nearest' })
     })
     return () => window.cancelAnimationFrame(frame)
   }, [currentPage])
+
+  useEffect(() => {
+    if (!groupComposerOpen) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setGroupComposerOpen(false)
+        setEditingGroupIndex(null)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [groupComposerOpen])
 
   return (
     <div className="scroll-grid-layout grid h-full w-full min-w-0 grid-cols-[var(--scroll-grid-sidebar-width)_minmax(0,1fr)] overflow-hidden">
@@ -229,10 +340,19 @@ export function ScrollableOuterGridView({
           <button
             type="button"
             data-grid-mode-nav
+            data-no-window-drag="true"
             aria-label={translate('添加分组')}
             title={translate('添加分组')}
             className="flex h-8 w-8 items-center justify-center rounded-md text-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
-            onClick={onAddGroup}
+            onPointerDown={event => {
+              if (event.button !== 0) return
+              event.preventDefault()
+              event.stopPropagation()
+              openGroupComposer()
+            }}
+            onClick={event => {
+              if (event.detail === 0) openGroupComposer()
+            }}
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -277,16 +397,24 @@ export function ScrollableOuterGridView({
                         ].join(' ')}
                         onClick={() => selectSection(section.index)}
                       >
-                        <GroupPreviewIcon items={section.previewItems} />
+                        {section.meta ? (
+                          <CustomGroupIcon icon={section.meta.icon} compact />
+                        ) : (
+                          <GroupPreviewIcon items={section.previewItems} />
+                        )}
                         <span className={sidebarCompact ? 'w-full min-w-0' : 'min-w-0'}>
                           <span
-                            title={translate('网格 {index}', { index: section.index + 1 })}
+                            title={
+                              section.meta?.name ??
+                              translate('网格 {index}', { index: section.index + 1 })
+                            }
                             className={[
                               'block truncate font-medium',
                               sidebarCompact ? 'text-[11px] leading-3.5' : 'text-[13px] leading-4',
                             ].join(' ')}
                           >
-                            {translate('网格 {index}', { index: section.index + 1 })}
+                            {section.meta?.name ??
+                              translate('网格 {index}', { index: section.index + 1 })}
                           </span>
                           {!sidebarCompact ? (
                             <span
@@ -301,6 +429,12 @@ export function ScrollableOuterGridView({
                     </div>
                   </ContextMenuTrigger>
                   <ContextMenuContent className="w-40">
+                    <ContextMenuItem
+                      className="rounded-md"
+                      onSelect={() => openGroupEditor(section)}
+                    >
+                      {translate('编辑分组')}
+                    </ContextMenuItem>
                     <ContextMenuItem
                       disabled={sections.length <= 1}
                       className="rounded-md text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/20 dark:focus:text-red-100"
@@ -490,6 +624,110 @@ export function ScrollableOuterGridView({
           </div>
         </div>
       </div>
+      {groupComposerOpen && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              data-grid-mode-nav
+              data-no-window-drag="true"
+              className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/25 px-6 backdrop-blur-[2px] dark:bg-black/50"
+              onMouseDown={event => {
+                if (event.target === event.currentTarget) closeGroupComposer()
+              }}
+            >
+              <form
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="scroll-group-editor-title"
+                className="w-full max-w-[360px] rounded-xl border border-border/90 bg-background p-5 text-foreground shadow-[0_24px_70px_rgba(15,23,42,0.28)] dark:shadow-[0_28px_80px_rgba(0,0,0,0.58)]"
+                onSubmit={event => {
+                  event.preventDefault()
+                  submitGroup()
+                }}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 id="scroll-group-editor-title" className="text-base font-semibold">
+                      {translate(editingGroupIndex === null ? '创建分组' : '编辑分组')}
+                    </h2>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      {translate('选择图标后会自动填入名称，也可以自行修改。')}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={translate('关闭')}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+                    onClick={closeGroupComposer}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <fieldset className="mt-5">
+                  <legend className="mb-2 text-xs font-medium text-foreground/80">
+                    {translate('分组图标')}
+                  </legend>
+                  <div className="grid grid-cols-4 gap-2">
+                    {GROUP_ICON_OPTIONS.map(option => {
+                      const Glyph = option.icon
+                      const selected = option.value === selectedGroupIcon
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          aria-label={translate(option.label)}
+                          aria-pressed={selected}
+                          title={translate(option.label)}
+                          className={`flex h-12 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 ${
+                            selected
+                              ? 'border-blue-500/45 bg-blue-500/12 text-blue-700 dark:text-blue-200'
+                              : 'border-border/75 bg-foreground/3 text-foreground/65 hover:border-foreground/20 hover:bg-accent hover:text-foreground'
+                          }`}
+                          onClick={() => selectGroupIcon(option)}
+                        >
+                          <Glyph className="h-5 w-5" />
+                        </button>
+                      )
+                    })}
+                  </div>
+                </fieldset>
+
+                <label className="mt-4 block">
+                  <span className="mb-2 block text-xs font-medium text-foreground/80">
+                    {translate('分组名称')}
+                  </span>
+                  <input
+                    autoFocus
+                    value={groupName}
+                    maxLength={24}
+                    placeholder={translate('填写分组名称')}
+                    className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/15"
+                    onChange={event => setGroupName(event.target.value)}
+                  />
+                </label>
+
+                <div className="mt-5 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="h-9 rounded-lg px-4 text-sm text-foreground/75 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+                    onClick={closeGroupComposer}
+                  >
+                    {translate('取消')}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!groupName.trim()}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 disabled:pointer-events-none disabled:opacity-40 dark:bg-blue-500 dark:text-blue-950"
+                  >
+                    <Check className="h-4 w-4" />
+                    {translate(editingGroupIndex === null ? '创建' : '保存')}
+                  </button>
+                </div>
+              </form>
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   )
 }

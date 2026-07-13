@@ -27,6 +27,21 @@ export type FolderItem = {
 export type GridItem = IconItem | FolderItem
 export type DragContext = 'outer' | 'folder' | 'dock'
 
+export type ScrollGroupIcon =
+  | 'grid'
+  | 'briefcase'
+  | 'code'
+  | 'gamepad'
+  | 'palette'
+  | 'book'
+  | 'music'
+  | 'star'
+
+export interface ScrollGroupMeta {
+  name: string
+  icon: ScrollGroupIcon
+}
+
 export type PersistedItem =
   | {
       type: 'icon'
@@ -61,6 +76,7 @@ export interface PersistedLayout {
   // 网格几何锁定标识，形如 `${windowMode}:${iconSize}:${dockEnabled}`。
   // 只有该三元组变化时才重新测量列数/行数，避免 DPI/分辨率切换导致图标重排。
   geometryKey?: string
+  scrollGroups?: ScrollGroupMeta[]
 }
 
 export const getId = (item: GridItem): string =>

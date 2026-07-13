@@ -9,6 +9,8 @@ import type {
   PersistedItem,
   PersistedItemCoordinates,
   PersistedLayout,
+  ScrollGroupIcon,
+  ScrollGroupMeta,
 } from '../model'
 import { makeFolderId } from '../model'
 import type { DesktopIcon } from '../../../types'
@@ -92,7 +94,14 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
       | { version: 2; items: PersistedItem[]; slots: unknown[] }
       | { version: 3; items: PersistedItem[]; slots: unknown[]; dockKeys: unknown[] }
       | { version: 4; items: PersistedItem[]; slots: unknown[]; dockKeys: unknown[] }
-      | { version: 5; items: PersistedItem[]; slots: unknown[]; dockKeys: unknown[]; pageSize?: number; columns?: number }
+      | {
+          version: 5
+          items: PersistedItem[]
+          slots: unknown[]
+          dockKeys: unknown[]
+          pageSize?: number
+          columns?: number
+        }
       | {
           version: 6
           items: PersistedItem[]
@@ -112,6 +121,17 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
           coordinates?: unknown
           geometryKey?: unknown
         }
+      | {
+          version: 8
+          items: PersistedItem[]
+          slots: unknown[]
+          dockKeys: unknown[]
+          pageSize?: number
+          columns?: number
+          coordinates?: unknown
+          geometryKey?: unknown
+          scrollGroups?: unknown
+        }
     if (!Array.isArray(parsed.items)) return null
     if (parsed.version === 1) return { items: parsed.items, slots: null, dockKeys: [] }
     if (parsed.version === 2 && Array.isArray(parsed.slots)) {
@@ -126,7 +146,8 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
         parsed.version !== 4 &&
         parsed.version !== 5 &&
         parsed.version !== 6 &&
-        parsed.version !== 7) ||
+        parsed.version !== 7 &&
+        parsed.version !== 8) ||
       !Array.isArray(parsed.slots) ||
       !Array.isArray(parsed.dockKeys)
     ) {
@@ -138,20 +159,42 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
       dockKeys: parsed.dockKeys.map(key => (typeof key === 'string' ? key : null)),
     }
     if (parsed.version === 5) {
-      if (typeof parsed.pageSize === 'number' && parsed.pageSize > 0) result.pageSize = parsed.pageSize
+      if (typeof parsed.pageSize === 'number' && parsed.pageSize > 0)
+        result.pageSize = parsed.pageSize
       if (typeof parsed.columns === 'number' && parsed.columns > 0) result.columns = parsed.columns
     }
     if (parsed.version === 6) {
-      if (typeof parsed.pageSize === 'number' && parsed.pageSize > 0) result.pageSize = parsed.pageSize
+      if (typeof parsed.pageSize === 'number' && parsed.pageSize > 0)
+        result.pageSize = parsed.pageSize
       if (typeof parsed.columns === 'number' && parsed.columns > 0) result.columns = parsed.columns
       result.coordinates = normalizePersistedItemCoordinates(parsed.coordinates)
     }
-    if (parsed.version === 7) {
-      if (typeof parsed.pageSize === 'number' && parsed.pageSize > 0) result.pageSize = parsed.pageSize
+    if (parsed.version === 7 || parsed.version === 8) {
+      if (typeof parsed.pageSize === 'number' && parsed.pageSize > 0)
+        result.pageSize = parsed.pageSize
       if (typeof parsed.columns === 'number' && parsed.columns > 0) result.columns = parsed.columns
       result.coordinates = normalizePersistedItemCoordinates(parsed.coordinates)
       if (typeof parsed.geometryKey === 'string' && parsed.geometryKey.length > 0) {
         result.geometryKey = parsed.geometryKey
+      }
+      if (parsed.version === 8 && Array.isArray(parsed.scrollGroups)) {
+        const validIcons = new Set<ScrollGroupIcon>([
+          'grid',
+          'briefcase',
+          'code',
+          'gamepad',
+          'palette',
+          'book',
+          'music',
+          'star',
+        ])
+        result.scrollGroups = parsed.scrollGroups.flatMap(entry => {
+          if (!entry || typeof entry !== 'object') return []
+          const name = 'name' in entry && typeof entry.name === 'string' ? entry.name.trim() : ''
+          const icon = 'icon' in entry && typeof entry.icon === 'string' ? entry.icon : ''
+          if (!name || !validIcons.has(icon as ScrollGroupIcon)) return []
+          return [{ name, icon: icon as ScrollGroupIcon } satisfies ScrollGroupMeta]
+        })
       }
     }
     return result
@@ -160,24 +203,21 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
   }
 }
 
-
 export const writeLayout = async (
   items: GridItem[],
   slots: Array<string | null>,
   dockKeys: Array<string | null>,
   pageSize?: number,
   columns?: number,
-  geometryKey?: string
+  geometryKey?: string,
+  scrollGroups?: ScrollGroupMeta[]
 ) => {
   const coordinates =
-    typeof pageSize === 'number' &&
-    typeof columns === 'number' &&
-    pageSize > 0 &&
-    columns > 0
+    typeof pageSize === 'number' && typeof columns === 'number' && pageSize > 0 && columns > 0
       ? buildPersistedItemCoordinates(slots, items, pageSize, columns)
       : undefined
   const payload = {
-    version: 7,
+    version: 8,
     items: serializeItems(items),
     slots,
     dockKeys,
@@ -185,6 +225,7 @@ export const writeLayout = async (
     columns,
     coordinates,
     geometryKey,
+    scrollGroups,
   }
   await invoke('set_layout_payload', { key: LAYOUT_KEY, payload: JSON.stringify(payload) })
 }
@@ -196,7 +237,7 @@ export const writePersistedLayout = async (layout: PersistedLayout | null) => {
   }
 
   const payload = {
-    version: 7,
+    version: 8,
     items: layout.items,
     slots: layout.slots ?? [],
     dockKeys: layout.dockKeys ?? [],
@@ -204,6 +245,7 @@ export const writePersistedLayout = async (layout: PersistedLayout | null) => {
     columns: layout.columns,
     coordinates: layout.coordinates,
     geometryKey: layout.geometryKey,
+    scrollGroups: layout.scrollGroups,
   }
   await invoke('set_layout_payload', { key: LAYOUT_KEY, payload: JSON.stringify(payload) })
 }

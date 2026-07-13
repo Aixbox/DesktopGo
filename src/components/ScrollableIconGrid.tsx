@@ -10,7 +10,15 @@ import {
 import type { DesktopIcon } from '../types'
 import { getIconGridLayoutRowHeight, getIconGridRowHeight, ICON_SIZE_CONFIG } from '../types'
 import { useIconStore } from '../stores/iconStore'
-import type { FolderItem, FolderSize, GridItem, IconItem, PersistedLayout } from './icon-grid/model'
+import { translate } from '../lib/i18n'
+import type {
+  FolderItem,
+  FolderSize,
+  GridItem,
+  IconItem,
+  PersistedLayout,
+  ScrollGroupMeta,
+} from './icon-grid/model'
 import { getGridItemSpan, getId } from './icon-grid/model'
 import { compactEmptyPages, DRAG_HOLE_ID, areSlotsEqual } from './icon-grid/domain/slots'
 import { clampNumber } from './icon-grid/domain/geometry'
@@ -266,6 +274,7 @@ export function ScrollableIconGrid({
   const itemsRef = useRef<GridItem[]>([])
   const outerSlotsRef = useRef<Array<string | null>>([])
   const dockKeysRef = useRef<Array<string | null>>([])
+  const scrollGroupsRef = useRef<ScrollGroupMeta[]>([])
   const dockEnabledRef = useRef(dockEnabled)
   const currentPageRef = useRef(0)
   const pageSizeRef = useRef(1)
@@ -289,6 +298,7 @@ export function ScrollableIconGrid({
   const [layoutHydrationTick, setLayoutHydrationTick] = useState(0)
   const [currentPage, setCurrentPage] = useState(0)
   const [scrollGroupCount, setScrollGroupCount] = useState(1)
+  const [scrollGroups, setScrollGroups] = useState<ScrollGroupMeta[]>([])
   const [hoverPage, setHoverPage] = useState<number | null>(null)
   const [itemWidth, setItemWidth] = useState<number>(columnWidth)
   const [itemHeight, setItemHeight] = useState<number>(rowHeight)
@@ -455,9 +465,13 @@ export function ScrollableIconGrid({
       itemsRef.current = nextItems
       outerSlotsRef.current = rawSlots
       dockKeysRef.current = nextDockKeys
+      const nextScrollGroups = persisted?.scrollGroups ?? []
+      scrollGroupsRef.current = nextScrollGroups
       setItems(nextItems)
       setOuterSlots(rawSlots)
       setDockKeys(nextDockKeys)
+      setScrollGroups(nextScrollGroups)
+      setScrollGroupCount(Math.max(1, nextScrollGroups.length))
       hydratedRef.current = true
       hydratedLayoutResetTokenRef.current = layoutResetToken
       // 强制几何测量回调重跑，使锁定几何（若有）在本次水合后立即生效。
@@ -480,6 +494,7 @@ export function ScrollableIconGrid({
     itemsRef.current = items
     outerSlotsRef.current = outerSlots
     dockKeysRef.current = dockKeys
+    scrollGroupsRef.current = scrollGroups
     if (!hydratedRef.current || !layoutBaselineRef.current) return
 
     const nextItems = items
@@ -496,12 +511,20 @@ export function ScrollableIconGrid({
         : (lockedGeometryRef.current?.key ?? geometryKey)
     layoutWriteQueueRef.current = layoutWriteQueueRef.current
       .then(() =>
-        writeLayout(nextItems, nextSlots, nextDockKeys, nextPageSize, nextColumns, nextGeometryKey)
+        writeLayout(
+          nextItems,
+          nextSlots,
+          nextDockKeys,
+          nextPageSize,
+          nextColumns,
+          nextGeometryKey,
+          scrollGroups
+        )
       )
       .catch(e => {
         console.error('Failed to persist launchpad layout:', e)
       })
-  }, [dockKeys, geometryKey, items, launchpadGridViewMode, outerSlots])
+  }, [dockKeys, geometryKey, items, launchpadGridViewMode, outerSlots, scrollGroups])
 
   useEffect(() => {
     currentPageRef.current = currentPage
@@ -1441,6 +1464,7 @@ export function ScrollableIconGrid({
         index,
         itemCount,
         entries,
+        meta: scrollGroups[index],
         previewItems: pageSlots
           .filter((slot): slot is string => typeof slot === 'string' && slot !== DRAG_HOLE_ID)
           .map(id => outerViewItemById.get(id))
@@ -1457,6 +1481,7 @@ export function ScrollableIconGrid({
     pageCount,
     pageSize,
     scrollRenderOrder,
+    scrollGroups,
   ])
   const activeScrollGridSection =
     launchpadGridViewMode === 'scroll'
@@ -1754,9 +1779,19 @@ export function ScrollableIconGrid({
     setCurrentPage(nextPage)
   }
 
-  const handleAddScrollGroup = () => {
+  const handleAddScrollGroup = (meta: ScrollGroupMeta) => {
     setScrollGroupCount(current => {
       const nextCount = Math.max(current, pageCount) + 1
+      const nextGroups = Array.from({ length: nextCount }, (_, index) =>
+        index === nextCount - 1
+          ? meta
+          : (scrollGroupsRef.current[index] ?? {
+              name: translate('网格 {index}', { index: index + 1 }),
+              icon: 'grid' as const,
+            })
+      )
+      scrollGroupsRef.current = nextGroups
+      setScrollGroups(nextGroups)
       const nextSlots = padSlotsToPageCount(
         outerSlotsRef.current,
         nextCount,
@@ -1769,6 +1804,20 @@ export function ScrollableIconGrid({
       setCurrentPage(nextPage)
       return nextCount
     })
+  }
+
+  const handleEditScrollGroup = (page: number, meta: ScrollGroupMeta) => {
+    const targetPage = clampNumber(page, 0, pageCount - 1)
+    const nextGroups = Array.from({ length: pageCount }, (_, index) =>
+      index === targetPage
+        ? meta
+        : (scrollGroupsRef.current[index] ?? {
+            name: translate('网格 {index}', { index: index + 1 }),
+            icon: 'grid' as const,
+          })
+    )
+    scrollGroupsRef.current = nextGroups
+    setScrollGroups(nextGroups)
   }
 
   const handleDeleteScrollGroup = (page: number) => {
@@ -1797,6 +1846,10 @@ export function ScrollableIconGrid({
       })
 
       const nextCount = effectiveCount - 1
+      const nextGroups = [...scrollGroupsRef.current]
+      nextGroups.splice(targetPage, 1)
+      scrollGroupsRef.current = nextGroups
+      setScrollGroups(nextGroups)
       const outerItems = filterItemsByIds(
         itemsRef.current,
         resolveOuterItemIds(itemsRef.current.map(getId), dockEnabled ? dockKeysRef.current : [])
@@ -1858,6 +1911,7 @@ export function ScrollableIconGrid({
             activeFolderSharedLayoutId={activeFolderSharedLayoutId}
             onActivePageChange={handleScrollGridActivePageChange}
             onAddGroup={handleAddScrollGroup}
+            onEditGroup={handleEditScrollGroup}
             addIconDisabled={addIconDisabled}
             onAddIcon={onAddIcon}
             onDeleteGroup={handleDeleteScrollGroup}
