@@ -12,7 +12,7 @@ import type {
   ScrollGroupIcon,
   ScrollGroupMeta,
 } from '../model'
-import { makeFolderId } from '../model'
+import { makeFolderId, SCROLL_GROUP_ICONS } from '../model'
 import type { DesktopIcon } from '../../../types'
 import { buildIconSelectionKey } from '../../../stores/iconStore'
 
@@ -178,16 +178,7 @@ export const readLayout = async (): Promise<PersistedLayout | null> => {
         result.geometryKey = parsed.geometryKey
       }
       if (parsed.version === 8 && Array.isArray(parsed.scrollGroups)) {
-        const validIcons = new Set<ScrollGroupIcon>([
-          'grid',
-          'briefcase',
-          'code',
-          'gamepad',
-          'palette',
-          'book',
-          'music',
-          'star',
-        ])
+        const validIcons = new Set<ScrollGroupIcon>(SCROLL_GROUP_ICONS)
         result.scrollGroups = parsed.scrollGroups.flatMap(entry => {
           if (!entry || typeof entry !== 'object') return []
           const name = 'name' in entry && typeof entry.name === 'string' ? entry.name.trim() : ''

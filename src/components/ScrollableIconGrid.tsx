@@ -45,7 +45,11 @@ import {
   normalizeOuterSlots,
   resizeSlotPages,
 } from './icon-grid/domain/topLevelLayout'
-import { compactOuterSlotsWithinPages } from './icon-grid/scroll/scrollTopLevelLayout'
+import {
+  compactOuterSlotsWithinPages,
+  remapScrollPageIndexAfterReorder,
+  reorderScrollGroupPages,
+} from './icon-grid/scroll/scrollTopLevelLayout'
 import {
   applyMultiOuterDropFromSession,
   applyOuterDropFromSession,
@@ -1820,6 +1824,45 @@ export function ScrollableIconGrid({
     setScrollGroups(nextGroups)
   }
 
+  const handleReorderScrollGroup = (sourcePage: number, targetPage: number) => {
+    const effectiveCount = Math.max(1, scrollGroupCount, pageCount)
+    const safeSourcePage = clampNumber(sourcePage, 0, effectiveCount - 1)
+    const safeTargetPage = clampNumber(targetPage, 0, effectiveCount - 1)
+    if (safeSourcePage === safeTargetPage) return
+
+    const nextGroups = Array.from(
+      { length: effectiveCount },
+      (_, index) =>
+        scrollGroupsRef.current[index] ?? {
+          name: translate('网格 {index}', { index: index + 1 }),
+          icon: 'grid' as const,
+        }
+    )
+    const [movedGroup] = nextGroups.splice(safeSourcePage, 1)
+    nextGroups.splice(safeTargetPage, 0, movedGroup)
+    scrollGroupsRef.current = nextGroups
+    setScrollGroups(nextGroups)
+
+    const safePageSize = Math.max(1, pageSizeRef.current || pageSize)
+    const nextSlots = reorderScrollGroupPages(
+      outerSlotsRef.current,
+      safePageSize,
+      effectiveCount,
+      safeSourcePage,
+      safeTargetPage
+    )
+    outerSlotsRef.current = nextSlots
+    setOuterSlots(nextSlots)
+
+    const nextPage = remapScrollPageIndexAfterReorder(
+      currentPageRef.current,
+      safeSourcePage,
+      safeTargetPage
+    )
+    currentPageRef.current = nextPage
+    setCurrentPage(nextPage)
+  }
+
   const handleDeleteScrollGroup = (page: number) => {
     setScrollGroupCount(current => {
       const effectiveCount = Math.max(current, pageCount)
@@ -1912,6 +1955,7 @@ export function ScrollableIconGrid({
             onActivePageChange={handleScrollGridActivePageChange}
             onAddGroup={handleAddScrollGroup}
             onEditGroup={handleEditScrollGroup}
+            onReorderGroup={handleReorderScrollGroup}
             addIconDisabled={addIconDisabled}
             onAddIcon={onAddIcon}
             onDeleteGroup={handleDeleteScrollGroup}

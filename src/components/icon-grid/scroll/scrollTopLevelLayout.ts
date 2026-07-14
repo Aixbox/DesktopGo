@@ -5,6 +5,47 @@ import { getFootprintIndices, normalizeOuterSlots } from '../domain/topLevelLayo
 
 const buildItemMap = (items: GridItem[]) => new Map(items.map(item => [getId(item), item]))
 
+export const reorderScrollGroupPages = (
+  slots: Array<string | null>,
+  pageSize: number,
+  pageCount: number,
+  sourcePage: number,
+  targetPage: number
+): Array<string | null> => {
+  const safePageSize = Math.max(1, pageSize)
+  const effectivePageCount = Math.max(
+    1,
+    pageCount,
+    Math.ceil(Math.max(slots.length, safePageSize) / safePageSize)
+  )
+  const safeSourcePage = Math.min(Math.max(0, sourcePage), effectivePageCount - 1)
+  const safeTargetPage = Math.min(Math.max(0, targetPage), effectivePageCount - 1)
+  const paddedSlots = slots.slice(0, effectivePageCount * safePageSize)
+
+  while (paddedSlots.length < effectivePageCount * safePageSize) {
+    paddedSlots.push(null)
+  }
+  if (safeSourcePage === safeTargetPage) return paddedSlots
+
+  const pages = Array.from({ length: effectivePageCount }, (_, page) =>
+    paddedSlots.slice(page * safePageSize, (page + 1) * safePageSize)
+  )
+  const [movedPage] = pages.splice(safeSourcePage, 1)
+  pages.splice(safeTargetPage, 0, movedPage)
+  return pages.flat()
+}
+
+export const remapScrollPageIndexAfterReorder = (
+  activePage: number,
+  sourcePage: number,
+  targetPage: number
+): number => {
+  if (activePage === sourcePage) return targetPage
+  if (sourcePage < activePage && activePage <= targetPage) return activePage - 1
+  if (targetPage <= activePage && activePage < sourcePage) return activePage + 1
+  return activePage
+}
+
 export const compactOuterSlotsWithinPages = (
   slots: Array<string | null>,
   items: GridItem[],

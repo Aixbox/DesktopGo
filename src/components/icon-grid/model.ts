@@ -27,15 +27,82 @@ export type FolderItem = {
 export type GridItem = IconItem | FolderItem
 export type DragContext = 'outer' | 'folder' | 'dock'
 
-export type ScrollGroupIcon =
-  | 'grid'
-  | 'briefcase'
-  | 'code'
-  | 'gamepad'
-  | 'palette'
-  | 'book'
-  | 'music'
-  | 'star'
+export const SCROLL_GROUP_ICONS = [
+  'grid',
+  'briefcase',
+  'code',
+  'gamepad',
+  'palette',
+  'book',
+  'music',
+  'star',
+  'house',
+  'globe',
+  'message',
+  'camera',
+  'video',
+  'shopping',
+  'wallet',
+  'tools',
+  'cloud',
+  'mail',
+  'calendar',
+  'health',
+  'travel',
+  'food',
+  'fitness',
+  'archive',
+  'terminal',
+  'database',
+  'security',
+  'ideas',
+  'team',
+  'office',
+  'lab',
+  'projects',
+  'notifications',
+  'bookmarks',
+  'ai',
+  'storage',
+  'thinking',
+  'testing',
+  'vehicles',
+  'budget',
+  'lists',
+  'time',
+  'coffee',
+  'hardware',
+  'downloads',
+  'documents',
+  'movies',
+  'gifts',
+  'education',
+  'headphones',
+  'images',
+  'keys',
+  'computers',
+  'resources',
+  'maps',
+  'displays',
+  'night',
+  'news',
+  'pets',
+  'phone',
+  'printing',
+  'radio',
+  'search',
+  'settings',
+  'mobile',
+  'daytime',
+  'tags',
+  'achievements',
+  'logistics',
+  'television',
+  'productivity',
+  'nature',
+] as const
+
+export type ScrollGroupIcon = (typeof SCROLL_GROUP_ICONS)[number]
 
 export interface ScrollGroupMeta {
   name: string

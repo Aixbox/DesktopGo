@@ -5,6 +5,8 @@ import {
   maskDraggingIdsInCompactOrder,
   resolveCompactStableTargetId,
   preserveCompactPreviewOrderForCommit,
+  remapScrollPageIndexAfterReorder,
+  reorderScrollGroupPages,
 } from './scrollTopLevelLayout.ts'
 
 function assert(condition, message) {
@@ -58,6 +60,25 @@ const buildPreview = overrides => {
     minPageCount: overrides.minPageCount ?? 1,
   })
 }
+
+assertOrder(
+  reorderScrollGroupPages(['a', null, 'b', 'c', 'd', null], 2, 3, 0, 2),
+  ['b', 'c', 'd', null, 'a', null],
+  'Moving a scroll group forward must move its complete page without mixing page contents'
+)
+
+assertOrder(
+  reorderScrollGroupPages(['a', null, 'b', 'c', 'd', null], 2, 3, 2, 0),
+  ['d', null, 'a', null, 'b', 'c'],
+  'Moving a scroll group backward must preserve the relative order of the remaining pages'
+)
+
+assert(
+  remapScrollPageIndexAfterReorder(0, 0, 2) === 2 &&
+    remapScrollPageIndexAfterReorder(1, 0, 2) === 0 &&
+    remapScrollPageIndexAfterReorder(1, 2, 0) === 2,
+  'The active page must follow its group or shift with the surrounding reordered pages'
+)
 
 const adjacentForward = buildPreview({
   slots: ['a', 'b', 'c', null],
