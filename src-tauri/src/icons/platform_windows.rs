@@ -274,6 +274,8 @@ pub(super) fn resolve_lnk(lnk_path: &PathBuf) -> Option<String> {
 pub(super) fn create_shortcut_windows(
     shortcut_path: &PathBuf,
     target_path: &str,
+    launch_arguments: &str,
+    working_directory: &str,
 ) -> Result<(), String> {
     use windows::core::Interface;
     use windows::core::PCWSTR;
@@ -299,15 +301,34 @@ pub(super) fn create_shortcut_windows(
             .SetPath(PCWSTR(target_wide.as_ptr()))
             .map_err(|error| format!("Failed to set shortcut target path: {error}"))?;
 
-        if let Some(parent) = PathBuf::from(target_trimmed)
-            .parent()
-            .and_then(|path| path.to_str())
-        {
-            if !parent.trim().is_empty() {
-                let working_dir_wide: Vec<u16> =
-                    parent.encode_utf16().chain(std::iter::once(0)).collect();
-                let _ = shell_link.SetWorkingDirectory(PCWSTR(working_dir_wide.as_ptr()));
-            }
+        let arguments_trimmed = launch_arguments.trim();
+        if !arguments_trimmed.is_empty() {
+            let arguments_wide: Vec<u16> = arguments_trimmed
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect();
+            shell_link
+                .SetArguments(PCWSTR(arguments_wide.as_ptr()))
+                .map_err(|error| format!("Failed to set shortcut arguments: {error}"))?;
+        }
+
+        let resolved_working_directory = if working_directory.trim().is_empty() {
+            PathBuf::from(target_trimmed)
+                .parent()
+                .and_then(|path| path.to_str())
+                .unwrap_or_default()
+                .to_string()
+        } else {
+            working_directory.trim().to_string()
+        };
+        if !resolved_working_directory.is_empty() {
+            let working_dir_wide: Vec<u16> = resolved_working_directory
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect();
+            shell_link
+                .SetWorkingDirectory(PCWSTR(working_dir_wide.as_ptr()))
+                .map_err(|error| format!("Failed to set shortcut working directory: {error}"))?;
         }
 
         let persist_file: IPersistFile = shell_link
@@ -322,6 +343,67 @@ pub(super) fn create_shortcut_windows(
         persist_file
             .Save(PCWSTR(shortcut_wide.as_ptr()), true)
             .map_err(|error| format!("Failed to save shortcut file {:?}: {error}", shortcut_path))
+    }
+}
+
+#[cfg(windows)]
+pub(super) fn update_shortcut_launch_options_windows(
+    shortcut_path: &PathBuf,
+    launch_arguments: &str,
+    working_directory: &str,
+) -> Result<(), String> {
+    use windows::core::Interface;
+    use windows::core::PCWSTR;
+    use windows::Win32::System::Com::*;
+    use windows::Win32::UI::Shell::*;
+
+    if launch_arguments.trim().is_empty() && working_directory.trim().is_empty() {
+        return Ok(());
+    }
+
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+
+        let shell_link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)
+            .map_err(|error| format!("Failed to create ShellLink instance: {error}"))?;
+        let persist_file: IPersistFile = shell_link
+            .cast()
+            .map_err(|error| format!("Failed to cast ShellLink to IPersistFile: {error}"))?;
+        let shortcut_wide: Vec<u16> = shortcut_path
+            .as_os_str()
+            .to_string_lossy()
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        persist_file
+            .Load(PCWSTR(shortcut_wide.as_ptr()), Default::default())
+            .map_err(|error| format!("Failed to load shortcut {:?}: {error}", shortcut_path))?;
+
+        let arguments_trimmed = launch_arguments.trim();
+        if !arguments_trimmed.is_empty() {
+            let arguments_wide: Vec<u16> = arguments_trimmed
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect();
+            shell_link
+                .SetArguments(PCWSTR(arguments_wide.as_ptr()))
+                .map_err(|error| format!("Failed to set shortcut arguments: {error}"))?;
+        }
+
+        let working_directory_trimmed = working_directory.trim();
+        if !working_directory_trimmed.is_empty() {
+            let working_dir_wide: Vec<u16> = working_directory_trimmed
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect();
+            shell_link
+                .SetWorkingDirectory(PCWSTR(working_dir_wide.as_ptr()))
+                .map_err(|error| format!("Failed to set shortcut working directory: {error}"))?;
+        }
+
+        persist_file
+            .Save(PCWSTR(shortcut_wide.as_ptr()), true)
+            .map_err(|error| format!("Failed to update shortcut {:?}: {error}", shortcut_path))
     }
 }
 

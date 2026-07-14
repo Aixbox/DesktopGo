@@ -801,7 +801,7 @@ export function AiOrganizePanel({
   }, [])
 
   const handleInsertOrganizeCommand = useCallback(() => {
-    insertComposerCommand({ kind: 'organize' }, translate('按用途整理当前桌面图标。'))
+    insertComposerCommand({ kind: 'organize' }, translate('按用途整理当前图标库。'))
   }, [insertComposerCommand])
 
   const handleInsertEditCommand = useCallback(
@@ -1513,7 +1513,7 @@ export function AiOrganizePanel({
           normalizedPrompt ||
           (command.kind === 'edit'
             ? translate('参考此版布局继续优化。')
-            : translate('按用途整理当前桌面图标。'))
+            : translate('按用途整理当前图标库。'))
         void runClassification(
           instruction,
           label ?? getComposerCommandLabel(command)

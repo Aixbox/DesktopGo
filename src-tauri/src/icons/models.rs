@@ -13,6 +13,9 @@ pub struct DesktopIcon {
     pub name: String,
     pub path: String,
     pub target_path: String,
+    pub launch_arguments: String,
+    pub working_directory: String,
+    pub custom_icon_path: String,
     pub icon_base64: String,
     pub item_type: String,
     pub source: String,
@@ -24,6 +27,9 @@ pub struct IconManagerItem {
     pub name: String,
     pub path: String,
     pub target_path: String,
+    pub launch_arguments: String,
+    pub working_directory: String,
+    pub custom_icon_path: String,
     pub icon_base64: String,
     pub item_type: String,
     pub source: String,
@@ -53,6 +59,12 @@ pub(crate) struct SnapshotIconItem {
     pub(crate) name: String,
     pub(crate) path: String,
     pub(crate) target_path: String,
+    #[serde(default)]
+    pub(crate) launch_arguments: String,
+    #[serde(default)]
+    pub(crate) working_directory: String,
+    #[serde(default)]
+    pub(crate) custom_icon_path: String,
     pub(crate) item_type: String,
     #[serde(default)]
     pub(crate) hidden: bool,
@@ -74,6 +86,19 @@ pub struct IconSyncResult {
     pub(crate) added_count: usize,
     pub(crate) removed_count: usize,
     pub(crate) total_count: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateIconEntryInput {
+    pub display_name: String,
+    pub target_path: String,
+    #[serde(default)]
+    pub launch_arguments: String,
+    #[serde(default)]
+    pub working_directory: String,
+    #[serde(default)]
+    pub custom_icon_path: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

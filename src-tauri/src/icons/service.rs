@@ -3,15 +3,15 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use super::models::{
-    DesktopIcon, IconBucket, IconManagerItem, IconMutationTarget, IconSnapshot, IconSyncResult,
-    ImportDroppedPathsResult, ScannedDesktopItem, SnapshotIconItem, SnapshotIconPaths,
-    ICON_SOURCE_CUSTOMAPP, ICON_SOURCE_DESKTOP,
+    CreateIconEntryInput, DesktopIcon, IconBucket, IconManagerItem, IconMutationTarget,
+    IconSnapshot, IconSyncResult, ImportDroppedPathsResult, ScannedDesktopItem, SnapshotIconItem,
+    SnapshotIconPaths, ICON_SOURCE_CUSTOMAPP, ICON_SOURCE_DESKTOP,
 };
 #[cfg(windows)]
 use super::platform_windows::{
     collect_special_desktop_items, create_shortcut_windows, extract_icon_for_item,
     extract_special_shell_icon, get_desktop_dirs, get_dpi_scale, is_special_shell_path,
-    launch_app_windows, resolve_lnk, scan_desktop_items,
+    launch_app_windows, resolve_lnk, scan_desktop_items, update_shortcut_launch_options_windows,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -271,6 +271,24 @@ pub fn import_dropped_paths(
     {
         let _ = app_handle;
         let _ = paths;
+        let _ = custom_app_dir;
+        Err("Not supported on this platform".to_string())
+    }
+}
+
+pub fn create_icon_entry(
+    app_handle: tauri::AppHandle,
+    input: CreateIconEntryInput,
+    custom_app_dir: Option<String>,
+) -> Result<ImportDroppedPathsResult, String> {
+    #[cfg(windows)]
+    {
+        create_icon_entry_windows(&app_handle, input, custom_app_dir)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app_handle;
+        let _ = input;
         let _ = custom_app_dir;
         Err("Not supported on this platform".to_string())
     }
@@ -821,6 +839,36 @@ fn save_scanned_icon_for_bucket(
 }
 
 #[cfg(windows)]
+fn build_custom_icon_paths(
+    app_handle: &tauri::AppHandle,
+    custom_icon_path: &str,
+    id: &str,
+    source: IconSource,
+) -> Result<SnapshotIconPaths, String> {
+    let icon_path = PathBuf::from(custom_icon_path);
+    if !icon_path.is_file() {
+        return Err("Custom icon path does not point to a file".to_string());
+    }
+    let icon_item = build_scanned_item_from_path(&icon_path)
+        .ok_or_else(|| "Custom icon file does not exist or is not supported".to_string())?;
+    let icons = SnapshotIconPaths {
+        small: save_scanned_icon_for_bucket(app_handle, &icon_item, id, IconBucket::Small, source)?,
+        medium: save_scanned_icon_for_bucket(
+            app_handle,
+            &icon_item,
+            id,
+            IconBucket::Medium,
+            source,
+        )?,
+        large: save_scanned_icon_for_bucket(app_handle, &icon_item, id, IconBucket::Large, source)?,
+    };
+    if icons.small.is_empty() && icons.medium.is_empty() && icons.large.is_empty() {
+        return Err("Failed to extract an icon from the custom icon file".to_string());
+    }
+    Ok(icons)
+}
+
+#[cfg(windows)]
 fn build_snapshot_item(
     app_handle: &tauri::AppHandle,
     item: &ScannedDesktopItem,
@@ -842,6 +890,9 @@ fn build_snapshot_item(
         name: item.name.clone(),
         path: item.path.clone(),
         target_path: item.target_path.clone(),
+        launch_arguments: String::new(),
+        working_directory: String::new(),
+        custom_icon_path: String::new(),
         item_type: item.item_type.clone(),
         hidden: false,
         source: source.as_str().to_string(),
@@ -892,6 +943,9 @@ fn snapshot_to_ordered_desktop_icons(
                     name: item.name.clone(),
                     path: item.path.clone(),
                     target_path: item.target_path.clone(),
+                    launch_arguments: item.launch_arguments.clone(),
+                    working_directory: item.working_directory.clone(),
+                    custom_icon_path: item.custom_icon_path.clone(),
                     icon_base64,
                     item_type: item.item_type.clone(),
                     source: IconSource::from_value(&item.source).as_str().to_string(),
@@ -940,6 +994,9 @@ fn snapshot_to_ordered_icon_manager_items(
                     name: item.name.clone(),
                     path: item.path.clone(),
                     target_path: item.target_path.clone(),
+                    launch_arguments: item.launch_arguments.clone(),
+                    working_directory: item.working_directory.clone(),
+                    custom_icon_path: item.custom_icon_path.clone(),
                     icon_base64,
                     item_type: item.item_type.clone(),
                     source: IconSource::from_value(&item.source).as_str().to_string(),
@@ -1397,7 +1454,7 @@ fn import_dropped_paths_windows(
                 )
             })?;
         } else {
-            create_shortcut_windows(&destination_path, &source_path.to_string_lossy())?;
+            create_shortcut_windows(&destination_path, &source_path.to_string_lossy(), "", "")?;
         }
 
         let _ = known_keys.insert(identity_key);
@@ -1418,6 +1475,134 @@ fn import_dropped_paths_windows(
 }
 
 #[cfg(windows)]
+fn create_icon_entry_windows(
+    app_handle: &tauri::AppHandle,
+    input: CreateIconEntryInput,
+    custom_app_dir: Option<String>,
+) -> Result<ImportDroppedPathsResult, String> {
+    let display_name = input.display_name.trim().to_string();
+    if display_name.is_empty() {
+        return Err("Display name is required".to_string());
+    }
+
+    let target_path_text = input.target_path.trim().to_string();
+    if target_path_text.is_empty() {
+        return Err("Target path is required".to_string());
+    }
+
+    let launch_arguments = input.launch_arguments.trim().to_string();
+    let working_directory = input.working_directory.trim().to_string();
+    let custom_icon_path = input.custom_icon_path.trim().to_string();
+
+    let source_path = PathBuf::from(&target_path_text);
+    let scanned_item = build_scanned_item_from_path(&source_path)
+        .ok_or_else(|| "Target path does not exist or is not supported".to_string())?;
+    if !working_directory.is_empty() && !PathBuf::from(&working_directory).is_dir() {
+        return Err("Working directory does not exist or is not a folder".to_string());
+    }
+    if !custom_icon_path.is_empty() && !PathBuf::from(&custom_icon_path).is_file() {
+        return Err("Custom icon path does not exist or is not a file".to_string());
+    }
+
+    let target_identity = import_identity_key(&scanned_item);
+    if let Some(snapshot) = read_icon_snapshot(app_handle, IconSource::CustomApp)? {
+        let duplicate = snapshot.icons.iter().any(|item| {
+            let item_identity = if item.target_path.trim().is_empty() {
+                item.path.trim()
+            } else {
+                item.target_path.trim()
+            };
+            item_identity.eq_ignore_ascii_case(&target_identity)
+                && item.launch_arguments.trim() == launch_arguments
+                && item
+                    .working_directory
+                    .trim()
+                    .eq_ignore_ascii_case(&working_directory)
+        });
+        if duplicate {
+            return Ok(ImportDroppedPathsResult {
+                imported_count: 0,
+                duplicate_count: 1,
+                invalid_count: 0,
+            });
+        }
+    }
+
+    let custom_dir = resolve_customapp_dir_windows(app_handle, custom_app_dir)?;
+    let destination_path = build_import_file_path(&custom_dir, &source_path);
+    if has_extension(&source_path, "lnk") {
+        std::fs::copy(&source_path, &destination_path).map_err(|error| {
+            format!(
+                "Failed to copy shortcut {:?} to {:?}: {}",
+                source_path, destination_path, error
+            )
+        })?;
+        if let Err(error) = update_shortcut_launch_options_windows(
+            &destination_path,
+            &launch_arguments,
+            &working_directory,
+        ) {
+            let _ = std::fs::remove_file(&destination_path);
+            return Err(error);
+        }
+    } else {
+        create_shortcut_windows(
+            &destination_path,
+            &source_path.to_string_lossy(),
+            &launch_arguments,
+            &working_directory,
+        )?;
+    }
+
+    if let Err(error) = sync_new_icons_windows(app_handle, IconSource::CustomApp, || {
+        collect_items_from_single_dir(&custom_dir)
+    }) {
+        let _ = std::fs::remove_file(&destination_path);
+        return Err(error);
+    }
+
+    let update_result = (|| -> Result<(), String> {
+        let mut snapshot = read_icon_snapshot(app_handle, IconSource::CustomApp)?
+            .ok_or_else(|| "Icon library data was not created".to_string())?;
+        let destination_text = destination_path.to_string_lossy();
+        let created_item = snapshot
+            .icons
+            .iter_mut()
+            .find(|item| item.path.eq_ignore_ascii_case(&destination_text))
+            .ok_or_else(|| "Created icon entry was not found".to_string())?;
+
+        created_item.name = display_name;
+        created_item.launch_arguments = launch_arguments;
+        created_item.working_directory = working_directory;
+        created_item.custom_icon_path = custom_icon_path.clone();
+        if !custom_icon_path.is_empty() {
+            created_item.icons = build_custom_icon_paths(
+                app_handle,
+                &custom_icon_path,
+                &created_item.id,
+                IconSource::CustomApp,
+            )?;
+        }
+
+        write_icon_snapshot(app_handle, IconSource::CustomApp, &snapshot)
+    })();
+
+    if let Err(error) = update_result {
+        let _ = std::fs::remove_file(&destination_path);
+        let _ = sync_full_icons_windows(app_handle, IconSource::CustomApp, || {
+            collect_items_from_single_dir(&custom_dir)
+        });
+        return Err(error);
+    }
+
+    Ok(ImportDroppedPathsResult {
+        imported_count: 1,
+        duplicate_count: 0,
+        invalid_count: 0,
+    })
+}
+
+#[cfg(windows)]
 fn get_all_icons_windows(
     app_handle: &tauri::AppHandle,
     icon_size: i32,
@@ -1425,10 +1610,13 @@ fn get_all_icons_windows(
 ) -> Result<Vec<DesktopIcon>, String> {
     resolve_cross_source_display_order_collisions(app_handle)?;
 
+    // 图标库不再为新用户自动扫描桌面。已有桌面记录继续读取，
+    // 仅作为旧版本数据兼容，避免升级后丢失既有布局。
     let desktop_snapshot =
-        load_or_init_icon_snapshot_windows(app_handle, IconSource::Desktop, || {
-            Ok(collect_desktop_items())
-        })?;
+        read_icon_snapshot(app_handle, IconSource::Desktop)?.unwrap_or(IconSnapshot {
+            version: 1,
+            icons: Vec::new(),
+        });
 
     let custom_dir = resolve_customapp_dir_windows(app_handle, custom_app_dir)?;
     let custom_snapshot =
@@ -1461,10 +1649,13 @@ fn get_all_icon_manager_items_windows(
 ) -> Result<Vec<IconManagerItem>, String> {
     resolve_cross_source_display_order_collisions(app_handle)?;
 
+    // 图标库不再为新用户自动扫描桌面。已有桌面记录继续读取，
+    // 仅作为旧版本数据兼容，避免升级后丢失既有布局。
     let desktop_snapshot =
-        load_or_init_icon_snapshot_windows(app_handle, IconSource::Desktop, || {
-            Ok(collect_desktop_items())
-        })?;
+        read_icon_snapshot(app_handle, IconSource::Desktop)?.unwrap_or(IconSnapshot {
+            version: 1,
+            icons: Vec::new(),
+        });
 
     let custom_dir = resolve_customapp_dir_windows(app_handle, custom_app_dir)?;
     let custom_snapshot =

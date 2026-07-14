@@ -503,7 +503,7 @@ export function SearchPanel({
   )
   const iconEmptyText = trimmedKeyword
     ? translate('没有匹配的图标。')
-    : translate('输入关键词以搜索桌面图标。')
+    : translate('输入关键词以搜索图标库。')
   const everythingEmptyText =
     searchPending && virtualCount === 0 ? translate('搜索中...') : translate('没有结果')
   const effectiveEverythingEmptyText = isEverythingInitializing

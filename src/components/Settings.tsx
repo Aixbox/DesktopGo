@@ -14,14 +14,8 @@ import { getIdentifier, getName, getTauriVersion, getVersion } from '@tauri-apps
 import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import {
-  filterIconManagerItems,
-  getPathLeaf,
-  type IconSourceFilter,
-  type IconVisibilityFilter,
-} from '@/lib/iconManager'
+import { filterIconManagerItems, getPathLeaf, type IconVisibilityFilter } from '@/lib/iconManager'
 import { cn } from '@/lib/utils'
 import { useIconStore } from '@/stores/iconStore'
 import { loadCustomNames } from '@/lib/customNamesStore'
@@ -51,6 +45,7 @@ import { UpdatePanel } from '@/components/settings/UpdatePanel'
 import { Logo, LogoText } from '@/components/Logo'
 import { SearchSettingsPanel } from '@/components/search/SearchSettingsPanel'
 import { AiOrganizePanel } from '@/components/ai/AiOrganizePanel'
+import { AddIconDialog } from '@/components/icons/AddIconDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -92,6 +87,7 @@ import {
   X,
   LayoutGrid,
   List,
+  Upload,
 } from 'lucide-react'
 
 type NavItem = 'settings' | 'search' | 'iconManager' | 'ai' | 'update' | 'about'
@@ -99,7 +95,7 @@ type NavItem = 'settings' | 'search' | 'iconManager' | 'ai' | 'update' | 'about'
 const NAV_ITEMS: { key: NavItem; label: string; icon: ReactNode }[] = [
   { key: 'settings', label: '设置', icon: <SettingsIcon className="w-4 h-4" /> },
   { key: 'search', label: '搜索', icon: <Search className="w-4 h-4" /> },
-  { key: 'iconManager', label: '图标管理', icon: <Images className="w-4 h-4" /> },
+  { key: 'iconManager', label: '图标库', icon: <Images className="w-4 h-4" /> },
   { key: 'ai', label: 'AI 助手', icon: <Bot className="w-4 h-4" /> },
   { key: 'update', label: '更新', icon: <RefreshCw className="w-4 h-4" /> },
   { key: 'about', label: '关于', icon: <Info className="w-4 h-4" /> },
@@ -190,38 +186,10 @@ const ABOUT_RELEASES_URL = `${ABOUT_REPOSITORY_URL}/releases`
 let pendingWindowPersistentSync: Promise<void> = Promise.resolve()
 let skipReturnToMainOnClose = false
 
-type IconSyncAction =
-  | 'desktopIncremental'
-  | 'desktopFull'
-  | 'customappIncremental'
-  | 'customappFull'
-
-type IconSyncCommand =
-  | 'sync_new_desktop_icons'
-  | 'sync_full_desktop_icons'
-  | 'sync_new_customapp_icons'
-  | 'sync_full_customapp_icons'
-
-type IconSyncMode = 'incremental' | 'full'
-
-type IconSyncResult = {
-  mode: string
-  scanned_count: number
-  added_count: number
-  removed_count: number
-  total_count: number
-}
-
 const ICON_VISIBILITY_FILTER_OPTIONS: { label: string; value: IconVisibilityFilter }[] = [
   { label: '全部', value: 'all' },
   { label: '未隐藏', value: 'visible' },
   { label: '隐藏', value: 'hidden' },
-]
-
-const ICON_SOURCE_FILTER_OPTIONS: { label: string; value: IconSourceFilter }[] = [
-  { label: '全部来源', value: 'all' },
-  { label: '桌面', value: 'desktop' },
-  { label: '自定义应用', value: 'customapp' },
 ]
 
 const ICON_MANAGER_VIEW_MODE_OPTIONS: {
@@ -231,96 +199,6 @@ const ICON_MANAGER_VIEW_MODE_OPTIONS: {
 }[] = [
   { label: '列表', value: 'list', icon: <List className="h-3.5 w-3.5" /> },
   { label: '宫格', value: 'grid', icon: <LayoutGrid className="h-3.5 w-3.5" /> },
-]
-
-const ICON_SYNC_ACTIONS: Record<
-  IconSyncAction,
-  {
-    title: string
-    buttonLabel: string
-    command: IconSyncCommand
-    source: 'desktop' | 'customapp'
-    sourceLabel: string
-    mode: IconSyncMode
-    desc: string
-    impact: string
-    toneLabel: string
-    confirmTitle?: string
-    confirmDesc?: string
-    confirmLabel?: string
-  }
-> = {
-  desktopIncremental: {
-    title: '导入新增项',
-    buttonLabel: '立即导入',
-    command: 'sync_new_desktop_icons',
-    source: 'desktop',
-    sourceLabel: '桌面',
-    mode: 'incremental',
-    desc: '扫描桌面，只补进新增图标，不改动已有快照记录。',
-    impact: '适合日常维护，风险最低，可直接执行。',
-    toneLabel: '推荐',
-  },
-  desktopFull: {
-    title: '全量对账',
-    buttonLabel: '开始对账',
-    command: 'sync_full_desktop_icons',
-    source: 'desktop',
-    sourceLabel: '桌面',
-    mode: 'full',
-    desc: '重新对照当前桌面状态，补齐缺失项并清理失效记录。',
-    impact: '适合批量整理后执行，会更新快照结果，需要二次确认。',
-    toneLabel: '谨慎',
-    confirmTitle: '确认执行桌面全量对账',
-    confirmDesc: '该操作会重新扫描整个桌面，补齐缺失项并清理快照中的失效记录，不会删除磁盘文件。',
-    confirmLabel: '确认对账',
-  },
-  customappIncremental: {
-    title: '导入新增项',
-    buttonLabel: '立即导入',
-    command: 'sync_new_customapp_icons',
-    source: 'customapp',
-    sourceLabel: '自定义应用',
-    mode: 'incremental',
-    desc: '扫描当前生效目录，只补进新增图标，不改动已有快照记录。',
-    impact: '适合新增应用后执行，风险最低，可直接执行。',
-    toneLabel: '推荐',
-  },
-  customappFull: {
-    title: '全量对账',
-    buttonLabel: '开始对账',
-    command: 'sync_full_customapp_icons',
-    source: 'customapp',
-    sourceLabel: '自定义应用',
-    mode: 'full',
-    desc: '重新对照当前目录内容，补齐缺失项并清理失效记录。',
-    impact: '适合整理目录后执行，会更新快照结果，需要二次确认。',
-    toneLabel: '谨慎',
-    confirmTitle: '确认执行自定义应用全量对账',
-    confirmDesc:
-      '该操作会扫描当前自定义应用目录（仅一级目录），补齐缺失项并清理快照中的失效记录，不会删除磁盘文件。',
-    confirmLabel: '确认对账',
-  },
-}
-
-const ICON_SYNC_GROUPS: {
-  source: 'desktop' | 'customapp'
-  title: string
-  desc: string
-  actions: [IconSyncAction, IconSyncAction]
-}[] = [
-  {
-    source: 'desktop',
-    title: '桌面图标',
-    desc: '适合把桌面新增或整理后的图标状态同步回应用快照。',
-    actions: ['desktopIncremental', 'desktopFull'],
-  },
-  {
-    source: 'customapp',
-    title: '自定义应用目录',
-    desc: '适合维护当前配置的自定义应用目录中的图标快照。',
-    actions: ['customappIncremental', 'customappFull'],
-  },
 ]
 
 const SHORTCUT_MODIFIER_CODES = new Set([
@@ -1176,84 +1054,53 @@ function SettingsPanel() {
 function IconManagerPanel() {
   useI18n()
 
-  const [pendingAction, setPendingAction] = useState<IconSyncAction | null>(null)
-  const [activeSyncAction, setActiveSyncAction] = useState<IconSyncAction | null>(null)
   const [pendingMutation, setPendingMutation] = useState<{
     type: 'hide' | 'unhide' | 'delete'
     icon: IconManagerItem
   } | null>(null)
-  const [syncing, setSyncing] = useState(false)
+  const [addIconDialogOpen, setAddIconDialogOpen] = useState(false)
   const [mutating, setMutating] = useState(false)
   const [listLoading, setListLoading] = useState(false)
   const [layoutResetting, setLayoutResetting] = useState(false)
-  const [defaultCustomAppDir, setDefaultCustomAppDir] = useState('')
-  const [customAppDirInput, setCustomAppDirInput] = useState('')
-  const [effectiveCustomAppDir, setEffectiveCustomAppDir] = useState('')
   const [allIcons, setAllIcons] = useState<IconManagerItem[]>([])
   const [viewMode, setViewMode] = useState<IconManagerViewMode>('list')
   const [searchInput, setSearchInput] = useState('')
   const [searchKeyword, setSearchKeyword] = useState('')
   const [visibilityFilter, setVisibilityFilter] = useState<IconVisibilityFilter>('all')
-  const [sourceFilter, setSourceFilter] = useState<IconSourceFilter>('all')
   const [aiOrganizeOpen, setAiOrganizeOpen] = useState(false)
   const [customNames, setCustomNames] = useState<Record<string, string>>({})
   const toast = useToast()
 
-  const refreshCustomAppDirDisplay = async (options?: { syncInput?: boolean }) => {
-    try {
-      const [savedCustomAppDir, resolvedDefaultCustomAppDir] = await Promise.all([
-        getSetting('customAppDir'),
-        invoke<string>('get_default_customapp_dir'),
-      ])
-      const nextSavedCustomAppDir = savedCustomAppDir.trim()
-      const nextEffectiveCustomAppDir = nextSavedCustomAppDir || resolvedDefaultCustomAppDir
-      setDefaultCustomAppDir(resolvedDefaultCustomAppDir)
-      setEffectiveCustomAppDir(nextEffectiveCustomAppDir)
-      if (options?.syncInput) {
-        setCustomAppDirInput(nextEffectiveCustomAppDir)
-      }
-    } catch (e) {
-      console.error('Failed to load customapp dir:', e)
-      toast.error(`加载自定义应用目录失败：${String(e)}`, {
-        key: 'icon-manager-path',
-        title: '图标管理',
-      })
-    }
-  }
-
-  const refreshIconManagerList = async () => {
+  const refreshIconManagerList = useCallback(async () => {
     setListLoading(true)
     try {
-      const savedCustomAppDir = (await getSetting('customAppDir')).trim()
+      // 旧版本可能保存过自定义目录。继续在内部读取它以兼容历史数据，
+      // 但不再把目录和来源暴露为用户需要维护的概念。
+      const legacyCustomAppDir = (await getSetting('customAppDir')).trim()
       const icons = await invoke<IconManagerItem[]>('get_icon_manager_items', {
         iconSize: 48,
-        customAppDir: savedCustomAppDir || null,
+        customAppDir: legacyCustomAppDir || null,
       })
       setAllIcons(icons)
     } catch (e) {
-      toast.error(`加载图标列表失败：${String(e)}`, {
-        key: 'icon-manager-list',
-        title: '图标管理',
+      toast.error(translate('加载图标库失败：{error}', { error: String(e) }), {
+        key: 'icon-library-list',
+        title: translate('图标库'),
       })
     } finally {
       setListLoading(false)
     }
-  }
+  }, [toast])
 
   useEffect(() => {
     void getSetting('iconManagerViewMode')
       .then(setViewMode)
       .catch(e => console.error('Failed to load icon manager view mode:', e))
-
-    void (async () => {
-      await refreshCustomAppDirDisplay({ syncInput: true })
-      await refreshIconManagerList()
-    })()
-
+    void refreshIconManagerList()
     void loadCustomNames()
       .then(setCustomNames)
       .catch(e => console.error('Failed to load custom names:', e))
-  }, [])
+  }, [refreshIconManagerList])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1262,96 +1109,34 @@ function IconManagerPanel() {
     return () => window.clearTimeout(timer)
   }, [searchInput])
 
-  const filteredIcons = useMemo(() => {
-    return filterIconManagerItems(allIcons, {
-      visibilityFilter,
-      sourceFilter,
-      searchKeyword,
-    })
-  }, [allIcons, visibilityFilter, sourceFilter, searchKeyword])
+  const filteredIcons = useMemo(
+    () =>
+      filterIconManagerItems(allIcons, {
+        visibilityFilter,
+        sourceFilter: 'all',
+        searchKeyword,
+      }),
+    [allIcons, visibilityFilter, searchKeyword]
+  )
 
   const handleViewModeChange = (nextMode: IconManagerViewMode) => {
     if (nextMode === viewMode) return
-
-    // 视图模式属于用户偏好，持久化后可避免每次进入设置页都重新切回常用展示。
     setViewMode(nextMode)
     void setSetting('iconManagerViewMode', nextMode).catch(e =>
       console.error('Failed to save icon manager view mode:', e)
     )
   }
 
-  const runSyncAction = async (actionKey: IconSyncAction) => {
-    setSyncing(true)
-    setActiveSyncAction(actionKey)
-
-    try {
-      const action = ICON_SYNC_ACTIONS[actionKey]
-      let result: IconSyncResult
-
-      if (action.source === 'customapp') {
-        const savedCustomAppDir = (await getSetting('customAppDir')).trim()
-        result = await invoke<IconSyncResult>(action.command, {
-          customAppDir: savedCustomAppDir || null,
-        })
-      } else {
-        result = await invoke<IconSyncResult>(action.command)
-      }
-
-      const modeText = action.mode === 'full' ? translate('全量对账') : translate('导入新增项')
-      toast.success(
-        translate(
-          '{source}{mode}完成：扫描 {scanned} 项，新增 {added} 项，删除 {removed} 项，当前快照共 {total} 项。',
-          {
-            source: translate(action.sourceLabel),
-            mode: modeText,
-            scanned: result.scanned_count,
-            added: result.added_count,
-            removed: result.removed_count,
-            total: result.total_count,
-          }
-        ),
-        {
-          key: 'icon-manager-sync',
-          title: translate('图标管理'),
-          duration: 3600,
-        }
-      )
-      await refreshCustomAppDirDisplay()
-      await refreshIconManagerList()
-    } catch (e) {
-      const action = ICON_SYNC_ACTIONS[actionKey]
-      const modeText = action.mode === 'full' ? translate('全量对账') : translate('导入新增项')
-      toast.error(
-        translate('{source}{mode}失败：{error}', {
-          source: translate(action.sourceLabel),
-          mode: modeText,
-          error: String(e),
-        }),
-        {
-          key: 'icon-manager-sync',
-          title: translate('图标管理'),
-        }
-      )
-    } finally {
-      setSyncing(false)
-      setActiveSyncAction(null)
-      setPendingAction(null)
+  const notifyMainWindow = async () => {
+    const mainWindow = await WebviewWindow.getByLabel('main')
+    if (mainWindow) {
+      await mainWindow.emit(LAUNCHPAD_LAYOUT_RESET_EVENT)
     }
   }
 
-  const handleTriggerSync = (actionKey: IconSyncAction) => {
-    const action = ICON_SYNC_ACTIONS[actionKey]
-    if (action.mode === 'full') {
-      setPendingAction(actionKey)
-      return
-    }
-
-    void runSyncAction(actionKey)
-  }
-
-  const handleConfirmSync = async () => {
-    if (!pendingAction) return
-    await runSyncAction(pendingAction)
+  const handleIconCreated = async () => {
+    await refreshIconManagerList()
+    await notifyMainWindow()
   }
 
   const handleConfirmMutation = async () => {
@@ -1359,41 +1144,34 @@ function IconManagerPanel() {
     setMutating(true)
     try {
       const targets: IconMutationTarget[] = [
-        {
-          id: pendingMutation.icon.id,
-          source: pendingMutation.icon.source,
-        },
+        { id: pendingMutation.icon.id, source: pendingMutation.icon.source },
       ]
-
-      let command = 'hide_desktop_icons'
-      let actionLabel = '隐藏'
-      if (pendingMutation.type === 'unhide') {
-        command = 'unhide_desktop_icons'
-        actionLabel = '取消隐藏'
-      } else if (pendingMutation.type === 'delete') {
-        command = 'delete_desktop_icons'
-        actionLabel = '删除'
-      }
-
+      const command =
+        pendingMutation.type === 'unhide'
+          ? 'unhide_desktop_icons'
+          : pendingMutation.type === 'delete'
+            ? 'delete_desktop_icons'
+            : 'hide_desktop_icons'
+      const actionLabel =
+        pendingMutation.type === 'unhide'
+          ? '显示'
+          : pendingMutation.type === 'delete'
+            ? '移出图标库'
+            : '隐藏'
       const affected = await invoke<number>(command, { targets })
-      const sourceText =
-        pendingMutation.icon.source === 'desktop' ? translate('桌面') : translate('自定义应用')
       toast.success(
-        translate('{action}完成：{source} 图标影响 {count} 项。', {
+        translate('{action}完成，影响 {count} 项。', {
           action: translate(actionLabel),
-          source: sourceText,
           count: affected,
         }),
-        {
-          key: 'icon-manager-action',
-          title: translate('图标管理'),
-        }
+        { key: 'icon-library-action', title: translate('图标库') }
       )
       await refreshIconManagerList()
+      await notifyMainWindow()
     } catch (e) {
       toast.error(translate('操作失败：{error}', { error: String(e) }), {
-        key: 'icon-manager-action',
-        title: translate('图标管理'),
+        key: 'icon-library-action',
+        title: translate('图标库'),
       })
     } finally {
       setMutating(false)
@@ -1401,133 +1179,25 @@ function IconManagerPanel() {
     }
   }
 
-  const handlePickCustomAppDir = async () => {
-    try {
-      const selected = await openDialog({
-        directory: true,
-        multiple: false,
-        defaultPath:
-          customAppDirInput.trim() || effectiveCustomAppDir || defaultCustomAppDir || undefined,
-      })
-
-      if (typeof selected === 'string') {
-        setCustomAppDirInput(selected)
-        toast.info(translate('已选择文件夹，请点击“保存路径”后生效。'), {
-          key: 'icon-manager-path',
-          title: translate('自定义图标文件夹'),
-        })
-      }
-    } catch (e) {
-      toast.error(translate('选择文件夹失败：{error}', { error: String(e) }), {
-        key: 'icon-manager-path',
-        title: translate('自定义图标文件夹'),
-      })
-    }
-  }
-
-  const handleOpenCustomAppDir = async () => {
-    const targetDir = customAppDirInput.trim() || effectiveCustomAppDir || defaultCustomAppDir
-    if (!targetDir) {
-      toast.error(translate('没有可打开的目录，请先选择或输入自定义应用目录。'), {
-        key: 'icon-manager-path',
-        title: translate('自定义图标文件夹'),
-      })
-      return
-    }
-
-    try {
-      await invoke('launch_app', { path: targetDir })
-      toast.info(translate('已打开目录：{dir}', { dir: targetDir }), {
-        key: 'icon-manager-path',
-        title: translate('自定义图标文件夹'),
-        duration: 3200,
-      })
-    } catch (e) {
-      toast.error(translate('打开目录失败：{error}', { error: String(e) }), {
-        key: 'icon-manager-path',
-        title: translate('自定义图标文件夹'),
-      })
-    }
-  }
-
-  const handleSaveCustomAppDir = async () => {
-    try {
-      const nextCustomAppDir = customAppDirInput.trim()
-      await setSetting('customAppDir', nextCustomAppDir)
-      const nextEffectiveCustomAppDir = nextCustomAppDir || defaultCustomAppDir
-      setEffectiveCustomAppDir(nextEffectiveCustomAppDir)
-      toast.success(
-        nextCustomAppDir
-          ? translate('路径已保存，后续自定义应用同步将使用该目录。')
-          : translate('已恢复使用默认自定义应用目录。'),
-        {
-          key: 'icon-manager-path',
-          title: translate('自定义图标文件夹'),
-        }
-      )
-      await refreshIconManagerList()
-    } catch (e) {
-      toast.error(translate('保存失败：{error}', { error: String(e) }), {
-        key: 'icon-manager-path',
-        title: translate('自定义图标文件夹'),
-      })
-    }
-  }
-
-  const handleResetCustomAppDir = async () => {
-    try {
-      await setSetting('customAppDir', '')
-      setCustomAppDirInput(defaultCustomAppDir)
-      setEffectiveCustomAppDir(defaultCustomAppDir)
-      toast.success(translate('已恢复默认自定义应用目录。'), {
-        key: 'icon-manager-path',
-        title: translate('自定义图标文件夹'),
-      })
-      await refreshIconManagerList()
-    } catch (e) {
-      toast.error(translate('恢复默认失败：{error}', { error: String(e) }), {
-        key: 'icon-manager-path',
-        title: translate('自定义图标文件夹'),
-      })
-    }
-  }
-
   const handleResetLaunchpadIcons = async () => {
     if (layoutResetting) return
     const confirmed = window.confirm(
-      translate(
-        '确定要重置图标吗？这会先全量同步桌面和自定义应用，移除已不存在的图标记录，再清空当前宫格排序、文件夹和 Dock 排布。'
-      )
+      translate('确定要重置图标布局吗？这会清空当前宫格排序、文件夹和 Dock 排布。')
     )
     if (!confirmed) return
 
     setLayoutResetting(true)
-
     try {
-      const savedCustomAppDir = (await getSetting('customAppDir')).trim()
-      await invoke('sync_full_desktop_icons')
-      await invoke('sync_full_customapp_icons', {
-        customAppDir: savedCustomAppDir || null,
-      })
       await resetLaunchpadLayout()
-      await refreshIconManagerList()
-      const mainWindow = await WebviewWindow.getByLabel('main')
-      if (mainWindow) {
-        await mainWindow.emit(LAUNCHPAD_LAYOUT_RESET_EVENT)
-        toast.success(translate('图标已重置并同步，主窗口已刷新。'), {
-          key: 'icon-manager-layout',
-          title: translate('图标布局重置'),
-        })
-      } else {
-        toast.success(translate('图标已重置并同步，主窗口下次显示时会应用。'), {
-          key: 'icon-manager-layout',
-          title: translate('图标布局重置'),
-        })
-      }
+      await notifyMainWindow()
+      toast.success(translate('图标布局已重置。'), {
+        key: 'icon-library-layout',
+        title: translate('图标库'),
+      })
     } catch (e) {
-      toast.error(translate('重置图标失败：{error}', { error: String(e) }), {
-        key: 'icon-manager-layout',
-        title: translate('图标布局重置'),
+      toast.error(translate('重置图标布局失败：{error}', { error: String(e) }), {
+        key: 'icon-library-layout',
+        title: translate('图标库'),
       })
     } finally {
       setLayoutResetting(false)
@@ -1538,7 +1208,7 @@ function IconManagerPanel() {
     ? pendingMutation.type === 'hide'
       ? {
           title: translate('确认隐藏图标'),
-          desc: translate('将隐藏图标”{name}”。隐藏后不会在主页面显示。', {
+          desc: translate('将隐藏图标“{name}”。隐藏后不会在启动台显示。', {
             name: pendingMutation.icon.name,
           }),
           confirmLabel: translate('确认隐藏'),
@@ -1546,556 +1216,257 @@ function IconManagerPanel() {
         }
       : pendingMutation.type === 'unhide'
         ? {
-            title: translate('确认取消隐藏图标'),
-            desc: translate('将取消隐藏图标”{name}”。取消后图标会重新显示。', {
+            title: translate('确认显示图标'),
+            desc: translate('图标“{name}”将重新显示在启动台。', {
               name: pendingMutation.icon.name,
             }),
-            confirmLabel: translate('确认取消隐藏'),
+            confirmLabel: translate('确认显示'),
             confirmVariant: 'default' as const,
           }
         : {
-            title: translate('确认删除图标记录'),
-            desc: translate('将删除图标”{name}”在应用内的记录，不会删除磁盘文件。', {
+            title: translate('确认移出图标库'),
+            desc: translate('将“{name}”移出图标库，不会删除原始程序、文件或文件夹。', {
               name: pendingMutation.icon.name,
             }),
-            confirmLabel: translate('确认删除'),
+            confirmLabel: translate('移出图标库'),
             confirmVariant: 'destructive' as const,
           }
     : null
 
+  const controlsDisabled = mutating || listLoading || layoutResetting
+
   return (
     <>
-      <div className="min-w-0 space-y-6">
-        <div className="max-w-3xl space-y-2">
-          <h2 className="text-lg font-semibold">{translate('图标管理')}</h2>
-          <p className="text-sm text-muted-foreground">
-            {translate(
-              '首次进入主页面会自动建立桌面和自定义应用快照，后续由你在这里手动同步和整理。'
-            )}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {translate('日常优先使用“导入新增项”；只有需要清理失效记录时，再执行“全量对账”。')}
-          </p>
+      <div className="min-w-0 space-y-5">
+        <div className="flex flex-col gap-4 border-b border-border/80 pb-5 md:flex-row md:items-end md:justify-between">
+          <div className="max-w-2xl space-y-1.5">
+            <h2 className="text-lg font-semibold">{translate('图标库')}</h2>
+            <p className="text-sm leading-6 text-muted-foreground">
+              {translate('导入常用应用、快捷方式和文件；文件夹可以直接拖入启动台。')}
+            </p>
+          </div>
+          <Button onClick={() => setAddIconDialogOpen(true)} disabled={mutating || layoutResetting}>
+            <Upload className="h-4 w-4" />
+            {translate('导入图标')}
+          </Button>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)] xl:items-start">
-          <div className="min-w-0 space-y-4">
-            <SettingCard
-              label={translate('自定义图标文件夹')}
-              desc={translate(
-                '自定义应用目录只扫描一级目录。这里修改后，图标列表和后续同步都会使用新目录。'
-              )}
-            >
-              <p className="break-all text-xs text-muted-foreground">
-                {translate('默认目录：{path}', {
-                  path: defaultCustomAppDir || translate('加载中...'),
-                })}
-              </p>
-              <p className="break-all text-xs text-muted-foreground">
-                {translate('当前生效目录：{path}', {
-                  path: effectiveCustomAppDir || translate('加载中...'),
-                })}
-              </p>
+        <div className="min-w-0 space-y-3 rounded-lg border border-border/90 bg-card p-4 shadow-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex min-w-0 flex-[1_1_24rem] flex-wrap items-center gap-2">
               <Input
-                value={customAppDirInput}
-                onChange={e => setCustomAppDirInput(e.target.value)}
-                placeholder={translate('输入自定义应用文件夹绝对路径')}
-                className="w-full"
-                disabled={syncing || mutating || listLoading}
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                placeholder={translate('搜索图标名称或路径')}
+                className="min-w-0 flex-[1_1_15rem]"
               />
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handlePickCustomAppDir}
-                  disabled={syncing || mutating || listLoading}
-                >
-                  {translate('选择文件夹')}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleOpenCustomAppDir}
-                  disabled={syncing || mutating}
-                >
-                  {translate('打开文件夹')}
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSaveCustomAppDir}
-                  disabled={syncing || mutating || listLoading}
-                >
-                  {translate('保存路径')}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleResetCustomAppDir}
-                  disabled={syncing || mutating || listLoading}
-                >
-                  {translate('恢复默认路径')}
-                </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                {ICON_VISIBILITY_FILTER_OPTIONS.map(opt => (
+                  <OptionButton
+                    key={opt.value}
+                    label={translate(opt.label)}
+                    selected={visibilityFilter === opt.value}
+                    onClick={() => setVisibilityFilter(opt.value)}
+                  />
+                ))}
               </div>
-            </SettingCard>
+            </div>
 
-            {ICON_SYNC_GROUPS.map(group => {
-              return (
-                <div
-                  key={group.source}
-                  className="space-y-4 rounded-xl border border-border/90 bg-card p-4 shadow-sm"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-medium text-foreground">
-                        {translate(group.title)}
-                      </h3>
-                      <span className="rounded-full border border-border/70 bg-muted px-2 py-0.5 text-[11px] text-foreground/75">
-                        {group.source === 'desktop' ? translate('桌面来源') : translate('目录来源')}
-                      </span>
-                    </div>
-                    <p className="text-xs leading-5 text-muted-foreground">
-                      {translate(group.desc)}
-                    </p>
-                  </div>
-
-                  <div className="space-y-3">
-                    {group.actions.map(actionKey => {
-                      const action = ICON_SYNC_ACTIONS[actionKey]
-                      const isActive = syncing && activeSyncAction === actionKey
-                      const isIncremental = action.mode === 'incremental'
-
-                      return (
-                        <div
-                          key={actionKey}
-                          className={`rounded-lg border px-3 py-3 shadow-sm ${
-                            isIncremental
-                              ? 'border-border/85 bg-background'
-                              : 'border-amber-500/30 bg-amber-500/8'
-                          }`}
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1 space-y-1.5">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-sm font-medium text-foreground">
-                                  {translate(action.title)}
-                                </p>
-                                <span
-                                  className={`rounded-full px-2 py-0.5 text-[11px] ${
-                                    isIncremental
-                                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                                      : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
-                                  }`}
-                                >
-                                  {translate(action.toneLabel)}
-                                </span>
-                              </div>
-                              <p className="text-xs leading-5 text-muted-foreground">
-                                {translate(action.desc)}
-                              </p>
-                              <p className="text-[11px] leading-5 text-muted-foreground/90">
-                                {translate(action.impact)}
-                              </p>
-                            </div>
-                            <div className="flex shrink-0 items-center gap-2 self-center">
-                              <span
-                                className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] ${
-                                  isIncremental
-                                    ? 'border border-border/70 bg-muted text-foreground/75'
-                                    : 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
-                                }`}
-                              >
-                                {isActive ? (
-                                  <>
-                                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                                    {translate('处理中')}
-                                  </>
-                                ) : isIncremental ? (
-                                  translate('直接执行')
-                                ) : (
-                                  translate('需确认')
-                                )}
-                              </span>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant={isIncremental ? 'default' : 'outline'}
-                              onClick={() => handleTriggerSync(actionKey)}
-                              disabled={syncing || mutating || layoutResetting}
-                              className={
-                                isIncremental
-                                  ? ''
-                                  : 'border-amber-500/30 text-amber-700 hover:bg-amber-500/10 hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200'
-                              }
-                            >
-                              {isActive ? (
-                                <>
-                                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                                  {translate('{label}中...', { label: action.buttonLabel })}
-                                </>
-                              ) : (
-                                translate(action.buttonLabel)
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-
-            <SettingCard
-              label={translate('图标布局重置')}
-              desc={translate(
-                '重置后会恢复默认图标布局，并清空当前创建的文件夹和 Dock 排布，不会删除图标快照记录。'
-              )}
-            >
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleResetLaunchpadIcons}
-                  disabled={layoutResetting || syncing || mutating}
-                >
-                  {layoutResetting ? translate('重置中...') : translate('重置图标')}
-                </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAiOrganizeOpen(true)}
+                disabled={controlsDisabled || allIcons.length === 0}
+              >
+                <Bot className="h-3.5 w-3.5" />
+                {translate('AI 整理')}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResetLaunchpadIcons}
+                disabled={controlsDisabled}
+              >
+                {layoutResetting ? translate('重置中...') : translate('重置布局')}
+              </Button>
+              <div className="inline-flex h-9 rounded-lg border border-border/90 bg-background p-1">
+                {ICON_MANAGER_VIEW_MODE_OPTIONS.map(option => {
+                  const selected = viewMode === option.value
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-label={translate(option.label)}
+                      title={translate(option.label)}
+                      aria-pressed={selected}
+                      onClick={() => handleViewModeChange(option.value)}
+                      className={cn(
+                        'inline-flex h-full w-8 items-center justify-center rounded-md transition-colors',
+                        selected
+                          ? 'bg-accent text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      {option.icon}
+                    </button>
+                  )
+                })}
               </div>
-            </SettingCard>
-
-            <SettingCard
-              label={translate('AI 智能整理')}
-              desc={translate(
-                '调用已配置的 AI 模型，按用途把图标归类到文件夹。会先弹出预览，确认后再写入主窗口布局。'
-              )}
-            >
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setAiOrganizeOpen(true)}
-                  disabled={layoutResetting || syncing || mutating || listLoading}
-                >
-                  {translate('开始 AI 整理')}
-                </Button>
-              </div>
-            </SettingCard>
+            </div>
           </div>
 
-          <div className="min-w-0 space-y-3 rounded-lg border border-border/90 bg-card p-4 shadow-sm">
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-2 md:flex-row md:items-center">
-                <Input
-                  value={searchInput}
-                  onChange={e => setSearchInput(e.target.value)}
-                  placeholder={translate('搜索图标名称或路径')}
-                  className="w-full md:min-w-[220px] md:flex-1 xl:max-w-md"
-                />
-                <div className="inline-flex h-10 shrink-0 self-start rounded-lg border border-border/90 bg-background p-1 shadow-sm">
-                  {ICON_MANAGER_VIEW_MODE_OPTIONS.map(option => {
-                    const selected = viewMode === option.value
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        aria-label={translate(option.label)}
-                        title={translate(option.label)}
-                        aria-pressed={selected}
-                        onClick={() => handleViewModeChange(option.value)}
-                        className={cn(
-                          'inline-flex h-full w-8 items-center justify-center rounded-md transition-colors',
-                          selected
-                            ? 'bg-accent text-foreground shadow-sm'
-                            : 'text-muted-foreground hover:text-foreground'
-                        )}
-                      >
-                        {option.icon}
-                      </button>
-                    )
-                  })}
-                </div>
+          <p className="text-xs text-muted-foreground">
+            {translate('图标库共 {total} 项，当前显示 {filtered} 项。', {
+              total: allIcons.length,
+              filtered: filteredIcons.length,
+            })}
+          </p>
+
+          <div
+            className={cn(
+              'min-h-52',
+              viewMode === 'grid'
+                ? 'grid content-start gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(100%,10rem),1fr))]'
+                : 'space-y-2'
+            )}
+          >
+            {listLoading ? (
+              <div className="col-span-full flex min-h-44 items-center justify-center text-sm text-muted-foreground">
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                {translate('图标库加载中...')}
               </div>
-            </div>
+            ) : filteredIcons.length === 0 ? (
+              <div className="col-span-full flex min-h-44 flex-col items-center justify-center gap-3 text-center">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                  <Upload className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">
+                    {allIcons.length === 0
+                      ? translate('图标库还是空的')
+                      : translate('没有符合当前条件的图标')}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {allIcons.length === 0
+                      ? translate('导入应用、快捷方式或文件，开始创建你的启动台。')
+                      : translate('尝试调整搜索词或显示状态。')}
+                  </p>
+                </div>
+                {allIcons.length === 0 ? (
+                  <Button
+                    size="sm"
+                    onClick={() => setAddIconDialogOpen(true)}
+                    disabled={controlsDisabled}
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    {translate('导入图标')}
+                  </Button>
+                ) : null}
+              </div>
+            ) : (
+              filteredIcons.map(icon => {
+                const compactPathLabel = getPathLeaf(icon.target_path || icon.path) || '-'
+                const visibilityBadgeClass = icon.hidden
+                  ? 'border-orange-500/30 bg-orange-500/15 text-orange-700 dark:text-orange-300'
+                  : 'border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
 
-            <div className="flex flex-wrap items-center gap-2">
-              {ICON_VISIBILITY_FILTER_OPTIONS.map(opt => (
-                <OptionButton
-                  key={opt.value}
-                  label={translate(opt.label)}
-                  selected={visibilityFilter === opt.value}
-                  onClick={() => setVisibilityFilter(opt.value)}
-                />
-              ))}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {ICON_SOURCE_FILTER_OPTIONS.map(opt => (
-                <OptionButton
-                  key={opt.value}
-                  label={translate(opt.label)}
-                  selected={sourceFilter === opt.value}
-                  onClick={() => setSourceFilter(opt.value)}
-                />
-              ))}
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-              {translate(
-                '图标总数 {total} 项，当前筛选结果 {filtered} 项，当前为{viewMode}展示。',
-                {
-                  total: allIcons.length,
-                  filtered: filteredIcons.length,
-                  viewMode: viewMode === 'list' ? translate('列表') : translate('宫格'),
-                }
-              )}
-            </p>
-
-            <div
-              className={
-                viewMode === 'grid'
-                  ? 'grid items-start gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(100%,9.5rem),1fr))]'
-                  : 'space-y-2'
-              }
-            >
-              {listLoading ? (
-                <p className="text-sm text-muted-foreground">{translate('图标列表加载中...')}</p>
-              ) : filteredIcons.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {translate('当前筛选条件下没有图标。')}
-                </p>
-              ) : (
-                filteredIcons.map(icon => {
-                  const sourceLabel =
-                    icon.source === 'desktop' ? translate('桌面') : translate('自定义应用')
-                  const compactPathLabel = getPathLeaf(icon.target_path || icon.path) || '-'
-                  const sourceBadgeClass =
-                    icon.source === 'desktop'
-                      ? 'border-blue-500/30 bg-blue-500/15 text-blue-700 dark:text-blue-300'
-                      : 'border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                  const visibilityBadgeClass = icon.hidden
-                    ? 'border-orange-500/30 bg-orange-500/15 text-orange-700 dark:text-orange-300'
-                    : 'border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
-                  if (viewMode === 'grid') {
-                    return (
-                      <div
-                        key={`${icon.source}:${icon.id}`}
-                        title={`${translate('路径：{path}', { path: icon.path })}\n${translate(
-                          '目标：{path}',
-                          {
-                            path: icon.target_path || '-',
-                          }
-                        )}`}
-                        className="min-w-0 self-start rounded-md border border-border/85 bg-background p-2.5 shadow-sm"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/70 bg-muted/35">
-                            {icon.icon_base64 ? (
-                              <img
-                                src={icon.icon_base64}
-                                alt={icon.name}
-                                className="h-full w-full object-contain"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                                {translate('无图标')}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="flex min-w-0 flex-wrap justify-end gap-1">
-                            <span
-                              className={`rounded border px-1.5 py-0.5 text-[10px] leading-none ${sourceBadgeClass}`}
-                            >
-                              {sourceLabel}
-                            </span>
-                            <span
-                              className={`rounded border px-1.5 py-0.5 text-[10px] leading-none ${visibilityBadgeClass}`}
-                            >
-                              {icon.hidden ? translate('隐藏') : translate('未隐藏')}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="mt-2 min-w-0 space-y-1">
+                return (
+                  <article
+                    key={icon.source + ':' + icon.id}
+                    className={cn(
+                      'border border-border/80 bg-background',
+                      viewMode === 'grid'
+                        ? 'rounded-lg p-3'
+                        : 'flex flex-wrap items-center gap-3 rounded-lg p-3'
+                    )}
+                  >
+                    <div className="flex min-w-0 flex-[1_1_16rem] items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/70 bg-muted/35">
+                        {icon.icon_base64 ? (
+                          <img
+                            src={icon.icon_base64}
+                            alt={icon.name}
+                            className="h-full w-full object-contain"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">
+                            {translate('无图标')}
+                          </span>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
                           <p
-                            className="min-w-0 overflow-hidden text-left text-sm font-medium leading-4 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] [overflow-wrap:anywhere]"
+                            className={cn(
+                              'font-medium',
+                              viewMode === 'grid'
+                                ? 'overflow-hidden text-sm leading-4 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]'
+                                : 'truncate text-sm'
+                            )}
                             title={icon.name || translate('未命名')}
                           >
                             {icon.name || translate('未命名')}
                           </p>
-                          <p
-                            className="min-w-0 truncate text-left text-[11px] text-muted-foreground"
-                            title={icon.target_path || icon.path}
+                          <span
+                            className={cn(
+                              'rounded border px-1.5 py-0.5 text-[10px]',
+                              visibilityBadgeClass
+                            )}
                           >
-                            {compactPathLabel}
-                          </p>
+                            {icon.hidden ? translate('隐藏') : translate('显示中')}
+                          </span>
                         </div>
-
-                        <div className="mt-2 grid grid-cols-2 gap-1.5">
-                          {icon.hidden ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setPendingMutation({ type: 'unhide', icon })}
-                              disabled={syncing || mutating}
-                              className="h-7 min-w-0 overflow-hidden px-2 text-[11px]"
-                            >
-                              {translate('显示')}
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setPendingMutation({ type: 'hide', icon })}
-                              disabled={syncing || mutating}
-                              className="h-7 min-w-0 overflow-hidden px-2 text-[11px]"
-                            >
-                              {translate('隐藏')}
-                            </Button>
-                          )}
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => setPendingMutation({ type: 'delete', icon })}
-                            disabled={syncing || mutating}
-                            className="h-7 min-w-0 overflow-hidden px-2 text-[11px]"
-                          >
-                            {translate('删除')}
-                          </Button>
-                        </div>
-                      </div>
-                    )
-                  }
-
-                  return (
-                    <div
-                      key={`${icon.source}:${icon.id}`}
-                      title={`${translate('路径：{path}', { path: icon.path })}\n${translate(
-                        '目标：{path}',
-                        {
-                          path: icon.target_path || '-',
-                        }
-                      )}`}
-                      className="rounded-md border border-border/85 bg-background p-3 shadow-sm"
-                    >
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start">
-                        <div
-                          className={cn(
-                            'flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/70 bg-muted/35'
-                          )}
+                        <p
+                          className="mt-1 truncate text-xs text-muted-foreground"
+                          title={icon.target_path || icon.path}
                         >
-                          {icon.icon_base64 ? (
-                            <img
-                              src={icon.icon_base64}
-                              alt={icon.name}
-                              className="h-full w-full object-contain"
-                              loading="lazy"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                              {translate('无图标')}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="min-w-0 flex-1 space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className={cn('truncate text-sm font-medium')}>
-                              {icon.name || translate('未命名')}
-                            </p>
-                            <span
-                              className={`rounded border px-2 py-0.5 text-[11px] ${sourceBadgeClass}`}
-                            >
-                              {sourceLabel}
-                            </span>
-                            <span
-                              className={`rounded border px-2 py-0.5 text-[11px] ${visibilityBadgeClass}`}
-                            >
-                              {icon.hidden ? translate('隐藏') : translate('未隐藏')}
-                            </span>
-                          </div>
-                          <div className="space-y-1">
-                            <p className="break-all text-xs text-muted-foreground md:truncate">
-                              {translate('路径：{path}', { path: icon.path })}
-                            </p>
-                            <p className="break-all text-xs text-muted-foreground md:truncate">
-                              {translate('目标：{path}', { path: icon.target_path || '-' })}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex w-full shrink-0 flex-wrap gap-2 md:w-auto md:justify-end">
-                          {icon.hidden ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setPendingMutation({ type: 'unhide', icon })}
-                              disabled={syncing || mutating}
-                              className="flex-1 md:flex-none"
-                            >
-                              {translate('取消隐藏')}
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setPendingMutation({ type: 'hide', icon })}
-                              disabled={syncing || mutating}
-                              className="flex-1 md:flex-none"
-                            >
-                              {translate('隐藏')}
-                            </Button>
-                          )}
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => setPendingMutation({ type: 'delete', icon })}
-                            disabled={syncing || mutating}
-                            className="flex-1 md:flex-none"
-                          >
-                            {translate('删除')}
-                          </Button>
-                        </div>
+                          {viewMode === 'grid' ? compactPathLabel : icon.target_path || icon.path}
+                        </p>
                       </div>
                     </div>
-                  )
-                })
-              )}
-            </div>
+
+                    <div
+                      className={cn(
+                        'flex min-w-0 flex-wrap gap-2',
+                        viewMode === 'grid' ? 'mt-3' : 'flex-[1_1_12rem]'
+                      )}
+                    >
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setPendingMutation({ type: icon.hidden ? 'unhide' : 'hide', icon })
+                        }
+                        disabled={mutating}
+                        className="min-w-0 flex-1 whitespace-normal"
+                      >
+                        {icon.hidden ? translate('显示') : translate('隐藏')}
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => setPendingMutation({ type: 'delete', icon })}
+                        disabled={mutating}
+                        className="min-w-0 flex-1 whitespace-normal"
+                      >
+                        {viewMode === 'grid' ? translate('移出') : translate('移出图标库')}
+                      </Button>
+                    </div>
+                  </article>
+                )
+              })
+            )}
           </div>
         </div>
       </div>
 
-      {pendingAction ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/22 p-4 backdrop-blur-[1px] dark:bg-black/45">
-          <div className="w-full max-w-md rounded-xl border border-border bg-background p-5 shadow-xl">
-            <h3 className="text-base font-semibold">
-              {translate(ICON_SYNC_ACTIONS[pendingAction].confirmTitle ?? '')}
-            </h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {translate(ICON_SYNC_ACTIONS[pendingAction].confirmDesc ?? '')}
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPendingAction(null)}
-                disabled={syncing}
-              >
-                {translate('取消')}
-              </Button>
-              <Button size="sm" onClick={handleConfirmSync} disabled={syncing}>
-                {syncing
-                  ? translate('{label}中...', {
-                      label: ICON_SYNC_ACTIONS[pendingAction].buttonLabel,
-                    })
-                  : translate(ICON_SYNC_ACTIONS[pendingAction].confirmLabel ?? '')}
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <AddIconDialog
+        open={addIconDialogOpen}
+        onOpenChange={setAddIconDialogOpen}
+        onCreated={handleIconCreated}
+      />
 
       {pendingMutation && mutationDialogText ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/22 p-4 backdrop-blur-[1px] dark:bg-black/45">
@@ -2117,7 +1488,7 @@ function IconManagerPanel() {
                 onClick={handleConfirmMutation}
                 disabled={mutating}
               >
-                {mutating ? translate('处理中...') : translate(mutationDialogText.confirmLabel)}
+                {mutating ? translate('处理中...') : mutationDialogText.confirmLabel}
               </Button>
             </div>
           </div>
@@ -2129,19 +1500,8 @@ function IconManagerPanel() {
         icons={allIcons.filter(icon => !icon.hidden)}
         customNames={customNames}
         onClose={() => setAiOrganizeOpen(false)}
-        onPreviewed={async () => {
-          const mainWindow = await WebviewWindow.getByLabel('main')
-          if (mainWindow) {
-            await mainWindow.emit(LAUNCHPAD_LAYOUT_RESET_EVENT)
-          }
-        }}
-        onApplied={async () => {
-          // 设置窗口里完成写回后，通知主窗口重新 hydrate 布局，与「重置图标」一致。
-          const mainWindow = await WebviewWindow.getByLabel('main')
-          if (mainWindow) {
-            await mainWindow.emit(LAUNCHPAD_LAYOUT_RESET_EVENT)
-          }
-        }}
+        onPreviewed={notifyMainWindow}
+        onApplied={notifyMainWindow}
       />
     </>
   )
@@ -2506,11 +1866,9 @@ function AboutPanel() {
       meta: translate('Installed Everything only'),
     },
     {
-      title: translate('图标管理'),
-      description: translate(
-        '支持桌面与自定义应用两套来源的增量与全量同步，并保留隐藏与整理能力。'
-      ),
-      meta: translate('桌面 + 自定义应用'),
+      title: translate('图标库'),
+      description: translate('导入并管理启动台中的应用、文件和文件夹，支持隐藏、移出与智能整理。'),
+      meta: translate('统一图标库'),
     },
     {
       title: translate('应用更新'),

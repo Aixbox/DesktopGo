@@ -1,6 +1,8 @@
+import type { ReactNode } from 'react'
+
 interface SettingGroupProps {
   title: string
-  children: React.ReactNode
+  children: ReactNode
 }
 
 export function SettingGroup({ title, children }: SettingGroupProps) {
@@ -15,7 +17,7 @@ export function SettingGroup({ title, children }: SettingGroupProps) {
 interface SettingCardProps {
   label: string
   desc?: string
-  children: React.ReactNode
+  children: ReactNode
 }
 
 export function SettingCard({ label, desc, children }: SettingCardProps) {
@@ -103,7 +105,7 @@ export function OptionButton({ label, selected, onClick }: OptionButtonProps) {
   return (
     <button
       onClick={onClick}
-      className={`rounded-lg border px-4 py-2 text-sm transition-all duration-150 cursor-pointer ${
+      className={`shrink-0 whitespace-nowrap rounded-lg border px-4 py-2 text-sm transition-all duration-150 cursor-pointer ${
         selected
           ? 'border-blue-500/40 bg-blue-500/12 text-blue-700 shadow-sm ring-1 ring-blue-500/10 dark:border-blue-400/35 dark:bg-blue-400/14 dark:text-blue-200 dark:ring-blue-400/12'
           : 'border-border/90 bg-card text-foreground hover:border-foreground/15 hover:bg-accent'

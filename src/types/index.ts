@@ -5,6 +5,9 @@ export interface DesktopIcon {
   name: string
   path: string
   target_path: string
+  launch_arguments?: string
+  working_directory?: string
+  custom_icon_path?: string
   icon_base64: string
   item_type: 'shortcut' | 'folder' | 'file' | 'executable' | 'special'
   source: IconSource

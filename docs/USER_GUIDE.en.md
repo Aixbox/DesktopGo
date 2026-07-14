@@ -4,7 +4,7 @@
 
 Supported platforms: Windows 10 / Windows 11
 
-DesktopGo is a Windows desktop launchpad that brings desktop icon organization, custom app entry points, and Everything-powered file search into one focused entry point.
+DesktopGo is a Windows desktop launchpad that brings a personal icon library, quick app entry points, and Everything-powered file search into one focused entry point.
 
 ## 📦 1. Install and Launch
 
@@ -29,7 +29,7 @@ Default values on first launch:
 - 📌 Dock: Enabled
 - ⚡ Launch on startup: Enabled
 - ⌨️ Launchpad shortcut: `Ctrl+Space`
-- 🗂️ Icon manager view: List
+- 🗂️ Icon library view: List
 
 Notes:
 
@@ -44,23 +44,20 @@ Notes:
 - The launchpad hides automatically when it loses focus.
 - You can also reopen it from the system tray icon.
 
-### 🖼️ Browse Desktop Icons
+### 🖼️ Icon Library
 
-- Desktop icons are loaded and shown in a grid by default.
-- You can drag icons to reorder them, organize them across pages, and manage folders and the Dock.
-- Right-click the empty background of the launchpad for quick actions:
-- 🔹 Icon size
-- 🔹 Window size
-- 🔹 Title lines
-- 🔹 Enter icon edit mode
-- 🔹 Open settings
+- A new installation starts with an empty icon library and does not scan the entire desktop automatically.
+- Click **Import Icons** to choose apps, shortcuts, or files; drag folders directly into the launchpad.
+- You can also drag items directly into the launchpad to import them.
+- Drag icons to reorder them, organize pages, and manage folders and the Dock.
+- Right-click the empty launchpad background to adjust icon size, window size, title lines, or enter edit mode.
 
 ### 🔎 Search Files and Apps
 
 - The top search box is the main search entry point.
 - The default source is Everything, which can search files, folders, and apps.
 - Typing opens the search panel automatically.
-- You can switch between "Everything Search" and "Desktop Icon Search" at the top of the panel.
+- You can switch between "Everything Search" and "Icon Library Search" at the top of the panel.
 
 ## 🧠 3. Search Panel
 
@@ -104,7 +101,7 @@ Note:
 
 ## 🧩 4. Icon Organization and Edit Mode
 
-Besides showing desktop icons, DesktopGo also supports local icon organization.
+DesktopGo uses one icon library for apps, files, and folders explicitly imported by the user.
 
 Available capabilities:
 
@@ -114,7 +111,7 @@ Available capabilities:
 - Dock shortcuts
 - Multi-select
 - Hide icons
-- Delete icon records
+- Remove items from the icon library without deleting the originals
 
 How to enter edit mode:
 
@@ -151,22 +148,24 @@ You can adjust:
 - Path / case / regex / whole-word matching
 - Auto-connect Everything
 
-### 🗂️ Icon Manager
+### 🗂️ Icon Library
 
-The icon manager is mainly used to maintain snapshots for both desktop entries and custom app entries.
+The Icon Library page imports and manages launchpad items.
 
-Supported actions:
+Available actions:
 
-- View the icon list
-- Switch between list and grid view
-- Configure the custom app directory
-- Run incremental sync
-- Run full sync
+- Every **Add / Import Icons** entry point opens the same add-icon dialog
+- Enter a display name and target path in the dialog; the display name never changes the underlying filename
+- Choose a file or folder to fill the name and path and preview the icon
+- Expand **Advanced launch options** to set launch arguments, a working directory, or a custom icon
+- Arguments and working directory are written to DesktopGo's managed shortcut; custom icons are cached separately
+- Browse and search icons
+- Switch between list and grid views
+- Filter by visibility
+- Hide, show, or remove library items
+- Run AI organization or reset the layout
 
-Sync notes:
-
-- Incremental sync only adds new entries and leaves existing records untouched. It is the best choice for daily use.
-- Full sync re-checks the current desktop or directory state, fills missing entries, and cleans invalid records. It is safer after major cleanup.
+The icon library only requires importing and managing items; there are no storage directories or sync tasks to maintain.
 
 ### 🔄 Updates
 
@@ -179,30 +178,7 @@ Sync notes:
 - Open the GitHub repository, releases, and issues
 - Copy diagnostic information for bug reports
 
-## 📁 6. `customapp` Directory
-
-DesktopGo supports custom app entries beyond the desktop.
-
-Default behavior:
-
-- If `customAppDir` is not configured manually, the default directory is `customapp/` next to the executable
-- The directory is created automatically if it does not exist
-- Only the first directory level is scanned right now
-
-Recommended workflow:
-
-1. Put commonly used shortcuts, executables, or folders into the `customapp` directory.
-2. Open `Settings -> Icon Manager`.
-3. Confirm that the active directory is correct.
-4. Run an incremental sync.
-
-If you change the directory:
-
-1. Enter a new path or choose a folder in the icon manager page.
-2. Save the path.
-3. Run sync again so the new directory contents appear in the launchpad.
-
-## 💾 7. Data Storage
+## 💾 6. Data Storage
 
 DesktopGo follows a local-first design.
 
@@ -210,16 +186,16 @@ Main persisted data:
 
 - General settings: stored in `settings.json`
 - Launchpad layout, search settings, and related state: stored in the local SQLite database `app_state.db`
-- Icon snapshots and caches: stored in the local app data directory
+- Icon library data and icon caches: stored in the local app data directory
 
 Notes:
 
 - DesktopGo does not depend on an account system.
 - Most settings, layouts, and search configuration stay on the current machine only.
 
-## 🛠️ 8. Common Issues
+## 🛠️ 7. Common Issues
 
-### ⌨️ 8.1 Shortcut Does Not Work
+### ⌨️ 7.1 Shortcut Does Not Work
 
 Check these first:
 
@@ -231,7 +207,7 @@ Suggested fix:
 
 - Go to `Settings -> Launchpad Shortcut` and change it to another combination, such as `Ctrl+Alt+Space`
 
-### 🔎 8.2 Search Is Not Working
+### 🔎 7.2 Search Is Not Working
 
 Check these first:
 
@@ -240,27 +216,14 @@ Check these first:
 - Whether DesktopGo and Everything are running at the same privilege level
 - Whether the DesktopGo installer was allowed to install Everything
 
-### 📂 8.3 `customapp` Entries Are Missing
-
-Check these first:
-
-- Whether the active directory is correct
-- Whether the new files are placed in the scanned top-level directory
-- Whether you already ran sync
-
-Suggested fix:
-
-- Run incremental sync after adding a small number of files
-- Run full sync after major reorganization
-
-### 🪟 8.4 Defaults Did Not Change After an Upgrade
+### 🪟 7.3 Defaults Did Not Change After an Upgrade
 
 This is expected.
 
 - Default values only affect first install or cases where no local setting exists yet
 - If you already saved your own theme, window mode, or other preferences, upgrades will continue using your saved values
 
-## 💬 9. Feedback and Support
+## 💬 8. Feedback and Support
 
 - GitHub repository: <https://github.com/Aixbox/DesktopGo>
 - Issue tracker: <https://github.com/Aixbox/DesktopGo/issues>

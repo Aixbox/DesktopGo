@@ -1,6 +1,6 @@
-mod autostart;
 mod agent;
 mod ai;
+mod autostart;
 mod commands;
 mod everything;
 mod icons;
@@ -10,23 +10,22 @@ mod shell_context_menu;
 mod storage_profile;
 mod updater;
 
+use agent::icon_agent::{ai_organize_icons_agent, ai_organize_record_apply};
+use ai::{ai_chat, ai_classify_icons};
 use commands::{
     activate_main_window, activate_settings_window, apply_window_style, check_for_app_update,
-    close_settings_window, delete_desktop_icons, get_default_customapp_dir, get_desktop_icons,
-    get_drag_preview_icon, get_icon_manager_items, get_launch_on_startup_enabled,
-    get_main_window_always_on_top_enabled,
-    get_layout_payload, get_layout_payloads, get_search_preview, get_search_runtime_status,
+    close_settings_window, create_icon_entry, delete_desktop_icons, get_default_customapp_dir,
+    get_desktop_icons, get_drag_preview_icon, get_icon_manager_items,
+    get_launch_on_startup_enabled, get_layout_payload, get_layout_payloads,
+    get_main_window_always_on_top_enabled, get_search_preview, get_search_runtime_status,
     get_updater_configuration_status, hide_desktop_icons, import_dropped_paths, install_app_update,
     launch_app, notify_main_window_ready, record_search_result_run, search_files,
-    set_main_window_always_on_top_enabled,
-    set_layout_payload, set_layout_payloads, set_window_mode,
-    show_shell_context_menu, start_search_runtime, sync_full_customapp_icons,
+    set_layout_payload, set_layout_payloads, set_main_window_always_on_top_enabled,
+    set_window_mode, show_shell_context_menu, start_search_runtime, sync_full_customapp_icons,
     sync_full_desktop_icons, sync_new_customapp_icons, sync_new_desktop_icons,
     sync_window_persistent_state, toggle_window, unhide_desktop_icons,
     update_launch_on_startup_enabled, update_launchpad_shortcut,
 };
-use agent::icon_agent::{ai_organize_icons_agent, ai_organize_record_apply};
-use ai::{ai_chat, ai_classify_icons};
 #[cfg(windows)]
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
@@ -87,10 +86,8 @@ const TRAY_SETTINGS_MENU_ITEM_ID: &str = "tray-open-settings";
 const TRAY_QUIT_MENU_ITEM_ID: &str = "tray-quit";
 const LANGUAGE_CHANGED_EVENT: &str = "desktopgo://language-changed";
 const MAIN_WINDOW_SHOWN_EVENT: &str = "launchpad:shown";
-pub(crate) const WINDOW_PERSISTENT_CHANGED_EVENT: &str =
-    "desktopgo://window-persistent-changed";
-pub(crate) const SETTINGS_RETURNED_TO_MAIN_EVENT: &str =
-    "desktopgo://settings-returned-to-main";
+pub(crate) const WINDOW_PERSISTENT_CHANGED_EVENT: &str = "desktopgo://window-persistent-changed";
+pub(crate) const SETTINGS_RETURNED_TO_MAIN_EVENT: &str = "desktopgo://settings-returned-to-main";
 
 struct MainWindowState {
     ready: AtomicBool,
@@ -348,6 +345,7 @@ pub fn run() {
             sync_new_customapp_icons,
             sync_full_customapp_icons,
             import_dropped_paths,
+            create_icon_entry,
             hide_desktop_icons,
             unhide_desktop_icons,
             delete_desktop_icons,
@@ -721,10 +719,7 @@ pub(crate) fn main_window_manual_always_on_top_enabled(state: &MainWindowState) 
     state.manual_always_on_top_enabled.load(Ordering::SeqCst)
 }
 
-pub(crate) fn set_main_window_manual_always_on_top_enabled(
-    state: &MainWindowState,
-    enabled: bool,
-) {
+pub(crate) fn set_main_window_manual_always_on_top_enabled(state: &MainWindowState, enabled: bool) {
     state
         .manual_always_on_top_enabled
         .store(enabled, Ordering::SeqCst);
@@ -774,7 +769,8 @@ fn build_window_bootstrap_script(app: &tauri::AppHandle, include_window_style: b
     } else {
         "default"
     };
-    let window_persistent_enabled = include_window_style && read_saved_window_persistent_enabled(app);
+    let window_persistent_enabled =
+        include_window_style && read_saved_window_persistent_enabled(app);
 
     format!(
         r#"
@@ -1015,7 +1011,9 @@ fn main_window_persistent_enabled(state: &MainWindowState) -> bool {
 }
 
 pub(crate) fn set_main_window_persistent_enabled(state: &MainWindowState, enabled: bool) {
-    state.window_persistent_enabled.store(enabled, Ordering::SeqCst);
+    state
+        .window_persistent_enabled
+        .store(enabled, Ordering::SeqCst);
 }
 
 fn save_launch_on_startup_setting(app: &tauri::AppHandle, enabled: bool) -> Result<(), String> {

@@ -1,6 +1,6 @@
 use crate::everything::{self, SearchPage, SearchQuery, SearchRuntimeStatus};
 use crate::icons::{
-    self, DesktopIcon, IconManagerItem, IconMutationTarget, IconSyncResult,
+    self, CreateIconEntryInput, DesktopIcon, IconManagerItem, IconMutationTarget, IconSyncResult,
     ImportDroppedPathsResult,
 };
 use crate::layout_db;
@@ -105,7 +105,8 @@ pub fn apply_window_style(
     style: String,
     theme_mode: Option<String>,
 ) -> Result<(), String> {
-    if crate::main_window_should_recreate_for_surface_mode(&app_handle, Some(style.as_str()), None) {
+    if crate::main_window_should_recreate_for_surface_mode(&app_handle, Some(style.as_str()), None)
+    {
         if let Some(window) = app_handle.get_webview_window("main") {
             window
                 .destroy()
@@ -192,7 +193,6 @@ pub fn close_settings_window(
 
     Ok(())
 }
-
 
 #[tauri::command]
 pub fn sync_window_persistent_state(
@@ -360,6 +360,15 @@ pub fn import_dropped_paths(
 }
 
 #[tauri::command]
+pub fn create_icon_entry(
+    app_handle: tauri::AppHandle,
+    input: CreateIconEntryInput,
+    custom_app_dir: Option<String>,
+) -> Result<ImportDroppedPathsResult, String> {
+    icons::create_icon_entry(app_handle, input, custom_app_dir)
+}
+
+#[tauri::command]
 pub fn launch_app(path: String) -> Result<(), String> {
     icons::launch_app(path)
 }
@@ -461,7 +470,6 @@ mod tests {
             }
         );
     }
-
 }
 
 #[tauri::command]

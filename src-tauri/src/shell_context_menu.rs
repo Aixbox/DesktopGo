@@ -371,7 +371,10 @@ fn show_shell_context_menu_on_main_thread(
     }
 
     if selected_command == 0 {
-        crate::apply_main_window_runtime_mode(app_handle, app_handle.state::<crate::MainWindowState>().inner());
+        crate::apply_main_window_runtime_mode(
+            app_handle,
+            app_handle.state::<crate::MainWindowState>().inner(),
+        );
         return Ok(None);
     }
 
@@ -412,7 +415,10 @@ fn show_shell_context_menu_on_main_thread(
             .InvokeCommand((&invoke as *const CMINVOKECOMMANDINFOEX).cast::<CMINVOKECOMMANDINFO>())
     };
     if let Err(error) = invoke_result {
-        crate::apply_main_window_runtime_mode(app_handle, app_handle.state::<crate::MainWindowState>().inner());
+        crate::apply_main_window_runtime_mode(
+            app_handle,
+            app_handle.state::<crate::MainWindowState>().inner(),
+        );
         return Err(format!("执行 Windows Shell 菜单命令失败：{}", error));
     }
 

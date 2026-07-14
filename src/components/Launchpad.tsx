@@ -12,7 +12,6 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import { Bot, Check, ChevronDown, Download, FileIcon, Minus, Pin, X } from 'lucide-react'
@@ -55,6 +54,7 @@ import type {
 } from '@/types'
 import { IconGrid } from './IconGrid'
 import { AiOrganizePanel, type AiOrganizePanelRunState } from './ai/AiOrganizePanel'
+import { AddIconDialog } from './icons/AddIconDialog'
 
 const LAUNCHPAD_SHOWN_EVENT = 'launchpad:shown'
 const ICON_SIZE_OPTIONS: { label: string; value: IconSize }[] = [
@@ -274,6 +274,7 @@ export function Launchpad() {
   const [mainWindowAlwaysOnTopEnabled, setMainWindowAlwaysOnTopEnabled] = useState(false)
   const [isExternalDragActive, setIsExternalDragActive] = useState(false)
   const [isImportingDrop, setIsImportingDrop] = useState(false)
+  const [addIconDialogOpen, setAddIconDialogOpen] = useState(false)
   const [dragPreview, setDragPreview] = useState<{
     paths: string[]
     x: number
@@ -339,6 +340,7 @@ export function Launchpad() {
     setAiOrganizeApplyRequestToken(token => token + 1)
   }, [])
   const importPlacementTokenRef = useRef(0)
+  const pendingAddIconKeySetRef = useRef<Set<string>>(new Set())
   const dragPreviewIconTokenRef = useRef(0)
   const searchFilterOptions = useMemo(() => {
     void language
@@ -441,82 +443,31 @@ export function Launchpad() {
     syncWindowPersistentState,
   ])
 
-  const handleAddIcons = useCallback(async () => {
+  const handleAddIcons = useCallback(() => {
+    pendingAddIconKeySetRef.current = new Set(icons.map(buildIconSelectionKey))
+    setAddIconDialogOpen(true)
+  }, [icons])
+
+  const handleIconCreated = useCallback(async () => {
+    setIsImportingDrop(true)
     try {
-      const selected = await openDialog({
-        multiple: true,
-        directory: false,
-        title: translate('\u6dfb\u52a0\u56fe\u6807'),
-      })
-      if (!selected) return
-      const paths = Array.isArray(selected) ? selected : [selected]
-      if (paths.length === 0) return
+      await fetchIcons()
+      const nextIcons = useIconStore.getState().icons
+      const importedIconKeys = nextIcons
+        .map(icon => buildIconSelectionKey(icon))
+        .filter(key => !pendingAddIconKeySetRef.current.has(key))
 
-      setIsImportingDrop(true)
-      const previousIconKeySet = new Set(icons.map(buildIconSelectionKey))
-      try {
-        const savedCustomAppDir = (await getSetting('customAppDir')).trim()
-        const result = await invoke<ImportDroppedPathsResult>('import_dropped_paths', {
-          paths,
-          customAppDir: savedCustomAppDir || null,
+      if (importedIconKeys.length > 0) {
+        importPlacementTokenRef.current += 1
+        setImportPlacementRequest({
+          token: importPlacementTokenRef.current,
+          iconKeys: importedIconKeys,
         })
-        await fetchIcons()
-
-        if (result.imported_count > 0) {
-          const nextIcons = useIconStore.getState().icons
-          const importedIconKeys = nextIcons
-            .map(icon => buildIconSelectionKey(icon))
-            .filter(key => !previousIconKeySet.has(key))
-
-          if (importedIconKeys.length > 0) {
-            importPlacementTokenRef.current += 1
-            setImportPlacementRequest({
-              token: importPlacementTokenRef.current,
-              iconKeys: importedIconKeys,
-            })
-          }
-        }
-
-        const message = translate(
-          '\u5bfc\u5165\u5b8c\u6210\uff1a\u65b0\u589e {imported} \u9879\uff0c\u91cd\u590d {duplicate} \u9879\uff0c\u65e0\u6548 {invalid} \u9879\u3002',
-          {
-            imported: result.imported_count,
-            duplicate: result.duplicate_count,
-            invalid: result.invalid_count,
-          }
-        )
-        const notify = result.imported_count > 0 ? toast.success : toast.info
-        notify(message, {
-          key: 'launchpad-add-icons',
-          title: translate('\u542f\u52a8\u53f0'),
-          duration: result.imported_count > 0 ? 3600 : 3200,
-        })
-      } catch (error) {
-        console.error('Failed to import selected paths:', error)
-        toast.error(
-          translate('\u5bfc\u5165\u5931\u8d25\uff1a{error}', {
-            error: String(error),
-          }),
-          {
-            key: 'launchpad-add-icons',
-            title: translate('\u542f\u52a8\u53f0'),
-          }
-        )
-      } finally {
-        setIsImportingDrop(false)
       }
-    } catch (error) {
-      console.error('Failed to choose icon paths:', error)
-      toast.error(
-        translate('\u9009\u62e9\u6587\u4ef6\u5931\u8d25\uff1a{error}', { error: String(error) }),
-        {
-          key: 'launchpad-add-icons',
-          title: translate('\u542f\u52a8\u53f0'),
-        }
-      )
+    } finally {
+      setIsImportingDrop(false)
     }
-  }, [fetchIcons, icons, toast])
-
+  }, [fetchIcons])
   useEffect(() => {
     let disposed = false
     let unlisten: (() => void) | null = null
@@ -1515,10 +1466,10 @@ export function Launchpad() {
                 placeholder={
                   searchSource === 'everything'
                     ? translate('搜索文件、文件夹和应用...')
-                    : translate('搜索桌面图标...')
+                    : translate('搜索图标库...')
                 }
                 aria-label={
-                  searchSource === 'everything' ? translate('搜索文件') : translate('搜索桌面图标')
+                  searchSource === 'everything' ? translate('搜索文件') : translate('搜索图标库')
                 }
                 className={`launchpad-glass-panel h-11 w-full rounded-full px-4 text-sm text-foreground/90 shadow-lg outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 ${
                   searchSource === 'everything' ? 'pr-32' : ''
@@ -1789,7 +1740,7 @@ export function Launchpad() {
                 sidebarCompact={isScrollSidebarCompact}
                 onToggleSidebarCompact={() => setIsScrollSidebarCompact(current => !current)}
                 importPlacementRequest={importPlacementRequest}
-                addIconDisabled={isImportingDrop}
+                addIconDisabled={isImportingDrop || addIconDialogOpen}
                 onAddIcon={handleAddIcons}
               />
             </Suspense>
@@ -1876,6 +1827,12 @@ export function Launchpad() {
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={openSettings}>{translate('设置')}</ContextMenuItem>
       </ContextMenuContent>
+
+      <AddIconDialog
+        open={addIconDialogOpen}
+        onOpenChange={setAddIconDialogOpen}
+        onCreated={handleIconCreated}
+      />
 
       <AiOrganizePanel
         open={isAiOrganizeMode}

@@ -35,7 +35,12 @@ pub struct AiIconInput {
 pub struct AiGroup {
     pub folder_name: String,
     pub icon_keys: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none", alias = "folderSize", alias = "size")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "folderSize",
+        alias = "size"
+    )]
     pub folder_size: Option<String>,
 }
 
@@ -364,7 +369,11 @@ pub async fn ai_chat(
             .to_string(),
     }];
 
-    if let Some(extra) = config.custom_prompt.as_deref().filter(|value| !value.trim().is_empty()) {
+    if let Some(extra) = config
+        .custom_prompt
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
         request_messages.push(ChatMessage {
             role: "system",
             content: format!("用户对助手的附加偏好：{}", extra.trim()),
