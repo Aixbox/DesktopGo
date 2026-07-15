@@ -548,6 +548,26 @@ const EN_MESSAGES: Record<string, string> = {
   'AI 整理': 'AI organize',
   '按用途整理当前图标库。': 'Organize the current icon library by purpose.',
   重置布局: 'Reset layout',
+  扫描失效图标: 'Scan invalid icons',
+  '正在扫描...': 'Scanning...',
+  '扫描失效图标失败：{error}': 'Failed to scan invalid icons: {error}',
+  失效图标扫描: 'Invalid icon scan',
+  '仅检查入口和目标是否存在；请确认网络盘或移动设备已连接。':
+    'This only checks whether entries and targets exist. Make sure network drives and removable devices are connected.',
+  未发现失效图标: 'No invalid icons found',
+  '当前图标库中的入口和目标均可访问。':
+    'All entries and targets in the current icon library are accessible.',
+  全选: 'Select all',
+  '发现 {total} 项，已选择 {selected} 项。': 'Found {total} item(s); {selected} selected.',
+  入口文件不存在: 'Entry file missing',
+  无法解析快捷方式目标: 'Shortcut target could not be resolved',
+  目标文件不存在: 'Target file missing',
+  '确定将选中的 {count} 个失效图标移出图标库吗？不会删除原始文件。':
+    'Remove the selected {count} invalid icon(s) from the icon library? Original files will not be deleted.',
+  '已移出 {count} 个失效图标。': 'Removed {count} invalid icon(s).',
+  '删除失效图标失败：{error}': 'Failed to remove invalid icons: {error}',
+  '正在删除...': 'Deleting...',
+  '删除所选（{count}）': 'Delete selected ({count})',
   '图标库共 {total} 项，当前显示 {filtered} 项。':
     'The icon library contains {total} item(s); {filtered} currently shown.',
   '图标库加载中...': 'Loading icon library...',

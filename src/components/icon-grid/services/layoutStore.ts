@@ -248,7 +248,11 @@ export const resetLaunchpadLayout = async () => {
 export const hydrateDockKeys = (
   itemIds: string[],
   persisted: Array<string | null> | null | undefined
-): string[] => normalizeDockKeys(persisted, itemIds)
+): string[] =>
+  normalizeDockKeys(
+    persisted?.map(key => (key ? key.replace(/^(desktop|customapp):/, '') : null)),
+    itemIds
+  )
 
 export const hydrateItems = (
   icons: DesktopIcon[],
@@ -262,20 +266,23 @@ export const hydrateItems = (
 
   const consumed = new Set<string>()
   const result: GridItem[] = []
+  const normalizeLegacyKey = (key: string) => key.replace(/^(desktop|customapp):/, '')
 
   if (persisted) {
     persisted.forEach(item => {
       if (item.type === 'icon') {
-        if (consumed.has(item.key)) return
-        const iconItem = iconMap.get(item.key)
+        const key = normalizeLegacyKey(item.key)
+        if (consumed.has(key)) return
+        const iconItem = iconMap.get(key)
         if (!iconItem) return
-        consumed.add(item.key)
+        consumed.add(key)
         result.push(iconItem)
         return
       }
 
       const children: IconItem[] = []
-      item.children.forEach(key => {
+      item.children.forEach(persistedKey => {
+        const key = normalizeLegacyKey(persistedKey)
         if (consumed.has(key)) return
         const iconItem = iconMap.get(key)
         if (!iconItem) return

@@ -554,7 +554,7 @@ export function AiOrganizePanel({
   const iconByKey = useMemo(() => {
     const map = new Map<string, DesktopIcon>()
     icons.forEach(icon => {
-      map.set(`${icon.source}:${icon.id}`, icon)
+      map.set(icon.id, icon)
     })
     return map
   }, [icons])

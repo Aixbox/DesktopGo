@@ -511,10 +511,8 @@ export function Launchpad() {
         void (async () => {
           try {
             const previousIconKeySet = new Set(icons.map(buildIconSelectionKey))
-            const savedCustomAppDir = (await getSetting('customAppDir')).trim()
             const result = await invoke<ImportDroppedPathsResult>('import_dropped_paths', {
               paths: payload.paths,
-              customAppDir: savedCustomAppDir || null,
             })
             await fetchIcons()
 

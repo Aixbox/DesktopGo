@@ -3,10 +3,6 @@ use serde::{Deserialize, Serialize};
 pub(crate) const ICON_SOURCE_DESKTOP: &str = "desktop";
 pub(crate) const ICON_SOURCE_CUSTOMAPP: &str = "customapp";
 
-pub(crate) fn default_icon_source() -> String {
-    ICON_SOURCE_DESKTOP.to_string()
-}
-
 #[derive(Debug, Clone, Serialize)]
 pub struct DesktopIcon {
     pub id: String,
@@ -18,7 +14,6 @@ pub struct DesktopIcon {
     pub custom_icon_path: String,
     pub icon_base64: String,
     pub item_type: String,
-    pub source: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -32,15 +27,21 @@ pub struct IconManagerItem {
     pub custom_icon_path: String,
     pub icon_base64: String,
     pub item_type: String,
-    pub source: String,
     pub hidden: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InvalidIconEntry {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub target_path: String,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct IconMutationTarget {
     pub id: String,
-    #[serde(default = "default_icon_source")]
-    pub source: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,8 +69,6 @@ pub(crate) struct SnapshotIconItem {
     pub(crate) item_type: String,
     #[serde(default)]
     pub(crate) hidden: bool,
-    #[serde(default = "default_icon_source")]
-    pub(crate) source: String,
     pub(crate) icons: SnapshotIconPaths,
 }
 
@@ -77,15 +76,6 @@ pub(crate) struct SnapshotIconItem {
 pub(crate) struct IconSnapshot {
     pub(crate) version: u32,
     pub(crate) icons: Vec<SnapshotIconItem>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct IconSyncResult {
-    pub(crate) mode: String,
-    pub(crate) scanned_count: usize,
-    pub(crate) added_count: usize,
-    pub(crate) removed_count: usize,
-    pub(crate) total_count: usize,
 }
 
 #[derive(Debug, Clone, Deserialize)]

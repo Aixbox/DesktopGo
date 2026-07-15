@@ -735,7 +735,7 @@ export function SearchPanel({
               >
                 {iconResults.map((icon, index) => (
                   <IconResultTile
-                    key={`${icon.source}:${icon.id}`}
+                    key={icon.id}
                     icon={icon}
                     selected={selectedIconIndex === index}
                     onSelect={() => onSelectIcon(index)}

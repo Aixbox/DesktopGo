@@ -369,7 +369,9 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
         ? hydrateDockKeys(nextItemIds, persisted?.dockKeys)
         : []
 
-      const rawSlots = persisted?.slots ?? []
+      const rawSlots = (persisted?.slots ?? []).map(key =>
+        key ? key.replace(/^(desktop|customapp):/, '') : null
+      )
       const hasDims =
         persisted?.pageSize && persisted?.columns && persisted.pageSize > 1 && persisted.columns > 1
       persistedDimsRef.current = hasDims

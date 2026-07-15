@@ -16,7 +16,6 @@ import {
 } from 'lucide-react'
 import { getPathLeaf } from '@/lib/iconManager'
 import { translate, useI18n } from '@/lib/i18n'
-import { getSetting } from '@/lib/settingsStore'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -293,7 +292,6 @@ export function AddIconDialog({ open, onOpenChange, onCreated }: AddIconDialogPr
 
     setSubmitting(true)
     try {
-      const legacyCustomAppDir = (await getSetting('customAppDir')).trim()
       const result = await invoke<ImportIconsResult>('create_icon_entry', {
         input: {
           displayName,
@@ -302,7 +300,6 @@ export function AddIconDialog({ open, onOpenChange, onCreated }: AddIconDialogPr
           workingDirectory: workingDirectory.trim(),
           customIconPath: selectedIconSource === 'custom' ? customIconPath.trim() : '',
         },
-        customAppDir: legacyCustomAppDir || null,
       })
 
       if (result.duplicate_count > 0) {

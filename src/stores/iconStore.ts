@@ -75,10 +75,8 @@ export const useIconStore = create<IconStore>((set, get) => ({
     try {
       const { iconSize } = get()
       const iconSizeValue = ICON_SIZE_CONFIG[iconSize].logicalSize
-      const customAppDir = (await getSetting('customAppDir')).trim()
-      const icons = await invoke<DesktopIcon[]>('get_desktop_icons', {
+      const icons = await invoke<DesktopIcon[]>('get_icons', {
         iconSize: iconSizeValue,
-        customAppDir: customAppDir || null,
       })
       const iconKeySet = new Set(icons.map(icon => buildIconSelectionKey(icon)))
       const { selectedIconKeys, selectionMode } = get()
@@ -207,12 +205,12 @@ export const useIconStore = create<IconStore>((set, get) => ({
     const selectedKeySet = new Set(selectedIconKeys)
     const targets: IconMutationTarget[] = icons
       .filter(icon => selectedKeySet.has(buildIconSelectionKey(icon)))
-      .map(icon => ({ id: icon.id, source: icon.source }))
+      .map(icon => ({ id: icon.id }))
 
     if (targets.length === 0) return
 
     try {
-      await invoke<number>('hide_desktop_icons', { targets })
+      await invoke<number>('hide_icons', { targets })
       set({ selectionMode: false, selectedIconKeys: [] })
       await get().fetchIcons()
     } catch (e) {
@@ -227,12 +225,12 @@ export const useIconStore = create<IconStore>((set, get) => ({
     const selectedKeySet = new Set(selectedIconKeys)
     const targets: IconMutationTarget[] = icons
       .filter(icon => selectedKeySet.has(buildIconSelectionKey(icon)))
-      .map(icon => ({ id: icon.id, source: icon.source }))
+      .map(icon => ({ id: icon.id }))
 
     if (targets.length === 0) return
 
     try {
-      await invoke<number>('delete_desktop_icons', { targets })
+      await invoke<number>('delete_icons', { targets })
       set({ selectionMode: false, selectedIconKeys: [] })
       await get().fetchIcons()
     } catch (e) {
@@ -254,15 +252,6 @@ export const useIconStore = create<IconStore>((set, get) => ({
       }
       if (!shouldRefreshAfterShellMenuVerb(selectedVerb)) {
         return
-      }
-
-      if (icon.source === 'desktop') {
-        await invoke('sync_full_desktop_icons')
-      } else {
-        const customAppDir = (await getSetting('customAppDir')).trim()
-        await invoke('sync_full_customapp_icons', {
-          customAppDir: customAppDir || null,
-        })
       }
 
       await get().fetchIcons()

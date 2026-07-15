@@ -32,7 +32,7 @@ type SettingKey =
   | 'launchpadShortcut'
   | 'launchpadOpenFocusTarget'
   | 'iconManagerViewMode'
-type ExtendedSettingKey = SettingKey | 'customAppDir'
+type ExtendedSettingKey = SettingKey
 
 type SettingValueMap = {
   iconSize: IconSize
@@ -48,10 +48,9 @@ type SettingValueMap = {
   launchpadShortcut: string
   launchpadOpenFocusTarget: LaunchpadOpenFocusTarget
   iconManagerViewMode: IconManagerViewMode
-  customAppDir: string
 }
 
-const SETTINGS_STORE_VERSION = 10
+const SETTINGS_STORE_VERSION = 11
 const SETTINGS_VERSION_KEY = 'settingsVersion'
 const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'iconSize',
@@ -67,7 +66,6 @@ const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'launchpadShortcut',
   'launchpadOpenFocusTarget',
   'iconManagerViewMode',
-  'customAppDir',
 ]
 
 const DEFAULT_SETTINGS: SettingValueMap = {
@@ -84,7 +82,6 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   launchpadShortcut: DEFAULT_LAUNCHPAD_SHORTCUT,
   launchpadOpenFocusTarget: DEFAULT_LAUNCHPAD_OPEN_FOCUS_TARGET,
   iconManagerViewMode: 'list',
-  customAppDir: '',
 }
 
 const SETTINGS_STORE_PATH = import.meta.env.DEV ? 'dev/settings.json' : 'settings.json'
@@ -120,8 +117,6 @@ const isLaunchpadShortcut = (value: unknown): value is string => typeof value ==
 const isLaunchpadOpenFocus = (value: unknown): value is LaunchpadOpenFocusTarget =>
   isLaunchpadOpenFocusTarget(value)
 
-const isCustomAppDir = (value: unknown): value is string => typeof value === 'string'
-
 const validators: {
   [K in ExtendedSettingKey]: (value: unknown) => value is SettingValueMap[K]
 } = {
@@ -138,7 +133,6 @@ const validators: {
   launchpadShortcut: isLaunchpadShortcut,
   launchpadOpenFocusTarget: isLaunchpadOpenFocus,
   iconManagerViewMode: isIconManagerViewMode,
-  customAppDir: isCustomAppDir,
 }
 
 async function migrateStore(): Promise<void> {

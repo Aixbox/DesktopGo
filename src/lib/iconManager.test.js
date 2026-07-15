@@ -13,7 +13,6 @@ const icons = [
     target_path: 'C:/Program Files/Microsoft VS Code/Code.exe',
     icon_base64: '',
     item_type: 'shortcut',
-    source: 'desktop',
     hidden: false,
   },
   {
@@ -23,7 +22,6 @@ const icons = [
     target_path: '',
     icon_base64: '',
     item_type: 'special',
-    source: 'desktop',
     hidden: true,
   },
   {
@@ -33,7 +31,6 @@ const icons = [
     target_path: 'D:/Apps/Obsidian/Obsidian.exe',
     icon_base64: '',
     item_type: 'shortcut',
-    source: 'customapp',
     hidden: false,
   },
 ]
@@ -55,7 +52,6 @@ function assertIds(actualIcons, expectedIds, message) {
 assertIds(
   filterIconManagerItems(icons, {
     visibilityFilter: 'visible',
-    sourceFilter: 'customapp',
     searchKeyword: 'obsidian',
   }),
   ['customapp-visible'],
@@ -65,7 +61,6 @@ assertIds(
 assertIds(
   filterIconManagerItems(icons, {
     visibilityFilter: 'all',
-    sourceFilter: 'all',
     searchKeyword: '  code.exe  ',
   }),
   ['desktop-visible'],

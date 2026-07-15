@@ -1,6 +1,6 @@
 use crate::everything::{self, SearchPage, SearchQuery, SearchRuntimeStatus};
 use crate::icons::{
-    self, CreateIconEntryInput, DesktopIcon, IconManagerItem, IconMutationTarget, IconSyncResult,
+    self, CreateIconEntryInput, DesktopIcon, IconManagerItem, IconMutationTarget,
     ImportDroppedPathsResult,
 };
 use crate::layout_db;
@@ -278,94 +278,65 @@ pub fn notify_main_window_ready(
 }
 
 #[tauri::command]
-pub fn get_desktop_icons(
-    app_handle: tauri::AppHandle,
-    icon_size: i32,
-    custom_app_dir: Option<String>,
-) -> Vec<DesktopIcon> {
-    icons::get_desktop_icons(app_handle, icon_size, custom_app_dir)
+pub fn get_icons(app_handle: tauri::AppHandle, icon_size: i32) -> Vec<DesktopIcon> {
+    icons::get_icons(app_handle, icon_size)
 }
 
 #[tauri::command]
 pub fn get_icon_manager_items(
     app_handle: tauri::AppHandle,
     icon_size: i32,
-    custom_app_dir: Option<String>,
 ) -> Vec<IconManagerItem> {
-    icons::get_icon_manager_items(app_handle, icon_size, custom_app_dir)
+    icons::get_icon_manager_items(app_handle, icon_size)
 }
 
 #[tauri::command]
-pub fn sync_new_desktop_icons(app_handle: tauri::AppHandle) -> Result<IconSyncResult, String> {
-    icons::sync_new_desktop_icons(app_handle)
-}
-
-#[tauri::command]
-pub fn sync_full_desktop_icons(app_handle: tauri::AppHandle) -> Result<IconSyncResult, String> {
-    icons::sync_full_desktop_icons(app_handle)
-}
-
-#[tauri::command]
-pub fn sync_new_customapp_icons(
-    app_handle: tauri::AppHandle,
-    custom_app_dir: Option<String>,
-) -> Result<IconSyncResult, String> {
-    icons::sync_new_customapp_icons(app_handle, custom_app_dir)
-}
-
-#[tauri::command]
-pub fn sync_full_customapp_icons(
-    app_handle: tauri::AppHandle,
-    custom_app_dir: Option<String>,
-) -> Result<IconSyncResult, String> {
-    icons::sync_full_customapp_icons(app_handle, custom_app_dir)
-}
-
-#[tauri::command]
-pub fn hide_desktop_icons(
+pub fn hide_icons(
     app_handle: tauri::AppHandle,
     targets: Vec<IconMutationTarget>,
 ) -> Result<usize, String> {
-    icons::hide_desktop_icons(app_handle, targets)
+    icons::hide_icons(app_handle, targets)
 }
 
 #[tauri::command]
-pub fn unhide_desktop_icons(
+pub fn unhide_icons(
     app_handle: tauri::AppHandle,
     targets: Vec<IconMutationTarget>,
 ) -> Result<usize, String> {
-    icons::unhide_desktop_icons(app_handle, targets)
+    icons::unhide_icons(app_handle, targets)
 }
 
 #[tauri::command]
-pub fn delete_desktop_icons(
+pub fn delete_icons(
     app_handle: tauri::AppHandle,
     targets: Vec<IconMutationTarget>,
 ) -> Result<usize, String> {
-    icons::delete_desktop_icons(app_handle, targets)
+    icons::delete_icons(app_handle, targets)
 }
 
 #[tauri::command]
-pub fn get_default_customapp_dir(app_handle: tauri::AppHandle) -> Result<String, String> {
-    icons::get_default_customapp_dir(app_handle)
+pub async fn scan_invalid_icons(
+    app_handle: tauri::AppHandle,
+) -> Result<Vec<icons::InvalidIconEntry>, String> {
+    tauri::async_runtime::spawn_blocking(move || icons::scan_invalid_icons(app_handle))
+        .await
+        .map_err(|error| format!("Failed to scan invalid icons: {}", error))?
 }
 
 #[tauri::command]
 pub fn import_dropped_paths(
     app_handle: tauri::AppHandle,
     paths: Vec<String>,
-    custom_app_dir: Option<String>,
 ) -> Result<ImportDroppedPathsResult, String> {
-    icons::import_dropped_paths(app_handle, paths, custom_app_dir)
+    icons::import_dropped_paths(app_handle, paths)
 }
 
 #[tauri::command]
 pub fn create_icon_entry(
     app_handle: tauri::AppHandle,
     input: CreateIconEntryInput,
-    custom_app_dir: Option<String>,
 ) -> Result<ImportDroppedPathsResult, String> {
-    icons::create_icon_entry(app_handle, input, custom_app_dir)
+    icons::create_icon_entry(app_handle, input)
 }
 
 #[tauri::command]

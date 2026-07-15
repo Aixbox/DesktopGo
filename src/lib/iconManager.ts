@@ -1,11 +1,8 @@
-import type { IconManagerItem, IconManagerViewMode, IconSource } from '../types/index.ts'
+import type { IconManagerItem, IconManagerViewMode } from '../types/index.ts'
 
 export type IconVisibilityFilter = 'all' | 'visible' | 'hidden'
-export type IconSourceFilter = 'all' | IconSource
-
 export interface IconManagerFilters {
   visibilityFilter: IconVisibilityFilter
-  sourceFilter: IconSourceFilter
   searchKeyword: string
 }
 
@@ -35,7 +32,6 @@ export function filterIconManagerItems(
   return icons.filter(icon => {
     if (filters.visibilityFilter === 'visible' && icon.hidden) return false
     if (filters.visibilityFilter === 'hidden' && !icon.hidden) return false
-    if (filters.sourceFilter !== 'all' && icon.source !== filters.sourceFilter) return false
     if (!normalizedKeyword) return true
 
     const haystack = `${icon.name} ${icon.path} ${icon.target_path}`.toLowerCase()
