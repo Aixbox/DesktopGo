@@ -12,6 +12,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import {
@@ -70,6 +71,12 @@ import { AddIconDialog, type AddIconDialogDraft } from './icons/AddIconDialog'
 import { Button } from './ui/button'
 
 const LAUNCHPAD_SHOWN_EVENT = 'launchpad:shown'
+const NATIVE_FILE_DRAG_EVENT = 'desktopgo://native-file-drag'
+
+type NativeFileDragPayload = {
+  eventType: 'enter' | 'leave' | 'drop'
+  paths: string[]
+}
 const ICON_SIZE_OPTIONS: { label: string; value: IconSize }[] = [
   { label: '大图标', value: 'large' },
   { label: '中图标', value: 'medium' },
@@ -683,28 +690,29 @@ export function Launchpad() {
   useEffect(() => {
     let disposed = false
     let unlisten: (() => void) | null = null
+    let unlistenNative: (() => void) | null = null
+
+    const handleFileDrag = (type: 'enter' | 'over' | 'leave' | 'drop', paths: string[] = []) => {
+      if (type === 'enter' || type === 'over') {
+        setIsExternalDragActive(true)
+        return
+      }
+
+      if (type === 'leave') {
+        if (!isImportingDrop) {
+          setIsExternalDragActive(false)
+        }
+        return
+      }
+
+      setIsExternalDragActive(false)
+      prepareDroppedPaths(paths)
+    }
 
     void getCurrentWindow()
       .onDragDropEvent(event => {
         const payload = event.payload
-        if (payload.type === 'enter' || payload.type === 'over') {
-          setIsExternalDragActive(true)
-          return
-        }
-
-        if (payload.type === 'leave') {
-          if (!isImportingDrop) {
-            setIsExternalDragActive(false)
-          }
-          return
-        }
-
-        if (payload.type !== 'drop') {
-          return
-        }
-
-        setIsExternalDragActive(false)
-        prepareDroppedPaths(payload.paths)
+        handleFileDrag(payload.type, payload.type === 'drop' ? payload.paths : [])
       })
       .then(fn => {
         if (disposed) {
@@ -714,9 +722,20 @@ export function Launchpad() {
         unlisten = fn
       })
 
+    void listen<NativeFileDragPayload>(NATIVE_FILE_DRAG_EVENT, event => {
+      handleFileDrag(event.payload.eventType, event.payload.paths)
+    }).then(fn => {
+      if (disposed) {
+        fn()
+        return
+      }
+      unlistenNative = fn
+    })
+
     return () => {
       disposed = true
       unlisten?.()
+      unlistenNative?.()
     }
   }, [isImportingDrop, prepareDroppedPaths])
 

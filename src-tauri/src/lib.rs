@@ -9,6 +9,8 @@ mod search_preview;
 mod shell_context_menu;
 mod storage_profile;
 mod updater;
+#[cfg(windows)]
+mod windows_drag_drop;
 
 use agent::icon_agent::{ai_organize_icons_agent, ai_organize_record_apply};
 use ai::{ai_chat, ai_classify_icons};
@@ -1457,7 +1459,11 @@ fn create_main_window(app: &tauri::AppHandle) {
             .center();
 
     match builder.build() {
-        Ok(_) => {
+        Ok(window) => {
+            #[cfg(windows)]
+            if let Err(error) = windows_drag_drop::install(&window) {
+                eprintln!("Warning: Failed to install Windows Shell drag-drop support: {error}");
+            }
             state
                 .transparent_surface_enabled
                 .store(transparent_surface, Ordering::SeqCst);

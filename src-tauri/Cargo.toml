@@ -45,6 +45,7 @@ tauri-plugin-updater = "2"
 
 [target.'cfg(windows)'.dependencies]
 window-vibrancy = "0.6"
+windows-core = "0.61"
 windows = { version = "0.61", features = [
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
