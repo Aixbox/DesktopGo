@@ -14,7 +14,7 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { getPathLeaf } from '@/lib/iconManager'
+import { deriveIconEntryName } from '@/lib/iconManager'
 import { translate, useI18n } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -32,19 +32,29 @@ export type AddIconDialogCreatedEntry = {
   targetPath: string
 }
 
+export type AddIconDialogDraft = {
+  displayName: string
+  targetPath: string
+  launchArguments: string
+  workingDirectory: string
+  customIconPath: string
+}
+
 interface AddIconDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreated?: (entry: AddIconDialogCreatedEntry) => void | Promise<void>
+  initialDraft?: AddIconDialogDraft | null
+  onSubmitDraft?: (draft: AddIconDialogDraft) => void | Promise<void>
 }
 
-function deriveIconEntryName(path: string) {
-  const leaf = getPathLeaf(path)
-  if (!leaf) return ''
-  return leaf.replace(/\.[^./\\]+$/, '') || leaf
-}
-
-export function AddIconDialog({ open, onOpenChange, onCreated }: AddIconDialogProps) {
+export function AddIconDialog({
+  open,
+  onOpenChange,
+  onCreated,
+  initialDraft = null,
+  onSubmitDraft,
+}: AddIconDialogProps) {
   useI18n()
 
   const titleId = useId()
@@ -109,8 +119,25 @@ export function AddIconDialog({ open, onOpenChange, onCreated }: AddIconDialogPr
   }, [open])
 
   useEffect(() => {
-    if (!open) resetForm()
-  }, [open])
+    if (!open) {
+      resetForm()
+      return
+    }
+    if (!initialDraft) return
+
+    targetPreviewRequestRef.current += 1
+    customPreviewRequestRef.current += 1
+    setName(initialDraft.displayName)
+    setTargetPath(initialDraft.targetPath)
+    setLaunchArguments(initialDraft.launchArguments)
+    setWorkingDirectory(initialDraft.workingDirectory)
+    setCustomIconPath(initialDraft.customIconPath)
+    setSelectedIconSource(initialDraft.customIconPath ? 'custom' : 'target')
+    setTargetPreview('')
+    setTargetPreviewLoading(Boolean(initialDraft.targetPath.trim()))
+    setCustomPreview('')
+    setCustomPreviewLoading(Boolean(initialDraft.customIconPath.trim()))
+  }, [initialDraft, open])
 
   useEffect(() => {
     if (!targetPickerOpen) return
@@ -292,13 +319,22 @@ export function AddIconDialog({ open, onOpenChange, onCreated }: AddIconDialogPr
 
     setSubmitting(true)
     try {
+      const draft: AddIconDialogDraft = {
+        displayName,
+        targetPath: normalizedTargetPath,
+        launchArguments: launchArguments.trim(),
+        workingDirectory: workingDirectory.trim(),
+        customIconPath: selectedIconSource === 'custom' ? customIconPath.trim() : '',
+      }
+      if (onSubmitDraft) {
+        await onSubmitDraft(draft)
+        onOpenChange(false)
+        return
+      }
+
       const result = await invoke<ImportIconsResult>('create_icon_entry', {
         input: {
-          displayName,
-          targetPath: normalizedTargetPath,
-          launchArguments: launchArguments.trim(),
-          workingDirectory: workingDirectory.trim(),
-          customIconPath: selectedIconSource === 'custom' ? customIconPath.trim() : '',
+          ...draft,
         },
       })
 
@@ -711,7 +747,13 @@ export function AddIconDialog({ open, onOpenChange, onCreated }: AddIconDialogPr
               ) : (
                 <Upload className="h-4 w-4" />
               )}
-              {submitting ? translate('正在添加...') : translate('确认添加')}
+              {submitting
+                ? onSubmitDraft
+                  ? translate('正在保存...')
+                  : translate('正在添加...')
+                : onSubmitDraft
+                  ? translate('保存修改')
+                  : translate('确认添加')}
             </Button>
           </div>
         </form>

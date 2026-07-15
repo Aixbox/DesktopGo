@@ -22,6 +22,12 @@ export const getPathLeaf = (value: string): string => {
   return segments[segments.length - 1] ?? normalizedValue
 }
 
+export const deriveIconEntryName = (path: string): string => {
+  const leaf = getPathLeaf(path)
+  if (!leaf) return ''
+  return leaf.replace(/\.[^./\\]+$/, '') || leaf
+}
+
 export function filterIconManagerItems(
   icons: IconManagerItem[],
   filters: IconManagerFilters

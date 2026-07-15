@@ -14,8 +14,20 @@ import {
 import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
-import { Bot, Check, ChevronDown, Download, FileIcon, Minus, Pin, X } from 'lucide-react'
+import {
+  Bot,
+  Check,
+  ChevronDown,
+  Download,
+  FileIcon,
+  Minus,
+  Pencil,
+  Pin,
+  RefreshCw,
+  X,
+} from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
+import { deriveIconEntryName } from '@/lib/iconManager'
 import { getSetting } from '@/lib/settingsStore'
 import { applyTheme, getSavedTheme } from '@/lib/theme'
 import {
@@ -54,7 +66,8 @@ import type {
 } from '@/types'
 import { IconGrid } from './IconGrid'
 import { AiOrganizePanel, type AiOrganizePanelRunState } from './ai/AiOrganizePanel'
-import { AddIconDialog } from './icons/AddIconDialog'
+import { AddIconDialog, type AddIconDialogDraft } from './icons/AddIconDialog'
+import { Button } from './ui/button'
 
 const LAUNCHPAD_SHOWN_EVENT = 'launchpad:shown'
 const ICON_SIZE_OPTIONS: { label: string; value: IconSize }[] = [
@@ -174,6 +187,13 @@ type ImportDroppedPathsResult = {
   invalid_count: number
 }
 
+type DroppedIconDraft = AddIconDialogDraft & {
+  key: string
+  selected: boolean
+  preview: string
+  previewLoading: boolean
+}
+
 export function Launchpad() {
   const { language } = useI18n()
   const toast = useToast()
@@ -274,13 +294,10 @@ export function Launchpad() {
   const [mainWindowAlwaysOnTopEnabled, setMainWindowAlwaysOnTopEnabled] = useState(false)
   const [isExternalDragActive, setIsExternalDragActive] = useState(false)
   const [isImportingDrop, setIsImportingDrop] = useState(false)
+  const [pendingDropDrafts, setPendingDropDrafts] = useState<DroppedIconDraft[]>([])
+  const [editingDropIndex, setEditingDropIndex] = useState<number | null>(null)
+  const [addIconInitialDraft, setAddIconInitialDraft] = useState<AddIconDialogDraft | null>(null)
   const [addIconDialogOpen, setAddIconDialogOpen] = useState(false)
-  const [dragPreview, setDragPreview] = useState<{
-    paths: string[]
-    x: number
-    y: number
-  } | null>(null)
-  const [dragPreviewIcon, setDragPreviewIcon] = useState<string | null>(null)
   const [marquee, setMarquee] = useState<{
     startX: number
     startY: number
@@ -340,8 +357,8 @@ export function Launchpad() {
     setAiOrganizeApplyRequestToken(token => token + 1)
   }, [])
   const importPlacementTokenRef = useRef(0)
+  const dropPreviewRequestRef = useRef(0)
   const pendingAddIconKeySetRef = useRef<Set<string>>(new Set())
-  const dragPreviewIconTokenRef = useRef(0)
   const searchFilterOptions = useMemo(() => {
     void language
     return getSearchFilterOptions()
@@ -445,6 +462,8 @@ export function Launchpad() {
 
   const handleAddIcons = useCallback(() => {
     pendingAddIconKeySetRef.current = new Set(icons.map(buildIconSelectionKey))
+    setAddIconInitialDraft(null)
+    setEditingDropIndex(null)
     setAddIconDialogOpen(true)
   }, [icons])
 
@@ -468,6 +487,199 @@ export function Launchpad() {
       setIsImportingDrop(false)
     }
   }, [fetchIcons])
+
+  const prepareDroppedPaths = useCallback(
+    (paths: string[]) => {
+      const uniquePaths = Array.from(new Set(paths.filter(path => path.trim())))
+      if (uniquePaths.length === 0) return
+      const requestId = ++dropPreviewRequestRef.current
+      setPendingDropDrafts([])
+
+      const drafts = uniquePaths.map<DroppedIconDraft>(path => ({
+        key: path,
+        selected: true,
+        displayName: deriveIconEntryName(path),
+        targetPath: path,
+        launchArguments: '',
+        workingDirectory: '',
+        customIconPath: '',
+        preview: '',
+        previewLoading: true,
+      }))
+
+      if (drafts.length === 1) {
+        pendingAddIconKeySetRef.current = new Set(icons.map(buildIconSelectionKey))
+        setAddIconInitialDraft(drafts[0])
+        setEditingDropIndex(null)
+        setAddIconDialogOpen(true)
+        return
+      }
+
+      setPendingDropDrafts(drafts)
+      void Promise.all(
+        drafts.map(async draft => {
+          try {
+            const preview = await invoke<string>('get_drag_preview_icon', {
+              path: draft.targetPath,
+              iconSize: 48,
+            })
+            return { key: draft.key, preview }
+          } catch {
+            return { key: draft.key, preview: '' }
+          }
+        })
+      ).then(results => {
+        if (dropPreviewRequestRef.current !== requestId) return
+        const previewByKey = new Map(results.map(result => [result.key, result.preview]))
+        setPendingDropDrafts(current =>
+          current.map(draft => ({
+            ...draft,
+            preview: previewByKey.get(draft.key) ?? '',
+            previewLoading: false,
+          }))
+        )
+      })
+    },
+    [icons]
+  )
+
+  const handleEditDroppedDraft = useCallback(
+    (index: number) => {
+      const draft = pendingDropDrafts[index]
+      if (!draft) return
+      setAddIconInitialDraft(draft)
+      setEditingDropIndex(index)
+      setAddIconDialogOpen(true)
+    },
+    [pendingDropDrafts]
+  )
+
+  const handleSaveDroppedDraft = useCallback(
+    async (draft: AddIconDialogDraft) => {
+      if (editingDropIndex === null) return
+      const previewPath = draft.customIconPath || draft.targetPath
+      const preview = await invoke<string>('get_drag_preview_icon', {
+        path: previewPath,
+        iconSize: 48,
+      }).catch(() => '')
+      setPendingDropDrafts(current =>
+        current.map((item, index) =>
+          index === editingDropIndex
+            ? {
+                ...item,
+                ...draft,
+                selected: true,
+                preview,
+                previewLoading: false,
+              }
+            : item
+        )
+      )
+    },
+    [editingDropIndex]
+  )
+
+  const handleAddIconDialogOpenChange = useCallback((nextOpen: boolean) => {
+    setAddIconDialogOpen(nextOpen)
+    if (nextOpen) return
+    setAddIconInitialDraft(null)
+    setEditingDropIndex(null)
+  }, [])
+
+  const handleConfirmDroppedImport = useCallback(async () => {
+    const selectedDrafts = pendingDropDrafts.filter(draft => draft.selected)
+    if (selectedDrafts.length === 0 || isImportingDrop) return
+
+    setIsImportingDrop(true)
+    try {
+      const previousIconKeySet = new Set(icons.map(buildIconSelectionKey))
+      const result = { imported_count: 0, duplicate_count: 0, invalid_count: 0 }
+      const failedKeys = new Set<string>()
+      let firstItemError = ''
+      for (const draft of selectedDrafts) {
+        try {
+          const itemResult = await invoke<ImportDroppedPathsResult>('create_icon_entry', {
+            input: {
+              displayName: draft.displayName,
+              targetPath: draft.targetPath,
+              launchArguments: draft.launchArguments,
+              workingDirectory: draft.workingDirectory,
+              customIconPath: draft.customIconPath,
+            },
+          })
+          result.imported_count += itemResult.imported_count
+          result.duplicate_count += itemResult.duplicate_count
+          result.invalid_count += itemResult.invalid_count
+        } catch (error) {
+          failedKeys.add(draft.key)
+          result.invalid_count += 1
+          if (!firstItemError) firstItemError = String(error)
+        }
+      }
+      await fetchIcons()
+
+      if (result.imported_count > 0) {
+        const nextIcons = useIconStore.getState().icons
+        const importedIconKeys = nextIcons
+          .map(icon => buildIconSelectionKey(icon))
+          .filter(key => !previousIconKeySet.has(key))
+
+        if (importedIconKeys.length > 0) {
+          importPlacementTokenRef.current += 1
+          setImportPlacementRequest({
+            token: importPlacementTokenRef.current,
+            iconKeys: importedIconKeys,
+          })
+        }
+      }
+
+      const message = translate(
+        '导入完成：新增 {imported} 项，重复 {duplicate} 项，无效 {invalid} 项。',
+        {
+          imported: result.imported_count,
+          duplicate: result.duplicate_count,
+          invalid: result.invalid_count,
+        }
+      )
+
+      if (result.imported_count > 0) {
+        toast.success(message, {
+          key: 'launchpad-import-drop',
+          title: translate('启动台'),
+          duration: 3600,
+        })
+      } else {
+        toast.info(message, {
+          key: 'launchpad-import-drop',
+          title: translate('启动台'),
+          duration: 3200,
+        })
+      }
+      if (failedKeys.size > 0) {
+        setPendingDropDrafts(current => current.filter(draft => failedKeys.has(draft.key)))
+        toast.error(
+          translate('部分项目未能导入：{error}', {
+            error: firstItemError,
+          }),
+          {
+            key: 'launchpad-import-drop-error',
+            title: translate('启动台'),
+          }
+        )
+      } else {
+        setPendingDropDrafts([])
+      }
+    } catch (error) {
+      console.error('Failed to import dropped paths:', error)
+      toast.error(translate('拖入导入失败：{error}', { error: String(error) }), {
+        key: 'launchpad-import-drop',
+        title: translate('启动台'),
+      })
+    } finally {
+      setIsImportingDrop(false)
+    }
+  }, [fetchIcons, icons, isImportingDrop, pendingDropDrafts, toast])
+
   useEffect(() => {
     let disposed = false
     let unlisten: (() => void) | null = null
@@ -477,18 +689,6 @@ export function Launchpad() {
         const payload = event.payload
         if (payload.type === 'enter' || payload.type === 'over') {
           setIsExternalDragActive(true)
-          const pos = (payload as { position?: { x: number; y: number } }).position
-          if (pos) {
-            const dpr = window.devicePixelRatio || 1
-            setDragPreview(prev => ({
-              paths:
-                'paths' in payload && Array.isArray(payload.paths)
-                  ? payload.paths
-                  : (prev?.paths ?? []),
-              x: pos.x / dpr,
-              y: pos.y / dpr,
-            }))
-          }
           return
         }
 
@@ -496,7 +696,6 @@ export function Launchpad() {
           if (!isImportingDrop) {
             setIsExternalDragActive(false)
           }
-          setDragPreview(null)
           return
         }
 
@@ -505,69 +704,7 @@ export function Launchpad() {
         }
 
         setIsExternalDragActive(false)
-        setDragPreview(null)
-        setIsImportingDrop(true)
-
-        void (async () => {
-          try {
-            const previousIconKeySet = new Set(icons.map(buildIconSelectionKey))
-            const result = await invoke<ImportDroppedPathsResult>('import_dropped_paths', {
-              paths: payload.paths,
-            })
-            await fetchIcons()
-
-            if (result.imported_count > 0) {
-              const nextIcons = useIconStore.getState().icons
-              const importedIconKeys = nextIcons
-                .map(icon => buildIconSelectionKey(icon))
-                .filter(key => !previousIconKeySet.has(key))
-
-              if (importedIconKeys.length > 0) {
-                importPlacementTokenRef.current += 1
-                setImportPlacementRequest({
-                  token: importPlacementTokenRef.current,
-                  iconKeys: importedIconKeys,
-                })
-              }
-            }
-
-            const message = translate(
-              '导入完成：新增 {imported} 项，重复 {duplicate} 项，无效 {invalid} 项。',
-              {
-                imported: result.imported_count,
-                duplicate: result.duplicate_count,
-                invalid: result.invalid_count,
-              }
-            )
-
-            if (result.imported_count > 0) {
-              toast.success(message, {
-                key: 'launchpad-import-drop',
-                title: translate('启动台'),
-                duration: 3600,
-              })
-            } else {
-              toast.info(message, {
-                key: 'launchpad-import-drop',
-                title: translate('启动台'),
-                duration: 3200,
-              })
-            }
-          } catch (error) {
-            console.error('Failed to import dropped paths:', error)
-            toast.error(
-              translate('拖入导入失败：{error}', {
-                error: String(error),
-              }),
-              {
-                key: 'launchpad-import-drop',
-                title: translate('启动台'),
-              }
-            )
-          } finally {
-            setIsImportingDrop(false)
-          }
-        })()
+        prepareDroppedPaths(payload.paths)
       })
       .then(fn => {
         if (disposed) {
@@ -581,7 +718,7 @@ export function Launchpad() {
       disposed = true
       unlisten?.()
     }
-  }, [fetchIcons, icons, isImportingDrop, toast])
+  }, [isImportingDrop, prepareDroppedPaths])
 
   const applyLaunchpadOpenFocus = useCallback(async () => {
     try {
@@ -603,28 +740,6 @@ export function Launchpad() {
       console.error('Failed to apply launchpad open focus target:', error)
     }
   }, [])
-
-  const dragPreviewPrimaryPath = dragPreview?.paths[0] ?? null
-
-  useEffect(() => {
-    const primaryPath = dragPreviewPrimaryPath
-    if (!primaryPath) {
-      dragPreviewIconTokenRef.current += 1
-      setDragPreviewIcon(null)
-      return
-    }
-    const token = ++dragPreviewIconTokenRef.current
-    void invoke<string>('get_drag_preview_icon', { path: primaryPath, iconSize: 32 })
-      .then(result => {
-        if (token !== dragPreviewIconTokenRef.current) return
-        setDragPreviewIcon(typeof result === 'string' && result.length > 0 ? result : null)
-      })
-      .catch(error => {
-        if (token !== dragPreviewIconTokenRef.current) return
-        console.error('Failed to fetch drag preview icon:', error)
-        setDragPreviewIcon(null)
-      })
-  }, [dragPreviewPrimaryPath])
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -1652,19 +1767,161 @@ export function Launchpad() {
             </div>
           ) : null}
 
-          {isExternalDragActive || isImportingDrop ? (
-            <div className="pointer-events-none absolute inset-x-0 top-20 z-30 flex justify-center px-6">
-              <div className="launchpad-glass-panel-strong pointer-events-auto flex items-center gap-2.5 rounded-full border border-blue-500/25 px-4 py-2 shadow-xl">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full border border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300">
-                  {isImportingDrop ? (
-                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-500/40 border-t-blue-600 dark:border-blue-300/50 dark:border-t-blue-200" />
-                  ) : (
-                    <Download className="h-3.5 w-3.5" />
-                  )}
-                </div>
-                <span className="text-xs font-medium text-foreground">
-                  {isImportingDrop ? translate('正在导入...') : translate('松开即可导入')}
-                </span>
+          {isExternalDragActive || (pendingDropDrafts.length > 0 && editingDropIndex === null) ? (
+            <div className="fixed inset-0 z-[260] flex items-center justify-center bg-black/25 p-4 backdrop-blur-[2px] dark:bg-black/55">
+              <div
+                role={isExternalDragActive ? 'status' : 'dialog'}
+                aria-modal={isExternalDragActive ? undefined : true}
+                aria-labelledby={isExternalDragActive ? undefined : 'drop-import-title'}
+                className="w-full max-w-3xl overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
+              >
+                {isExternalDragActive ? (
+                  <div className="p-5 sm:p-6">
+                    <div className="flex min-h-64 flex-col items-center justify-center rounded-lg border-2 border-dashed border-primary/45 bg-primary/[0.04] px-6 py-10 text-center">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <Download className="h-5 w-5" />
+                      </div>
+                      <p className="mt-4 text-base font-semibold text-foreground">
+                        {translate('拖到这里准备导入')}
+                      </p>
+                      <p className="mt-1.5 max-w-sm text-sm leading-6 text-muted-foreground">
+                        {translate('松开后将打开导入表单，确认前不会添加到图标库。')}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <form
+                    onSubmit={event => {
+                      event.preventDefault()
+                      void handleConfirmDroppedImport()
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-4 border-b border-border/80 px-4 py-4 sm:px-5">
+                      <div className="min-w-0 space-y-1">
+                        <h2
+                          id="drop-import-title"
+                          className="text-base font-semibold text-foreground"
+                        >
+                          {translate('确认导入图标')}
+                        </h2>
+                        <p className="text-xs leading-5 text-muted-foreground">
+                          {translate('选择需要导入的图标；可单独编辑名称、启动选项和图标。')}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={translate('关闭')}
+                        onClick={() => setPendingDropDrafts([])}
+                        disabled={isImportingDrop}
+                        className="shrink-0"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    <div className="max-h-[min(28rem,56vh)] overflow-y-auto px-4 py-3 sm:px-5">
+                      <div className="grid justify-start gap-x-2 gap-y-1 [grid-template-columns:repeat(auto-fill,5rem)]">
+                        {pendingDropDrafts.map((draft, index) => (
+                          <div key={draft.key} className="group relative min-w-0">
+                            <button
+                              type="button"
+                              aria-pressed={draft.selected}
+                              aria-label={
+                                draft.selected
+                                  ? translate('取消选择 {name}', { name: draft.displayName })
+                                  : translate('选择 {name}', { name: draft.displayName })
+                              }
+                              onClick={() =>
+                                setPendingDropDrafts(current =>
+                                  current.map((item, itemIndex) =>
+                                    itemIndex === index
+                                      ? { ...item, selected: !item.selected }
+                                      : item
+                                  )
+                                )
+                              }
+                              disabled={isImportingDrop}
+                              className={`flex h-[4.75rem] w-full min-w-0 flex-col items-center justify-start gap-1 px-1 py-1 text-center transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 ${
+                                draft.selected ? 'opacity-100' : 'opacity-70 hover:opacity-100'
+                              }`}
+                            >
+                              <span
+                                className={`pointer-events-none absolute left-1.5 top-0.5 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full transition-opacity ${
+                                  draft.selected
+                                    ? 'bg-primary text-primary-foreground opacity-100'
+                                    : 'border border-border bg-background opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+                                }`}
+                              >
+                                {draft.selected ? <Check className="h-2.5 w-2.5" /> : null}
+                              </span>
+                              <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden">
+                                {draft.previewLoading ? (
+                                  <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                                ) : draft.preview ? (
+                                  <img
+                                    src={draft.preview}
+                                    alt=""
+                                    className="h-full w-full object-contain"
+                                  />
+                                ) : (
+                                  <FileIcon className="h-5 w-5 text-muted-foreground" />
+                                )}
+                              </span>
+                              <span
+                                className="min-h-6 w-full overflow-hidden text-[11px] font-medium leading-3 text-foreground [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
+                                title={draft.displayName}
+                              >
+                                {draft.displayName}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={translate('编辑 {name}', { name: draft.displayName })}
+                              title={translate('编辑')}
+                              onClick={() => handleEditDroppedDraft(index)}
+                              disabled={isImportingDrop}
+                              className="absolute right-1.5 top-0.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-background/90 text-muted-foreground opacity-100 shadow-sm transition-[opacity,color] hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                            >
+                              <Pencil className="h-2.5 w-2.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap justify-end gap-2 border-t border-border/80 bg-muted/15 px-4 py-3 sm:px-5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setPendingDropDrafts([])}
+                        disabled={isImportingDrop}
+                        className="min-w-0 flex-1 sm:flex-none"
+                      >
+                        {translate('取消')}
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={
+                          isImportingDrop || !pendingDropDrafts.some(draft => draft.selected)
+                        }
+                        className="min-w-0 flex-1 sm:flex-none"
+                      >
+                        {isImportingDrop ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4" />
+                        )}
+                        {isImportingDrop
+                          ? translate('正在导入...')
+                          : translate('确认导入（{count}）', {
+                              count: pendingDropDrafts.filter(draft => draft.selected).length,
+                            })}
+                      </Button>
+                    </div>
+                  </form>
+                )}
               </div>
             </div>
           ) : null}
@@ -1679,39 +1936,6 @@ export function Launchpad() {
                 height: Math.abs(marquee.currentY - marquee.startY),
               }}
             />
-          ) : null}
-
-          {dragPreview && dragPreview.paths.length > 0 ? (
-            <div
-              className="pointer-events-none fixed z-50"
-              style={{
-                left: dragPreview.x + 14,
-                top: dragPreview.y + 14,
-                transform: 'translate3d(0,0,0)',
-              }}
-            >
-              <div className="launchpad-glass-panel-strong flex max-w-[260px] items-center gap-2 rounded-xl border border-blue-500/30 px-2.5 py-1.5 shadow-2xl">
-                {dragPreviewIcon ? (
-                  <img
-                    src={dragPreviewIcon}
-                    alt=""
-                    className="h-5 w-5 flex-none object-contain"
-                    draggable={false}
-                  />
-                ) : (
-                  <FileIcon className="h-4 w-4 flex-none text-foreground/70" />
-                )}
-                <span className="truncate text-xs text-foreground">
-                  {dragPreview.paths[0].split(/[\\/]/).filter(Boolean).pop() ??
-                    dragPreview.paths[0]}
-                </span>
-                {dragPreview.paths.length > 1 ? (
-                  <span className="ml-1 flex-none rounded-full bg-blue-500/12 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300">
-                    +{dragPreview.paths.length - 1}
-                  </span>
-                ) : null}
-              </div>
-            </div>
           ) : null}
 
           {loading ? (
@@ -1828,8 +2052,10 @@ export function Launchpad() {
 
       <AddIconDialog
         open={addIconDialogOpen}
-        onOpenChange={setAddIconDialogOpen}
+        onOpenChange={handleAddIconDialogOpenChange}
         onCreated={handleIconCreated}
+        initialDraft={addIconInitialDraft}
+        onSubmitDraft={editingDropIndex !== null ? handleSaveDroppedDraft : undefined}
       />
 
       <AiOrganizePanel

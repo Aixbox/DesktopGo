@@ -442,6 +442,23 @@ const EN_MESSAGES: Record<string, string> = {
   '导入完成：新增 {imported} 项，重复 {duplicate} 项，无效 {invalid} 项。':
     'Import completed: added {imported}, duplicates {duplicate}, invalid {invalid}.',
   '正在导入...': 'Importing...',
+  拖到这里准备导入: 'Drop here to prepare the import',
+  '松开后将打开导入表单，确认前不会添加到图标库。':
+    'Release to open the import form. Nothing is added to the icon library until you confirm.',
+  确认导入图标: 'Confirm icon import',
+  '检查拖入的项目；移除不需要的项目后再确认导入。':
+    'Review the dropped items and remove anything you do not want before importing.',
+  '移除 {name}': 'Remove {name}',
+  '确认导入（{count}）': 'Confirm import ({count})',
+  '选择需要导入的图标；可单独编辑名称、启动选项和图标。':
+    'Select the icons to import. You can edit each name, launch options, and icon.',
+  '取消选择 {name}': 'Deselect {name}',
+  '选择 {name}': 'Select {name}',
+  '编辑 {name}': 'Edit {name}',
+  编辑: 'Edit',
+  '正在保存...': 'Saving...',
+  保存修改: 'Save changes',
+  '部分项目未能导入：{error}': 'Some items could not be imported: {error}',
   松开即可导入: 'Release to import',
   '支持拖入快捷方式、程序、文件夹和普通文件，导入后会加入图标库。':
     'Drop shortcuts, apps, folders, or files to add them to the icon library.',

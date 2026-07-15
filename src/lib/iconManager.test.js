@@ -1,5 +1,6 @@
 import {
   filterIconManagerItems,
+  deriveIconEntryName,
   getPathLeaf,
   isIconManagerViewMode,
   normalizeIconManagerViewMode,
@@ -77,5 +78,6 @@ assert(
   'Windows 路径叶子节点提取失败'
 )
 assert(getPathLeaf('D:/Apps/Obsidian/Obsidian.lnk') === 'Obsidian.lnk', '斜杠路径叶子节点提取失败')
+assert(deriveIconEntryName('D:/Apps/Obsidian/Obsidian.lnk') === 'Obsidian', '图标名称推导失败')
 
 console.log('iconManager 测试通过')
