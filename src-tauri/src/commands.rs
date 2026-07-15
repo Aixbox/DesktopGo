@@ -1,7 +1,7 @@
 use crate::everything::{self, SearchPage, SearchQuery, SearchRuntimeStatus};
 use crate::icons::{
     self, CreateIconEntryInput, DesktopIcon, IconManagerItem, IconMutationTarget,
-    ImportDroppedPathsResult,
+    ImportDroppedPathsResult, WebsiteIconResult,
 };
 use crate::layout_db;
 use crate::search_preview::{self, SearchPreview};
@@ -337,6 +337,11 @@ pub fn create_icon_entry(
     input: CreateIconEntryInput,
 ) -> Result<ImportDroppedPathsResult, String> {
     icons::create_icon_entry(app_handle, input)
+}
+
+#[tauri::command]
+pub async fn extract_website_icon(url: String) -> Result<WebsiteIconResult, String> {
+    icons::extract_website_icon(url).await
 }
 
 #[tauri::command]

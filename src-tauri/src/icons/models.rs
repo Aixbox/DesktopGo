@@ -89,6 +89,15 @@ pub struct CreateIconEntryInput {
     pub working_directory: String,
     #[serde(default)]
     pub custom_icon_path: String,
+    #[serde(default)]
+    pub website_icon_base64: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WebsiteIconResult {
+    pub url: String,
+    pub title: String,
+    pub icon_base64: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

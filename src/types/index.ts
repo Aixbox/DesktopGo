@@ -7,7 +7,7 @@ export interface DesktopIcon {
   working_directory?: string
   custom_icon_path?: string
   icon_base64: string
-  item_type: 'shortcut' | 'folder' | 'file' | 'executable' | 'special'
+  item_type: 'shortcut' | 'folder' | 'file' | 'executable' | 'special' | 'website'
 }
 
 export interface IconManagerItem extends DesktopIcon {

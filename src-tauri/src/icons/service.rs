@@ -1,11 +1,16 @@
 use base64::Engine;
+use futures_util::StreamExt;
+use scraper::{Html, Selector};
 use std::collections::HashSet;
+use std::io::Cursor;
 use std::path::PathBuf;
+use std::time::Duration;
+use url::Url;
 
 use super::models::{
     CreateIconEntryInput, DesktopIcon, IconBucket, IconManagerItem, IconMutationTarget,
     IconSnapshot, ImportDroppedPathsResult, InvalidIconEntry, ScannedDesktopItem, SnapshotIconItem,
-    SnapshotIconPaths, ICON_SOURCE_CUSTOMAPP, ICON_SOURCE_DESKTOP,
+    SnapshotIconPaths, WebsiteIconResult, ICON_SOURCE_CUSTOMAPP, ICON_SOURCE_DESKTOP,
 };
 #[cfg(windows)]
 use super::platform_windows::{
@@ -220,6 +225,157 @@ pub fn create_icon_entry(
     }
 }
 
+const MAX_WEBSITE_HTML_BYTES: usize = 2 * 1024 * 1024;
+const MAX_WEBSITE_ICON_BYTES: usize = 5 * 1024 * 1024;
+
+fn normalize_website_url(value: &str) -> Result<Url, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("Website URL is required".to_string());
+    }
+
+    let candidate = if trimmed.contains("://") {
+        trimmed.to_string()
+    } else {
+        format!("https://{trimmed}")
+    };
+    let url = Url::parse(&candidate).map_err(|error| format!("Invalid website URL: {error}"))?;
+    if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
+        return Err("Only HTTP and HTTPS website URLs are supported".to_string());
+    }
+    Ok(url)
+}
+
+async fn read_response_limited(
+    response: reqwest::Response,
+    max_bytes: usize,
+) -> Result<(Url, Vec<u8>), String> {
+    if !response.status().is_success() {
+        return Err(format!("Website returned HTTP {}", response.status()));
+    }
+    if response
+        .content_length()
+        .is_some_and(|length| length > max_bytes as u64)
+    {
+        return Err("Website response is too large".to_string());
+    }
+
+    let final_url = response.url().clone();
+    let mut bytes = Vec::new();
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|error| format!("Failed to read website response: {error}"))?;
+        if bytes.len().saturating_add(chunk.len()) > max_bytes {
+            return Err("Website response is too large".to_string());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok((final_url, bytes))
+}
+
+fn website_icon_candidates(html: &str, page_url: &Url) -> (String, Vec<Url>) {
+    let document = Html::parse_document(html);
+    let title_selector = Selector::parse("title").expect("valid title selector");
+    let link_selector = Selector::parse("link[href]").expect("valid link selector");
+    let title = document
+        .select(&title_selector)
+        .next()
+        .map(|element| element.text().collect::<String>().trim().to_string())
+        .unwrap_or_default();
+
+    let mut scored_candidates = document
+        .select(&link_selector)
+        .filter_map(|element| {
+            let rel = element.value().attr("rel")?;
+            let is_icon = rel.split_ascii_whitespace().any(|value| {
+                value.eq_ignore_ascii_case("icon") || value.eq_ignore_ascii_case("apple-touch-icon")
+            });
+            if !is_icon {
+                return None;
+            }
+            let href = element.value().attr("href")?;
+            let url = page_url.join(href).ok()?;
+            if !matches!(url.scheme(), "http" | "https") {
+                return None;
+            }
+            let score = if rel.to_ascii_lowercase().contains("apple-touch-icon") {
+                30
+            } else if element.value().attr("sizes").is_some() {
+                20
+            } else {
+                10
+            };
+            Some((score, url))
+        })
+        .collect::<Vec<_>>();
+    scored_candidates.sort_by(|left, right| right.0.cmp(&left.0));
+
+    let mut seen = HashSet::new();
+    let mut candidates = scored_candidates
+        .into_iter()
+        .map(|(_, url)| url)
+        .filter(|url| seen.insert(url.as_str().to_string()))
+        .collect::<Vec<_>>();
+    if let Ok(fallback) = page_url.join("/favicon.ico") {
+        if seen.insert(fallback.as_str().to_string()) {
+            candidates.push(fallback);
+        }
+    }
+    (title, candidates)
+}
+
+fn website_icon_to_data_uri(bytes: &[u8]) -> Result<String, String> {
+    let image = image::load_from_memory(bytes)
+        .map_err(|error| format!("Unsupported website icon format: {error}"))?
+        .thumbnail(256, 256);
+    let mut output = Cursor::new(Vec::new());
+    image
+        .write_to(&mut output, image::ImageFormat::Png)
+        .map_err(|error| format!("Failed to encode website icon: {error}"))?;
+    Ok(format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(output.into_inner())
+    ))
+}
+
+pub async fn extract_website_icon(value: String) -> Result<WebsiteIconResult, String> {
+    let url = normalize_website_url(&value)?;
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .timeout(Duration::from_secs(12))
+        .user_agent(concat!("DesktopGo/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|error| format!("Failed to initialize website request: {error}"))?;
+    let response = client
+        .get(url.clone())
+        .send()
+        .await
+        .map_err(|error| format!("Failed to open website: {error}"))?;
+    let (page_url, html_bytes) = read_response_limited(response, MAX_WEBSITE_HTML_BYTES).await?;
+    let html = String::from_utf8_lossy(&html_bytes);
+    let (title, candidates) = website_icon_candidates(&html, &page_url);
+
+    let mut icon_base64 = String::new();
+    for candidate in candidates.into_iter().take(8) {
+        let Ok(response) = client.get(candidate).send().await else {
+            continue;
+        };
+        let Ok((_, bytes)) = read_response_limited(response, MAX_WEBSITE_ICON_BYTES).await else {
+            continue;
+        };
+        if let Ok(data_uri) = website_icon_to_data_uri(&bytes) {
+            icon_base64 = data_uri;
+            break;
+        }
+    }
+
+    Ok(WebsiteIconResult {
+        url: url.to_string(),
+        title,
+        icon_base64,
+    })
+}
+
 // ===== Windows implementations =====
 
 #[cfg(windows)]
@@ -405,6 +561,11 @@ fn has_extension(path: &PathBuf, ext: &str) -> bool {
 }
 
 #[cfg(windows)]
+fn is_web_url(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    normalized.starts_with("https://") || normalized.starts_with("http://")
+}
+
 fn build_scanned_item_from_path(path: &PathBuf) -> Option<ScannedDesktopItem> {
     if !path.exists() {
         return None;
@@ -462,12 +623,19 @@ fn build_import_file_path(custom_dir: &PathBuf, source_path: &PathBuf) -> PathBu
         .filter(|value| !value.trim().is_empty())
         .unwrap_or("Imported");
 
+    let safe_stem = stem
+        .replace(":", "_")
+        .replace("/", "_")
+        .replace("\\", "_")
+        .replace("?", "_")
+        .replace("*", "_");
+
     let mut attempt = 0usize;
     loop {
         let file_name = if attempt == 0 {
-            format!("{stem}.{ext}")
+            format!("{safe_stem}.{ext}")
         } else {
-            format!("{stem} ({attempt}).{ext}")
+            format!("{safe_stem} ({attempt}).{ext}")
         };
         let candidate = custom_dir.join(file_name);
         if !candidate.exists() {
@@ -560,6 +728,59 @@ fn build_custom_icon_paths(
         return Err("Failed to extract an icon from the custom icon file".to_string());
     }
     Ok(icons)
+}
+
+#[cfg(windows)]
+fn save_data_icon_for_bucket(
+    app_handle: &tauri::AppHandle,
+    source_image: &image::DynamicImage,
+    id: &str,
+    bucket: IconBucket,
+    source: IconSource,
+) -> Result<String, String> {
+    let size = bucket_actual_size(bucket).max(1) as u32;
+    let resized = source_image.resize(size, size, image::imageops::FilterType::Lanczos3);
+    let mut output = Cursor::new(Vec::new());
+    resized
+        .write_to(&mut output, image::ImageFormat::Png)
+        .map_err(|error| format!("Failed to encode cached website icon: {error}"))?;
+
+    let rel_path = icon_file_rel_path(id, bucket, source);
+    let abs_path = snapshot_base_dir(app_handle)?.join(&rel_path);
+    if let Some(parent) = abs_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "Failed to create icon cache directory {:?}: {error}",
+                parent
+            )
+        })?;
+    }
+    std::fs::write(&abs_path, output.into_inner())
+        .map_err(|error| format!("Failed to write icon file {:?}: {error}", abs_path))?;
+    Ok(rel_path)
+}
+
+#[cfg(windows)]
+fn build_data_icon_paths(
+    app_handle: &tauri::AppHandle,
+    data_uri: &str,
+    id: &str,
+    source: IconSource,
+) -> Result<SnapshotIconPaths, String> {
+    let icon_data = decode_data_uri_png(data_uri)?;
+    let source_image = image::load_from_memory(&icon_data)
+        .map_err(|error| format!("Failed to decode website icon: {error}"))?;
+    Ok(SnapshotIconPaths {
+        small: save_data_icon_for_bucket(app_handle, &source_image, id, IconBucket::Small, source)?,
+        medium: save_data_icon_for_bucket(
+            app_handle,
+            &source_image,
+            id,
+            IconBucket::Medium,
+            source,
+        )?,
+        large: save_data_icon_for_bucket(app_handle, &source_image, id, IconBucket::Large, source)?,
+    })
 }
 
 #[cfg(windows)]
@@ -700,7 +921,11 @@ fn snapshot_to_ordered_icon_manager_items(
 
 #[cfg(windows)]
 fn invalid_icon_reason(item: &SnapshotIconItem) -> Option<&'static str> {
-    if item.item_type == "special" || is_special_shell_path(&item.path) {
+    if item.item_type == "special"
+        || item.item_type == "website"
+        || is_special_shell_path(&item.path)
+        || is_web_url(&item.path)
+    {
         return None;
     }
 
@@ -991,18 +1216,41 @@ fn create_icon_entry_windows(
         return Err("Display name is required".to_string());
     }
 
-    let target_path_text = input.target_path.trim().to_string();
-    if target_path_text.is_empty() {
+    let raw_target_path = input.target_path.trim();
+    if raw_target_path.is_empty() {
         return Err("Target path is required".to_string());
     }
 
-    let launch_arguments = input.launch_arguments.trim().to_string();
-    let working_directory = input.working_directory.trim().to_string();
+    let is_web = is_web_url(raw_target_path);
+    let target_path_text = if is_web {
+        normalize_website_url(raw_target_path)?.to_string()
+    } else {
+        raw_target_path.to_string()
+    };
+    let launch_arguments = if is_web {
+        String::new()
+    } else {
+        input.launch_arguments.trim().to_string()
+    };
+    let working_directory = if is_web {
+        String::new()
+    } else {
+        input.working_directory.trim().to_string()
+    };
     let custom_icon_path = input.custom_icon_path.trim().to_string();
-
+    let website_icon_base64 = input.website_icon_base64.trim().to_string();
     let source_path = PathBuf::from(&target_path_text);
-    let scanned_item = build_scanned_item_from_path(&source_path)
-        .ok_or_else(|| "Target path does not exist or is not supported".to_string())?;
+    let scanned_item = if is_web {
+        Some(ScannedDesktopItem {
+            name: display_name.clone(),
+            path: target_path_text.clone(),
+            target_path: target_path_text.clone(),
+            item_type: "website".to_string(),
+        })
+    } else {
+        build_scanned_item_from_path(&source_path)
+    }
+    .ok_or_else(|| "Target path does not exist or is not supported".to_string())?;
     if !working_directory.is_empty() && !PathBuf::from(&working_directory).is_dir() {
         return Err("Working directory does not exist or is not a folder".to_string());
     }
@@ -1035,35 +1283,43 @@ fn create_icon_entry_windows(
         }
     }
 
-    let entry_dir = icon_entry_dir_windows(app_handle)?;
-    let destination_path = build_import_file_path(&entry_dir, &source_path);
-    if has_extension(&source_path, "lnk") {
-        std::fs::copy(&source_path, &destination_path).map_err(|error| {
-            format!(
-                "Failed to copy shortcut {:?} to {:?}: {}",
-                source_path, destination_path, error
-            )
-        })?;
-        if let Err(error) = update_shortcut_launch_options_windows(
-            &destination_path,
-            &launch_arguments,
-            &working_directory,
-        ) {
-            let _ = std::fs::remove_file(&destination_path);
-            return Err(error);
-        }
+    let destination_path = if is_web {
+        None
     } else {
-        create_shortcut_windows(
-            &destination_path,
-            &source_path.to_string_lossy(),
-            &launch_arguments,
-            &working_directory,
-        )?;
-    }
+        let entry_dir = icon_entry_dir_windows(app_handle)?;
+        let destination_path = build_import_file_path(&entry_dir, &source_path);
+        if has_extension(&source_path, "lnk") {
+            std::fs::copy(&source_path, &destination_path).map_err(|error| {
+                format!(
+                    "Failed to copy shortcut {:?} to {:?}: {}",
+                    source_path, destination_path, error
+                )
+            })?;
+            if let Err(error) = update_shortcut_launch_options_windows(
+                &destination_path,
+                &launch_arguments,
+                &working_directory,
+            ) {
+                let _ = std::fs::remove_file(&destination_path);
+                return Err(error);
+            }
+        } else {
+            create_shortcut_windows(
+                &destination_path,
+                &source_path.to_string_lossy(),
+                &launch_arguments,
+                &working_directory,
+            )?;
+        }
+        Some(destination_path)
+    };
 
     let update_result = (|| -> Result<(), String> {
-        let created_scan = build_scanned_item_from_path(&destination_path)
-            .ok_or_else(|| "Created icon entry could not be read".to_string())?;
+        let created_scan = match destination_path.as_ref() {
+            Some(path) => build_scanned_item_from_path(path)
+                .ok_or_else(|| "Created icon entry could not be read".to_string())?,
+            None => scanned_item.clone(),
+        };
         let mut snapshot = load_icon_library_snapshot(app_handle)?;
         let display_order = max_snapshot_display_order(&snapshot).saturating_add(1);
         let mut created_item = build_snapshot_item(
@@ -1084,6 +1340,13 @@ fn create_icon_entry_windows(
                 &created_item.id,
                 IconSource::Library,
             )?;
+        } else if is_web && !website_icon_base64.is_empty() {
+            created_item.icons = build_data_icon_paths(
+                app_handle,
+                &website_icon_base64,
+                &created_item.id,
+                IconSource::Library,
+            )?;
         }
         snapshot.icons.push(created_item);
 
@@ -1091,7 +1354,9 @@ fn create_icon_entry_windows(
     })();
 
     if let Err(error) = update_result {
-        let _ = std::fs::remove_file(&destination_path);
+        if let Some(path) = destination_path.as_ref() {
+            let _ = std::fs::remove_file(path);
+        }
         return Err(error);
     }
 

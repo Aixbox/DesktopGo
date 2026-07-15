@@ -8,13 +8,17 @@ import {
   CircleAlert,
   FileSearch,
   FolderOpen,
+  Globe2,
   ImagePlus,
   Images,
+  Link2,
+  Monitor,
   RefreshCw,
   Upload,
   X,
 } from 'lucide-react'
 import { deriveIconEntryName } from '@/lib/iconManager'
+import { deriveWebsiteName, normalizeWebsiteUrl } from '@/lib/websiteIcon'
 import { translate, useI18n } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -25,6 +29,13 @@ type ImportIconsResult = {
   imported_count: number
   duplicate_count: number
   invalid_count: number
+}
+type AddIconKind = 'app' | 'website'
+
+type WebsiteIconResult = {
+  url: string
+  title: string
+  icon_base64: string
 }
 
 export type AddIconDialogCreatedEntry = {
@@ -38,6 +49,7 @@ export type AddIconDialogDraft = {
   launchArguments: string
   workingDirectory: string
   customIconPath: string
+  websiteIconBase64?: string
 }
 
 interface AddIconDialogProps {
@@ -69,6 +81,8 @@ export function AddIconDialog({
   const customPreviewRequestRef = useRef(0)
   const [name, setName] = useState('')
   const [targetPath, setTargetPath] = useState('')
+  const websitePreviewRequestRef = useRef(0)
+  const [entryKind, setEntryKind] = useState<AddIconKind>('app')
   const [targetPickerOpen, setTargetPickerOpen] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [launchArguments, setLaunchArguments] = useState('')
@@ -81,10 +95,16 @@ export function AddIconDialog({
   const [customPreviewLoading, setCustomPreviewLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const toast = useToast()
+  const [websitePreview, setWebsitePreview] = useState('')
+  const [websitePreviewLoading, setWebsitePreviewLoading] = useState(false)
+  const [websitePreviewError, setWebsitePreviewError] = useState('')
+  const [websitePreviewResolved, setWebsitePreviewResolved] = useState(false)
 
   const resetForm = () => {
     targetPreviewRequestRef.current += 1
     customPreviewRequestRef.current += 1
+    websitePreviewRequestRef.current += 1
+    setEntryKind('app')
     setName('')
     setTargetPath('')
     setTargetPickerOpen(false)
@@ -97,6 +117,10 @@ export function AddIconDialog({
     setTargetPreviewLoading(false)
     setCustomPreview('')
     setCustomPreviewLoading(false)
+    setWebsitePreview('')
+    setWebsitePreviewLoading(false)
+    setWebsitePreviewError('')
+    setWebsitePreviewResolved(false)
   }
 
   const closeDialog = () => {
@@ -129,14 +153,23 @@ export function AddIconDialog({
     customPreviewRequestRef.current += 1
     setName(initialDraft.displayName)
     setTargetPath(initialDraft.targetPath)
+    websitePreviewRequestRef.current += 1
+    const nextEntryKind: AddIconKind = normalizeWebsiteUrl(initialDraft.targetPath)
+      ? 'website'
+      : 'app'
+    setEntryKind(nextEntryKind)
     setLaunchArguments(initialDraft.launchArguments)
     setWorkingDirectory(initialDraft.workingDirectory)
     setCustomIconPath(initialDraft.customIconPath)
     setSelectedIconSource(initialDraft.customIconPath ? 'custom' : 'target')
     setTargetPreview('')
-    setTargetPreviewLoading(Boolean(initialDraft.targetPath.trim()))
+    setTargetPreviewLoading(nextEntryKind === 'app' && Boolean(initialDraft.targetPath.trim()))
     setCustomPreview('')
     setCustomPreviewLoading(Boolean(initialDraft.customIconPath.trim()))
+    setWebsitePreview(initialDraft.websiteIconBase64 ?? '')
+    setWebsitePreviewLoading(false)
+    setWebsitePreviewError('')
+    setWebsitePreviewResolved(Boolean(initialDraft.websiteIconBase64))
   }, [initialDraft, open])
 
   useEffect(() => {
@@ -154,7 +187,7 @@ export function AddIconDialog({
     const requestId = targetPreviewRequestRef.current
     const previewPath = targetPath.trim()
 
-    if (!open || !previewPath) {
+    if (!open || entryKind !== 'app' || !previewPath) {
       setTargetPreview('')
       setTargetPreviewLoading(false)
       return
@@ -177,7 +210,7 @@ export function AddIconDialog({
     }, 280)
 
     return () => window.clearTimeout(timer)
-  }, [open, targetPath])
+  }, [entryKind, open, targetPath])
 
   useEffect(() => {
     customPreviewRequestRef.current += 1
@@ -244,10 +277,78 @@ export function AddIconDialog({
   }
 
   const updateTargetPath = (nextPath: string) => {
-    targetPreviewRequestRef.current += 1
     setTargetPath(nextPath)
+    if (entryKind === 'website') {
+      websitePreviewRequestRef.current += 1
+      setWebsitePreview('')
+      setWebsitePreviewLoading(false)
+      setWebsitePreviewError('')
+      setWebsitePreviewResolved(false)
+      setSelectedIconSource('target')
+      return
+    }
+
+    targetPreviewRequestRef.current += 1
     setTargetPreview('')
     setTargetPreviewLoading(Boolean(nextPath.trim()))
+  }
+
+  const handleEntryKindChange = (nextKind: AddIconKind) => {
+    if (nextKind === entryKind || submitting) return
+    targetPreviewRequestRef.current += 1
+    customPreviewRequestRef.current += 1
+    websitePreviewRequestRef.current += 1
+    setEntryKind(nextKind)
+    setName('')
+    setTargetPath('')
+    setTargetPickerOpen(false)
+    setAdvancedOpen(false)
+    setLaunchArguments('')
+    setWorkingDirectory('')
+    setCustomIconPath('')
+    setSelectedIconSource('target')
+    setTargetPreview('')
+    setTargetPreviewLoading(false)
+    setCustomPreview('')
+    setCustomPreviewLoading(false)
+    setWebsitePreview('')
+    setWebsitePreviewLoading(false)
+    setWebsitePreviewError('')
+    setWebsitePreviewResolved(false)
+    window.requestAnimationFrame(() => targetInputRef.current?.focus())
+  }
+
+  const handleExtractWebsiteIcon = async () => {
+    const normalizedUrl = normalizeWebsiteUrl(targetPath)
+    if (!normalizedUrl || websitePreviewLoading) return
+
+    const requestId = ++websitePreviewRequestRef.current
+    setTargetPath(normalizedUrl)
+    setWebsitePreview('')
+    setWebsitePreviewLoading(true)
+    setWebsitePreviewError('')
+    setWebsitePreviewResolved(false)
+    setSelectedIconSource('target')
+    try {
+      const result = await invoke<WebsiteIconResult>('extract_website_icon', {
+        url: normalizedUrl,
+      })
+      if (websitePreviewRequestRef.current !== requestId) return
+
+      setTargetPath(result.url)
+      setWebsitePreview(result.icon_base64)
+      setWebsitePreviewResolved(true)
+      if (!name.trim()) setName(result.title.trim() || deriveWebsiteName(result.url))
+    } catch (error) {
+      if (websitePreviewRequestRef.current !== requestId) return
+      setWebsitePreviewError(String(error))
+    } finally {
+      if (websitePreviewRequestRef.current === requestId) setWebsitePreviewLoading(false)
+    }
+  }
+
+  const handleWebsiteUrlBlur = () => {
+    if (!websitePreviewResolved) void handleExtractWebsiteIcon()
   }
 
   const handlePickTarget = async (directory: boolean) => {
@@ -313,8 +414,13 @@ export function AddIconDialog({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const normalizedTargetPath = targetPath.trim()
-    const displayName = name.trim() || deriveIconEntryName(normalizedTargetPath)
+    const normalizedTargetPath =
+      entryKind === 'website' ? normalizeWebsiteUrl(targetPath) : targetPath.trim()
+    const displayName =
+      name.trim() ||
+      (entryKind === 'website'
+        ? deriveWebsiteName(normalizedTargetPath)
+        : deriveIconEntryName(normalizedTargetPath))
     if (!displayName || !normalizedTargetPath || submitting) return
 
     setSubmitting(true)
@@ -322,9 +428,11 @@ export function AddIconDialog({
       const draft: AddIconDialogDraft = {
         displayName,
         targetPath: normalizedTargetPath,
-        launchArguments: launchArguments.trim(),
-        workingDirectory: workingDirectory.trim(),
+        launchArguments: entryKind === 'app' ? launchArguments.trim() : '',
+        workingDirectory: entryKind === 'app' ? workingDirectory.trim() : '',
         customIconPath: selectedIconSource === 'custom' ? customIconPath.trim() : '',
+        websiteIconBase64:
+          entryKind === 'website' && selectedIconSource === 'target' ? websitePreview : '',
       }
       if (onSubmitDraft) {
         await onSubmitDraft(draft)
@@ -364,13 +472,23 @@ export function AddIconDialog({
 
   if (!open) return null
 
-  const normalizedTargetPath = targetPath.trim()
-  const effectiveName = name.trim() || deriveIconEntryName(normalizedTargetPath)
+  const normalizedTargetPath =
+    entryKind === 'website' ? normalizeWebsiteUrl(targetPath) : targetPath.trim()
+  const effectiveName =
+    name.trim() ||
+    (entryKind === 'website'
+      ? deriveWebsiteName(normalizedTargetPath)
+      : deriveIconEntryName(normalizedTargetPath))
   const hasTargetPreviewFailure = Boolean(
-    normalizedTargetPath && !targetPreviewLoading && !targetPreview
+    entryKind === 'app' && normalizedTargetPath && !targetPreviewLoading && !targetPreview
   )
   const selectedCustomIconInvalid =
     selectedIconSource === 'custom' && (!customPreview || customPreviewLoading)
+  const automaticPreview = entryKind === 'website' ? websitePreview : targetPreview
+  const automaticPreviewLoading =
+    entryKind === 'website' ? websitePreviewLoading : targetPreviewLoading
+  const automaticPreviewLabel =
+    entryKind === 'website' ? translate('网页图标') : translate('自动提取')
 
   return createPortal(
     <div
@@ -394,7 +512,9 @@ export function AddIconDialog({
               {translate('添加图标')}
             </h2>
             <p id={descriptionId} className="text-xs leading-5 text-muted-foreground">
-              {translate('选择目标后会自动生成名称和图标；需要时可继续配置高级启动选项。')}
+              {entryKind === 'website'
+                ? translate('输入网页地址并提取站点图标。')
+                : translate('选择目标后会自动生成名称和图标；需要时可继续配置高级启动选项。')}
             </p>
           </div>
           <Button
@@ -413,97 +533,215 @@ export function AddIconDialog({
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
             <div className="flex flex-col gap-5">
-              <div className="min-w-0 space-y-1.5">
-                <label htmlFor={targetInputId} className="text-xs font-medium text-foreground">
-                  {translate('选择目标')}
-                </label>
-                <div className="flex min-w-0 flex-wrap gap-2">
-                  <Input
-                    id={targetInputId}
-                    ref={targetInputRef}
-                    value={targetPath}
-                    onChange={event => updateTargetPath(event.target.value)}
-                    placeholder={translate('输入程序、快捷方式、文件或文件夹路径')}
-                    disabled={submitting}
-                    className="min-w-0 flex-[1_1_18rem]"
-                  />
-                  <div
-                    ref={targetPickerRef}
-                    className="relative min-w-0 flex-[1_1_8rem] sm:flex-none"
+              <div
+                role="tablist"
+                aria-label={translate('添加类型')}
+                className="inline-flex h-9 self-start rounded-lg bg-muted p-1"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={entryKind === 'app'}
+                  onClick={() => handleEntryKindChange('app')}
+                  disabled={submitting}
+                  className={cn(
+                    'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+                    entryKind === 'app'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Monitor className="h-3.5 w-3.5" />
+                  {translate('应用')}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={entryKind === 'website'}
+                  onClick={() => handleEntryKindChange('website')}
+                  disabled={submitting}
+                  className={cn(
+                    'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+                    entryKind === 'website'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Globe2 className="h-3.5 w-3.5" />
+                  {translate('网页')}
+                </button>
+              </div>
+              {entryKind === 'app' ? (
+                <div className="min-w-0 space-y-1.5">
+                  <label htmlFor={targetInputId} className="text-xs font-medium text-foreground">
+                    {translate('选择目标')}
+                  </label>
+                  <div className="flex min-w-0 flex-wrap gap-2">
+                    <Input
+                      id={targetInputId}
+                      ref={targetInputRef}
+                      value={targetPath}
+                      onChange={event => updateTargetPath(event.target.value)}
+                      placeholder={translate('输入程序、快捷方式、文件或文件夹路径')}
+                      disabled={submitting}
+                      className="min-w-0 flex-[1_1_18rem]"
+                    />
+                    <div
+                      ref={targetPickerRef}
+                      className="relative min-w-0 flex-[1_1_8rem] sm:flex-none"
+                    >
+                      <Button
+                        type="button"
+                        variant="outline"
+                        aria-haspopup="menu"
+                        aria-expanded={targetPickerOpen}
+                        onClick={() => setTargetPickerOpen(current => !current)}
+                        disabled={submitting}
+                        className="w-full sm:w-auto"
+                      >
+                        <FileSearch className="h-4 w-4" />
+                        {translate('选择目标')}
+                        <ChevronDown
+                          className={cn(
+                            'h-3.5 w-3.5 transition-transform duration-200 motion-reduce:transition-none',
+                            targetPickerOpen && 'rotate-180'
+                          )}
+                        />
+                      </Button>
+                      {targetPickerOpen ? (
+                        <div
+                          role="menu"
+                          className="absolute right-0 top-full z-20 mt-1.5 w-40 overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-lg"
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => void handlePickTarget(false)}
+                            className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
+                          >
+                            <FileSearch className="h-4 w-4 text-muted-foreground" />
+                            {translate('选择文件')}
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => void handlePickTarget(true)}
+                            className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
+                          >
+                            <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                            {translate('选择文件夹')}
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <span
+                    className={cn(
+                      'flex items-center gap-1.5 text-xs leading-5',
+                      hasTargetPreviewFailure
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-muted-foreground'
+                    )}
                   >
+                    {!normalizedTargetPath ? (
+                      translate('支持程序、快捷方式、文件和文件夹。')
+                    ) : targetPreviewLoading ? (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                        {translate('正在读取目标并提取图标...')}
+                      </>
+                    ) : hasTargetPreviewFailure ? (
+                      <>
+                        <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                        {translate('未能识别该路径或提取图标，仍可尝试添加。')}
+                      </>
+                    ) : targetPreview ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        {translate('已识别目标并生成图标预览。')}
+                      </>
+                    ) : null}
+                  </span>
+                </div>
+              ) : (
+                <div className="min-w-0 space-y-1.5">
+                  <label htmlFor={targetInputId} className="text-xs font-medium text-foreground">
+                    {translate('网页地址')}
+                  </label>
+                  <div className="flex min-w-0 flex-wrap gap-2">
+                    <div className="relative min-w-0 flex-[1_1_18rem]">
+                      <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id={targetInputId}
+                        ref={targetInputRef}
+                        type="url"
+                        inputMode="url"
+                        value={targetPath}
+                        onChange={event => updateTargetPath(event.target.value)}
+                        onBlur={handleWebsiteUrlBlur}
+                        placeholder={translate('例如：https://www.example.com')}
+                        disabled={submitting || websitePreviewLoading}
+                        className="min-w-0 pl-9"
+                      />
+                    </div>
                     <Button
                       type="button"
                       variant="outline"
-                      aria-haspopup="menu"
-                      aria-expanded={targetPickerOpen}
-                      onClick={() => setTargetPickerOpen(current => !current)}
-                      disabled={submitting}
-                      className="w-full sm:w-auto"
+                      onClick={() => void handleExtractWebsiteIcon()}
+                      disabled={!normalizedTargetPath || websitePreviewLoading || submitting}
+                      className="min-w-0 flex-[1_1_8rem] sm:flex-none"
                     >
-                      <FileSearch className="h-4 w-4" />
-                      {translate('选择目标')}
-                      <ChevronDown
-                        className={cn(
-                          'h-3.5 w-3.5 transition-transform duration-200 motion-reduce:transition-none',
-                          targetPickerOpen && 'rotate-180'
-                        )}
-                      />
+                      {websitePreviewLoading ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Globe2 className="h-4 w-4" />
+                      )}
+                      {websitePreviewLoading ? translate('正在提取...') : translate('提取图标')}
                     </Button>
-                    {targetPickerOpen ? (
-                      <div
-                        role="menu"
-                        className="absolute right-0 top-full z-20 mt-1.5 w-40 overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-lg"
-                      >
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => void handlePickTarget(false)}
-                          className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
-                        >
-                          <FileSearch className="h-4 w-4 text-muted-foreground" />
-                          {translate('选择文件')}
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => void handlePickTarget(true)}
-                          className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
-                        >
-                          <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                          {translate('选择文件夹')}
-                        </button>
-                      </div>
-                    ) : null}
                   </div>
+                  <span
+                    className={cn(
+                      'flex items-center gap-1.5 text-xs leading-5',
+                      websitePreviewError || (targetPath.trim() && !normalizedTargetPath)
+                        ? 'text-destructive'
+                        : websitePreviewResolved && !websitePreview
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-muted-foreground'
+                    )}
+                  >
+                    {!targetPath.trim() ? (
+                      translate('输入网页地址后提取站点图标。')
+                    ) : !normalizedTargetPath ? (
+                      <>
+                        <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                        {translate('请输入有效的 HTTP 或 HTTPS 网页地址。')}
+                      </>
+                    ) : websitePreviewLoading ? (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                        {translate('正在读取网页并提取站点图标...')}
+                      </>
+                    ) : websitePreviewError ? (
+                      <>
+                        <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                        {translate('网页图标提取失败：{error}', { error: websitePreviewError })}
+                      </>
+                    ) : websitePreviewResolved && websitePreview ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        {translate('已提取网页图标。')}
+                      </>
+                    ) : websitePreviewResolved ? (
+                      <>
+                        <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                        {translate('网页未提供可用图标，仍可继续添加。')}
+                      </>
+                    ) : (
+                      translate('网页将在系统默认浏览器中打开。')
+                    )}
+                  </span>
                 </div>
-                <span
-                  className={cn(
-                    'flex items-center gap-1.5 text-xs leading-5',
-                    hasTargetPreviewFailure
-                      ? 'text-amber-600 dark:text-amber-400'
-                      : 'text-muted-foreground'
-                  )}
-                >
-                  {!normalizedTargetPath ? (
-                    translate('支持程序、快捷方式、文件和文件夹。')
-                  ) : targetPreviewLoading ? (
-                    <>
-                      <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                      {translate('正在读取目标并提取图标...')}
-                    </>
-                  ) : hasTargetPreviewFailure ? (
-                    <>
-                      <CircleAlert className="h-3.5 w-3.5 shrink-0" />
-                      {translate('未能识别该路径或提取图标，仍可尝试添加。')}
-                    </>
-                  ) : targetPreview ? (
-                    <>
-                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                      {translate('已识别目标并生成图标预览。')}
-                    </>
-                  ) : null}
-                </span>
-              </div>
+              )}
 
               {normalizedTargetPath ? (
                 <div className="space-y-2">
@@ -515,7 +753,7 @@ export function AddIconDialog({
                       <button
                         type="button"
                         aria-pressed={selectedIconSource === 'target'}
-                        aria-label={translate('使用自动提取的图标')}
+                        aria-label={automaticPreviewLabel}
                         onClick={() => setSelectedIconSource('target')}
                         disabled={submitting}
                         className={cn(
@@ -525,14 +763,16 @@ export function AddIconDialog({
                             : 'border-border hover:border-foreground/30'
                         )}
                       >
-                        {targetPreviewLoading ? (
+                        {automaticPreviewLoading ? (
                           <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-                        ) : targetPreview ? (
+                        ) : automaticPreview ? (
                           <img
-                            src={targetPreview}
-                            alt={translate('自动提取的图标')}
+                            src={automaticPreview}
+                            alt={automaticPreviewLabel}
                             className="h-full w-full object-contain"
                           />
+                        ) : entryKind === 'website' ? (
+                          <Globe2 className="h-5 w-5 text-muted-foreground" />
                         ) : (
                           <Images className="h-5 w-5 text-muted-foreground" />
                         )}
@@ -541,7 +781,7 @@ export function AddIconDialog({
                         ) : null}
                       </button>
                       <span className="text-center text-[11px] leading-4 text-muted-foreground">
-                        {translate('自动提取')}
+                        {automaticPreviewLabel}
                       </span>
                     </div>
 
@@ -632,96 +872,100 @@ export function AddIconDialog({
                   disabled={submitting}
                 />
                 <span className="block text-xs leading-5 text-muted-foreground">
-                  {translate('可选；留空时使用目标文件名。')}
+                  {entryKind === 'website'
+                    ? translate('可选；留空时使用网页标题或域名。')
+                    : translate('可选；留空时使用目标文件名。')}
                 </span>
               </div>
 
-              <div
-                className={cn(
-                  'overflow-hidden rounded-xl border transition-[border-color,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none',
-                  advancedOpen
-                    ? 'border-border bg-muted/20 shadow-sm'
-                    : 'border-border/70 bg-muted/10 hover:border-border hover:bg-muted/20'
-                )}
-              >
-                <button
-                  type="button"
-                  aria-expanded={advancedOpen}
-                  onClick={() => setAdvancedOpen(current => !current)}
-                  disabled={submitting}
-                  className="flex w-full min-w-0 items-center justify-between gap-3 px-3 py-3 text-left disabled:opacity-50 sm:px-4"
-                >
-                  <span className="min-w-0">
-                    <span className="block text-xs font-medium text-foreground">
-                      {translate('高级启动选项')}
-                    </span>
-                    <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
-                      {translate('启动参数和工作目录均为可选项。')}
-                    </span>
-                  </span>
-                  <ChevronDown
-                    className={cn(
-                      'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none',
-                      advancedOpen && 'rotate-180'
-                    )}
-                  />
-                </button>
-
+              {entryKind === 'app' ? (
                 <div
                   className={cn(
-                    'grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none',
-                    advancedOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                    'overflow-hidden rounded-xl border transition-[border-color,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none',
+                    advancedOpen
+                      ? 'border-border bg-muted/20 shadow-sm'
+                      : 'border-border/70 bg-muted/10 hover:border-border hover:bg-muted/20'
                   )}
                 >
-                  <div
-                    className="min-h-0 overflow-hidden"
-                    aria-hidden={!advancedOpen}
-                    inert={!advancedOpen}
+                  <button
+                    type="button"
+                    aria-expanded={advancedOpen}
+                    onClick={() => setAdvancedOpen(current => !current)}
+                    disabled={submitting}
+                    className="flex w-full min-w-0 items-center justify-between gap-3 px-3 py-3 text-left disabled:opacity-50 sm:px-4"
                   >
-                    <div className="grid gap-4 border-t border-border/60 px-3 pb-4 pt-4 sm:px-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr))]">
-                      <label className="col-span-full min-w-0 space-y-1.5">
-                        <span className="text-xs font-medium text-foreground">
-                          {translate('启动参数')}
-                        </span>
-                        <Input
-                          value={launchArguments}
-                          onChange={event => setLaunchArguments(event.target.value)}
-                          placeholder={translate('例如：--profile work --new-window')}
-                          disabled={submitting}
-                        />
-                        <span className="block text-xs leading-5 text-muted-foreground">
-                          {translate('参数会原样写入快捷方式，不会修改目标路径。')}
-                        </span>
-                      </label>
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium text-foreground">
+                        {translate('高级启动选项')}
+                      </span>
+                      <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
+                        {translate('启动参数和工作目录均为可选项。')}
+                      </span>
+                    </span>
+                    <ChevronDown
+                      className={cn(
+                        'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none',
+                        advancedOpen && 'rotate-180'
+                      )}
+                    />
+                  </button>
 
-                      <label className="min-w-0 space-y-1.5">
-                        <span className="text-xs font-medium text-foreground">
-                          {translate('工作目录')}
-                        </span>
-                        <div className="flex min-w-0 flex-wrap gap-2">
+                  <div
+                    className={cn(
+                      'grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none',
+                      advancedOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                    )}
+                  >
+                    <div
+                      className="min-h-0 overflow-hidden"
+                      aria-hidden={!advancedOpen}
+                      inert={!advancedOpen}
+                    >
+                      <div className="grid gap-4 border-t border-border/60 px-3 pb-4 pt-4 sm:px-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr))]">
+                        <label className="col-span-full min-w-0 space-y-1.5">
+                          <span className="text-xs font-medium text-foreground">
+                            {translate('启动参数')}
+                          </span>
                           <Input
-                            value={workingDirectory}
-                            onChange={event => setWorkingDirectory(event.target.value)}
-                            placeholder={translate('留空则使用目标文件所在目录')}
+                            value={launchArguments}
+                            onChange={event => setLaunchArguments(event.target.value)}
+                            placeholder={translate('例如：--profile work --new-window')}
                             disabled={submitting}
-                            className="min-w-0 flex-[1_1_14rem]"
                           />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => void handlePickWorkingDirectory()}
-                            disabled={submitting}
-                            className="min-w-0 flex-[1_1_8rem] sm:flex-none"
-                          >
-                            <FolderOpen className="h-4 w-4" />
-                            {translate('选择目录')}
-                          </Button>
-                        </div>
-                      </label>
+                          <span className="block text-xs leading-5 text-muted-foreground">
+                            {translate('参数会原样写入快捷方式，不会修改目标路径。')}
+                          </span>
+                        </label>
+
+                        <label className="min-w-0 space-y-1.5">
+                          <span className="text-xs font-medium text-foreground">
+                            {translate('工作目录')}
+                          </span>
+                          <div className="flex min-w-0 flex-wrap gap-2">
+                            <Input
+                              value={workingDirectory}
+                              onChange={event => setWorkingDirectory(event.target.value)}
+                              placeholder={translate('留空则使用目标文件所在目录')}
+                              disabled={submitting}
+                              className="min-w-0 flex-[1_1_14rem]"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => void handlePickWorkingDirectory()}
+                              disabled={submitting}
+                              className="min-w-0 flex-[1_1_8rem] sm:flex-none"
+                            >
+                              <FolderOpen className="h-4 w-4" />
+                              {translate('选择目录')}
+                            </Button>
+                          </div>
+                        </label>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              ) : null}
             </div>
           </div>
 
