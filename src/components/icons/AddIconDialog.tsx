@@ -1,8 +1,18 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from 'react'
 import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import {
+  Ban,
+  Check,
   CheckCircle2,
   ChevronDown,
   CircleAlert,
@@ -14,11 +24,20 @@ import {
   Link2,
   Monitor,
   RefreshCw,
+  Type,
   Upload,
   X,
 } from 'lucide-react'
 import { deriveIconEntryName } from '@/lib/iconManager'
 import { deriveWebsiteName, normalizeWebsiteUrl } from '@/lib/websiteIcon'
+import {
+  createColoredIconDataUri,
+  createTextIconDataUri,
+  ICON_COLOR_PRESETS,
+  normalizeTextIconText,
+  pickRandomIconColor,
+  type IconColorId,
+} from '@/lib/textIcon'
 import { translate, useI18n } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -31,6 +50,16 @@ type ImportIconsResult = {
   invalid_count: number
 }
 type AddIconKind = 'app' | 'website'
+type IconSource = 'target' | 'custom' | 'text'
+
+const ICON_COLOR_LABELS: Record<IconColorId, string> = {
+  none: '无色',
+  ocean: '海蓝',
+  emerald: '翠绿',
+  amber: '琥珀',
+  coral: '珊瑚',
+  plum: '梅紫',
+}
 
 type WebsiteIconResult = {
   url: string
@@ -50,6 +79,10 @@ export type AddIconDialogDraft = {
   workingDirectory: string
   customIconPath: string
   websiteIconBase64?: string
+  generatedIconBase64?: string
+  iconSource?: IconSource
+  iconColor?: IconColorId
+  iconText?: string
 }
 
 interface AddIconDialogProps {
@@ -73,6 +106,7 @@ export function AddIconDialog({
   const descriptionId = useId()
   const targetInputId = useId()
   const nameInputId = useId()
+  const iconTextInputId = useId()
   const targetInputRef = useRef<HTMLInputElement | null>(null)
   const targetPickerRef = useRef<HTMLDivElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -88,7 +122,9 @@ export function AddIconDialog({
   const [launchArguments, setLaunchArguments] = useState('')
   const [workingDirectory, setWorkingDirectory] = useState('')
   const [customIconPath, setCustomIconPath] = useState('')
-  const [selectedIconSource, setSelectedIconSource] = useState<'target' | 'custom'>('target')
+  const [selectedIconSource, setSelectedIconSource] = useState<IconSource>('target')
+  const [iconColor, setIconColor] = useState<IconColorId>('none')
+  const [iconText, setIconText] = useState('')
   const [targetPreview, setTargetPreview] = useState('')
   const [targetPreviewLoading, setTargetPreviewLoading] = useState(false)
   const [customPreview, setCustomPreview] = useState('')
@@ -99,6 +135,10 @@ export function AddIconDialog({
   const [websitePreviewLoading, setWebsitePreviewLoading] = useState(false)
   const [websitePreviewError, setWebsitePreviewError] = useState('')
   const [websitePreviewResolved, setWebsitePreviewResolved] = useState(false)
+  const textIconPreview = useMemo(
+    () => createTextIconDataUri(iconText, iconColor),
+    [iconColor, iconText]
+  )
 
   const resetForm = () => {
     targetPreviewRequestRef.current += 1
@@ -113,6 +153,8 @@ export function AddIconDialog({
     setWorkingDirectory('')
     setCustomIconPath('')
     setSelectedIconSource('target')
+    setIconColor('none')
+    setIconText('')
     setTargetPreview('')
     setTargetPreviewLoading(false)
     setCustomPreview('')
@@ -161,7 +203,16 @@ export function AddIconDialog({
     setLaunchArguments(initialDraft.launchArguments)
     setWorkingDirectory(initialDraft.workingDirectory)
     setCustomIconPath(initialDraft.customIconPath)
-    setSelectedIconSource(initialDraft.customIconPath ? 'custom' : 'target')
+    setSelectedIconSource(
+      initialDraft.iconSource ??
+        (initialDraft.generatedIconBase64
+          ? 'text'
+          : initialDraft.customIconPath
+            ? 'custom'
+            : 'target')
+    )
+    setIconColor(initialDraft.iconColor ?? 'none')
+    setIconText(initialDraft.iconText ?? '')
     setTargetPreview('')
     setTargetPreviewLoading(nextEntryKind === 'app' && Boolean(initialDraft.targetPath.trim()))
     setCustomPreview('')
@@ -285,6 +336,7 @@ export function AddIconDialog({
       setWebsitePreviewError('')
       setWebsitePreviewResolved(false)
       setSelectedIconSource('target')
+      setIconColor('none')
       return
     }
 
@@ -307,6 +359,8 @@ export function AddIconDialog({
     setWorkingDirectory('')
     setCustomIconPath('')
     setSelectedIconSource('target')
+    setIconColor('none')
+    setIconText('')
     setTargetPreview('')
     setTargetPreviewLoading(false)
     setCustomPreview('')
@@ -316,6 +370,25 @@ export function AddIconDialog({
     setWebsitePreviewError('')
     setWebsitePreviewResolved(false)
     window.requestAnimationFrame(() => targetInputRef.current?.focus())
+  }
+
+  const handleIconSourceChange = (source: IconSource) => {
+    if (source === selectedIconSource) return
+    setSelectedIconSource(source)
+    if (source !== 'text') {
+      setIconColor('none')
+      return
+    }
+
+    const normalizedTarget =
+      entryKind === 'website' ? normalizeWebsiteUrl(targetPath) : targetPath.trim()
+    const fallbackText =
+      name.trim() ||
+      (entryKind === 'website'
+        ? deriveWebsiteName(normalizedTarget)
+        : deriveIconEntryName(normalizedTarget))
+    setIconText(current => current || normalizeTextIconText(fallbackText))
+    setIconColor(current => (current === 'none' ? pickRandomIconColor() : current))
   }
 
   const handleExtractWebsiteIcon = async () => {
@@ -404,6 +477,7 @@ export function AddIconDialog({
       setCustomPreview('')
       setCustomPreviewLoading(true)
       setSelectedIconSource('custom')
+      setIconColor('none')
     } catch (error) {
       toast.error(translate('选择自定义图标失败：{error}', { error: String(error) }), {
         key: 'add-icon-dialog-custom-icon',
@@ -421,10 +495,36 @@ export function AddIconDialog({
       (entryKind === 'website'
         ? deriveWebsiteName(normalizedTargetPath)
         : deriveIconEntryName(normalizedTargetPath))
-    if (!displayName || !normalizedTargetPath || submitting) return
+    if (
+      !displayName ||
+      !normalizedTargetPath ||
+      (selectedIconSource === 'custom' && (!customPreview || customPreviewLoading)) ||
+      (selectedIconSource === 'text' && !textIconPreview) ||
+      (selectedIconSource !== 'text' &&
+        iconColor !== 'none' &&
+        !(selectedIconSource === 'custom'
+          ? customPreview
+          : entryKind === 'website'
+            ? websitePreview
+            : targetPreview)) ||
+      submitting
+    )
+      return
 
     setSubmitting(true)
     try {
+      const selectedPreview =
+        selectedIconSource === 'custom'
+          ? customPreview
+          : entryKind === 'website'
+            ? websitePreview
+            : targetPreview
+      const generatedIconBase64 =
+        selectedIconSource === 'text'
+          ? textIconPreview
+          : iconColor === 'none'
+            ? ''
+            : await createColoredIconDataUri(selectedPreview, iconColor)
       const draft: AddIconDialogDraft = {
         displayName,
         targetPath: normalizedTargetPath,
@@ -432,7 +532,13 @@ export function AddIconDialog({
         workingDirectory: entryKind === 'app' ? workingDirectory.trim() : '',
         customIconPath: selectedIconSource === 'custom' ? customIconPath.trim() : '',
         websiteIconBase64:
-          entryKind === 'website' && selectedIconSource === 'target' ? websitePreview : '',
+          entryKind === 'website' && selectedIconSource === 'target' && iconColor === 'none'
+            ? websitePreview
+            : '',
+        generatedIconBase64,
+        iconSource: selectedIconSource,
+        iconColor,
+        iconText: selectedIconSource === 'text' ? normalizeTextIconText(iconText) : '',
       }
       if (onSubmitDraft) {
         await onSubmitDraft(draft)
@@ -489,6 +595,11 @@ export function AddIconDialog({
     entryKind === 'website' ? websitePreviewLoading : targetPreviewLoading
   const automaticPreviewLabel =
     entryKind === 'website' ? translate('网页图标') : translate('自动提取')
+  const selectedRasterPreview = selectedIconSource === 'custom' ? customPreview : automaticPreview
+  const selectedColorPreset = ICON_COLOR_PRESETS.find(preset => preset.id === iconColor)
+  const selectedTextIconInvalid = selectedIconSource === 'text' && !textIconPreview
+  const selectedColoredIconInvalid =
+    selectedIconSource !== 'text' && iconColor !== 'none' && !selectedRasterPreview
 
   return createPortal(
     <div
@@ -754,7 +865,7 @@ export function AddIconDialog({
                         type="button"
                         aria-pressed={selectedIconSource === 'target'}
                         aria-label={automaticPreviewLabel}
-                        onClick={() => setSelectedIconSource('target')}
+                        onClick={() => handleIconSourceChange('target')}
                         disabled={submitting}
                         className={cn(
                           'relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
@@ -762,6 +873,11 @@ export function AddIconDialog({
                             ? 'border-primary ring-2 ring-primary/20'
                             : 'border-border hover:border-foreground/30'
                         )}
+                        style={
+                          selectedIconSource === 'target' && iconColor !== 'none'
+                            ? { backgroundColor: selectedColorPreset?.color }
+                            : undefined
+                        }
                       >
                         {automaticPreviewLoading ? (
                           <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -769,7 +885,12 @@ export function AddIconDialog({
                           <img
                             src={automaticPreview}
                             alt={automaticPreviewLabel}
-                            className="h-full w-full object-contain"
+                            className={cn(
+                              'object-contain',
+                              selectedIconSource === 'target' && iconColor !== 'none'
+                                ? 'h-10 w-10'
+                                : 'h-full w-full'
+                            )}
                           />
                         ) : entryKind === 'website' ? (
                           <Globe2 className="h-5 w-5 text-muted-foreground" />
@@ -792,7 +913,7 @@ export function AddIconDialog({
                             type="button"
                             aria-pressed={selectedIconSource === 'custom'}
                             aria-label={translate('使用自定义图标')}
-                            onClick={() => setSelectedIconSource('custom')}
+                            onClick={() => handleIconSourceChange('custom')}
                             disabled={submitting || !customPreview}
                             className={cn(
                               'relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
@@ -800,6 +921,11 @@ export function AddIconDialog({
                                 ? 'border-primary ring-2 ring-primary/20'
                                 : 'border-border hover:border-foreground/30'
                             )}
+                            style={
+                              selectedIconSource === 'custom' && iconColor !== 'none'
+                                ? { backgroundColor: selectedColorPreset?.color }
+                                : undefined
+                            }
                           >
                             {customPreviewLoading ? (
                               <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -807,7 +933,12 @@ export function AddIconDialog({
                               <img
                                 src={customPreview}
                                 alt={translate('自定义图标')}
-                                className="h-full w-full object-contain"
+                                className={cn(
+                                  'object-contain',
+                                  selectedIconSource === 'custom' && iconColor !== 'none'
+                                    ? 'h-10 w-10'
+                                    : 'h-full w-full'
+                                )}
                               />
                             ) : (
                               <CircleAlert className="h-5 w-5 text-amber-500" />
@@ -841,7 +972,108 @@ export function AddIconDialog({
                         {customIconPath ? translate('自定义图标') : translate('添加图标')}
                       </span>
                     </div>
+
+                    <div className="flex w-20 flex-col items-center gap-1.5">
+                      <button
+                        type="button"
+                        aria-pressed={selectedIconSource === 'text'}
+                        aria-label={translate('使用文字图标')}
+                        onClick={() => handleIconSourceChange('text')}
+                        disabled={submitting}
+                        className={cn(
+                          'relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
+                          selectedIconSource === 'text'
+                            ? 'border-primary ring-2 ring-primary/20'
+                            : 'border-border hover:border-foreground/30'
+                        )}
+                      >
+                        {textIconPreview ? (
+                          <img
+                            src={textIconPreview}
+                            alt={translate('文字图标')}
+                            className="h-full w-full object-contain"
+                          />
+                        ) : (
+                          <Type className="h-5 w-5 text-muted-foreground" />
+                        )}
+                        {selectedIconSource === 'text' && textIconPreview ? (
+                          <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
+                        ) : null}
+                      </button>
+                      <span className="text-center text-[11px] leading-4 text-muted-foreground">
+                        {translate('文字图标')}
+                      </span>
+                    </div>
                   </div>
+
+                  <div className="space-y-2 border-t border-border/60 pt-3">
+                    <span className="text-xs font-medium text-foreground">
+                      {translate('图标颜色')}
+                    </span>
+                    <div
+                      role="radiogroup"
+                      aria-label={translate('图标颜色')}
+                      className="flex min-h-9 flex-wrap items-center gap-2"
+                    >
+                      {ICON_COLOR_PRESETS.map(preset => {
+                        const colorLabel = translate(ICON_COLOR_LABELS[preset.id])
+                        const selected = iconColor === preset.id
+                        const disabled =
+                          submitting ||
+                          (preset.id !== 'none' &&
+                            selectedIconSource !== 'text' &&
+                            !selectedRasterPreview)
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            aria-label={colorLabel}
+                            title={colorLabel}
+                            onClick={() => setIconColor(preset.id)}
+                            disabled={disabled}
+                            className={cn(
+                              'relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-[border-color,box-shadow,transform] duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-35 motion-reduce:transform-none motion-reduce:transition-none',
+                              selected
+                                ? 'border-foreground ring-2 ring-foreground/15'
+                                : 'border-border hover:border-foreground/40',
+                              preset.id === 'none' && 'bg-background text-muted-foreground'
+                            )}
+                            style={
+                              preset.id === 'none' ? undefined : { backgroundColor: preset.color }
+                            }
+                          >
+                            {preset.id === 'none' ? <Ban className="h-4 w-4" /> : null}
+                            {selected && preset.id !== 'none' ? (
+                              <Check className="absolute h-4 w-4 text-white" />
+                            ) : null}
+                          </button>
+                        )
+                      })}
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        {translate(ICON_COLOR_LABELS[iconColor])}
+                      </span>
+                    </div>
+                  </div>
+
+                  {selectedIconSource === 'text' ? (
+                    <label htmlFor={iconTextInputId} className="block min-w-0 space-y-1.5">
+                      <span className="text-xs font-medium text-foreground">
+                        {translate('图标文字')}
+                      </span>
+                      <Input
+                        id={iconTextInputId}
+                        value={iconText}
+                        onChange={event => setIconText(normalizeTextIconText(event.target.value))}
+                        placeholder={translate('输入一到两个字符')}
+                        disabled={submitting}
+                      />
+                      <span className="block text-xs leading-5 text-muted-foreground">
+                        {translate('最多使用两个字符生成图标。')}
+                      </span>
+                    </label>
+                  ) : null}
                   {customIconPath && !customPreviewLoading && !customPreview ? (
                     <p className="flex items-center gap-1.5 text-xs leading-5 text-amber-600 dark:text-amber-400">
                       <CircleAlert className="h-3.5 w-3.5 shrink-0" />
@@ -982,7 +1214,12 @@ export function AddIconDialog({
             <Button
               type="submit"
               disabled={
-                !effectiveName || !normalizedTargetPath || selectedCustomIconInvalid || submitting
+                !effectiveName ||
+                !normalizedTargetPath ||
+                selectedCustomIconInvalid ||
+                selectedTextIconInvalid ||
+                selectedColoredIconInvalid ||
+                submitting
               }
               className="min-w-0 flex-1 sm:flex-none"
             >

@@ -565,10 +565,12 @@ export function Launchpad() {
     async (draft: AddIconDialogDraft) => {
       if (editingDropIndex === null) return
       const previewPath = draft.customIconPath || draft.targetPath
-      const preview = await invoke<string>('get_drag_preview_icon', {
-        path: previewPath,
-        iconSize: 48,
-      }).catch(() => '')
+      const preview =
+        draft.generatedIconBase64 ||
+        (await invoke<string>('get_drag_preview_icon', {
+          path: previewPath,
+          iconSize: 48,
+        }).catch(() => ''))
       setPendingDropDrafts(current =>
         current.map((item, index) =>
           index === editingDropIndex
@@ -612,6 +614,8 @@ export function Launchpad() {
               launchArguments: draft.launchArguments,
               workingDirectory: draft.workingDirectory,
               customIconPath: draft.customIconPath,
+              websiteIconBase64: draft.websiteIconBase64,
+              generatedIconBase64: draft.generatedIconBase64,
             },
           })
           result.imported_count += itemResult.imported_count

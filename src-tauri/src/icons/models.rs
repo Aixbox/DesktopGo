@@ -91,6 +91,8 @@ pub struct CreateIconEntryInput {
     pub custom_icon_path: String,
     #[serde(default)]
     pub website_icon_base64: String,
+    #[serde(default)]
+    pub generated_icon_base64: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

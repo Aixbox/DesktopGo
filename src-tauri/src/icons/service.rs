@@ -743,7 +743,7 @@ fn save_data_icon_for_bucket(
     let mut output = Cursor::new(Vec::new());
     resized
         .write_to(&mut output, image::ImageFormat::Png)
-        .map_err(|error| format!("Failed to encode cached website icon: {error}"))?;
+        .map_err(|error| format!("Failed to encode cached icon: {error}"))?;
 
     let rel_path = icon_file_rel_path(id, bucket, source);
     let abs_path = snapshot_base_dir(app_handle)?.join(&rel_path);
@@ -769,7 +769,7 @@ fn build_data_icon_paths(
 ) -> Result<SnapshotIconPaths, String> {
     let icon_data = decode_data_uri_png(data_uri)?;
     let source_image = image::load_from_memory(&icon_data)
-        .map_err(|error| format!("Failed to decode website icon: {error}"))?;
+        .map_err(|error| format!("Failed to decode generated icon: {error}"))?;
     Ok(SnapshotIconPaths {
         small: save_data_icon_for_bucket(app_handle, &source_image, id, IconBucket::Small, source)?,
         medium: save_data_icon_for_bucket(
@@ -1239,6 +1239,7 @@ fn create_icon_entry_windows(
     };
     let custom_icon_path = input.custom_icon_path.trim().to_string();
     let website_icon_base64 = input.website_icon_base64.trim().to_string();
+    let generated_icon_base64 = input.generated_icon_base64.trim().to_string();
     let source_path = PathBuf::from(&target_path_text);
     let scanned_item = if is_web {
         Some(ScannedDesktopItem {
@@ -1333,7 +1334,14 @@ fn create_icon_entry_windows(
         created_item.launch_arguments = launch_arguments;
         created_item.working_directory = working_directory;
         created_item.custom_icon_path = custom_icon_path.clone();
-        if !custom_icon_path.is_empty() {
+        if !generated_icon_base64.is_empty() {
+            created_item.icons = build_data_icon_paths(
+                app_handle,
+                &generated_icon_base64,
+                &created_item.id,
+                IconSource::Library,
+            )?;
+        } else if !custom_icon_path.is_empty() {
             created_item.icons = build_custom_icon_paths(
                 app_handle,
                 &custom_icon_path,
