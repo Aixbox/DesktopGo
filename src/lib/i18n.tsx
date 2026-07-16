@@ -164,6 +164,8 @@ const EN_MESSAGES: Record<string, string> = {
   标题行数: 'Title lines',
   'Windows 原生菜单': 'Windows native menu',
   '图标使用 Windows 原生菜单': 'Use Windows native menu for icons',
+  'Shift + 右键': 'Shift + Right-click',
+  右键: 'Right-click',
   应用内重命名: 'Rename in DesktopGo',
   从启动台隐藏: 'Hide from Launchpad',
   界面语言: 'Language',

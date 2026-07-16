@@ -96,7 +96,7 @@ export function IconContextMenu({
           <FolderCog className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <span>{translate('Windows 原生菜单')}</span>
           <ContextMenuShortcut>
-            {iconContextMenuMode === 'custom' ? 'Shift + RMB' : 'RMB'}
+            {translate(iconContextMenuMode === 'custom' ? 'Shift + 右键' : '右键')}
           </ContextMenuShortcut>
         </ContextMenuItem>
       </ContextMenuContent>
