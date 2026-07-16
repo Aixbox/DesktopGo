@@ -13,6 +13,9 @@ pub struct DesktopIcon {
     pub working_directory: String,
     pub custom_icon_path: String,
     pub icon_base64: String,
+    pub icon_source: String,
+    pub icon_color: String,
+    pub icon_text: String,
     pub item_type: String,
 }
 
@@ -26,6 +29,9 @@ pub struct IconManagerItem {
     pub working_directory: String,
     pub custom_icon_path: String,
     pub icon_base64: String,
+    pub icon_source: String,
+    pub icon_color: String,
+    pub icon_text: String,
     pub item_type: String,
     pub hidden: bool,
 }
@@ -66,6 +72,12 @@ pub(crate) struct SnapshotIconItem {
     pub(crate) working_directory: String,
     #[serde(default)]
     pub(crate) custom_icon_path: String,
+    #[serde(default)]
+    pub(crate) icon_source: String,
+    #[serde(default)]
+    pub(crate) icon_color: String,
+    #[serde(default)]
+    pub(crate) icon_text: String,
     pub(crate) item_type: String,
     #[serde(default)]
     pub(crate) hidden: bool,
@@ -93,6 +105,12 @@ pub struct CreateIconEntryInput {
     pub website_icon_base64: String,
     #[serde(default)]
     pub generated_icon_base64: String,
+    #[serde(default)]
+    pub icon_source: String,
+    #[serde(default)]
+    pub icon_color: String,
+    #[serde(default)]
+    pub icon_text: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -112,7 +130,11 @@ pub struct UpdateIconEntryInput {
     #[serde(default)]
     pub generated_icon_base64: String,
     #[serde(default)]
-    pub preserve_current_icon: bool,
+    pub icon_source: String,
+    #[serde(default)]
+    pub icon_color: String,
+    #[serde(default)]
+    pub icon_text: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -6,6 +6,7 @@ import {
   useState,
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
@@ -50,7 +51,7 @@ type ImportIconsResult = {
   invalid_count: number
 }
 export type AddIconKind = 'app' | 'website'
-type IconSource = 'current' | 'target' | 'custom' | 'text'
+type IconSource = 'target' | 'custom' | 'text'
 
 const ICON_COLOR_LABELS: Record<IconColorId, string> = {
   none: '无色',
@@ -60,6 +61,9 @@ const ICON_COLOR_LABELS: Record<IconColorId, string> = {
   coral: '珊瑚',
   plum: '梅紫',
 }
+
+const DEFAULT_TEXT_ICON_TEXT = 'D'
+const DEFAULT_TEXT_ICON_COLOR: IconColorId = 'ocean'
 
 type WebsiteIconResult = {
   url: string
@@ -81,7 +85,6 @@ export type AddIconDialogDraft = {
   customIconPath: string
   websiteIconBase64?: string
   generatedIconBase64?: string
-  currentIconBase64?: string
   iconSource?: IconSource
   iconColor?: IconColorId
   iconText?: string
@@ -93,6 +96,36 @@ interface AddIconDialogProps {
   onCreated?: (entry: AddIconDialogCreatedEntry) => void | Promise<void>
   initialDraft?: AddIconDialogDraft | null
   onSubmitDraft?: (draft: AddIconDialogDraft) => void | Promise<void>
+}
+
+function FormRow({
+  label,
+  labelFor,
+  children,
+}: {
+  label: string
+  labelFor?: string
+  children: ReactNode
+}) {
+  const labelClassName = 'block text-xs font-medium leading-5 text-foreground'
+
+  return (
+    <div className="grid min-w-0 gap-2 sm:contents">
+      <div
+        className={cn('min-w-0 sm:pt-2', !label && 'hidden sm:block')}
+        aria-hidden={label ? undefined : true}
+      >
+        {labelFor ? (
+          <label htmlFor={labelFor} className={labelClassName}>
+            {label}
+          </label>
+        ) : (
+          <span className={labelClassName}>{label}</span>
+        )}
+      </div>
+      <div className="min-w-0">{children}</div>
+    </div>
+  )
 }
 
 export function AddIconDialog({
@@ -124,9 +157,9 @@ export function AddIconDialog({
   const [launchArguments, setLaunchArguments] = useState('')
   const [workingDirectory, setWorkingDirectory] = useState('')
   const [customIconPath, setCustomIconPath] = useState('')
-  const [selectedIconSource, setSelectedIconSource] = useState<IconSource>('target')
-  const [iconColor, setIconColor] = useState<IconColorId>('none')
-  const [iconText, setIconText] = useState('')
+  const [selectedIconSource, setSelectedIconSource] = useState<IconSource>('text')
+  const [iconColor, setIconColor] = useState<IconColorId>(DEFAULT_TEXT_ICON_COLOR)
+  const [iconText, setIconText] = useState(DEFAULT_TEXT_ICON_TEXT)
   const [targetPreview, setTargetPreview] = useState('')
   const [targetPreviewLoading, setTargetPreviewLoading] = useState(false)
   const [customPreview, setCustomPreview] = useState('')
@@ -154,9 +187,9 @@ export function AddIconDialog({
     setLaunchArguments('')
     setWorkingDirectory('')
     setCustomIconPath('')
-    setSelectedIconSource('target')
-    setIconColor('none')
-    setIconText('')
+    setSelectedIconSource('text')
+    setIconColor(DEFAULT_TEXT_ICON_COLOR)
+    setIconText(DEFAULT_TEXT_ICON_TEXT)
     setTargetPreview('')
     setTargetPreviewLoading(false)
     setCustomPreview('')
@@ -359,9 +392,9 @@ export function AddIconDialog({
     setLaunchArguments('')
     setWorkingDirectory('')
     setCustomIconPath('')
-    setSelectedIconSource('target')
-    setIconColor('none')
-    setIconText('')
+    setSelectedIconSource('text')
+    setIconColor(DEFAULT_TEXT_ICON_COLOR)
+    setIconText(DEFAULT_TEXT_ICON_TEXT)
     setTargetPreview('')
     setTargetPreviewLoading(false)
     setCustomPreview('')
@@ -376,10 +409,7 @@ export function AddIconDialog({
   const handleIconSourceChange = (source: IconSource) => {
     if (source === selectedIconSource) return
     setSelectedIconSource(source)
-    if (source !== 'text') {
-      setIconColor('none')
-      return
-    }
+    if (source !== 'text') return
 
     const normalizedTarget =
       entryKind === 'website' ? normalizeWebsiteUrl(targetPath) : targetPath.trim()
@@ -478,7 +508,6 @@ export function AddIconDialog({
       setCustomPreview('')
       setCustomPreviewLoading(true)
       setSelectedIconSource('custom')
-      setIconColor('none')
     } catch (error) {
       toast.error(translate('选择自定义图标失败：{error}', { error: String(error) }), {
         key: 'add-icon-dialog-custom-icon',
@@ -503,13 +532,11 @@ export function AddIconDialog({
       (selectedIconSource === 'text' && !textIconPreview) ||
       (selectedIconSource !== 'text' &&
         iconColor !== 'none' &&
-        !(selectedIconSource === 'current'
-          ? initialDraft?.currentIconBase64
-          : selectedIconSource === 'custom'
-            ? customPreview
-            : entryKind === 'website'
-              ? websitePreview
-              : targetPreview)) ||
+        !(selectedIconSource === 'custom'
+          ? customPreview
+          : entryKind === 'website'
+            ? websitePreview
+            : targetPreview)) ||
       submitting
     )
       return
@@ -517,15 +544,29 @@ export function AddIconDialog({
     setSubmitting(true)
     try {
       const selectedPreview =
-        selectedIconSource === 'current'
-          ? (initialDraft?.currentIconBase64 ?? '')
-          : selectedIconSource === 'custom'
-            ? customPreview
-            : entryKind === 'website'
-              ? websitePreview
-              : targetPreview
-      const generatedIconBase64 =
-        selectedIconSource === 'text'
+        selectedIconSource === 'custom'
+          ? customPreview
+          : entryKind === 'website'
+            ? websitePreview
+            : targetPreview
+      const initialTargetPath = initialDraft
+        ? initialDraft.entryKind === 'website'
+          ? normalizeWebsiteUrl(initialDraft.targetPath)
+          : initialDraft.targetPath.trim()
+        : ''
+      const canReuseGeneratedIcon = Boolean(
+        initialDraft?.generatedIconBase64 &&
+        selectedIconSource === initialDraft.iconSource &&
+        iconColor === initialDraft.iconColor &&
+        normalizedTargetPath === initialTargetPath &&
+        (selectedIconSource !== 'custom' ||
+          customIconPath.trim() === initialDraft.customIconPath.trim()) &&
+        (selectedIconSource !== 'text' ||
+          normalizeTextIconText(iconText) === normalizeTextIconText(initialDraft.iconText ?? ''))
+      )
+      const generatedIconBase64 = canReuseGeneratedIcon
+        ? (initialDraft?.generatedIconBase64 ?? '')
+        : selectedIconSource === 'text'
           ? textIconPreview
           : iconColor === 'none'
             ? ''
@@ -606,13 +647,7 @@ export function AddIconDialog({
     entryKind === 'website' ? websitePreviewLoading : targetPreviewLoading
   const automaticPreviewLabel =
     entryKind === 'website' ? translate('网页图标') : translate('自动提取')
-  const currentIconPreview = initialDraft?.currentIconBase64 ?? ''
-  const selectedRasterPreview =
-    selectedIconSource === 'current'
-      ? currentIconPreview
-      : selectedIconSource === 'custom'
-        ? customPreview
-        : automaticPreview
+  const selectedRasterPreview = selectedIconSource === 'custom' ? customPreview : automaticPreview
   const selectedColorPreset = ICON_COLOR_PRESETS.find(preset => preset.id === iconColor)
   const selectedTextIconInvalid = selectedIconSource === 'text' && !textIconPreview
   const selectedColoredIconInvalid =
@@ -631,7 +666,7 @@ export function AddIconDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
-        className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl sm:max-h-[calc(100vh-2.5rem)]"
+        className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl sm:max-h-[calc(100vh-2.5rem)]"
         onKeyDown={handleDialogKeyDown}
       >
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border/80 px-4 py-3.5 sm:px-5">
@@ -660,263 +695,278 @@ export function AddIconDialog({
 
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-            <div className="flex flex-col gap-5">
-              <div
-                role="tablist"
-                aria-label={translate('添加类型')}
-                className="inline-flex h-9 self-start rounded-lg bg-muted p-1"
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={entryKind === 'app'}
-                  onClick={() => handleEntryKindChange('app')}
-                  disabled={submitting}
-                  className={cn(
-                    'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
-                    entryKind === 'app'
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
+            <div className="grid gap-y-3 sm:grid-cols-[max-content_minmax(0,1fr)] sm:gap-x-3">
+              <FormRow label={translate('图标类型')}>
+                <div
+                  role="tablist"
+                  aria-label={translate('图标类型')}
+                  className="inline-flex h-9 rounded-lg bg-muted p-1"
                 >
-                  <Monitor className="h-3.5 w-3.5" />
-                  {translate('应用')}
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={entryKind === 'website'}
-                  onClick={() => handleEntryKindChange('website')}
-                  disabled={submitting}
-                  className={cn(
-                    'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
-                    entryKind === 'website'
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  <Globe2 className="h-3.5 w-3.5" />
-                  {translate('网页')}
-                </button>
-              </div>
-              {entryKind === 'app' ? (
-                <div className="min-w-0 space-y-1.5">
-                  <label htmlFor={targetInputId} className="text-xs font-medium text-foreground">
-                    {translate('选择目标')}
-                  </label>
-                  <div className="flex min-w-0 flex-wrap gap-2">
-                    <Input
-                      id={targetInputId}
-                      ref={targetInputRef}
-                      value={targetPath}
-                      onChange={event => updateTargetPath(event.target.value)}
-                      placeholder={translate('输入程序、快捷方式、文件或文件夹路径')}
-                      disabled={submitting}
-                      className="min-w-0 flex-[1_1_18rem]"
-                    />
-                    <div
-                      ref={targetPickerRef}
-                      className="relative min-w-0 flex-[1_1_8rem] sm:flex-none"
-                    >
-                      <Button
-                        type="button"
-                        variant="outline"
-                        aria-haspopup="menu"
-                        aria-expanded={targetPickerOpen}
-                        onClick={() => setTargetPickerOpen(current => !current)}
-                        disabled={submitting}
-                        className="w-full sm:w-auto"
-                      >
-                        <FileSearch className="h-4 w-4" />
-                        {translate('选择目标')}
-                        <ChevronDown
-                          className={cn(
-                            'h-3.5 w-3.5 transition-transform duration-200 motion-reduce:transition-none',
-                            targetPickerOpen && 'rotate-180'
-                          )}
-                        />
-                      </Button>
-                      {targetPickerOpen ? (
-                        <div
-                          role="menu"
-                          className="absolute right-0 top-full z-20 mt-1.5 w-40 overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-lg"
-                        >
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={() => void handlePickTarget(false)}
-                            className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
-                          >
-                            <FileSearch className="h-4 w-4 text-muted-foreground" />
-                            {translate('选择文件')}
-                          </button>
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={() => void handlePickTarget(true)}
-                            className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
-                          >
-                            <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                            {translate('选择文件夹')}
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                  <span
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={entryKind === 'app'}
+                    onClick={() => handleEntryKindChange('app')}
+                    disabled={submitting}
                     className={cn(
-                      'flex items-center gap-1.5 text-xs leading-5',
-                      hasTargetPreviewFailure
-                        ? 'text-amber-600 dark:text-amber-400'
-                        : 'text-muted-foreground'
+                      'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+                      entryKind === 'app'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
                     )}
                   >
-                    {!normalizedTargetPath ? (
-                      translate('支持程序、快捷方式、文件和文件夹。')
-                    ) : targetPreviewLoading ? (
-                      <>
-                        <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                        {translate('正在读取目标并提取图标...')}
-                      </>
-                    ) : hasTargetPreviewFailure ? (
-                      <>
-                        <CircleAlert className="h-3.5 w-3.5 shrink-0" />
-                        {translate('未能识别该路径或提取图标，仍可尝试添加。')}
-                      </>
-                    ) : targetPreview ? (
-                      <>
-                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                        {translate('已识别目标并生成图标预览。')}
-                      </>
-                    ) : null}
-                  </span>
+                    <Monitor className="h-3.5 w-3.5" />
+                    {translate('应用')}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={entryKind === 'website'}
+                    onClick={() => handleEntryKindChange('website')}
+                    disabled={submitting}
+                    className={cn(
+                      'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+                      entryKind === 'website'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <Globe2 className="h-3.5 w-3.5" />
+                    {translate('网页')}
+                  </button>
                 </div>
-              ) : (
-                <div className="min-w-0 space-y-1.5">
-                  <label htmlFor={targetInputId} className="text-xs font-medium text-foreground">
-                    {translate('网页地址')}
-                  </label>
-                  <div className="flex min-w-0 flex-wrap gap-2">
-                    <div className="relative min-w-0 flex-[1_1_18rem]">
-                      <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              </FormRow>
+              {entryKind === 'app' ? (
+                <FormRow label={translate('选择目标')} labelFor={targetInputId}>
+                  <div className="min-w-0 space-y-1.5">
+                    <div className="flex min-w-0 flex-wrap gap-2">
                       <Input
                         id={targetInputId}
                         ref={targetInputRef}
-                        type="url"
-                        inputMode="url"
                         value={targetPath}
                         onChange={event => updateTargetPath(event.target.value)}
-                        onBlur={handleWebsiteUrlBlur}
-                        placeholder={translate('例如：https://www.example.com')}
-                        disabled={submitting || websitePreviewLoading}
-                        className="min-w-0 pl-9"
+                        placeholder={translate('输入程序、快捷方式、文件或文件夹路径')}
+                        disabled={submitting}
+                        className="min-w-0 flex-[1_1_18rem]"
                       />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => void handleExtractWebsiteIcon()}
-                      disabled={!normalizedTargetPath || websitePreviewLoading || submitting}
-                      className="min-w-0 flex-[1_1_8rem] sm:flex-none"
-                    >
-                      {websitePreviewLoading ? (
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Globe2 className="h-4 w-4" />
-                      )}
-                      {websitePreviewLoading ? translate('正在提取...') : translate('提取图标')}
-                    </Button>
-                  </div>
-                  <span
-                    className={cn(
-                      'flex items-center gap-1.5 text-xs leading-5',
-                      websitePreviewError || (targetPath.trim() && !normalizedTargetPath)
-                        ? 'text-destructive'
-                        : websitePreviewResolved && !websitePreview
-                          ? 'text-amber-600 dark:text-amber-400'
-                          : 'text-muted-foreground'
-                    )}
-                  >
-                    {!targetPath.trim() ? (
-                      translate('输入网页地址后提取站点图标。')
-                    ) : !normalizedTargetPath ? (
-                      <>
-                        <CircleAlert className="h-3.5 w-3.5 shrink-0" />
-                        {translate('请输入有效的 HTTP 或 HTTPS 网页地址。')}
-                      </>
-                    ) : websitePreviewLoading ? (
-                      <>
-                        <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                        {translate('正在读取网页并提取站点图标...')}
-                      </>
-                    ) : websitePreviewError ? (
-                      <>
-                        <CircleAlert className="h-3.5 w-3.5 shrink-0" />
-                        {translate('网页图标提取失败：{error}', { error: websitePreviewError })}
-                      </>
-                    ) : websitePreviewResolved && websitePreview ? (
-                      <>
-                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                        {translate('已提取网页图标。')}
-                      </>
-                    ) : websitePreviewResolved ? (
-                      <>
-                        <CircleAlert className="h-3.5 w-3.5 shrink-0" />
-                        {translate('网页未提供可用图标，仍可继续添加。')}
-                      </>
-                    ) : (
-                      translate('网页将在系统默认浏览器中打开。')
-                    )}
-                  </span>
-                </div>
-              )}
-
-              {normalizedTargetPath ? (
-                <div className="space-y-2">
-                  <span className="text-xs font-medium text-foreground">
-                    {translate('使用图标')}
-                  </span>
-                  <div className="flex flex-wrap items-start gap-3">
-                    {currentIconPreview ? (
-                      <div className="flex w-20 flex-col items-center gap-1.5">
-                        <button
+                      <div
+                        ref={targetPickerRef}
+                        className="relative min-w-0 flex-[1_1_8rem] sm:flex-none"
+                      >
+                        <Button
                           type="button"
-                          aria-pressed={selectedIconSource === 'current'}
-                          aria-label={translate('保留当前图标')}
-                          onClick={() => handleIconSourceChange('current')}
+                          variant="outline"
+                          aria-haspopup="menu"
+                          aria-expanded={targetPickerOpen}
+                          onClick={() => setTargetPickerOpen(current => !current)}
                           disabled={submitting}
-                          className={cn(
-                            'relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
-                            selectedIconSource === 'current'
-                              ? 'border-primary ring-2 ring-primary/20'
-                              : 'border-border hover:border-foreground/30'
-                          )}
-                          style={
-                            selectedIconSource === 'current' && iconColor !== 'none'
-                              ? { backgroundColor: selectedColorPreset?.color }
-                              : undefined
-                          }
+                          className="w-full sm:w-auto"
                         >
-                          <img
-                            src={currentIconPreview}
-                            alt={translate('当前图标')}
+                          <FileSearch className="h-4 w-4" />
+                          {translate('选择目标')}
+                          <ChevronDown
                             className={cn(
-                              'object-contain',
-                              selectedIconSource === 'current' && iconColor !== 'none'
-                                ? 'h-10 w-10'
-                                : 'h-full w-full'
+                              'h-3.5 w-3.5 transition-transform duration-200 motion-reduce:transition-none',
+                              targetPickerOpen && 'rotate-180'
                             )}
                           />
-                          {selectedIconSource === 'current' ? (
-                            <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
-                          ) : null}
-                        </button>
-                        <span className="text-center text-[11px] leading-4 text-muted-foreground">
-                          {translate('当前图标')}
-                        </span>
+                        </Button>
+                        {targetPickerOpen ? (
+                          <div
+                            role="menu"
+                            className="absolute right-0 top-full z-20 mt-1.5 w-40 overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-lg"
+                          >
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => void handlePickTarget(false)}
+                              className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
+                            >
+                              <FileSearch className="h-4 w-4 text-muted-foreground" />
+                              {translate('选择文件')}
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => void handlePickTarget(true)}
+                              className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
+                            >
+                              <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                              {translate('选择文件夹')}
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
+                    </div>
+                    <span
+                      className={cn(
+                        'flex items-center gap-1.5 text-xs leading-5',
+                        hasTargetPreviewFailure
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-muted-foreground'
+                      )}
+                    >
+                      {!normalizedTargetPath ? null : targetPreviewLoading ? (
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                          {translate('正在读取目标并提取图标...')}
+                        </>
+                      ) : hasTargetPreviewFailure ? (
+                        <>
+                          <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                          {translate('未能识别该路径或提取图标，仍可尝试添加。')}
+                        </>
+                      ) : targetPreview ? (
+                        <>
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                          {translate('已识别目标并生成图标预览。')}
+                        </>
+                      ) : null}
+                    </span>
+                  </div>
+                </FormRow>
+              ) : (
+                <FormRow label={translate('网页地址')} labelFor={targetInputId}>
+                  <div className="min-w-0 space-y-1.5">
+                    <div className="flex min-w-0 flex-wrap gap-2">
+                      <div className="relative min-w-0 flex-[1_1_18rem]">
+                        <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          id={targetInputId}
+                          ref={targetInputRef}
+                          type="url"
+                          inputMode="url"
+                          value={targetPath}
+                          onChange={event => updateTargetPath(event.target.value)}
+                          onBlur={handleWebsiteUrlBlur}
+                          placeholder={translate('例如：https://www.example.com')}
+                          disabled={submitting || websitePreviewLoading}
+                          className="min-w-0 pl-9"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => void handleExtractWebsiteIcon()}
+                        disabled={!normalizedTargetPath || websitePreviewLoading || submitting}
+                        className="min-w-0 flex-[1_1_8rem] sm:flex-none"
+                      >
+                        {websitePreviewLoading ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Globe2 className="h-4 w-4" />
+                        )}
+                        {websitePreviewLoading ? translate('正在提取...') : translate('提取图标')}
+                      </Button>
+                    </div>
+                    <span
+                      className={cn(
+                        'flex items-center gap-1.5 text-xs leading-5',
+                        websitePreviewError || (targetPath.trim() && !normalizedTargetPath)
+                          ? 'text-destructive'
+                          : websitePreviewResolved && !websitePreview
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-muted-foreground'
+                      )}
+                    >
+                      {!targetPath.trim() ? null : !normalizedTargetPath ? (
+                        <>
+                          <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                          {translate('请输入有效的 HTTP 或 HTTPS 网页地址。')}
+                        </>
+                      ) : websitePreviewLoading ? (
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                          {translate('正在读取网页并提取站点图标...')}
+                        </>
+                      ) : websitePreviewError ? (
+                        <>
+                          <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                          {translate('网页图标提取失败：{error}', { error: websitePreviewError })}
+                        </>
+                      ) : websitePreviewResolved && websitePreview ? (
+                        <>
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                          {translate('已提取网页图标。')}
+                        </>
+                      ) : websitePreviewResolved ? (
+                        <>
+                          <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                          {translate('网页未提供可用图标，仍可继续添加。')}
+                        </>
+                      ) : null}
+                    </span>
+                  </div>
+                </FormRow>
+              )}
 
+              <FormRow label={translate('图标颜色')}>
+                <div
+                  role="radiogroup"
+                  aria-label={translate('图标颜色')}
+                  className="flex min-h-9 flex-wrap items-center gap-2"
+                >
+                  {ICON_COLOR_PRESETS.map(preset => {
+                    const colorLabel = translate(ICON_COLOR_LABELS[preset.id])
+                    const selected = iconColor === preset.id
+                    const disabled =
+                      submitting ||
+                      (preset.id !== 'none' &&
+                        selectedIconSource !== 'text' &&
+                        !selectedRasterPreview)
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        aria-label={colorLabel}
+                        title={colorLabel}
+                        onClick={() => setIconColor(preset.id)}
+                        disabled={disabled}
+                        className={cn(
+                          'relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-[border-color,box-shadow,transform] duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-35 motion-reduce:transform-none motion-reduce:transition-none',
+                          selected
+                            ? 'border-foreground ring-2 ring-foreground/15'
+                            : 'border-border hover:border-foreground/40',
+                          preset.id === 'none' && 'bg-background text-muted-foreground'
+                        )}
+                        style={preset.id === 'none' ? undefined : { backgroundColor: preset.color }}
+                      >
+                        {preset.id === 'none' ? <Ban className="h-4 w-4" /> : null}
+                        {selected && preset.id !== 'none' ? (
+                          <Check className="absolute h-4 w-4 text-white" />
+                        ) : null}
+                      </button>
+                    )
+                  })}
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    {translate(ICON_COLOR_LABELS[iconColor])}
+                  </span>
+                </div>
+              </FormRow>
+
+              <FormRow label={translate('图标文字')} labelFor={iconTextInputId}>
+                <div className="min-w-0 space-y-1.5">
+                  <Input
+                    id={iconTextInputId}
+                    value={iconText}
+                    onChange={event => {
+                      if (selectedIconSource !== 'text') handleIconSourceChange('text')
+                      setIconText(normalizeTextIconText(event.target.value))
+                    }}
+                    placeholder={translate('输入一到两个字符')}
+                    disabled={submitting}
+                  />
+                  <span className="block text-xs leading-5 text-muted-foreground">
+                    {translate('最多使用两个字符生成图标。')}
+                  </span>
+                </div>
+              </FormRow>
+
+              <FormRow label="">
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-start gap-3">
                     <div className="flex w-20 flex-col items-center gap-1.5">
                       <button
                         type="button"
@@ -960,6 +1010,38 @@ export function AddIconDialog({
                       </button>
                       <span className="text-center text-[11px] leading-4 text-muted-foreground">
                         {automaticPreviewLabel}
+                      </span>
+                    </div>
+
+                    <div className="flex w-20 flex-col items-center gap-1.5">
+                      <button
+                        type="button"
+                        aria-pressed={selectedIconSource === 'text'}
+                        aria-label={translate('使用文字图标')}
+                        onClick={() => handleIconSourceChange('text')}
+                        disabled={submitting}
+                        className={cn(
+                          'relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
+                          selectedIconSource === 'text'
+                            ? 'border-primary ring-2 ring-primary/20'
+                            : 'border-border hover:border-foreground/30'
+                        )}
+                      >
+                        {textIconPreview ? (
+                          <img
+                            src={textIconPreview}
+                            alt={translate('文字图标')}
+                            className="h-full w-full object-contain"
+                          />
+                        ) : (
+                          <Type className="h-5 w-5 text-muted-foreground" />
+                        )}
+                        {selectedIconSource === 'text' && textIconPreview ? (
+                          <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
+                        ) : null}
+                      </button>
+                      <span className="text-center text-[11px] leading-4 text-muted-foreground">
+                        {translate('文字图标')}
                       </span>
                     </div>
 
@@ -1029,108 +1111,8 @@ export function AddIconDialog({
                         {customIconPath ? translate('自定义图标') : translate('添加图标')}
                       </span>
                     </div>
-
-                    <div className="flex w-20 flex-col items-center gap-1.5">
-                      <button
-                        type="button"
-                        aria-pressed={selectedIconSource === 'text'}
-                        aria-label={translate('使用文字图标')}
-                        onClick={() => handleIconSourceChange('text')}
-                        disabled={submitting}
-                        className={cn(
-                          'relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
-                          selectedIconSource === 'text'
-                            ? 'border-primary ring-2 ring-primary/20'
-                            : 'border-border hover:border-foreground/30'
-                        )}
-                      >
-                        {textIconPreview ? (
-                          <img
-                            src={textIconPreview}
-                            alt={translate('文字图标')}
-                            className="h-full w-full object-contain"
-                          />
-                        ) : (
-                          <Type className="h-5 w-5 text-muted-foreground" />
-                        )}
-                        {selectedIconSource === 'text' && textIconPreview ? (
-                          <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
-                        ) : null}
-                      </button>
-                      <span className="text-center text-[11px] leading-4 text-muted-foreground">
-                        {translate('文字图标')}
-                      </span>
-                    </div>
                   </div>
 
-                  <div className="space-y-2 border-t border-border/60 pt-3">
-                    <span className="text-xs font-medium text-foreground">
-                      {translate('图标颜色')}
-                    </span>
-                    <div
-                      role="radiogroup"
-                      aria-label={translate('图标颜色')}
-                      className="flex min-h-9 flex-wrap items-center gap-2"
-                    >
-                      {ICON_COLOR_PRESETS.map(preset => {
-                        const colorLabel = translate(ICON_COLOR_LABELS[preset.id])
-                        const selected = iconColor === preset.id
-                        const disabled =
-                          submitting ||
-                          (preset.id !== 'none' &&
-                            selectedIconSource !== 'text' &&
-                            !selectedRasterPreview)
-                        return (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            role="radio"
-                            aria-checked={selected}
-                            aria-label={colorLabel}
-                            title={colorLabel}
-                            onClick={() => setIconColor(preset.id)}
-                            disabled={disabled}
-                            className={cn(
-                              'relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-[border-color,box-shadow,transform] duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-35 motion-reduce:transform-none motion-reduce:transition-none',
-                              selected
-                                ? 'border-foreground ring-2 ring-foreground/15'
-                                : 'border-border hover:border-foreground/40',
-                              preset.id === 'none' && 'bg-background text-muted-foreground'
-                            )}
-                            style={
-                              preset.id === 'none' ? undefined : { backgroundColor: preset.color }
-                            }
-                          >
-                            {preset.id === 'none' ? <Ban className="h-4 w-4" /> : null}
-                            {selected && preset.id !== 'none' ? (
-                              <Check className="absolute h-4 w-4 text-white" />
-                            ) : null}
-                          </button>
-                        )
-                      })}
-                      <span className="ml-1 text-xs text-muted-foreground">
-                        {translate(ICON_COLOR_LABELS[iconColor])}
-                      </span>
-                    </div>
-                  </div>
-
-                  {selectedIconSource === 'text' ? (
-                    <label htmlFor={iconTextInputId} className="block min-w-0 space-y-1.5">
-                      <span className="text-xs font-medium text-foreground">
-                        {translate('图标文字')}
-                      </span>
-                      <Input
-                        id={iconTextInputId}
-                        value={iconText}
-                        onChange={event => setIconText(normalizeTextIconText(event.target.value))}
-                        placeholder={translate('输入一到两个字符')}
-                        disabled={submitting}
-                      />
-                      <span className="block text-xs leading-5 text-muted-foreground">
-                        {translate('最多使用两个字符生成图标。')}
-                      </span>
-                    </label>
-                  ) : null}
                   {customIconPath && !customPreviewLoading && !customPreview ? (
                     <p className="flex items-center gap-1.5 text-xs leading-5 text-amber-600 dark:text-amber-400">
                       <CircleAlert className="h-3.5 w-3.5 shrink-0" />
@@ -1138,122 +1120,106 @@ export function AddIconDialog({
                     </p>
                   ) : null}
                 </div>
-              ) : null}
+              </FormRow>
 
-              <div className="min-w-0 space-y-1.5">
-                <div className="flex items-center justify-between gap-3 text-xs font-medium text-foreground">
-                  <label htmlFor={nameInputId}>{translate('显示名称')}</label>
-                  {name.trim() ? null : effectiveName ? (
-                    <span className="font-normal text-muted-foreground">
-                      {translate('自动生成')}
-                    </span>
-                  ) : null}
+              <FormRow label={translate('显示名称')} labelFor={nameInputId}>
+                <div className="min-w-0">
+                  <Input
+                    id={nameInputId}
+                    value={name}
+                    onChange={event => setName(event.target.value)}
+                    placeholder={
+                      effectiveName
+                        ? translate('留空则使用：{name}', { name: effectiveName })
+                        : translate('选择目标后自动生成')
+                    }
+                    disabled={submitting}
+                  />
                 </div>
-                <Input
-                  id={nameInputId}
-                  value={name}
-                  onChange={event => setName(event.target.value)}
-                  placeholder={
-                    effectiveName
-                      ? translate('留空则使用：{name}', { name: effectiveName })
-                      : translate('选择目标后自动生成')
-                  }
-                  disabled={submitting}
-                />
-                <span className="block text-xs leading-5 text-muted-foreground">
-                  {entryKind === 'website'
-                    ? translate('可选；留空时使用网页标题或域名。')
-                    : translate('可选；留空时使用目标文件名。')}
-                </span>
-              </div>
+              </FormRow>
 
               {entryKind === 'app' ? (
-                <div
-                  className={cn(
-                    'overflow-hidden rounded-xl border transition-[border-color,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none',
-                    advancedOpen
-                      ? 'border-border bg-muted/20 shadow-sm'
-                      : 'border-border/70 bg-muted/10 hover:border-border hover:bg-muted/20'
-                  )}
-                >
-                  <button
-                    type="button"
-                    aria-expanded={advancedOpen}
-                    onClick={() => setAdvancedOpen(current => !current)}
-                    disabled={submitting}
-                    className="flex w-full min-w-0 items-center justify-between gap-3 px-3 py-3 text-left disabled:opacity-50 sm:px-4"
-                  >
-                    <span className="min-w-0">
-                      <span className="block text-xs font-medium text-foreground">
-                        {translate('高级启动选项')}
-                      </span>
-                      <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
-                        {translate('启动参数和工作目录均为可选项。')}
-                      </span>
-                    </span>
-                    <ChevronDown
-                      className={cn(
-                        'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none',
-                        advancedOpen && 'rotate-180'
-                      )}
-                    />
-                  </button>
-
+                <FormRow label={translate('高级启动选项')}>
                   <div
                     className={cn(
-                      'grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none',
-                      advancedOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                      'overflow-hidden rounded-lg border transition-[border-color,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none',
+                      advancedOpen
+                        ? 'border-border bg-muted/20 shadow-sm'
+                        : 'border-border/70 bg-muted/10 hover:border-border hover:bg-muted/20'
                     )}
                   >
-                    <div
-                      className="min-h-0 overflow-hidden"
-                      aria-hidden={!advancedOpen}
-                      inert={!advancedOpen}
+                    <button
+                      type="button"
+                      aria-expanded={advancedOpen}
+                      onClick={() => setAdvancedOpen(current => !current)}
+                      disabled={submitting}
+                      className="flex h-9 w-full min-w-0 items-center justify-between gap-3 px-3 text-left text-xs font-medium text-foreground disabled:opacity-50"
                     >
-                      <div className="grid gap-4 border-t border-border/60 px-3 pb-4 pt-4 sm:px-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr))]">
-                        <label className="col-span-full min-w-0 space-y-1.5">
-                          <span className="text-xs font-medium text-foreground">
-                            {translate('启动参数')}
-                          </span>
-                          <Input
-                            value={launchArguments}
-                            onChange={event => setLaunchArguments(event.target.value)}
-                            placeholder={translate('例如：--profile work --new-window')}
-                            disabled={submitting}
-                          />
-                          <span className="block text-xs leading-5 text-muted-foreground">
-                            {translate('参数会原样写入快捷方式，不会修改目标路径。')}
-                          </span>
-                        </label>
+                      <span>{translate(advancedOpen ? '收起选项' : '展开选项')}</span>
+                      <ChevronDown
+                        className={cn(
+                          'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none',
+                          advancedOpen && 'rotate-180'
+                        )}
+                      />
+                    </button>
 
-                        <label className="min-w-0 space-y-1.5">
-                          <span className="text-xs font-medium text-foreground">
-                            {translate('工作目录')}
-                          </span>
-                          <div className="flex min-w-0 flex-wrap gap-2">
+                    <div
+                      className={cn(
+                        'grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none',
+                        advancedOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                      )}
+                    >
+                      <div
+                        className="min-h-0 overflow-hidden"
+                        aria-hidden={!advancedOpen}
+                        inert={!advancedOpen}
+                      >
+                        <div className="grid gap-3 border-t border-border/60 p-3 lg:grid-cols-2">
+                          <label className="min-w-0 space-y-1.5">
+                            <span className="text-xs font-medium text-foreground">
+                              {translate('启动参数')}
+                            </span>
                             <Input
-                              value={workingDirectory}
-                              onChange={event => setWorkingDirectory(event.target.value)}
-                              placeholder={translate('留空则使用目标文件所在目录')}
+                              value={launchArguments}
+                              onChange={event => setLaunchArguments(event.target.value)}
+                              placeholder={translate('例如：--profile work --new-window')}
                               disabled={submitting}
-                              className="min-w-0 flex-[1_1_14rem]"
                             />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => void handlePickWorkingDirectory()}
-                              disabled={submitting}
-                              className="min-w-0 flex-[1_1_8rem] sm:flex-none"
-                            >
-                              <FolderOpen className="h-4 w-4" />
-                              {translate('选择目录')}
-                            </Button>
-                          </div>
-                        </label>
+                            <span className="block text-xs leading-5 text-muted-foreground">
+                              {translate('参数会原样写入快捷方式，不会修改目标路径。')}
+                            </span>
+                          </label>
+
+                          <label className="min-w-0 space-y-1.5">
+                            <span className="text-xs font-medium text-foreground">
+                              {translate('工作目录')}
+                            </span>
+                            <div className="flex min-w-0 flex-wrap gap-2">
+                              <Input
+                                value={workingDirectory}
+                                onChange={event => setWorkingDirectory(event.target.value)}
+                                placeholder={translate('留空则使用目标文件所在目录')}
+                                disabled={submitting}
+                                className="min-w-0 flex-[1_1_14rem]"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => void handlePickWorkingDirectory()}
+                                disabled={submitting}
+                                className="min-w-0 flex-[1_1_8rem] sm:flex-none"
+                              >
+                                <FolderOpen className="h-4 w-4" />
+                                {translate('选择目录')}
+                              </Button>
+                            </div>
+                          </label>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                </FormRow>
               ) : null}
             </div>
           </div>

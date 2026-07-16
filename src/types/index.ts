@@ -7,6 +7,9 @@ export interface DesktopIcon {
   working_directory?: string
   custom_icon_path?: string
   icon_base64: string
+  icon_source?: 'target' | 'custom' | 'text'
+  icon_color?: 'none' | 'ocean' | 'emerald' | 'amber' | 'coral' | 'plum'
+  icon_text?: string
   item_type: 'shortcut' | 'folder' | 'file' | 'executable' | 'special' | 'website'
 }
 

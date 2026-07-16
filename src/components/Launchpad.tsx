@@ -485,6 +485,9 @@ export function Launchpad() {
   useEffect(() => {
     if (!editRequestedIcon) return
 
+    const iconSource =
+      editRequestedIcon.icon_source ?? (editRequestedIcon.custom_icon_path ? 'custom' : 'target')
+
     setAddIconInitialDraft({
       entryKind: editRequestedIcon.item_type === 'website' ? 'website' : 'app',
       displayName: customNames[editRequestedIcon.path] ?? editRequestedIcon.name,
@@ -493,9 +496,17 @@ export function Launchpad() {
       workingDirectory: editRequestedIcon.working_directory ?? '',
       customIconPath: editRequestedIcon.custom_icon_path ?? '',
       websiteIconBase64:
-        editRequestedIcon.item_type === 'website' ? editRequestedIcon.icon_base64 : '',
-      currentIconBase64: editRequestedIcon.icon_base64,
-      iconSource: editRequestedIcon.icon_base64 ? 'current' : 'target',
+        editRequestedIcon.item_type === 'website' && iconSource === 'target'
+          ? editRequestedIcon.icon_base64
+          : '',
+      generatedIconBase64:
+        iconSource === 'text' ||
+        (Boolean(editRequestedIcon.icon_color) && editRequestedIcon.icon_color !== 'none')
+          ? editRequestedIcon.icon_base64
+          : '',
+      iconSource,
+      iconColor: editRequestedIcon.icon_color ?? 'none',
+      iconText: editRequestedIcon.icon_text ?? '',
     })
     setEditingDropIndex(null)
     setEditingIcon(editRequestedIcon)
@@ -632,7 +643,9 @@ export function Launchpad() {
           customIconPath: draft.customIconPath,
           websiteIconBase64: draft.websiteIconBase64 ?? '',
           generatedIconBase64: draft.generatedIconBase64 ?? '',
-          preserveCurrentIcon: draft.iconSource === 'current',
+          iconSource: draft.iconSource ?? 'target',
+          iconColor: draft.iconColor ?? 'none',
+          iconText: draft.iconText ?? '',
         },
       })
       clearCustomName(editingIcon.path)
@@ -674,6 +687,9 @@ export function Launchpad() {
               customIconPath: draft.customIconPath,
               websiteIconBase64: draft.websiteIconBase64,
               generatedIconBase64: draft.generatedIconBase64,
+              iconSource: draft.iconSource ?? 'target',
+              iconColor: draft.iconColor ?? 'none',
+              iconText: draft.iconText ?? '',
             },
           })
           result.imported_count += itemResult.imported_count

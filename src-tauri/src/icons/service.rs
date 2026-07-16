@@ -835,10 +835,47 @@ fn build_snapshot_item(
         launch_arguments: String::new(),
         working_directory: String::new(),
         custom_icon_path: String::new(),
+        icon_source: "target".to_string(),
+        icon_color: "none".to_string(),
+        icon_text: String::new(),
         item_type: item.item_type.clone(),
         hidden: false,
         icons,
     })
+}
+
+#[cfg(windows)]
+fn resolved_icon_source(item: &SnapshotIconItem) -> String {
+    match item.icon_source.as_str() {
+        "target" | "custom" | "text" => item.icon_source.clone(),
+        _ if !item.custom_icon_path.trim().is_empty() => "custom".to_string(),
+        _ => "target".to_string(),
+    }
+}
+
+#[cfg(windows)]
+fn resolved_icon_color(item: &SnapshotIconItem) -> String {
+    match item.icon_color.as_str() {
+        "none" | "ocean" | "emerald" | "amber" | "coral" | "plum" => item.icon_color.clone(),
+        _ => "none".to_string(),
+    }
+}
+
+#[cfg(windows)]
+fn normalize_icon_source(value: &str, custom_icon_path: &str) -> String {
+    match value.trim() {
+        "text" => "text".to_string(),
+        "custom" if !custom_icon_path.is_empty() => "custom".to_string(),
+        _ => "target".to_string(),
+    }
+}
+
+#[cfg(windows)]
+fn normalize_icon_color(value: &str) -> String {
+    match value.trim() {
+        "ocean" | "emerald" | "amber" | "coral" | "plum" => value.trim().to_string(),
+        _ => "none".to_string(),
+    }
 }
 
 #[cfg(windows)]
@@ -888,6 +925,9 @@ fn snapshot_to_ordered_desktop_icons(
                     working_directory: item.working_directory.clone(),
                     custom_icon_path: item.custom_icon_path.clone(),
                     icon_base64,
+                    icon_source: resolved_icon_source(item),
+                    icon_color: resolved_icon_color(item),
+                    icon_text: item.icon_text.clone(),
                     item_type: item.item_type.clone(),
                 },
             )
@@ -938,6 +978,9 @@ fn snapshot_to_ordered_icon_manager_items(
                     working_directory: item.working_directory.clone(),
                     custom_icon_path: item.custom_icon_path.clone(),
                     icon_base64,
+                    icon_source: resolved_icon_source(item),
+                    icon_color: resolved_icon_color(item),
+                    icon_text: item.icon_text.clone(),
                     item_type: item.item_type.clone(),
                     hidden: item.hidden,
                 },
@@ -1267,6 +1310,13 @@ fn create_icon_entry_windows(
     let custom_icon_path = input.custom_icon_path.trim().to_string();
     let website_icon_base64 = input.website_icon_base64.trim().to_string();
     let generated_icon_base64 = input.generated_icon_base64.trim().to_string();
+    let icon_source = normalize_icon_source(&input.icon_source, &custom_icon_path);
+    let icon_color = normalize_icon_color(&input.icon_color);
+    let icon_text = if icon_source == "text" {
+        input.icon_text.trim().to_string()
+    } else {
+        String::new()
+    };
     let source_path = PathBuf::from(&target_path_text);
     let scanned_item = if is_web {
         Some(ScannedDesktopItem {
@@ -1361,17 +1411,39 @@ fn create_icon_entry_windows(
         created_item.launch_arguments = launch_arguments;
         created_item.working_directory = working_directory;
         created_item.custom_icon_path = custom_icon_path.clone();
-        if !generated_icon_base64.is_empty() {
+        created_item.icon_source = icon_source.clone();
+        created_item.icon_color = icon_color;
+        created_item.icon_text = icon_text;
+        if icon_source == "text" {
+            if generated_icon_base64.is_empty() {
+                return Err("Generated text icon is required".to_string());
+            }
             created_item.icons = build_data_icon_paths(
                 app_handle,
                 &generated_icon_base64,
                 &created_item.id,
                 IconSource::Library,
             )?;
-        } else if !custom_icon_path.is_empty() {
-            created_item.icons = build_custom_icon_paths(
+        } else if icon_source == "custom" {
+            created_item.icons = if generated_icon_base64.is_empty() {
+                build_custom_icon_paths(
+                    app_handle,
+                    &custom_icon_path,
+                    &created_item.id,
+                    IconSource::Library,
+                )?
+            } else {
+                build_data_icon_paths(
+                    app_handle,
+                    &generated_icon_base64,
+                    &created_item.id,
+                    IconSource::Library,
+                )?
+            };
+        } else if !generated_icon_base64.is_empty() {
+            created_item.icons = build_data_icon_paths(
                 app_handle,
-                &custom_icon_path,
+                &generated_icon_base64,
                 &created_item.id,
                 IconSource::Library,
             )?;
@@ -1436,6 +1508,13 @@ fn update_icon_entry_windows(
     let custom_icon_path = input.custom_icon_path.trim().to_string();
     let website_icon_base64 = input.website_icon_base64.trim().to_string();
     let generated_icon_base64 = input.generated_icon_base64.trim().to_string();
+    let icon_source = normalize_icon_source(&input.icon_source, &custom_icon_path);
+    let icon_color = normalize_icon_color(&input.icon_color);
+    let icon_text = if icon_source == "text" {
+        input.icon_text.trim().to_string()
+    } else {
+        String::new()
+    };
 
     if !working_directory.is_empty() && !PathBuf::from(&working_directory).is_dir() {
         return Err("Working directory does not exist or is not a folder".to_string());
@@ -1523,19 +1602,36 @@ fn update_icon_entry_windows(
                 .ok_or_else(|| "Updated icon entry could not be read".to_string())?,
             None => source_item.clone(),
         };
-        let next_icons = if input.preserve_current_icon {
-            original_item.icons.clone()
-        } else if !generated_icon_base64.is_empty() {
+        let next_icons = if icon_source == "text" {
+            if generated_icon_base64.is_empty() {
+                return Err("Generated text icon is required".to_string());
+            }
             build_data_icon_paths(
                 app_handle,
                 &generated_icon_base64,
                 &replacement_cache_id,
                 IconSource::Library,
             )?
-        } else if !custom_icon_path.is_empty() {
-            build_custom_icon_paths(
+        } else if icon_source == "custom" {
+            if generated_icon_base64.is_empty() {
+                build_custom_icon_paths(
+                    app_handle,
+                    &custom_icon_path,
+                    &replacement_cache_id,
+                    IconSource::Library,
+                )?
+            } else {
+                build_data_icon_paths(
+                    app_handle,
+                    &generated_icon_base64,
+                    &replacement_cache_id,
+                    IconSource::Library,
+                )?
+            }
+        } else if !generated_icon_base64.is_empty() {
+            build_data_icon_paths(
                 app_handle,
-                &custom_icon_path,
+                &generated_icon_base64,
                 &replacement_cache_id,
                 IconSource::Library,
             )?
@@ -1562,11 +1658,10 @@ fn update_icon_entry_windows(
         updated_item.target_path = updated_scan.target_path;
         updated_item.launch_arguments = launch_arguments;
         updated_item.working_directory = working_directory;
-        updated_item.custom_icon_path = if input.preserve_current_icon {
-            original_item.custom_icon_path.clone()
-        } else {
-            custom_icon_path
-        };
+        updated_item.custom_icon_path = custom_icon_path;
+        updated_item.icon_source = icon_source;
+        updated_item.icon_color = icon_color;
+        updated_item.icon_text = icon_text;
         updated_item.item_type = updated_scan.item_type;
         updated_item.icons = next_icons;
 
@@ -1577,22 +1672,18 @@ fn update_icon_entry_windows(
         if let Some(path) = destination_path.as_ref() {
             let _ = std::fs::remove_file(path);
         }
-        if !input.preserve_current_icon {
-            for bucket in [IconBucket::Small, IconBucket::Medium, IconBucket::Large] {
-                let _ = remove_cached_icon_file(
-                    app_handle,
-                    &icon_file_rel_path(&replacement_cache_id, bucket, IconSource::Library),
-                );
-            }
+        for bucket in [IconBucket::Small, IconBucket::Medium, IconBucket::Large] {
+            let _ = remove_cached_icon_file(
+                app_handle,
+                &icon_file_rel_path(&replacement_cache_id, bucket, IconSource::Library),
+            );
         }
         return Err(error);
     }
 
-    if !input.preserve_current_icon {
-        let _ = remove_cached_icon_file(app_handle, &original_item.icons.small);
-        let _ = remove_cached_icon_file(app_handle, &original_item.icons.medium);
-        let _ = remove_cached_icon_file(app_handle, &original_item.icons.large);
-    }
+    let _ = remove_cached_icon_file(app_handle, &original_item.icons.small);
+    let _ = remove_cached_icon_file(app_handle, &original_item.icons.medium);
+    let _ = remove_cached_icon_file(app_handle, &original_item.icons.large);
 
     let original_entry_path = PathBuf::from(&original_item.path);
     if original_entry_path.parent() == Some(managed_entry_dir.as_path())
