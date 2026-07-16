@@ -174,7 +174,6 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     unselectIcons,
     clearSelection,
     launchApp,
-    showShellContextMenu,
   } = useIconStore()
   const containerRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -1660,9 +1659,6 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
             onDockAutoScroll={syncDockDragPreview}
             onLaunchIcon={path => {
               void launchApp(path)
-            }}
-            onShowSystemMenu={icon => {
-              void showShellContextMenu(icon)
             }}
             onOpenFolder={openFolderWithAnimation}
             onRemoveItem={key => {

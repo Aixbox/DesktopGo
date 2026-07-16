@@ -13,6 +13,7 @@ import {
 import type { DesktopIcon } from '../../../types'
 import { translate, useI18n } from '@/lib/i18n'
 import { useIconStore } from '@/stores/iconStore'
+import { IconContextMenu } from '@/components/icons/IconContextMenu'
 import type { GridItem } from '../model'
 import {
   ContextMenu,
@@ -57,7 +58,6 @@ interface DockBarProps {
   onDockItemClickCapture: (event: ReactMouseEvent<HTMLDivElement>) => void
   onDockAutoScroll: () => void
   onLaunchIcon: (path: string) => void
-  onShowSystemMenu: (icon: DesktopIcon) => void
   onOpenFolder: (folderId: string) => void
   onRemoveItem: (id: string) => void
 }
@@ -181,7 +181,6 @@ export function DockBar({
   onDockItemClickCapture,
   onDockAutoScroll,
   onLaunchIcon,
-  onShowSystemMenu,
   onOpenFolder,
   onRemoveItem,
 }: DockBarProps) {
@@ -627,84 +626,83 @@ export function DockBar({
                 >
                   {item && id ? (
                     item.kind === 'icon' ? (
-                      <div
-                        ref={node => {
-                          bindDockItemRef(id, node)
-                        }}
-                        data-dock-item
-                        data-dock-key={id}
-                        className="group relative flex items-center justify-center"
-                        style={{ width: dockButtonSize, height: dockButtonSize }}
-                        onPointerDown={event => {
-                          onDockItemPointerDown(event, id)
-                        }}
-                        onClickCapture={onDockItemClickCapture}
-                        onContextMenu={event => {
-                          event.preventDefault()
-                          event.stopPropagation()
-                          if (!selectionMode) {
-                            onShowSystemMenu(item.icon)
-                          }
-                        }}
+                      <IconContextMenu
+                        icon={item.icon}
+                        disabled={selectionMode}
+                        onOpen={() => onLaunchIcon(item.icon.path)}
                       >
-                        <button
-                          type="button"
-                          title={customNames[item.icon.path] ?? item.icon.name}
-                          className={`relative flex cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
-                            selectionMode ? '' : 'hover:-translate-y-0.5 active:translate-y-0'
-                          }`}
-                          style={{ width: dockButtonSize, height: dockButtonSize }}
-                          onClick={event => {
-                            event.stopPropagation()
-                            if (selectionMode) {
-                              onToggleSelectIcon(id)
-                              return
-                            }
-                            onLaunchIcon(item.icon.path)
+                        <div
+                          ref={node => {
+                            bindDockItemRef(id, node)
                           }}
+                          data-dock-item
+                          data-dock-key={id}
+                          className="group relative flex items-center justify-center"
+                          style={{ width: dockButtonSize, height: dockButtonSize }}
+                          onPointerDown={event => {
+                            onDockItemPointerDown(event, id)
+                          }}
+                          onClickCapture={onDockItemClickCapture}
                         >
-                          {selectionMode && selectableIcon ? (
-                            <span
-                              className={`absolute right-0.5 top-0.5 z-10 flex h-4 w-4 items-center justify-center rounded-full border text-xs ${
-                                selectedSet.has(id)
-                                  ? 'border-blue-500 bg-blue-500 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950'
-                                  : 'border-border/70 bg-background/72 text-transparent shadow-sm dark:border-white/60 dark:bg-black/30'
+                          <button
+                            type="button"
+                            title={customNames[item.icon.path] ?? item.icon.name}
+                            className={`relative flex cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
+                              selectionMode ? '' : 'hover:-translate-y-0.5 active:translate-y-0'
+                            }`}
+                            style={{ width: dockButtonSize, height: dockButtonSize }}
+                            onClick={event => {
+                              event.stopPropagation()
+                              if (selectionMode) {
+                                onToggleSelectIcon(id)
+                                return
+                              }
+                              onLaunchIcon(item.icon.path)
+                            }}
+                          >
+                            {selectionMode && selectableIcon ? (
+                              <span
+                                className={`absolute right-0.5 top-0.5 z-10 flex h-4 w-4 items-center justify-center rounded-full border text-xs ${
+                                  selectedSet.has(id)
+                                    ? 'border-blue-500 bg-blue-500 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950'
+                                    : 'border-border/70 bg-background/72 text-transparent shadow-sm dark:border-white/60 dark:bg-black/30'
+                                }`}
+                              >
+                                {selectedSet.has(id) ? (
+                                  <Check className="h-3 w-3" strokeWidth={3} />
+                                ) : null}
+                              </span>
+                            ) : null}
+                            <div
+                              className={`transition-opacity duration-150 ${
+                                folderPreview ? 'opacity-0' : 'opacity-100'
                               }`}
                             >
-                              {selectedSet.has(id) ? (
-                                <Check className="h-3 w-3" strokeWidth={3} />
-                              ) : null}
-                            </span>
-                          ) : null}
-                          <div
-                            className={`transition-opacity duration-150 ${
-                              folderPreview ? 'opacity-0' : 'opacity-100'
-                            }`}
-                          >
-                            {item.icon.icon_base64 ? (
-                              <img
-                                src={item.icon.icon_base64}
-                                alt={customNames[item.icon.path] ?? item.icon.name}
-                                className="icon-image object-contain"
-                                style={{ width: iconImageSize, height: iconImageSize }}
-                                draggable={false}
-                              />
-                            ) : (
-                              <div
-                                className="icon-image rounded-xl bg-foreground/8 dark:bg-white/12"
-                                style={{ width: iconImageSize, height: iconImageSize }}
-                                aria-hidden="true"
-                              />
-                            )}
-                          </div>
-                          <DockFolderCreatePreview
-                            active={folderPreview}
-                            icon={item.icon}
-                            metrics={singleSlotFolderMetrics}
-                            reorderAnimationMs={220}
-                          />
-                        </button>
-                      </div>
+                              {item.icon.icon_base64 ? (
+                                <img
+                                  src={item.icon.icon_base64}
+                                  alt={customNames[item.icon.path] ?? item.icon.name}
+                                  className="icon-image object-contain"
+                                  style={{ width: iconImageSize, height: iconImageSize }}
+                                  draggable={false}
+                                />
+                              ) : (
+                                <div
+                                  className="icon-image rounded-xl bg-foreground/8 dark:bg-white/12"
+                                  style={{ width: iconImageSize, height: iconImageSize }}
+                                  aria-hidden="true"
+                                />
+                              )}
+                            </div>
+                            <DockFolderCreatePreview
+                              active={folderPreview}
+                              icon={item.icon}
+                              metrics={singleSlotFolderMetrics}
+                              reorderAnimationMs={220}
+                            />
+                          </button>
+                        </div>
+                      </IconContextMenu>
                     ) : (
                       <ContextMenu>
                         <ContextMenuTrigger asChild>

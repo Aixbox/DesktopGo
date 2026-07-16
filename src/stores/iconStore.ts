@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
 import type {
   DesktopIcon,
+  IconContextMenuMode,
   IconMutationTarget,
   IconSize,
   LaunchpadGridViewMode,
@@ -28,6 +29,7 @@ interface IconStore {
   titleLineCount: TitleLineCount
   launchpadGridViewMode: LaunchpadGridViewMode
   dockEnabled: boolean
+  iconContextMenuMode: IconContextMenuMode
   selectionMode: boolean
   selectedIconKeys: string[]
   customNames: Record<string, string>
@@ -39,11 +41,13 @@ interface IconStore {
   setTitleLineCount: (count: TitleLineCount) => void
   setLaunchpadGridViewMode: (mode: LaunchpadGridViewMode) => void
   setDockEnabled: (enabled: boolean) => void
+  setIconContextMenuMode: (mode: IconContextMenuMode) => void
   enterSelectionMode: (initialKey?: string) => void
   toggleSelectIcon: (key: string) => void
   unselectIcons: (keys: string[]) => void
   clearSelection: () => void
   hideSelectedIcons: () => Promise<void>
+  hideIcon: (icon: DesktopIcon) => Promise<void>
   deleteSelectedIcons: () => Promise<void>
   showShellContextMenu: (icon: DesktopIcon) => Promise<void>
   applyWindowMode: (mode: WindowMode) => Promise<void>
@@ -51,6 +55,7 @@ interface IconStore {
   setCustomName: (path: string, name: string) => void
   clearCustomName: (path: string) => void
   clearRenameTrigger: () => void
+  requestIconRename: (path: string) => void
   setSelectedIconKeys: (keys: string[]) => void
 }
 
@@ -63,6 +68,7 @@ export const useIconStore = create<IconStore>((set, get) => ({
   titleLineCount: 'two',
   launchpadGridViewMode: 'paged',
   dockEnabled: true,
+  iconContextMenuMode: 'custom',
   selectionMode: false,
   selectedIconKeys: [],
   customNames: {},
@@ -135,6 +141,13 @@ export const useIconStore = create<IconStore>((set, get) => ({
     set({ dockEnabled: enabled })
     void setSetting('dockEnabled', enabled).catch(e => {
       console.error('Failed to persist dock enabled state:', e)
+    })
+  },
+
+  setIconContextMenuMode: (mode: IconContextMenuMode) => {
+    set({ iconContextMenuMode: mode })
+    void setSetting('iconContextMenuMode', mode).catch(e => {
+      console.error('Failed to persist icon context menu mode:', e)
     })
   },
 
@@ -218,6 +231,18 @@ export const useIconStore = create<IconStore>((set, get) => ({
     }
   },
 
+  hideIcon: async (icon: DesktopIcon) => {
+    try {
+      await invoke<number>('hide_icons', { targets: [{ id: icon.id }] })
+      set(state => ({
+        selectedIconKeys: state.selectedIconKeys.filter(key => key !== buildIconSelectionKey(icon)),
+      }))
+      await get().fetchIcons()
+    } catch (e) {
+      console.error('Failed to hide icon:', e)
+    }
+  },
+
   deleteSelectedIcons: async () => {
     const { selectedIconKeys, icons } = get()
     if (selectedIconKeys.length === 0) return
@@ -280,6 +305,7 @@ export const useIconStore = create<IconStore>((set, get) => ({
       titleLineCount,
       launchpadGridViewMode,
       dockEnabled,
+      iconContextMenuMode,
       customNames,
     ] = await Promise.all([
       getSetting('iconSize'),
@@ -287,6 +313,7 @@ export const useIconStore = create<IconStore>((set, get) => ({
       getSetting('titleLineCount'),
       getSetting('launchpadGridViewMode'),
       getSetting('dockEnabled'),
+      getSetting('iconContextMenuMode'),
       loadCustomNames(),
     ])
     const current = get()
@@ -306,6 +333,9 @@ export const useIconStore = create<IconStore>((set, get) => ({
     }
     if (current.dockEnabled !== dockEnabled) {
       nextState.dockEnabled = dockEnabled
+    }
+    if (current.iconContextMenuMode !== iconContextMenuMode) {
+      nextState.iconContextMenuMode = iconContextMenuMode
     }
     nextState.customNames = customNames
 
@@ -344,6 +374,10 @@ export const useIconStore = create<IconStore>((set, get) => ({
 
   clearRenameTrigger: () => {
     set({ renameTriggerPath: null })
+  },
+
+  requestIconRename: (path: string) => {
+    set({ renameTriggerPath: path })
   },
 
   setSelectedIconKeys: (keys: string[]) => {

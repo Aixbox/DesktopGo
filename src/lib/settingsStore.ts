@@ -2,6 +2,7 @@ import { LazyStore } from '@tauri-apps/plugin-store'
 import type {
   AppLanguage,
   IconManagerViewMode,
+  IconContextMenuMode,
   IconSize,
   LaunchpadGridViewMode,
   LaunchpadOpenFocusTarget,
@@ -32,6 +33,7 @@ type SettingKey =
   | 'launchpadShortcut'
   | 'launchpadOpenFocusTarget'
   | 'iconManagerViewMode'
+  | 'iconContextMenuMode'
 type ExtendedSettingKey = SettingKey
 
 type SettingValueMap = {
@@ -48,9 +50,10 @@ type SettingValueMap = {
   launchpadShortcut: string
   launchpadOpenFocusTarget: LaunchpadOpenFocusTarget
   iconManagerViewMode: IconManagerViewMode
+  iconContextMenuMode: IconContextMenuMode
 }
 
-const SETTINGS_STORE_VERSION = 11
+const SETTINGS_STORE_VERSION = 12
 const SETTINGS_VERSION_KEY = 'settingsVersion'
 const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'iconSize',
@@ -66,6 +69,7 @@ const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'launchpadShortcut',
   'launchpadOpenFocusTarget',
   'iconManagerViewMode',
+  'iconContextMenuMode',
 ]
 
 const DEFAULT_SETTINGS: SettingValueMap = {
@@ -82,6 +86,7 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   launchpadShortcut: DEFAULT_LAUNCHPAD_SHORTCUT,
   launchpadOpenFocusTarget: DEFAULT_LAUNCHPAD_OPEN_FOCUS_TARGET,
   iconManagerViewMode: 'list',
+  iconContextMenuMode: 'custom',
 }
 
 const SETTINGS_STORE_PATH = import.meta.env.DEV ? 'dev/settings.json' : 'settings.json'
@@ -112,6 +117,8 @@ const isAppLanguage = (value: unknown): value is AppLanguage => value === 'zh' |
 const isDockEnabled = (value: unknown): value is boolean => typeof value === 'boolean'
 const isWindowPersistent = (value: unknown): value is boolean => typeof value === 'boolean'
 const isLaunchOnStartup = (value: unknown): value is boolean => typeof value === 'boolean'
+const isIconContextMenuMode = (value: unknown): value is IconContextMenuMode =>
+  value === 'custom' || value === 'system'
 
 const isLaunchpadShortcut = (value: unknown): value is string => typeof value === 'string'
 const isLaunchpadOpenFocus = (value: unknown): value is LaunchpadOpenFocusTarget =>
@@ -133,6 +140,7 @@ const validators: {
   launchpadShortcut: isLaunchpadShortcut,
   launchpadOpenFocusTarget: isLaunchpadOpenFocus,
   iconManagerViewMode: isIconManagerViewMode,
+  iconContextMenuMode: isIconContextMenuMode,
 }
 
 async function migrateStore(): Promise<void> {

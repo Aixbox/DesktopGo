@@ -6,6 +6,7 @@ import {
   ICON_SIZE_CONFIG,
 } from '../types'
 import { useIconStore } from '../stores/iconStore'
+import { IconContextMenu } from './icons/IconContextMenu'
 import { AppWindow, Check } from 'lucide-react'
 import {
   useEffect,
@@ -13,7 +14,6 @@ import {
   useState,
   type ChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
 } from 'react'
 
 interface IconProps {
@@ -39,12 +39,12 @@ export function Icon({
     launchApp,
     iconSize,
     titleLineCount,
-    showShellContextMenu,
     customNames,
     setCustomName,
     clearCustomName,
     renameTriggerPath,
     clearRenameTrigger,
+    requestIconRename,
   } = useIconStore()
   const config = ICON_SIZE_CONFIG[iconSize]
   const tileHeight = getIconGridRowHeight(iconSize)
@@ -83,13 +83,6 @@ export function Icon({
     }
 
     void launchApp(icon.path)
-  }
-
-  const handleContextMenu = (event: ReactMouseEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-    if (selectionMode || isRenaming) return
-    void showShellContextMenu(icon)
   }
 
   const commitRename = () => {
@@ -131,90 +124,95 @@ export function Icon({
     selectionMode || isRenaming ? '' : 'group-hover:scale-105 group-active:scale-95'
 
   return (
-    <button
-      data-icon
-      data-selection-key={selectionKey}
-      data-selection-mode={selectionMode ? 'on' : 'off'}
-      className={`icon-item relative flex flex-col items-center justify-start rounded-2xl border-none px-3 shadow-none transition-all duration-200 cursor-pointer group ${buttonStateClass} ${layerClass} ${
-        highlighted ? 'launchpad-import-highlight-edge' : ''
-      }`}
-      style={{
-        width: config.containerWidth,
-        height: tileHeight,
-        paddingTop: ICON_GRID_TILE_PADDING_Y,
-        paddingBottom: ICON_GRID_TILE_PADDING_Y,
-        rowGap: ICON_GRID_TITLE_GAP,
-      }}
-      onClick={handleClick}
-      onContextMenu={handleContextMenu}
-      title={displayName}
-      aria-pressed={selectionMode ? selected : undefined}
+    <IconContextMenu
+      icon={icon}
+      disabled={selectionMode || isRenaming}
+      onRename={() => requestIconRename(icon.path)}
     >
-      {selectionMode ? (
-        <span
-          className={`absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full border text-xs ${
-            selected
-              ? 'border-blue-500 bg-blue-500 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950'
-              : 'border-border/70 bg-background/72 text-transparent shadow-sm dark:border-white/60 dark:bg-black/30'
-          }`}
-        >
-          {selected ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
-        </span>
-      ) : null}
-
-      <div
-        className={`icon-image flex flex-1 items-center justify-center overflow-hidden transition-all duration-200 ${imageMotionClass}`}
-        style={{ width: config.imgSize, height: config.imgSize }}
+      <button
+        data-icon
+        data-selection-key={selectionKey}
+        data-selection-mode={selectionMode ? 'on' : 'off'}
+        className={`icon-item relative flex flex-col items-center justify-start rounded-2xl border-none px-3 shadow-none transition-all duration-200 cursor-pointer group ${buttonStateClass} ${layerClass} ${
+          highlighted ? 'launchpad-import-highlight-edge' : ''
+        }`}
+        style={{
+          width: config.containerWidth,
+          height: tileHeight,
+          paddingTop: ICON_GRID_TILE_PADDING_Y,
+          paddingBottom: ICON_GRID_TILE_PADDING_Y,
+          rowGap: ICON_GRID_TITLE_GAP,
+        }}
+        onClick={handleClick}
+        title={displayName}
+        aria-pressed={selectionMode ? selected : undefined}
       >
-        {icon.icon_base64 ? (
-          <img
-            src={icon.icon_base64}
-            alt={displayName}
-            style={{ width: config.imgSize, height: config.imgSize }}
-            className="object-contain"
-            draggable={false}
+        {selectionMode ? (
+          <span
+            className={`absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full border text-xs ${
+              selected
+                ? 'border-blue-500 bg-blue-500 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950'
+                : 'border-border/70 bg-background/72 text-transparent shadow-sm dark:border-white/60 dark:bg-black/30'
+            }`}
+          >
+            {selected ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
+          </span>
+        ) : null}
+
+        <div
+          className={`icon-image flex flex-1 items-center justify-center overflow-hidden transition-all duration-200 ${imageMotionClass}`}
+          style={{ width: config.imgSize, height: config.imgSize }}
+        >
+          {icon.icon_base64 ? (
+            <img
+              src={icon.icon_base64}
+              alt={displayName}
+              style={{ width: config.imgSize, height: config.imgSize }}
+              className="object-contain"
+              draggable={false}
+            />
+          ) : (
+            <AppWindow className="w-8 h-8 text-foreground/60" />
+          )}
+        </div>
+        {isRenaming ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={draftName}
+            onChange={handleInputChange}
+            onKeyDown={handleInputKeyDown}
+            onBlur={commitRename}
+            onClick={event => event.stopPropagation()}
+            onPointerDown={event => event.stopPropagation()}
+            onContextMenu={event => event.stopPropagation()}
+            className="icon-label-input rounded-md border border-border/60 bg-background/95 px-1 py-[1px] text-[11px] leading-[13px] text-center text-foreground shadow-sm outline-none focus:border-blue-500 dark:border-white/30 dark:bg-black/60"
+            style={{
+              maxWidth: config.containerWidth - 4,
+              width: config.containerWidth - 4,
+              height: isSingleLineTitle ? 15 : 28,
+            }}
+            maxLength={64}
           />
         ) : (
-          <AppWindow className="w-8 h-8 text-foreground/60" />
+          <span
+            className="icon-label text-[11px] text-center leading-[13px] text-foreground drop-shadow-md"
+            style={{
+              maxWidth: config.containerWidth - 10,
+              height: isSingleLineTitle ? 13 : 26,
+              display: isSingleLineTitle ? 'block' : '-webkit-box',
+              WebkitLineClamp: isSingleLineTitle ? 1 : 2,
+              WebkitBoxOrient: isSingleLineTitle ? undefined : 'vertical',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: isSingleLineTitle ? 'nowrap' : 'normal',
+              overflowWrap: 'anywhere',
+            }}
+          >
+            {displayName}
+          </span>
         )}
-      </div>
-      {isRenaming ? (
-        <input
-          ref={inputRef}
-          type="text"
-          value={draftName}
-          onChange={handleInputChange}
-          onKeyDown={handleInputKeyDown}
-          onBlur={commitRename}
-          onClick={event => event.stopPropagation()}
-          onPointerDown={event => event.stopPropagation()}
-          onContextMenu={event => event.stopPropagation()}
-          className="icon-label-input rounded-md border border-border/60 bg-background/95 px-1 py-[1px] text-[11px] leading-[13px] text-center text-foreground shadow-sm outline-none focus:border-blue-500 dark:border-white/30 dark:bg-black/60"
-          style={{
-            maxWidth: config.containerWidth - 4,
-            width: config.containerWidth - 4,
-            height: isSingleLineTitle ? 15 : 28,
-          }}
-          maxLength={64}
-        />
-      ) : (
-        <span
-          className="icon-label text-[11px] text-center leading-[13px] text-foreground drop-shadow-md"
-          style={{
-            maxWidth: config.containerWidth - 10,
-            height: isSingleLineTitle ? 13 : 26,
-            display: isSingleLineTitle ? 'block' : '-webkit-box',
-            WebkitLineClamp: isSingleLineTitle ? 1 : 2,
-            WebkitBoxOrient: isSingleLineTitle ? undefined : 'vertical',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: isSingleLineTitle ? 'nowrap' : 'normal',
-            overflowWrap: 'anywhere',
-          }}
-        >
-          {displayName}
-        </span>
-      )}
-    </button>
+      </button>
+    </IconContextMenu>
   )
 }

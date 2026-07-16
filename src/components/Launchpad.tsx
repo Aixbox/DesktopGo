@@ -46,6 +46,7 @@ import { SearchPanel } from '@/components/search/SearchPanel'
 import { LAUNCHPAD_LAYOUT_RESET_EVENT } from '@/components/icon-grid/services/layoutStore'
 import {
   ContextMenu,
+  ContextMenuCheckboxItem,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuRadioGroup,
@@ -217,6 +218,8 @@ export function Launchpad() {
     setTitleLineCount,
     launchpadGridViewMode,
     setLaunchpadGridViewMode,
+    iconContextMenuMode,
+    setIconContextMenuMode,
     selectionMode,
     selectedIconKeys,
     launchApp,
@@ -2069,6 +2072,15 @@ export function Launchpad() {
           {translate('编辑图标')}
         </ContextMenuItem>
         <ContextMenuItem onSelect={enterAiOrganizeMode}>{translate('AI 智能整理')}</ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuCheckboxItem
+          checked={iconContextMenuMode === 'system'}
+          onCheckedChange={checked => {
+            setIconContextMenuMode(checked ? 'system' : 'custom')
+          }}
+        >
+          {translate('图标使用 Windows 原生菜单')}
+        </ContextMenuCheckboxItem>
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={openSettings}>{translate('设置')}</ContextMenuItem>
       </ContextMenuContent>

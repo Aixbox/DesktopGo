@@ -4,6 +4,7 @@ import type { SearchHistoryEntry } from '@/lib/search/history'
 import { parseEverythingHighlightedText } from '@/lib/search/highlight'
 import type { SearchHit, SearchPreview, SearchRuntimeState, SearchSort } from '@/lib/search/types'
 import { useIconStore } from '@/stores/iconStore'
+import { IconContextMenu } from '@/components/icons/IconContextMenu'
 import { ICON_SIZE_CONFIG, type DesktopIcon } from '@/types'
 import { AppWindow, File, Folder } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
@@ -113,65 +114,62 @@ function IconResultTile({
   onActivate: () => void
   singleLineTitle: boolean
 }) {
-  const { iconSize, showShellContextMenu } = useIconStore()
+  const { iconSize } = useIconStore()
   const config = ICON_SIZE_CONFIG[iconSize]
 
   return (
-    <button
-      type="button"
-      className={`group relative flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-none p-3 shadow-none transition-all duration-200 ${
-        selected
-          ? 'bg-blue-500/12 ring-1 ring-blue-500/40 dark:bg-blue-400/18 dark:ring-blue-400/45'
-          : 'bg-transparent hover:bg-accent/60 active:bg-accent'
-      }`}
-      style={{ width: config.containerWidth }}
-      title={icon.name}
-      onMouseEnter={onSelect}
-      onClick={onSelect}
-      onDoubleClick={onActivate}
-      onContextMenu={event => {
-        event.preventDefault()
-        event.stopPropagation()
-        void showShellContextMenu(icon)
-      }}
-    >
-      <div
-        className="flex items-center justify-center overflow-hidden transition-all duration-200 group-hover:scale-105 group-active:scale-95"
-        style={{ width: config.imgSize, height: config.imgSize }}
-      >
-        {icon.icon_base64 ? (
-          <img
-            src={icon.icon_base64}
-            alt={icon.name}
-            style={{ width: config.imgSize, height: config.imgSize }}
-            className="object-contain"
-            draggable={false}
-          />
-        ) : icon.item_type === 'folder' ? (
-          <Folder className="h-8 w-8 text-muted-foreground" />
-        ) : (
-          <AppWindow className="h-8 w-8 text-muted-foreground" />
-        )}
-      </div>
-
-      <span
-        className={`text-[11px] text-center leading-tight ${
-          selected ? 'text-blue-700 dark:text-blue-200' : 'text-foreground'
+    <IconContextMenu icon={icon} onOpen={onActivate}>
+      <button
+        type="button"
+        className={`group relative flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-none p-3 shadow-none transition-all duration-200 ${
+          selected
+            ? 'bg-blue-500/12 ring-1 ring-blue-500/40 dark:bg-blue-400/18 dark:ring-blue-400/45'
+            : 'bg-transparent hover:bg-accent/60 active:bg-accent'
         }`}
-        style={{
-          maxWidth: config.containerWidth - 10,
-          display: singleLineTitle ? 'block' : '-webkit-box',
-          WebkitLineClamp: singleLineTitle ? 1 : 2,
-          WebkitBoxOrient: singleLineTitle ? undefined : 'vertical',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: singleLineTitle ? 'nowrap' : 'normal',
-          overflowWrap: 'anywhere',
-        }}
+        style={{ width: config.containerWidth }}
+        title={icon.name}
+        onMouseEnter={onSelect}
+        onClick={onSelect}
+        onDoubleClick={onActivate}
       >
-        {icon.name}
-      </span>
-    </button>
+        <div
+          className="flex items-center justify-center overflow-hidden transition-all duration-200 group-hover:scale-105 group-active:scale-95"
+          style={{ width: config.imgSize, height: config.imgSize }}
+        >
+          {icon.icon_base64 ? (
+            <img
+              src={icon.icon_base64}
+              alt={icon.name}
+              style={{ width: config.imgSize, height: config.imgSize }}
+              className="object-contain"
+              draggable={false}
+            />
+          ) : icon.item_type === 'folder' ? (
+            <Folder className="h-8 w-8 text-muted-foreground" />
+          ) : (
+            <AppWindow className="h-8 w-8 text-muted-foreground" />
+          )}
+        </div>
+
+        <span
+          className={`text-[11px] text-center leading-tight ${
+            selected ? 'text-blue-700 dark:text-blue-200' : 'text-foreground'
+          }`}
+          style={{
+            maxWidth: config.containerWidth - 10,
+            display: singleLineTitle ? 'block' : '-webkit-box',
+            WebkitLineClamp: singleLineTitle ? 1 : 2,
+            WebkitBoxOrient: singleLineTitle ? undefined : 'vertical',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: singleLineTitle ? 'nowrap' : 'normal',
+            overflowWrap: 'anywhere',
+          }}
+        >
+          {icon.name}
+        </span>
+      </button>
+    </IconContextMenu>
   )
 }
 
