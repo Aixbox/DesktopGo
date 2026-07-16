@@ -29,7 +29,7 @@ import {
   X,
 } from 'lucide-react'
 import { deriveIconEntryName } from '@/lib/iconManager'
-import { deriveWebsiteName, normalizeWebsiteUrl } from '@/lib/websiteIcon'
+import { deriveWebsiteName, isWebsiteTarget, normalizeWebsiteUrl } from '@/lib/websiteIcon'
 import {
   createColoredIconDataUri,
   createTextIconDataUri,
@@ -49,8 +49,8 @@ type ImportIconsResult = {
   duplicate_count: number
   invalid_count: number
 }
-type AddIconKind = 'app' | 'website'
-type IconSource = 'target' | 'custom' | 'text'
+export type AddIconKind = 'app' | 'website'
+type IconSource = 'current' | 'target' | 'custom' | 'text'
 
 const ICON_COLOR_LABELS: Record<IconColorId, string> = {
   none: '无色',
@@ -73,6 +73,7 @@ export type AddIconDialogCreatedEntry = {
 }
 
 export type AddIconDialogDraft = {
+  entryKind?: AddIconKind
   displayName: string
   targetPath: string
   launchArguments: string
@@ -80,6 +81,7 @@ export type AddIconDialogDraft = {
   customIconPath: string
   websiteIconBase64?: string
   generatedIconBase64?: string
+  currentIconBase64?: string
   iconSource?: IconSource
   iconColor?: IconColorId
   iconText?: string
@@ -196,9 +198,8 @@ export function AddIconDialog({
     setName(initialDraft.displayName)
     setTargetPath(initialDraft.targetPath)
     websitePreviewRequestRef.current += 1
-    const nextEntryKind: AddIconKind = normalizeWebsiteUrl(initialDraft.targetPath)
-      ? 'website'
-      : 'app'
+    const nextEntryKind: AddIconKind =
+      initialDraft.entryKind ?? (isWebsiteTarget(initialDraft.targetPath) ? 'website' : 'app')
     setEntryKind(nextEntryKind)
     setLaunchArguments(initialDraft.launchArguments)
     setWorkingDirectory(initialDraft.workingDirectory)
@@ -502,11 +503,13 @@ export function AddIconDialog({
       (selectedIconSource === 'text' && !textIconPreview) ||
       (selectedIconSource !== 'text' &&
         iconColor !== 'none' &&
-        !(selectedIconSource === 'custom'
-          ? customPreview
-          : entryKind === 'website'
-            ? websitePreview
-            : targetPreview)) ||
+        !(selectedIconSource === 'current'
+          ? initialDraft?.currentIconBase64
+          : selectedIconSource === 'custom'
+            ? customPreview
+            : entryKind === 'website'
+              ? websitePreview
+              : targetPreview)) ||
       submitting
     )
       return
@@ -514,11 +517,13 @@ export function AddIconDialog({
     setSubmitting(true)
     try {
       const selectedPreview =
-        selectedIconSource === 'custom'
-          ? customPreview
-          : entryKind === 'website'
-            ? websitePreview
-            : targetPreview
+        selectedIconSource === 'current'
+          ? (initialDraft?.currentIconBase64 ?? '')
+          : selectedIconSource === 'custom'
+            ? customPreview
+            : entryKind === 'website'
+              ? websitePreview
+              : targetPreview
       const generatedIconBase64 =
         selectedIconSource === 'text'
           ? textIconPreview
@@ -526,6 +531,7 @@ export function AddIconDialog({
             ? ''
             : await createColoredIconDataUri(selectedPreview, iconColor)
       const draft: AddIconDialogDraft = {
+        entryKind,
         displayName,
         targetPath: normalizedTargetPath,
         launchArguments: entryKind === 'app' ? launchArguments.trim() : '',
@@ -567,10 +573,15 @@ export function AddIconDialog({
       })
       onOpenChange(false)
     } catch (error) {
-      toast.error(translate('图标导入失败：{error}', { error: String(error) }), {
-        key: 'add-icon-dialog-submit',
-        title: translate('添加图标'),
-      })
+      toast.error(
+        translate(onSubmitDraft ? '保存图标失败：{error}' : '图标导入失败：{error}', {
+          error: String(error),
+        }),
+        {
+          key: 'add-icon-dialog-submit',
+          title: translate(onSubmitDraft ? '编辑图标信息' : '添加图标'),
+        }
+      )
     } finally {
       setSubmitting(false)
     }
@@ -595,7 +606,13 @@ export function AddIconDialog({
     entryKind === 'website' ? websitePreviewLoading : targetPreviewLoading
   const automaticPreviewLabel =
     entryKind === 'website' ? translate('网页图标') : translate('自动提取')
-  const selectedRasterPreview = selectedIconSource === 'custom' ? customPreview : automaticPreview
+  const currentIconPreview = initialDraft?.currentIconBase64 ?? ''
+  const selectedRasterPreview =
+    selectedIconSource === 'current'
+      ? currentIconPreview
+      : selectedIconSource === 'custom'
+        ? customPreview
+        : automaticPreview
   const selectedColorPreset = ICON_COLOR_PRESETS.find(preset => preset.id === iconColor)
   const selectedTextIconInvalid = selectedIconSource === 'text' && !textIconPreview
   const selectedColoredIconInvalid =
@@ -620,7 +637,7 @@ export function AddIconDialog({
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border/80 px-4 py-3.5 sm:px-5">
           <div className="min-w-0 space-y-1">
             <h2 id={titleId} className="text-base font-semibold text-foreground">
-              {translate('添加图标')}
+              {translate(onSubmitDraft ? '编辑图标信息' : '添加图标')}
             </h2>
             <p id={descriptionId} className="text-xs leading-5 text-muted-foreground">
               {entryKind === 'website'
@@ -860,6 +877,46 @@ export function AddIconDialog({
                     {translate('使用图标')}
                   </span>
                   <div className="flex flex-wrap items-start gap-3">
+                    {currentIconPreview ? (
+                      <div className="flex w-20 flex-col items-center gap-1.5">
+                        <button
+                          type="button"
+                          aria-pressed={selectedIconSource === 'current'}
+                          aria-label={translate('保留当前图标')}
+                          onClick={() => handleIconSourceChange('current')}
+                          disabled={submitting}
+                          className={cn(
+                            'relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
+                            selectedIconSource === 'current'
+                              ? 'border-primary ring-2 ring-primary/20'
+                              : 'border-border hover:border-foreground/30'
+                          )}
+                          style={
+                            selectedIconSource === 'current' && iconColor !== 'none'
+                              ? { backgroundColor: selectedColorPreset?.color }
+                              : undefined
+                          }
+                        >
+                          <img
+                            src={currentIconPreview}
+                            alt={translate('当前图标')}
+                            className={cn(
+                              'object-contain',
+                              selectedIconSource === 'current' && iconColor !== 'none'
+                                ? 'h-10 w-10'
+                                : 'h-full w-full'
+                            )}
+                          />
+                          {selectedIconSource === 'current' ? (
+                            <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
+                          ) : null}
+                        </button>
+                        <span className="text-center text-[11px] leading-4 text-muted-foreground">
+                          {translate('当前图标')}
+                        </span>
+                      </div>
+                    ) : null}
+
                     <div className="flex w-20 flex-col items-center gap-1.5">
                       <button
                         type="button"

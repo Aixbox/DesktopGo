@@ -24,7 +24,7 @@ use commands::{
     record_search_result_run, scan_invalid_icons, search_files, set_layout_payload,
     set_layout_payloads, set_main_window_always_on_top_enabled, set_window_mode,
     show_shell_context_menu, start_search_runtime, sync_window_persistent_state, toggle_window,
-    unhide_icons, update_launch_on_startup_enabled, update_launchpad_shortcut,
+    unhide_icons, update_icon_entry, update_launch_on_startup_enabled, update_launchpad_shortcut,
 };
 #[cfg(windows)]
 use once_cell::sync::OnceCell;
@@ -342,6 +342,7 @@ pub fn run() {
             set_window_mode,
             import_dropped_paths,
             create_icon_entry,
+            update_icon_entry,
             extract_website_icon,
             hide_icons,
             unhide_icons,

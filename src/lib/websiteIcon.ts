@@ -12,6 +12,15 @@ export const normalizeWebsiteUrl = (value: string): string => {
   }
 }
 
+export const isWebsiteTarget = (value: string): boolean => {
+  const trimmed = value.trim()
+  if (!trimmed) return false
+  if (/^[a-z]:[\\/]/i.test(trimmed) || /^\\\\/.test(trimmed) || trimmed.startsWith('/')) {
+    return false
+  }
+  return Boolean(normalizeWebsiteUrl(trimmed))
+}
+
 export const deriveWebsiteName = (value: string): string => {
   const normalized = normalizeWebsiteUrl(value)
   if (!normalized) return ''

@@ -229,6 +229,9 @@ export function Launchpad() {
     deleteSelectedIcons,
     setSelectedIconKeys,
     customNames,
+    clearCustomName,
+    editRequestedIcon,
+    clearIconEditRequest,
   } = useIconStore()
 
   const [isAiOrganizeMode, setIsAiOrganizeMode] = useState(false)
@@ -306,6 +309,7 @@ export function Launchpad() {
   const [isImportingDrop, setIsImportingDrop] = useState(false)
   const [pendingDropDrafts, setPendingDropDrafts] = useState<DroppedIconDraft[]>([])
   const [editingDropIndex, setEditingDropIndex] = useState<number | null>(null)
+  const [editingIcon, setEditingIcon] = useState<DesktopIcon | null>(null)
   const [addIconInitialDraft, setAddIconInitialDraft] = useState<AddIconDialogDraft | null>(null)
   const [addIconDialogOpen, setAddIconDialogOpen] = useState(false)
   const [marquee, setMarquee] = useState<{
@@ -474,8 +478,30 @@ export function Launchpad() {
     pendingAddIconKeySetRef.current = new Set(icons.map(buildIconSelectionKey))
     setAddIconInitialDraft(null)
     setEditingDropIndex(null)
+    setEditingIcon(null)
     setAddIconDialogOpen(true)
   }, [icons])
+
+  useEffect(() => {
+    if (!editRequestedIcon) return
+
+    setAddIconInitialDraft({
+      entryKind: editRequestedIcon.item_type === 'website' ? 'website' : 'app',
+      displayName: customNames[editRequestedIcon.path] ?? editRequestedIcon.name,
+      targetPath: editRequestedIcon.target_path || editRequestedIcon.path,
+      launchArguments: editRequestedIcon.launch_arguments ?? '',
+      workingDirectory: editRequestedIcon.working_directory ?? '',
+      customIconPath: editRequestedIcon.custom_icon_path ?? '',
+      websiteIconBase64:
+        editRequestedIcon.item_type === 'website' ? editRequestedIcon.icon_base64 : '',
+      currentIconBase64: editRequestedIcon.icon_base64,
+      iconSource: editRequestedIcon.icon_base64 ? 'current' : 'target',
+    })
+    setEditingDropIndex(null)
+    setEditingIcon(editRequestedIcon)
+    setAddIconDialogOpen(true)
+    clearIconEditRequest()
+  }, [clearIconEditRequest, customNames, editRequestedIcon])
 
   const handleIconCreated = useCallback(async () => {
     setIsImportingDrop(true)
@@ -508,6 +534,7 @@ export function Launchpad() {
       const drafts = uniquePaths.map<DroppedIconDraft>(path => ({
         key: path,
         selected: true,
+        entryKind: 'app',
         displayName: deriveIconEntryName(path),
         targetPath: path,
         launchArguments: '',
@@ -591,11 +618,39 @@ export function Launchpad() {
     [editingDropIndex]
   )
 
+  const handleSaveIconEdit = useCallback(
+    async (draft: AddIconDialogDraft) => {
+      if (!editingIcon) return
+
+      await invoke('update_icon_entry', {
+        input: {
+          id: editingIcon.id,
+          displayName: draft.displayName,
+          targetPath: draft.targetPath,
+          launchArguments: draft.launchArguments,
+          workingDirectory: draft.workingDirectory,
+          customIconPath: draft.customIconPath,
+          websiteIconBase64: draft.websiteIconBase64 ?? '',
+          generatedIconBase64: draft.generatedIconBase64 ?? '',
+          preserveCurrentIcon: draft.iconSource === 'current',
+        },
+      })
+      clearCustomName(editingIcon.path)
+      await fetchIcons()
+      toast.success(translate('“{name}”已更新。', { name: draft.displayName }), {
+        key: 'edit-icon-dialog-submit',
+        title: translate('编辑图标信息'),
+      })
+    },
+    [clearCustomName, editingIcon, fetchIcons, toast]
+  )
+
   const handleAddIconDialogOpenChange = useCallback((nextOpen: boolean) => {
     setAddIconDialogOpen(nextOpen)
     if (nextOpen) return
     setAddIconInitialDraft(null)
     setEditingDropIndex(null)
+    setEditingIcon(null)
   }, [])
 
   const handleConfirmDroppedImport = useCallback(async () => {
@@ -2090,7 +2145,13 @@ export function Launchpad() {
         onOpenChange={handleAddIconDialogOpenChange}
         onCreated={handleIconCreated}
         initialDraft={addIconInitialDraft}
-        onSubmitDraft={editingDropIndex !== null ? handleSaveDroppedDraft : undefined}
+        onSubmitDraft={
+          editingIcon
+            ? handleSaveIconEdit
+            : editingDropIndex !== null
+              ? handleSaveDroppedDraft
+              : undefined
+        }
       />
 
       <AiOrganizePanel

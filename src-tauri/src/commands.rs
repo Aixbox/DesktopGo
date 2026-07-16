@@ -340,6 +340,14 @@ pub fn create_icon_entry(
 }
 
 #[tauri::command]
+pub fn update_icon_entry(
+    app_handle: tauri::AppHandle,
+    input: icons::UpdateIconEntryInput,
+) -> Result<(), String> {
+    icons::update_icon_entry(app_handle, input)
+}
+
+#[tauri::command]
 pub async fn extract_website_icon(url: String) -> Result<WebsiteIconResult, String> {
     icons::extract_website_icon(url).await
 }

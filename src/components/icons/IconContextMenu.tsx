@@ -18,7 +18,6 @@ interface IconContextMenuProps {
   children: ReactElement
   disabled?: boolean
   onOpen?: () => void
-  onRename?: () => void
 }
 
 export function IconContextMenu({
@@ -26,9 +25,9 @@ export function IconContextMenu({
   children,
   disabled = false,
   onOpen,
-  onRename,
 }: IconContextMenuProps) {
-  const { iconContextMenuMode, hideIcon, launchApp, showShellContextMenu } = useIconStore()
+  const { iconContextMenuMode, hideIcon, launchApp, requestIconEdit, showShellContextMenu } =
+    useIconStore()
 
   const openSystemMenu = () => {
     void showShellContextMenu(icon)
@@ -71,12 +70,13 @@ export function IconContextMenu({
           <Play className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <span>{translate('打开')}</span>
         </ContextMenuItem>
-        {onRename ? (
-          <ContextMenuItem className="gap-2 rounded-lg px-2.5 py-2" onSelect={onRename}>
-            <Pencil className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-            <span>{translate('应用内重命名')}</span>
-          </ContextMenuItem>
-        ) : null}
+        <ContextMenuItem
+          className="gap-2 rounded-lg px-2.5 py-2"
+          onSelect={() => requestIconEdit(icon)}
+        >
+          <Pencil className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <span>{translate('编辑图标信息')}</span>
+        </ContextMenuItem>
         <ContextMenuItem
           className="gap-2 rounded-lg px-2.5 py-2"
           onSelect={() => {

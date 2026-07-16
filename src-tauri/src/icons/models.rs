@@ -95,6 +95,26 @@ pub struct CreateIconEntryInput {
     pub generated_icon_base64: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateIconEntryInput {
+    pub id: String,
+    pub display_name: String,
+    pub target_path: String,
+    #[serde(default)]
+    pub launch_arguments: String,
+    #[serde(default)]
+    pub working_directory: String,
+    #[serde(default)]
+    pub custom_icon_path: String,
+    #[serde(default)]
+    pub website_icon_base64: String,
+    #[serde(default)]
+    pub generated_icon_base64: String,
+    #[serde(default)]
+    pub preserve_current_icon: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct WebsiteIconResult {
     pub url: String,

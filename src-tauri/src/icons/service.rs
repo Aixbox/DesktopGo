@@ -10,7 +10,8 @@ use url::Url;
 use super::models::{
     CreateIconEntryInput, DesktopIcon, IconBucket, IconManagerItem, IconMutationTarget,
     IconSnapshot, ImportDroppedPathsResult, InvalidIconEntry, ScannedDesktopItem, SnapshotIconItem,
-    SnapshotIconPaths, WebsiteIconResult, ICON_SOURCE_CUSTOMAPP, ICON_SOURCE_DESKTOP,
+    SnapshotIconPaths, UpdateIconEntryInput, WebsiteIconResult, ICON_SOURCE_CUSTOMAPP,
+    ICON_SOURCE_DESKTOP,
 };
 #[cfg(windows)]
 use super::platform_windows::{
@@ -216,6 +217,22 @@ pub fn create_icon_entry(
     #[cfg(windows)]
     {
         create_icon_entry_windows(&app_handle, input)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app_handle;
+        let _ = input;
+        Err("Not supported on this platform".to_string())
+    }
+}
+
+pub fn update_icon_entry(
+    app_handle: tauri::AppHandle,
+    input: UpdateIconEntryInput,
+) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        update_icon_entry_windows(&app_handle, input)
     }
     #[cfg(not(windows))]
     {
@@ -784,6 +801,20 @@ fn build_data_icon_paths(
 }
 
 #[cfg(windows)]
+fn build_scanned_icon_paths(
+    app_handle: &tauri::AppHandle,
+    item: &ScannedDesktopItem,
+    id: &str,
+    source: IconSource,
+) -> Result<SnapshotIconPaths, String> {
+    Ok(SnapshotIconPaths {
+        small: save_scanned_icon_for_bucket(app_handle, item, id, IconBucket::Small, source)?,
+        medium: save_scanned_icon_for_bucket(app_handle, item, id, IconBucket::Medium, source)?,
+        large: save_scanned_icon_for_bucket(app_handle, item, id, IconBucket::Large, source)?,
+    })
+}
+
+#[cfg(windows)]
 fn build_snapshot_item(
     app_handle: &tauri::AppHandle,
     item: &ScannedDesktopItem,
@@ -792,11 +823,7 @@ fn build_snapshot_item(
 ) -> Result<SnapshotIconItem, String> {
     let id = uuid::Uuid::new_v4().to_string();
     let key = stable_item_key(item);
-    let icons = SnapshotIconPaths {
-        small: save_scanned_icon_for_bucket(app_handle, item, &id, IconBucket::Small, source)?,
-        medium: save_scanned_icon_for_bucket(app_handle, item, &id, IconBucket::Medium, source)?,
-        large: save_scanned_icon_for_bucket(app_handle, item, &id, IconBucket::Large, source)?,
-    };
+    let icons = build_scanned_icon_paths(app_handle, item, &id, source)?;
 
     Ok(SnapshotIconItem {
         id,
@@ -1373,6 +1400,209 @@ fn create_icon_entry_windows(
         duplicate_count: 0,
         invalid_count: 0,
     })
+}
+
+#[cfg(windows)]
+fn update_icon_entry_windows(
+    app_handle: &tauri::AppHandle,
+    input: UpdateIconEntryInput,
+) -> Result<(), String> {
+    let display_name = input.display_name.trim().to_string();
+    if display_name.is_empty() {
+        return Err("Display name is required".to_string());
+    }
+
+    let raw_target_path = input.target_path.trim();
+    if raw_target_path.is_empty() {
+        return Err("Target path is required".to_string());
+    }
+
+    let is_web = is_web_url(raw_target_path);
+    let target_path_text = if is_web {
+        normalize_website_url(raw_target_path)?.to_string()
+    } else {
+        raw_target_path.to_string()
+    };
+    let launch_arguments = if is_web {
+        String::new()
+    } else {
+        input.launch_arguments.trim().to_string()
+    };
+    let working_directory = if is_web {
+        String::new()
+    } else {
+        input.working_directory.trim().to_string()
+    };
+    let custom_icon_path = input.custom_icon_path.trim().to_string();
+    let website_icon_base64 = input.website_icon_base64.trim().to_string();
+    let generated_icon_base64 = input.generated_icon_base64.trim().to_string();
+
+    if !working_directory.is_empty() && !PathBuf::from(&working_directory).is_dir() {
+        return Err("Working directory does not exist or is not a folder".to_string());
+    }
+    if !custom_icon_path.is_empty() && !PathBuf::from(&custom_icon_path).is_file() {
+        return Err("Custom icon path does not exist or is not a file".to_string());
+    }
+
+    let source_path = PathBuf::from(&target_path_text);
+    let source_item = if is_web {
+        Some(ScannedDesktopItem {
+            name: display_name.clone(),
+            path: target_path_text.clone(),
+            target_path: target_path_text.clone(),
+            item_type: "website".to_string(),
+        })
+    } else {
+        build_scanned_item_from_path(&source_path)
+    }
+    .ok_or_else(|| "Target path does not exist or is not supported".to_string())?;
+
+    let mut snapshot = load_icon_library_snapshot(app_handle)?;
+    let item_index = snapshot
+        .icons
+        .iter()
+        .position(|item| item.id == input.id)
+        .ok_or_else(|| "Icon entry no longer exists".to_string())?;
+    let original_item = snapshot.icons[item_index].clone();
+    let target_identity = import_identity_key(&source_item);
+    let duplicate = snapshot.icons.iter().any(|item| {
+        if item.id == input.id {
+            return false;
+        }
+        let item_identity = if item.target_path.trim().is_empty() {
+            item.path.trim()
+        } else {
+            item.target_path.trim()
+        };
+        item_identity.eq_ignore_ascii_case(&target_identity)
+            && item.launch_arguments.trim() == launch_arguments
+            && item
+                .working_directory
+                .trim()
+                .eq_ignore_ascii_case(&working_directory)
+    });
+    if duplicate {
+        return Err("An icon with the same target and launch options already exists".to_string());
+    }
+
+    let managed_entry_dir = icon_entry_dir_windows(app_handle)?;
+    let destination_path = if is_web {
+        None
+    } else {
+        let destination_path = build_import_file_path(&managed_entry_dir, &source_path);
+        if has_extension(&source_path, "lnk") {
+            std::fs::copy(&source_path, &destination_path).map_err(|error| {
+                format!(
+                    "Failed to copy shortcut {:?} to {:?}: {}",
+                    source_path, destination_path, error
+                )
+            })?;
+            if let Err(error) = update_shortcut_launch_options_windows(
+                &destination_path,
+                &launch_arguments,
+                &working_directory,
+            ) {
+                let _ = std::fs::remove_file(&destination_path);
+                return Err(error);
+            }
+        } else {
+            create_shortcut_windows(
+                &destination_path,
+                &source_path.to_string_lossy(),
+                &launch_arguments,
+                &working_directory,
+            )?;
+        }
+        Some(destination_path)
+    };
+    let replacement_cache_id = uuid::Uuid::new_v4().to_string();
+
+    let update_result = (|| -> Result<(), String> {
+        let updated_scan = match destination_path.as_ref() {
+            Some(path) => build_scanned_item_from_path(path)
+                .ok_or_else(|| "Updated icon entry could not be read".to_string())?,
+            None => source_item.clone(),
+        };
+        let next_icons = if input.preserve_current_icon {
+            original_item.icons.clone()
+        } else if !generated_icon_base64.is_empty() {
+            build_data_icon_paths(
+                app_handle,
+                &generated_icon_base64,
+                &replacement_cache_id,
+                IconSource::Library,
+            )?
+        } else if !custom_icon_path.is_empty() {
+            build_custom_icon_paths(
+                app_handle,
+                &custom_icon_path,
+                &replacement_cache_id,
+                IconSource::Library,
+            )?
+        } else if is_web && !website_icon_base64.is_empty() {
+            build_data_icon_paths(
+                app_handle,
+                &website_icon_base64,
+                &replacement_cache_id,
+                IconSource::Library,
+            )?
+        } else {
+            build_scanned_icon_paths(
+                app_handle,
+                &updated_scan,
+                &replacement_cache_id,
+                IconSource::Library,
+            )?
+        };
+
+        let updated_item = &mut snapshot.icons[item_index];
+        updated_item.key = stable_item_key(&updated_scan);
+        updated_item.name = display_name;
+        updated_item.path = updated_scan.path;
+        updated_item.target_path = updated_scan.target_path;
+        updated_item.launch_arguments = launch_arguments;
+        updated_item.working_directory = working_directory;
+        updated_item.custom_icon_path = if input.preserve_current_icon {
+            original_item.custom_icon_path.clone()
+        } else {
+            custom_icon_path
+        };
+        updated_item.item_type = updated_scan.item_type;
+        updated_item.icons = next_icons;
+
+        write_icon_snapshot(app_handle, IconSource::Library, &snapshot)
+    })();
+
+    if let Err(error) = update_result {
+        if let Some(path) = destination_path.as_ref() {
+            let _ = std::fs::remove_file(path);
+        }
+        if !input.preserve_current_icon {
+            for bucket in [IconBucket::Small, IconBucket::Medium, IconBucket::Large] {
+                let _ = remove_cached_icon_file(
+                    app_handle,
+                    &icon_file_rel_path(&replacement_cache_id, bucket, IconSource::Library),
+                );
+            }
+        }
+        return Err(error);
+    }
+
+    if !input.preserve_current_icon {
+        let _ = remove_cached_icon_file(app_handle, &original_item.icons.small);
+        let _ = remove_cached_icon_file(app_handle, &original_item.icons.medium);
+        let _ = remove_cached_icon_file(app_handle, &original_item.icons.large);
+    }
+
+    let original_entry_path = PathBuf::from(&original_item.path);
+    if original_entry_path.parent() == Some(managed_entry_dir.as_path())
+        && original_entry_path.is_file()
+        && destination_path.as_ref() != Some(&original_entry_path)
+    {
+        let _ = std::fs::remove_file(original_entry_path);
+    }
+
+    Ok(())
 }
 
 #[cfg(windows)]

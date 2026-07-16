@@ -34,6 +34,7 @@ interface IconStore {
   selectedIconKeys: string[]
   customNames: Record<string, string>
   renameTriggerPath: string | null
+  editRequestedIcon: DesktopIcon | null
   fetchIcons: () => Promise<void>
   launchApp: (path: string) => Promise<void>
   setIconSize: (size: IconSize) => void
@@ -55,7 +56,8 @@ interface IconStore {
   setCustomName: (path: string, name: string) => void
   clearCustomName: (path: string) => void
   clearRenameTrigger: () => void
-  requestIconRename: (path: string) => void
+  requestIconEdit: (icon: DesktopIcon) => void
+  clearIconEditRequest: () => void
   setSelectedIconKeys: (keys: string[]) => void
 }
 
@@ -73,6 +75,7 @@ export const useIconStore = create<IconStore>((set, get) => ({
   selectedIconKeys: [],
   customNames: {},
   renameTriggerPath: null,
+  editRequestedIcon: null,
 
   fetchIcons: async () => {
     if (get().icons.length === 0) {
@@ -376,8 +379,12 @@ export const useIconStore = create<IconStore>((set, get) => ({
     set({ renameTriggerPath: null })
   },
 
-  requestIconRename: (path: string) => {
-    set({ renameTriggerPath: path })
+  requestIconEdit: (icon: DesktopIcon) => {
+    set({ editRequestedIcon: icon })
+  },
+
+  clearIconEditRequest: () => {
+    set({ editRequestedIcon: null })
   },
 
   setSelectedIconKeys: (keys: string[]) => {

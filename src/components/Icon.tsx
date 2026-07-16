@@ -44,7 +44,6 @@ export function Icon({
     clearCustomName,
     renameTriggerPath,
     clearRenameTrigger,
-    requestIconRename,
   } = useIconStore()
   const config = ICON_SIZE_CONFIG[iconSize]
   const tileHeight = getIconGridRowHeight(iconSize)
@@ -124,11 +123,7 @@ export function Icon({
     selectionMode || isRenaming ? '' : 'group-hover:scale-105 group-active:scale-95'
 
   return (
-    <IconContextMenu
-      icon={icon}
-      disabled={selectionMode || isRenaming}
-      onRename={() => requestIconRename(icon.path)}
-    >
+    <IconContextMenu icon={icon} disabled={selectionMode || isRenaming}>
       <button
         data-icon
         data-selection-key={selectionKey}
