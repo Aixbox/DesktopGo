@@ -189,7 +189,7 @@ export function UpdatePanel() {
   const updateInfo = checkResult?.update
   const releaseDate = formatReleaseDate(updateInfo?.date ?? null)
 
-  const handleCheck = async () => {
+  async function handleCheck() {
     setChecking(true)
     setInstallStage('idle')
     setDownloadedBytes(0)
@@ -211,16 +211,22 @@ export function UpdatePanel() {
       )
     } catch (error) {
       setCheckResult(null)
-      toast.error(translate('检查更新失败：{error}', { error: String(error) }), {
+      console.error('Failed to check for app updates:', error)
+      toast.error(translate('检查更新失败，请确认网络连接后重试。'), {
         key: 'update-panel',
         title: translate('应用更新'),
+        duration: 8000,
+        action: {
+          label: translate('重试'),
+          onClick: () => void handleCheck(),
+        },
       })
     } finally {
       setChecking(false)
     }
   }
 
-  const handleInstall = async () => {
+  async function handleInstall() {
     if (!checkResult?.available) return
 
     setInstalling(true)
@@ -235,9 +241,15 @@ export function UpdatePanel() {
     } catch (error) {
       setInstalling(false)
       setInstallStage('idle')
-      toast.error(translate('下载安装更新失败：{error}', { error: String(error) }), {
+      console.error('Failed to download and install app update:', error)
+      toast.error(translate('下载安装更新失败，请稍后重试。'), {
         key: 'update-install',
         title: translate('应用更新'),
+        duration: 8000,
+        action: {
+          label: translate('重试'),
+          onClick: () => void handleInstall(),
+        },
       })
     }
   }

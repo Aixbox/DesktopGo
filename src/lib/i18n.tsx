@@ -897,6 +897,15 @@ const EN_MESSAGES: Record<string, string> = {
   '请先到「设置 → AI 助手」填写接口地址、密钥和模型。':
     'Go to Settings → AI Assistant to set the endpoint, API key, and model first.',
   重试: 'Retry',
+  撤销: 'Undo',
+  '操作已撤销。': 'The action was undone.',
+  '操作失败，请稍后重试。': 'The action failed. Please try again shortly.',
+  '撤销失败，请刷新图标库后重试。':
+    'Could not undo the action. Refresh the icon library and try again.',
+  '检查更新失败，请确认网络连接后重试。':
+    'Could not check for updates. Check your connection and try again.',
+  '下载安装更新失败，请稍后重试。':
+    'Could not download and install the update. Please try again shortly.',
   'AI 没有给出可用的分组建议。': 'AI did not return any usable grouping suggestions.',
   分组名称: 'Group name',
   解散: 'Disband',

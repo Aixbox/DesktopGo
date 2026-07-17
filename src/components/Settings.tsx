@@ -1142,35 +1142,76 @@ function IconManagerPanel() {
     await notifyMainWindow()
   }
 
-  const handleConfirmMutation = async () => {
-    if (!pendingMutation) return
+  const undoVisibilityMutation = async (
+    mutation: NonNullable<typeof pendingMutation> & { type: 'hide' | 'unhide' }
+  ) => {
     setMutating(true)
     try {
-      const targets: IconMutationTarget[] = [{ id: pendingMutation.icon.id }]
+      const command = mutation.type === 'hide' ? 'unhide_icons' : 'hide_icons'
+      await invoke<number>(command, { targets: [{ id: mutation.icon.id }] })
+      await refreshIconManagerList()
+      await notifyMainWindow()
+      toast.success(translate('操作已撤销。'), {
+        key: 'icon-library-action',
+        title: translate('图标库'),
+      })
+    } catch (error) {
+      console.error('Failed to undo icon visibility change:', error)
+      toast.error(translate('撤销失败，请刷新图标库后重试。'), {
+        key: 'icon-library-action',
+        title: translate('图标库'),
+      })
+    } finally {
+      setMutating(false)
+    }
+  }
+
+  const handleConfirmMutation = async () => {
+    if (!pendingMutation) return
+    const mutation = pendingMutation
+    setMutating(true)
+    try {
+      const targets: IconMutationTarget[] = [{ id: mutation.icon.id }]
       const command =
-        pendingMutation.type === 'unhide'
+        mutation.type === 'unhide'
           ? 'unhide_icons'
-          : pendingMutation.type === 'delete'
+          : mutation.type === 'delete'
             ? 'delete_icons'
             : 'hide_icons'
       const actionLabel =
-        pendingMutation.type === 'unhide'
+        mutation.type === 'unhide'
           ? '显示'
-          : pendingMutation.type === 'delete'
+          : mutation.type === 'delete'
             ? '移出图标库'
             : '隐藏'
       const affected = await invoke<number>(command, { targets })
+      const visibilityMutation =
+        mutation.type === 'delete'
+          ? null
+          : { type: mutation.type, icon: mutation.icon }
+      await refreshIconManagerList()
+      await notifyMainWindow()
       toast.success(
         translate('{action}完成，影响 {count} 项。', {
           action: translate(actionLabel),
           count: affected,
         }),
-        { key: 'icon-library-action', title: translate('图标库') }
+        {
+          key: 'icon-library-action',
+          title: translate('图标库'),
+          duration: visibilityMutation ? 8000 : undefined,
+          action:
+            visibilityMutation
+              ? {
+                  label: translate('撤销'),
+                  onClick: () => void undoVisibilityMutation(visibilityMutation),
+                }
+              : undefined,
+        }
       )
-      await refreshIconManagerList()
-      await notifyMainWindow()
     } catch (e) {
-      toast.error(translate('操作失败：{error}', { error: String(e) }), {
+      console.error('Failed to update icon library item:', e)
+      toast.error(translate('操作失败，请稍后重试。'), {
         key: 'icon-library-action',
         title: translate('图标库'),
       })

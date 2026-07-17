@@ -67,8 +67,8 @@ import type {
   WindowMode,
 } from '@/types'
 import { IconGrid } from './IconGrid'
-import { AiOrganizePanel, type AiOrganizePanelRunState } from './ai/AiOrganizePanel'
-import { AddIconDialog, type AddIconDialogDraft } from './icons/AddIconDialog'
+import type { AiOrganizePanelRunState } from './ai/AiOrganizePanel'
+import type { AddIconDialogDraft } from './icons/AddIconDialog'
 import { Button } from './ui/button'
 
 const LAUNCHPAD_SHOWN_EVENT = 'launchpad:shown'
@@ -103,6 +103,14 @@ const GRID_VIEW_MODE_OPTIONS: { label: string; value: LaunchpadGridViewMode }[] 
 
 const ScrollableIconGrid = lazy(() =>
   import('./ScrollableIconGrid').then(module => ({ default: module.ScrollableIconGrid }))
+)
+
+const AddIconDialog = lazy(() =>
+  import('./icons/AddIconDialog').then(module => ({ default: module.AddIconDialog }))
+)
+
+const AiOrganizePanel = lazy(() =>
+  import('./ai/AiOrganizePanel').then(module => ({ default: module.AiOrganizePanel }))
 )
 
 const LONG_PRESS_MS = 420
@@ -2156,40 +2164,46 @@ export function Launchpad() {
         <ContextMenuItem onSelect={openSettings}>{translate('设置')}</ContextMenuItem>
       </ContextMenuContent>
 
-      <AddIconDialog
-        open={addIconDialogOpen}
-        onOpenChange={handleAddIconDialogOpenChange}
-        onCreated={handleIconCreated}
-        initialDraft={addIconInitialDraft}
-        onSubmitDraft={
-          editingIcon
-            ? handleSaveIconEdit
-            : editingDropIndex !== null
-              ? handleSaveDroppedDraft
-              : undefined
-        }
-      />
+      <Suspense fallback={null}>
+        {addIconDialogOpen ? (
+          <AddIconDialog
+            open
+            onOpenChange={handleAddIconDialogOpenChange}
+            onCreated={handleIconCreated}
+            initialDraft={addIconInitialDraft}
+            onSubmitDraft={
+              editingIcon
+                ? handleSaveIconEdit
+                : editingDropIndex !== null
+                  ? handleSaveDroppedDraft
+                  : undefined
+            }
+          />
+        ) : null}
 
-      <AiOrganizePanel
-        open={isAiOrganizeMode}
-        visible={isAiOrganizeSidebarOpen}
-        icons={icons}
-        customNames={customNames}
-        applyRequestToken={aiOrganizeApplyRequestToken}
-        onRunStateChange={setAiOrganizeRunState}
-        onCollapse={() => setIsAiOrganizeSidebarOpen(false)}
-        onClose={exitAiOrganizeMode}
-        onPreviewed={async () => {
-          setLayoutResetToken(current => current + 1)
-          await fetchIcons()
-        }}
-        onApplied={async () => {
-          // 与设置页「重置布局」一致：递增令牌强制 IconGrid 丢弃旧内存布局，
-          // 重新从磁盘 hydrate 出 AI 整理后的结果。
-          setLayoutResetToken(current => current + 1)
-          await fetchIcons()
-        }}
-      />
+        {isAiOrganizeMode ? (
+          <AiOrganizePanel
+            open
+            visible={isAiOrganizeSidebarOpen}
+            icons={icons}
+            customNames={customNames}
+            applyRequestToken={aiOrganizeApplyRequestToken}
+            onRunStateChange={setAiOrganizeRunState}
+            onCollapse={() => setIsAiOrganizeSidebarOpen(false)}
+            onClose={exitAiOrganizeMode}
+            onPreviewed={async () => {
+              setLayoutResetToken(current => current + 1)
+              await fetchIcons()
+            }}
+            onApplied={async () => {
+              // 与设置页「重置布局」一致：递增令牌强制 IconGrid 丢弃旧内存布局，
+              // 重新从磁盘 hydrate 出 AI 整理后的结果。
+              setLayoutResetToken(current => current + 1)
+              await fetchIcons()
+            }}
+          />
+        ) : null}
+      </Suspense>
     </ContextMenu>
   )
 }

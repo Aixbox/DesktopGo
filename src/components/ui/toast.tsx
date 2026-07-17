@@ -7,6 +7,11 @@ import { cn } from '@/lib/utils'
 
 type ToastTone = 'info' | 'success' | 'error'
 
+type ToastAction = {
+  label: string
+  onClick: () => void
+}
+
 type ToastItem = {
   id: string
   key?: string
@@ -14,6 +19,7 @@ type ToastItem = {
   message: string
   tone: ToastTone
   duration: number
+  action?: ToastAction
 }
 
 type ShowToastOptions = {
@@ -22,6 +28,7 @@ type ShowToastOptions = {
   message: string
   tone?: ToastTone
   duration?: number
+  action?: ToastAction
 }
 
 type ToastOptionsWithoutMessage = Omit<ShowToastOptions, 'message' | 'tone'>
@@ -87,6 +94,18 @@ function ToastViewport({
                   <p className="text-sm font-medium text-foreground">{toast.title}</p>
                 ) : null}
                 <p className="break-words text-sm leading-5 text-foreground/85">{toast.message}</p>
+                {toast.action ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDismiss(toast.id)
+                      toast.action?.onClick()
+                    }}
+                    className="mt-1 rounded-md border border-border/80 bg-background px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+                  >
+                    {toast.action.label}
+                  </button>
+                ) : null}
               </div>
               <button
                 type="button"
@@ -154,6 +173,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         message: options.message,
         tone,
         duration,
+        action: options.action,
       }
 
       setToasts(prev => {

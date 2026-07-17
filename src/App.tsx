@@ -1,8 +1,11 @@
-import { useEffect } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import { Launchpad } from './components/Launchpad'
-import { Settings } from './components/Settings'
 import { ToastProvider } from './components/ui/toast'
 import { I18nProvider } from './lib/i18n'
+
+const Settings = lazy(() =>
+  import('./components/Settings').then(module => ({ default: module.Settings }))
+)
 
 function App() {
   const params = new URLSearchParams(window.location.search)
@@ -26,7 +29,15 @@ function App() {
 
   return (
     <I18nProvider>
-      <ToastProvider>{page === 'settings' ? <Settings /> : <Launchpad />}</ToastProvider>
+      <ToastProvider>
+        {page === 'settings' ? (
+          <Suspense fallback={<div className="settings-shell h-screen w-screen bg-background" />}>
+            <Settings />
+          </Suspense>
+        ) : (
+          <Launchpad />
+        )}
+      </ToastProvider>
     </I18nProvider>
   )
 }
