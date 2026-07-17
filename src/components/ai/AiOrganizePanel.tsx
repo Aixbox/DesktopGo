@@ -1659,7 +1659,7 @@ export function AiOrganizePanel({
     const canEdit = isEditingSnapshot && !previewDisabled
 
     return (
-      <div className="mt-2 w-[min(100%,390px)] rounded-lg border border-border/85 bg-background/82 p-3 shadow-sm">
+      <div className="mt-2 w-[min(100%,390px)] rounded-md border border-border/80 bg-background/82 p-3">
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
             <FolderClosed className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />

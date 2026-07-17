@@ -7,8 +7,8 @@ interface SettingGroupProps {
 
 export function SettingGroup({ title, children }: SettingGroupProps) {
   return (
-    <div className="mb-6">
-      <h3 className="mb-3 text-sm font-medium text-foreground/80">{title}</h3>
+    <div className="mb-5">
+      <h3 className="mb-2.5 text-xs font-semibold text-muted-foreground">{title}</h3>
       <div className="flex flex-wrap gap-2">{children}</div>
     </div>
   )
@@ -22,7 +22,7 @@ interface SettingCardProps {
 
 export function SettingCard({ label, desc, children }: SettingCardProps) {
   return (
-    <div className="space-y-3 rounded-lg border border-border/90 bg-card p-4 shadow-sm">
+    <div className="space-y-3 rounded-md border border-border/80 bg-card p-4">
       <div className="space-y-1">
         <h4 className="text-sm font-medium text-foreground">{label}</h4>
         {desc ? <p className="text-xs leading-5 text-muted-foreground">{desc}</p> : null}
@@ -83,7 +83,7 @@ export function ToggleRow({
   disabled = false,
 }: ToggleRowProps) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-lg border border-border/90 bg-card p-4 shadow-sm">
+    <div className="flex min-h-20 items-center justify-between gap-4 rounded-md border border-border/80 bg-card px-4 py-3.5">
       <div className="min-w-0 space-y-1">
         <h4 className="text-sm font-medium text-foreground">{title}</h4>
         <p className="text-xs leading-5 text-muted-foreground">{description}</p>
@@ -105,10 +105,10 @@ export function OptionButton({ label, selected, onClick }: OptionButtonProps) {
   return (
     <button
       onClick={onClick}
-      className={`shrink-0 whitespace-nowrap rounded-lg border px-4 py-2 text-sm transition-all duration-150 cursor-pointer ${
+      className={`shrink-0 whitespace-nowrap rounded-md border px-3 py-2 text-sm transition-all duration-150 cursor-pointer ${
         selected
-          ? 'border-blue-500/40 bg-blue-500/12 text-blue-700 shadow-sm ring-1 ring-blue-500/10 dark:border-blue-400/35 dark:bg-blue-400/14 dark:text-blue-200 dark:ring-blue-400/12'
-          : 'border-border/90 bg-card text-foreground hover:border-foreground/15 hover:bg-accent'
+          ? 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:border-blue-400/30 dark:bg-blue-400/12 dark:text-blue-200'
+          : 'border-input bg-background text-foreground hover:border-foreground/20 hover:bg-accent'
       }`}
     >
       {label}

@@ -246,7 +246,7 @@ export function UpdatePanel() {
     <div className="space-y-6">
       <div className="grid gap-6 xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] xl:items-start">
         <div className="space-y-4">
-          <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
+          <div className="rounded-md border border-border/80 bg-card p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-1">
                 <p className="text-sm font-medium text-foreground">{translate('应用更新')}</p>
@@ -296,7 +296,7 @@ export function UpdatePanel() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
+          <div className="rounded-md border border-border/80 bg-card p-4">
             <div className="flex items-start gap-3">
               {configStatus?.configured ? (
                 <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
@@ -324,7 +324,7 @@ export function UpdatePanel() {
           </div>
 
           {installStage !== 'idle' ? (
-            <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
+            <div className="rounded-md border border-border/80 bg-card p-4">
               <div className="flex items-start gap-3">
                 {installStage === 'finished' ? (
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
@@ -374,7 +374,7 @@ export function UpdatePanel() {
 
         <div className="space-y-4">
           {updateInfo ? (
-            <div className="rounded-lg border border-border/90 bg-card p-4 shadow-sm">
+            <div className="rounded-md border border-border/80 bg-card p-4">
               <div className="flex items-start gap-3">
                 <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
                 <div className="space-y-3">
@@ -391,7 +391,7 @@ export function UpdatePanel() {
                       })}
                     </p>
                   </div>
-                  <div className="rounded-md border border-border/85 bg-background px-3 py-2 text-xs leading-5 text-muted-foreground shadow-sm">
+                  <div className="rounded-md border border-border/75 bg-background px-3 py-2 text-xs leading-5 text-muted-foreground">
                     {updateInfo.body?.trim() ? (
                       <p className="whitespace-pre-wrap">{updateInfo.body}</p>
                     ) : (

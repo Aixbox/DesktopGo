@@ -103,7 +103,7 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
           )}
         />
 
-        <div className="absolute inset-y-1 right-1 flex w-8 flex-col overflow-hidden rounded-[calc(var(--radius)-4px)] border border-border/80 bg-muted shadow-sm">
+        <div className="absolute inset-y-1 right-1 flex w-8 flex-col overflow-hidden rounded-[calc(var(--radius)-4px)] border border-border/80 bg-muted">
           {/* 不直接定制原生 spinner：WebKit 伪元素是非标准实现，这里统一隐藏后用项目按钮替代。 */}
           <button
             type="button"

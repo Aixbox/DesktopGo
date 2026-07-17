@@ -1321,7 +1321,7 @@ function IconManagerPanel() {
           </Button>
         </div>
 
-        <div className="min-w-0 space-y-3 rounded-lg border border-border/90 bg-card p-4 shadow-sm">
+        <div className="min-w-0 space-y-3 rounded-md border border-border/80 bg-card p-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex min-w-0 flex-[1_1_24rem] flex-wrap items-center gap-2">
               <Input
@@ -1387,7 +1387,7 @@ function IconManagerPanel() {
                       className={cn(
                         'inline-flex h-full w-8 items-center justify-center rounded-md transition-colors',
                         selected
-                          ? 'bg-accent text-foreground shadow-sm'
+                          ? 'bg-accent text-foreground'
                           : 'text-muted-foreground hover:text-foreground'
                       )}
                     >
@@ -2395,7 +2395,7 @@ export function Settings() {
       <header
         onPointerDown={handleWindowDragStart}
         onDoubleClick={handleTitlebarDoubleClick}
-        className="flex h-12 items-center gap-3 border-b border-border/90 bg-card px-4 shadow-sm cursor-grab active:cursor-grabbing"
+        className="flex h-12 items-center gap-3 border-b border-border/80 bg-card px-4 cursor-grab active:cursor-grabbing"
       >
         <div className="flex min-w-0 flex-1 items-center gap-3 h-full">
           <Logo iconSize={20} textSize="sm" className="shrink-0" />
@@ -2426,16 +2426,16 @@ export function Settings() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <nav className="flex w-48 flex-col border-r border-border/90 bg-card px-4 py-3 shadow-sm">
+        <nav className="flex w-48 flex-col border-r border-border/80 bg-card px-3 py-3">
           <ul className="flex flex-col gap-1">
             {navItems.map(item => (
               <li key={item.key}>
                 <button
                   onClick={() => setActiveNav(item.key)}
-                  className={`flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors cursor-pointer ${
+                  className={`flex w-full items-center gap-2.5 rounded-md border px-3 py-2 text-sm transition-colors cursor-pointer ${
                     activeNav === item.key
-                      ? 'border-border/90 bg-background text-foreground shadow-sm font-medium'
-                      : 'border-transparent text-muted-foreground hover:border-border/70 hover:bg-accent hover:text-foreground'
+                      ? 'border-transparent bg-accent text-foreground font-medium'
+                      : 'border-transparent text-muted-foreground hover:bg-accent/70 hover:text-foreground'
                   }`}
                 >
                   {item.icon}
