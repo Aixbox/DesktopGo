@@ -832,7 +832,16 @@ function SettingsPanel() {
     WINDOW_STYLE_OPTIONS.find(option => option.value === windowStyle) ?? WINDOW_STYLE_OPTIONS[0]
 
   return (
-    <>
+    <div className="space-y-8">
+      <section aria-labelledby="settings-appearance-heading">
+        <div className="mb-4 border-b border-border/70 pb-3">
+          <h2 id="settings-appearance-heading" className="text-base font-semibold">
+            {translate('语言与外观')}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {translate('设置界面语言、明暗模式和窗口材质。')}
+          </p>
+        </div>
       <SettingGroup title={translate('界面语言')}>
         {LANGUAGE_OPTIONS.map(option => (
           <OptionButton
@@ -874,7 +883,17 @@ function SettingsPanel() {
           </p>
         </SettingCard>
       </div>
+      </section>
 
+      <section aria-labelledby="settings-layout-heading">
+        <div className="mb-4 border-b border-border/70 pb-3">
+          <h2 id="settings-layout-heading" className="text-base font-semibold">
+            {translate('图标与布局')}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {translate('调整图标、窗口和 Dock 的显示方式。')}
+          </p>
+        </div>
       <SettingGroup title={translate('图标大小')}>
         {ICON_SIZE_OPTIONS.map(opt => (
           <OptionButton
@@ -920,7 +939,17 @@ function SettingsPanel() {
           onChange={handleDockEnabled}
         />
       </div>
+      </section>
 
+      <section aria-labelledby="settings-startup-heading">
+        <div className="mb-4 border-b border-border/70 pb-3">
+          <h2 id="settings-startup-heading" className="text-base font-semibold">
+            {translate('启动行为')}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {translate('控制窗口驻留和登录 Windows 后的启动方式。')}
+          </p>
+        </div>
       <div className="mb-6">
         <ToggleRow
           title={translate('窗口常驻')}
@@ -937,7 +966,17 @@ function SettingsPanel() {
           onChange={handleWindowPersistent}
         />
       </div>
+      </section>
 
+      <section aria-labelledby="settings-shortcut-heading">
+        <div className="mb-4 border-b border-border/70 pb-3">
+          <h2 id="settings-shortcut-heading" className="text-base font-semibold">
+            {translate('快捷键与焦点')}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {translate('设置唤起方式和主窗口打开后的默认位置。')}
+          </p>
+        </div>
       <div className="mb-6">
         <ToggleRow
           title={translate('开机自启')}
@@ -1052,7 +1091,8 @@ function SettingsPanel() {
           </p>
         </SettingCard>
       </div>
-    </>
+      </section>
+    </div>
   )
 }
 

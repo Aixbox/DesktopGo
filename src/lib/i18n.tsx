@@ -902,6 +902,26 @@ const EN_MESSAGES: Record<string, string> = {
   '操作失败，请稍后重试。': 'The action failed. Please try again shortly.',
   '撤销失败，请刷新图标库后重试。':
     'Could not undo the action. Refresh the icon library and try again.',
+  语言与外观: 'Language and appearance',
+  '设置界面语言、明暗模式和窗口材质。':
+    'Choose the interface language, color mode, and window material.',
+  图标与布局: 'Icons and layout',
+  '调整图标、窗口和 Dock 的显示方式。':
+    'Adjust how icons, the window, and the Dock are displayed.',
+  启动行为: 'Startup behavior',
+  '控制窗口驻留和登录 Windows 后的启动方式。':
+    'Control window persistence and how DesktopGo starts with Windows.',
+  快捷键与焦点: 'Shortcut and focus',
+  '设置唤起方式和主窗口打开后的默认位置。':
+    'Configure how DesktopGo opens and where focus starts.',
+  '部分项目未能导入，未完成的项目已保留，请检查后重试。':
+    'Some items could not be imported. They remain in the list so you can check them and try again.',
+  '导入失败，项目已保留。请检查文件是否可访问后重试。':
+    'The import failed, but your items are still available. Check that the files can be accessed and try again.',
+  '加载搜索设置失败，请重试。': 'Could not load search settings. Please try again.',
+  '保存搜索设置失败，请重试。': 'Could not save the search setting. Please try again.',
+  '恢复默认设置失败，请重试。':
+    'Could not restore the default search settings. Please try again.',
   '检查更新失败，请确认网络连接后重试。':
     'Could not check for updates. Check your connection and try again.',
   '下载安装更新失败，请稍后重试。':

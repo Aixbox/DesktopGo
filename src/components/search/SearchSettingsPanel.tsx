@@ -21,26 +21,34 @@ export function SearchSettingsPanel() {
   const { language } = useI18n()
   const [settings, setSettings] = useState<SearchSettings>(DEFAULT_SEARCH_SETTINGS)
   const [loading, setLoading] = useState(true)
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const [resetting, setResetting] = useState(false)
   const toast = useToast()
   const filterOptions = useMemo(() => getSearchFilterOptions(), [language])
   const sortOptions = useMemo(() => getSearchSortOptions(), [language])
 
   useEffect(() => {
+    setLoading(true)
     void (async () => {
       try {
         const next = await loadSearchSettings()
         setSettings(next)
       } catch (error) {
-        toast.error(translate('加载搜索设置失败：{error}', { error: String(error) }), {
+        console.error('Failed to load search settings:', error)
+        toast.error(translate('加载搜索设置失败，请重试。'), {
           key: 'search-settings',
           title: translate('搜索设置'),
+          duration: 8000,
+          action: {
+            label: translate('重试'),
+            onClick: () => setLoadAttempt(attempt => attempt + 1),
+          },
         })
       } finally {
         setLoading(false)
       }
     })()
-  }, [toast])
+  }, [loadAttempt, toast])
 
   const persistSetting = async <K extends keyof SearchSettings>(
     key: K,
@@ -51,10 +59,10 @@ export function SearchSettingsPanel() {
     return normalized
   }
 
-  const updateSetting = async <K extends keyof SearchSettings>(
+  async function updateSetting<K extends keyof SearchSettings>(
     key: K,
     value: SearchSettings[K]
-  ) => {
+  ) {
     try {
       await persistSetting(key, value)
       toast.success(translate('搜索设置已保存。'), {
@@ -63,14 +71,20 @@ export function SearchSettingsPanel() {
         duration: 1800,
       })
     } catch (error) {
-      toast.error(translate('保存设置失败：{error}', { error: String(error) }), {
+      console.error('Failed to save search setting:', error)
+      toast.error(translate('保存搜索设置失败，请重试。'), {
         key: 'search-settings',
         title: translate('搜索设置'),
+        duration: 8000,
+        action: {
+          label: translate('重试'),
+          onClick: () => void updateSetting(key, value),
+        },
       })
     }
   }
 
-  const resetDefaults = async () => {
+  async function resetDefaults() {
     if (resetting) {
       return
     }
@@ -88,9 +102,15 @@ export function SearchSettingsPanel() {
         title: translate('搜索设置'),
       })
     } catch (error) {
-      toast.error(translate('恢复默认设置失败：{error}', { error: String(error) }), {
+      console.error('Failed to reset search settings:', error)
+      toast.error(translate('恢复默认设置失败，请重试。'), {
         key: 'search-settings',
         title: translate('搜索设置'),
+        duration: 8000,
+        action: {
+          label: translate('重试'),
+          onClick: () => void resetDefaults(),
+        },
       })
     } finally {
       setResetting(false)

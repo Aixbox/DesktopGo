@@ -683,7 +683,6 @@ export function Launchpad() {
       const previousIconKeySet = new Set(icons.map(buildIconSelectionKey))
       const result = { imported_count: 0, duplicate_count: 0, invalid_count: 0 }
       const failedKeys = new Set<string>()
-      let firstItemError = ''
       for (const draft of selectedDrafts) {
         try {
           const itemResult = await invoke<ImportDroppedPathsResult>('create_icon_entry', {
@@ -704,9 +703,9 @@ export function Launchpad() {
           result.duplicate_count += itemResult.duplicate_count
           result.invalid_count += itemResult.invalid_count
         } catch (error) {
+          console.error('Failed to import dropped item:', error)
           failedKeys.add(draft.key)
           result.invalid_count += 1
-          if (!firstItemError) firstItemError = String(error)
         }
       }
       await fetchIcons()
@@ -751,12 +750,11 @@ export function Launchpad() {
       if (failedKeys.size > 0) {
         setPendingDropDrafts(current => current.filter(draft => failedKeys.has(draft.key)))
         toast.error(
-          translate('部分项目未能导入：{error}', {
-            error: firstItemError,
-          }),
+          translate('部分项目未能导入，未完成的项目已保留，请检查后重试。'),
           {
             key: 'launchpad-import-drop-error',
             title: translate('启动台'),
+            duration: 8000,
           }
         )
       } else {
@@ -764,9 +762,10 @@ export function Launchpad() {
       }
     } catch (error) {
       console.error('Failed to import dropped paths:', error)
-      toast.error(translate('拖入导入失败：{error}', { error: String(error) }), {
+      toast.error(translate('导入失败，项目已保留。请检查文件是否可访问后重试。'), {
         key: 'launchpad-import-drop',
         title: translate('启动台'),
+        duration: 8000,
       })
     } finally {
       setIsImportingDrop(false)
