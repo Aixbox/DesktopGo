@@ -122,10 +122,7 @@ export function SearchFloatingMenu({
   }, [align, menuRef, triggerRef, width])
 
   useLayoutEffect(() => {
-    if (!open) {
-      setStyle(null)
-      return
-    }
+    if (!open) return
 
     updatePosition()
 

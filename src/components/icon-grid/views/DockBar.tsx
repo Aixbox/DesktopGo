@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MutableRefObject,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
@@ -246,6 +247,9 @@ export function DockBar({
 
     thumb.style.width = `${thumbWidth}px`
     thumb.style.transform = `translate3d(${thumbOffset}px, -50%, 0px)`
+    const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth)
+    const scrollPercent = maxScrollLeft > 0 ? Math.round((scroller.scrollLeft / maxScrollLeft) * 100) : 0
+    indicatorTrackRef.current?.setAttribute('aria-valuenow', String(scrollPercent))
   }
 
   const refreshDockMetrics = () => {
@@ -570,6 +574,43 @@ export function DockBar({
     beginIndicatorDrag(event, event.clientX - thumbRect.left)
   }
 
+  const handleIndicatorKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+
+    const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth)
+    const itemStep = iconTileWidth + DOCK_GAP
+    const pageStep = Math.max(itemStep, scroller.clientWidth * 0.8)
+    let delta: number | null = null
+
+    switch (event.key) {
+      case 'ArrowLeft':
+        delta = -itemStep
+        break
+      case 'ArrowRight':
+        delta = itemStep
+        break
+      case 'PageUp':
+        delta = -pageStep
+        break
+      case 'PageDown':
+        delta = pageStep
+        break
+      case 'Home':
+        delta = -scroller.scrollLeft
+        break
+      case 'End':
+        delta = maxScrollLeft - scroller.scrollLeft
+        break
+      default:
+        return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    queueSmoothScroll(delta, { relativeToCurrent: true })
+  }
+
   return (
     <div
       ref={bindDockContainerRef}
@@ -580,7 +621,7 @@ export function DockBar({
     >
       <div
         ref={panelRef}
-        className="launchpad-glass-panel relative overflow-hidden rounded-[28px] px-4 py-3 shadow-[0_20px_60px_rgba(15,23,42,0.18)] transition-[width] duration-[220ms] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]"
+        className="launchpad-glass-panel relative overflow-hidden rounded-2xl px-4 py-3 transition-[width] duration-[220ms]"
         style={{
           maxWidth: alignToContentColumn
             ? `calc(100vw - var(--scroll-grid-sidebar-width) - ${DOCK_PANEL_VIEWPORT_MARGIN * 2}px)`
@@ -590,6 +631,7 @@ export function DockBar({
       >
         <div
           ref={scrollerRef}
+          id="dock-scroller"
           className="dock-scrollbar-hidden overflow-x-auto overflow-y-hidden"
           onWheel={handleScrollWheel}
           onScroll={handleScrollerScroll}
@@ -647,6 +689,8 @@ export function DockBar({
                           <button
                             type="button"
                             title={customNames[item.icon.path] ?? item.icon.name}
+                            aria-label={customNames[item.icon.path] ?? item.icon.name}
+                            aria-pressed={selectionMode ? selectedSet.has(id) : undefined}
                             className={`relative flex cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
                               selectionMode ? '' : 'hover:-translate-y-0.5 active:translate-y-0'
                             }`}
@@ -725,6 +769,7 @@ export function DockBar({
                             <button
                               type="button"
                               title={item.name}
+                              aria-label={item.name}
                               className={`relative flex cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
                                 selectionMode ? '' : 'hover:-translate-y-0.5 active:translate-y-0'
                               }`}
@@ -770,7 +815,7 @@ export function DockBar({
                         {!selectionMode ? (
                           <ContextMenuContent
                             data-dock-menu="true"
-                            className="w-44 rounded-2xl p-1.5 shadow-2xl backdrop-blur-xl"
+                            className="w-44 rounded-lg p-1.5 shadow-xl backdrop-blur-xl"
                           >
                             <ContextMenuItem
                               className="rounded-xl px-3 py-2 text-foreground/85 focus:bg-accent focus:text-foreground"
@@ -813,8 +858,17 @@ export function DockBar({
           <div className="pointer-events-none absolute bottom-[-1px] left-4 right-4 h-4">
             <div
               ref={indicatorTrackRef}
-              className="group/dock-scrollbar pointer-events-auto absolute inset-x-0 bottom-0 h-4 touch-none"
+              role="scrollbar"
+              tabIndex={0}
+              aria-label={translate('滚动 Dock')}
+              aria-controls="dock-scroller"
+              aria-orientation="horizontal"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={0}
+              className="group/dock-scrollbar pointer-events-auto absolute inset-x-0 bottom-0 h-4 touch-none rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
               onPointerDown={handleIndicatorTrackPointerDown}
+              onKeyDown={handleIndicatorKeyDown}
               onClick={event => {
                 event.preventDefault()
                 event.stopPropagation()

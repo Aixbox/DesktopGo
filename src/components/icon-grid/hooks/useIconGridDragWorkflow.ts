@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
   type Dispatch,
+  type MouseEvent as ReactMouseEvent,
   type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
   type SetStateAction,
@@ -117,7 +118,7 @@ interface UseIconGridDragWorkflowResult {
     itemId: string
   ) => void
   handleDockItemPointerDown: (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => void
-  handleTileClickCapture: (event: React.MouseEvent<HTMLDivElement>) => void
+  handleTileClickCapture: (event: ReactMouseEvent<HTMLDivElement>) => void
   clearEdgeSwitchTimer: () => void
   clearOuterDragInteractionForPageSwitch: () => void
   syncDockDragPreview: () => void
@@ -1913,7 +1914,7 @@ export function useIconGridDragWorkflow({
     }, config.dragLongPressMs)
   }
 
-  const handleTileClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+  const handleTileClickCapture = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (performance.now() < suppressClickUntilRef.current) {
       event.preventDefault()
       event.stopPropagation()

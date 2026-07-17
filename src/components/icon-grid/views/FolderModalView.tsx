@@ -1,8 +1,10 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
@@ -16,6 +18,7 @@ import {
   getFolderSharedLayoutId,
 } from './FolderVisuals'
 import { Input } from '@/components/ui/input'
+import { translate, useI18n } from '@/lib/i18n'
 
 interface FolderModalViewProps {
   openFolder: FolderItem | null
@@ -78,6 +81,8 @@ export function FolderModalView({
   maxModalWidth,
   maxModalHeight,
 }: FolderModalViewProps) {
+  useI18n()
+
   const prefersReducedMotion = useReducedMotion()
   const backdropTransition = prefersReducedMotion
     ? { duration: 0 }
@@ -93,6 +98,65 @@ export function FolderModalView({
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const modalRootRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+  const openFolderIdRef = useRef<string | undefined>(undefined)
+  const openFolderId = openFolder?.id
+  openFolderIdRef.current = openFolderId
+
+  const restorePreviousFocus = useCallback(() => {
+    if (previousFocusRef.current?.isConnected) {
+      previousFocusRef.current.focus({ preventScroll: true })
+    }
+    previousFocusRef.current = null
+  }, [])
+
+  useEffect(() => {
+    if (!openFolderId) return
+
+    previousFocusRef.current ??= document.activeElement as HTMLElement | null
+    const focusFrame = window.requestAnimationFrame(() => {
+      modalRootRef.current?.focus({ preventScroll: true })
+    })
+
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+    }
+  }, [folderPanelRef, openFolderId])
+
+  useEffect(
+    () => () => {
+      restorePreviousFocus()
+    },
+    [restorePreviousFocus]
+  )
+
+  const handleModalKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Tab') return
+
+    const focusable = modalRootRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+    )
+    if (!focusable?.length) {
+      event.preventDefault()
+      modalRootRef.current?.focus({ preventScroll: true })
+      return
+    }
+
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    const activeElement = document.activeElement
+    const focusIsOutsideSequence =
+      !(activeElement instanceof HTMLElement) || !Array.from(focusable).includes(activeElement)
+
+    if (event.shiftKey && (activeElement === first || focusIsOutsideSequence)) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && (activeElement === last || focusIsOutsideSequence)) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
 
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -117,7 +181,12 @@ export function FolderModalView({
   const panelWidth = Math.min(fittedPanelWidth, maxModalWidth, window.innerWidth * 0.92)
 
   return (
-    <AnimatePresence initial={false}>
+    <AnimatePresence
+      initial={false}
+      onExitComplete={() => {
+        if (!openFolderIdRef.current) restorePreviousFocus()
+      }}
+    >
       {openFolder ? (
         <motion.div
           key={openFolder.id}
@@ -131,9 +200,17 @@ export function FolderModalView({
           onClick={event => {
             event.stopPropagation()
           }}
+          onKeyDown={handleModalKeyDown}
         >
           {/* Wrapper for title + close + panel */}
-          <div className="relative flex flex-col items-center">
+          <div
+            ref={modalRootRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={openFolder.name}
+            tabIndex={-1}
+            className="relative flex flex-col items-center focus:outline-none"
+          >
             {/* Title bar - name centered, X button right-aligned, same width as panel */}
             <motion.div
               initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
@@ -145,7 +222,7 @@ export function FolderModalView({
               onPointerDown={e => e.stopPropagation()}
             >
               {/* Spacer to balance the X button */}
-              <div className="w-6" />
+              <div className="w-8" />
               {/* Folder name - centered */}
               <div className="flex flex-1 justify-center">
                 {editing ? (
@@ -154,6 +231,7 @@ export function FolderModalView({
                     type="text"
                     value={editName}
                     onChange={e => setEditName(e.target.value)}
+                    maxLength={64}
                     onBlur={commitRename}
                     onKeyDown={e => {
                       if (e.key === 'Enter') commitRename()
@@ -165,7 +243,8 @@ export function FolderModalView({
                 ) : (
                   <button
                     type="button"
-                    className="truncate rounded-md px-3 py-1 text-sm font-medium text-foreground/90 transition-colors hover:bg-accent/80 dark:text-white/90 dark:hover:bg-white/10"
+                    aria-label={translate('重命名文件夹 {name}', { name: openFolder.name })}
+                    className="truncate rounded-md px-3 py-1 text-sm font-medium text-foreground/90 transition-colors hover:bg-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 dark:text-white/90 dark:hover:bg-white/10"
                     style={{ maxWidth: '240px' }}
                     title={openFolder.name}
                     onClick={() => {
@@ -180,7 +259,8 @@ export function FolderModalView({
               {/* Close X button */}
               <button
                 type="button"
-                className="flex h-6 w-6 items-center justify-center rounded-full bg-background/72 text-foreground/75 transition-colors hover:bg-background/92 hover:text-foreground dark:bg-white/15 dark:text-white/80 dark:hover:bg-white/25 dark:hover:text-white"
+                aria-label={translate('关闭文件夹')}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-background/72 text-foreground/75 transition-colors hover:bg-background/92 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 dark:bg-white/15 dark:text-white/80 dark:hover:bg-white/25 dark:hover:text-white"
                 onClick={e => {
                   e.stopPropagation()
                   onClose()
@@ -203,7 +283,7 @@ export function FolderModalView({
               transition={prefersReducedMotion ? { duration: 0 } : FOLDER_SHARED_LAYOUT_TRANSITION}
               data-icon
               ref={folderPanelRef}
-              className="launchpad-glass-panel-strong relative overflow-hidden rounded-3xl p-5 shadow-[0_24px_56px_rgba(15,23,42,0.22)] will-change-[transform,border-radius] dark:shadow-[0_24px_56px_rgba(0,0,0,0.5)]"
+              className="launchpad-glass-panel-strong relative overflow-hidden rounded-2xl p-5 will-change-[transform,border-radius]"
               style={{
                 width: `${panelWidth}px`,
                 maxHeight: `min(80vh, ${maxModalHeight}px)`,

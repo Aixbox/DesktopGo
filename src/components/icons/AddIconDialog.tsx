@@ -1119,6 +1119,7 @@ export function AddIconDialog({
                     id={nameInputId}
                     value={name}
                     onChange={event => setName(event.target.value)}
+                    maxLength={64}
                     placeholder={
                       effectiveName
                         ? translate('留空则使用：{name}', { name: effectiveName })

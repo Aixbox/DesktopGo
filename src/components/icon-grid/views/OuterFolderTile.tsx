@@ -140,7 +140,8 @@ function PreviewIconButton({
   return (
     <button
       type="button"
-      className={`group flex items-center justify-center rounded-2xl transition ${
+      aria-label={name}
+      className={`group flex items-center justify-center rounded-2xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 ${
         selectionMode ? 'cursor-pointer' : 'cursor-pointer active:scale-[0.97]'
       }`}
       style={{ width: `${size}px`, height: `${size}px` }}
@@ -239,7 +240,7 @@ function FolderBody({
           transition={FOLDER_SHARED_LAYOUT_TRANSITION}
           className={`${DESKTOP_FOLDER_SURFACE_CLASS} flex items-center justify-center transition-all duration-200 ${
             highlightSurface
-              ? 'border-border/70 bg-background/72 shadow-[0_0_0_1px_rgba(15,23,42,0.06),0_18px_42px_rgba(15,23,42,0.18)] dark:border-white/40 dark:bg-black/40 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_18px_42px_rgba(0,0,0,0.34)]'
+              ? 'border-border/70 bg-background/72 shadow-[0_0_0_1px_rgba(15,23,42,0.06),0_10px_26px_rgba(15,23,42,0.14)] dark:border-white/40 dark:bg-black/40 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_10px_26px_rgba(0,0,0,0.26)]'
               : ''
           }`}
           data-folder-body-hitbox
@@ -295,7 +296,7 @@ function FolderBody({
         transition={FOLDER_SHARED_LAYOUT_TRANSITION}
         className={`${DESKTOP_FOLDER_SURFACE_CLASS} transition-all duration-200 ${
           highlightSurface
-            ? 'border-border/70 bg-background/72 shadow-[0_0_0_1px_rgba(15,23,42,0.06),0_18px_42px_rgba(15,23,42,0.18)] dark:border-white/40 dark:bg-black/40 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_18px_42px_rgba(0,0,0,0.34)]'
+            ? 'border-border/70 bg-background/72 shadow-[0_0_0_1px_rgba(15,23,42,0.06),0_10px_26px_rgba(15,23,42,0.14)] dark:border-white/40 dark:bg-black/40 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_10px_26px_rgba(0,0,0,0.26)]'
             : ''
         }`}
         data-folder-body-hitbox
@@ -398,7 +399,8 @@ export function OuterFolderTile({
             />
             <button
               type="button"
-              className="flex max-w-full items-start justify-center overflow-hidden text-center text-[11px] text-foreground transition hover:text-foreground/90"
+              aria-label={folder.name}
+              className="flex max-w-full items-start justify-center overflow-hidden rounded-md text-center text-[11px] text-foreground transition hover:text-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
               style={{
                 width: `${Math.min(footprintWidth, bodyWidth)}px`,
                 height: `${titleMetrics.height}px`,
@@ -431,7 +433,7 @@ export function OuterFolderTile({
       </ContextMenuTrigger>
 
       {!selectionMode ? (
-        <ContextMenuContent className="w-44 rounded-2xl p-1.5 shadow-2xl backdrop-blur-xl">
+        <ContextMenuContent className="w-44 rounded-lg p-1.5 shadow-xl backdrop-blur-xl">
           <ContextMenuItem
             className="rounded-xl px-3 py-2 text-foreground/85 focus:bg-accent focus:text-foreground"
             onSelect={() => {

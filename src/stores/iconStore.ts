@@ -93,6 +93,7 @@ export const useIconStore = create<IconStore>((set, get) => ({
       set({
         icons,
         loading: false,
+        error: null,
         selectedIconKeys: nextSelectedKeys,
         selectionMode,
       })
@@ -107,6 +108,7 @@ export const useIconStore = create<IconStore>((set, get) => ({
       await invoke('toggle_window')
     } catch (e) {
       console.error('Failed to launch app:', e)
+      throw e
     }
   },
 

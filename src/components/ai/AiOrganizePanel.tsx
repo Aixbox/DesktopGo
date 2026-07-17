@@ -600,7 +600,7 @@ export function AiOrganizePanel({
     setShowScrollToBottom(false)
   }, [activeSession?.messages.length, phase, streamChunks.length, agentEvents.length])
 
-  const scrollTranscriptToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+  const scrollTranscriptToBottom = useCallback((behavior: 'auto' | 'smooth' = 'smooth') => {
     const transcript = transcriptRef.current
     if (!transcript) return
     shouldStickToBottomRef.current = true
@@ -1740,7 +1740,8 @@ export function AiOrganizePanel({
                     <Input
                       value={group.folderName}
                       onChange={e => handleRenameGroup(group.id, e.target.value)}
-                      className="h-8 flex-1"
+                      maxLength={64}
+                      className="h-8 min-w-0 flex-1"
                       aria-label={translate('分组名称')}
                     />
                   ) : (
@@ -1782,9 +1783,9 @@ export function AiOrganizePanel({
                             type="button"
                             aria-label={translate('移出分组')}
                             onClick={() => handleRemoveIcon(group.id, key)}
-                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-500/15 hover:text-red-600 dark:hover:text-red-300"
+                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-500/15 hover:text-red-600 dark:hover:text-red-300"
                           >
-                            <X className="h-3 w-3" />
+                            <X className="h-3.5 w-3.5" />
                           </button>
                         ) : null}
                       </span>
@@ -2123,9 +2124,9 @@ export function AiOrganizePanel({
                           onClick={() => setComposerCommand(null)}
                           aria-label={translate('移除指令')}
                           title={translate('移除指令')}
-                          className="-mr-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded text-blue-700/80 transition-colors hover:bg-blue-500/15 hover:text-blue-800 dark:text-blue-200"
+                          className="-mr-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded text-blue-700/80 transition-colors hover:bg-blue-500/15 hover:text-blue-800 dark:text-blue-200"
                         >
-                          <X className="h-3 w-3" />
+                          <X className="h-3.5 w-3.5" />
                         </button>
                       </span>
                     ) : null}

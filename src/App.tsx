@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect } from 'react'
 import { Launchpad } from './components/Launchpad'
 import { ToastProvider } from './components/ui/toast'
+import { AppErrorBoundary } from './components/ui/app-error-boundary'
 import { I18nProvider } from './lib/i18n'
 
 const Settings = lazy(() =>
@@ -30,13 +31,15 @@ function App() {
   return (
     <I18nProvider>
       <ToastProvider>
-        {page === 'settings' ? (
-          <Suspense fallback={<div className="settings-shell h-screen w-screen bg-background" />}>
-            <Settings />
-          </Suspense>
-        ) : (
-          <Launchpad />
-        )}
+        <AppErrorBoundary>
+          {page === 'settings' ? (
+            <Suspense fallback={<div className="settings-shell h-screen w-screen bg-background" />}>
+              <Settings />
+            </Suspense>
+          ) : (
+            <Launchpad />
+          )}
+        </AppErrorBoundary>
       </ToastProvider>
     </I18nProvider>
   )

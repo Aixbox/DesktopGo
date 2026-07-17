@@ -24,6 +24,7 @@ import {
   Minus,
   Pencil,
   Pin,
+  Plus,
   RefreshCw,
   X,
 } from 'lucide-react'
@@ -216,6 +217,7 @@ export function Launchpad() {
   const {
     icons,
     loading,
+    error: iconLoadError,
     fetchIcons,
     hydrateSettings,
     iconSize,
@@ -1150,9 +1152,13 @@ export function Launchpad() {
         clearSearch()
       } catch (e) {
         console.error('Failed to launch selected desktop icon:', e)
+        toast.error(translate('无法打开所选项目，请检查目标是否仍然可用。'), {
+          key: 'launch-item',
+          title: translate('启动失败'),
+        })
       }
     },
-    [clearSearch, launchApp]
+    [clearSearch, launchApp, toast]
   )
 
   const requestCloseLaunchpad = useCallback(() => {
@@ -1295,9 +1301,13 @@ export function Launchpad() {
         clearSearch()
       } catch (e) {
         console.error('Failed to launch selected search item:', e)
+        toast.error(translate('无法打开所选项目，请检查目标是否仍然可用。'), {
+          key: 'launch-item',
+          title: translate('启动失败'),
+        })
       }
     },
-    [clearSearch, recordCurrentSearch]
+    [clearSearch, recordCurrentSearch, toast]
   )
 
   const handleSearchNavigationKey = useCallback(
@@ -1581,6 +1591,10 @@ export function Launchpad() {
     })
     settingsWindow.once('tauri://error', e => {
       console.error('Failed to create settings window:', e)
+      toast.error(translate('无法打开设置窗口，请重试。'), {
+        key: 'settings-window',
+        title: translate('设置'),
+      })
     })
   }
 
@@ -1608,7 +1622,7 @@ export function Launchpad() {
             data-no-window-drag="true"
             className="absolute right-5 top-5 z-40 flex items-center gap-2"
           >
-            <div className="launchpad-glass-panel-strong flex items-center rounded-xl border border-border/80 px-1.5 py-1 shadow-lg">
+            <div className="launchpad-glass-panel-strong flex items-center rounded-lg border border-border/80 px-1.5 py-1">
               <WindowControlButton
                 label={
                   isAiOrganizeMode && isAiOrganizeSidebarOpen
@@ -1623,7 +1637,7 @@ export function Launchpad() {
             </div>
             {windowPersistentEnabled ? (
               <>
-                <div className="launchpad-glass-panel-strong flex items-center rounded-xl border border-border/80 px-1.5 py-1 shadow-lg">
+                <div className="launchpad-glass-panel-strong flex items-center rounded-lg border border-border/80 px-1.5 py-1">
                   <WindowControlButton
                     label={
                       mainWindowAlwaysOnTopEnabled ? translate('取消置顶') : translate('置顶窗口')
@@ -1637,7 +1651,7 @@ export function Launchpad() {
                     />
                   </WindowControlButton>
                 </div>
-                <div className="launchpad-glass-panel-strong flex items-center gap-1 rounded-xl border border-border/80 px-1.5 py-1 shadow-lg">
+                <div className="launchpad-glass-panel-strong flex items-center gap-1 rounded-lg border border-border/80 px-1.5 py-1">
                   <WindowControlButton label={translate('最小化')} onClick={handleMinimizeWindow}>
                     <Minus className="h-4 w-4" />
                   </WindowControlButton>
@@ -1688,7 +1702,7 @@ export function Launchpad() {
                 aria-label={
                   searchSource === 'everything' ? translate('搜索文件') : translate('搜索图标库')
                 }
-                className={`launchpad-glass-panel h-11 w-full rounded-full px-4 text-sm text-foreground/90 shadow-lg outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 ${
+                className={`launchpad-glass-panel h-11 w-full rounded-full px-4 text-sm text-foreground/90 outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 ${
                   searchSource === 'everything' ? 'pr-32' : ''
                 }`}
               />
@@ -1712,7 +1726,7 @@ export function Launchpad() {
                     menuRef={filterMenuRef}
                     width={192}
                     align="start"
-                    className="launchpad-glass-panel-strong overflow-hidden rounded-2xl shadow-2xl"
+                    className="launchpad-glass-panel-strong overflow-hidden rounded-lg shadow-xl"
                     contentClassName="p-1.5"
                   >
                     {searchFilterOptions.map(entry => (
@@ -1750,6 +1764,7 @@ export function Launchpad() {
             searchPending={searchPending}
             loadingMore={searchLoadingMore}
             error={searchError}
+            onRetry={submitSearch}
             runtimeState={searchRuntimeState}
             totalResults={searchTotalResults}
             loadedCount={searchLoadedCount}
@@ -1800,7 +1815,7 @@ export function Launchpad() {
           {isAiOrganizeMode ? (
             <div
               data-ai-organize-toolbar
-              className="launchpad-glass-panel-strong absolute left-1/2 top-20 z-30 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-full border border-blue-500/20 px-3 py-2 text-sm text-foreground/90 shadow-xl"
+              className="launchpad-glass-panel-strong absolute left-1/2 top-20 z-30 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-full border border-blue-500/20 px-3 py-2 text-sm text-foreground/90"
             >
               <span className="flex items-center gap-2 px-1.5 font-medium">
                 <Bot className="h-4 w-4 text-blue-600 dark:text-blue-300" />
@@ -1986,9 +2001,9 @@ export function Launchpad() {
                               title={translate('编辑')}
                               onClick={() => handleEditDroppedDraft(index)}
                               disabled={isImportingDrop}
-                              className="absolute right-1.5 top-0.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-background/90 text-muted-foreground opacity-100 shadow-sm transition-[opacity,color] hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                              className="absolute right-0.5 top-0.5 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-background/90 text-muted-foreground opacity-100 shadow-sm transition-[opacity,color] hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                             >
-                              <Pencil className="h-2.5 w-2.5" />
+                              <Pencil className="h-3 w-3" />
                             </button>
                           </div>
                         ))}
@@ -2047,9 +2062,41 @@ export function Launchpad() {
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/40 border-t-foreground" />
               <span className="text-lg text-foreground/70">{translate('Loading...')}</span>
             </div>
+          ) : iconLoadError && icons.length === 0 ? (
+            <div
+              role="alert"
+              className="flex max-w-md flex-col items-center gap-3 px-6 text-center"
+            >
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">
+                  {translate('图标库加载失败，请重试。')}
+                </p>
+                <p
+                  className="break-words text-xs leading-5 text-muted-foreground"
+                  title={iconLoadError}
+                >
+                  {translate('现有布局不会被修改。')}
+                </p>
+              </div>
+              <Button type="button" size="sm" onClick={() => void fetchIcons()}>
+                <RefreshCw className="h-4 w-4" />
+                {translate('重试')}
+              </Button>
+            </div>
           ) : icons.length === 0 ? (
-            <div className="text-lg text-foreground/50">
-              {translate('No desktop shortcuts found')}
+            <div className="flex max-w-md flex-col items-center gap-3 px-6 text-center">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">
+                  {translate('No desktop shortcuts found')}
+                </p>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  {translate('添加应用、快捷方式或网页，开始创建你的启动台。')}
+                </p>
+              </div>
+              <Button type="button" size="sm" onClick={handleAddIcons}>
+                <Plus className="h-4 w-4" />
+                {translate('添加图标')}
+              </Button>
             </div>
           ) : launchpadGridViewMode === 'scroll' ? (
             <Suspense

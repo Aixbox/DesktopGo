@@ -1,17 +1,26 @@
 ﻿import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react'
 import type { SearchHistoryEntry } from '@/lib/search/history'
 import { parseEverythingHighlightedText } from '@/lib/search/highlight'
 import type { SearchHit, SearchPreview, SearchRuntimeState, SearchSort } from '@/lib/search/types'
 import { useIconStore } from '@/stores/iconStore'
 import { IconContextMenu } from '@/components/icons/IconContextMenu'
 import { ICON_SIZE_CONFIG, type DesktopIcon } from '@/types'
-import { AppWindow, File, Folder } from 'lucide-react'
+import { AppWindow, File, Folder, RefreshCw } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
 import { SearchHistoryPanel } from './SearchHistoryPanel'
 import { SearchPreviewPane } from './SearchPreviewPane'
 import { SearchSourceTabs } from './SearchSourceTabs'
 import { SearchToolbar } from './SearchToolbar'
+import { Button } from '@/components/ui/button'
 
 const ROW_HEIGHT = 68
 const OVERSCAN_ROWS = 6
@@ -37,6 +46,7 @@ interface SearchPanelProps {
   searchPending: boolean
   loadingMore: boolean
   error: string | null
+  onRetry: () => void
   runtimeState: SearchRuntimeState
   totalResults: number
   loadedCount: number
@@ -182,6 +192,7 @@ export function SearchPanel({
   searchPending,
   loadingMore,
   error,
+  onRetry,
   runtimeState,
   totalResults,
   loadedCount,
@@ -230,6 +241,9 @@ export function SearchPanel({
   const [scrollTop, setScrollTop] = useState(0)
   const [bodyHeight, setBodyHeight] = useState(0)
   const [listPaneWidth, setListPaneWidth] = useState<number | null>(null)
+  const [splitContainerWidth, setSplitContainerWidth] = useState(
+    EVERYTHING_LIST_PANE_MIN_WIDTH + SPLIT_DIVIDER_WIDTH
+  )
   const [isResizingSplit, setIsResizingSplit] = useState(false)
   const prefersReducedMotion = useReducedMotion()
   const isEverything = source === 'everything'
@@ -368,6 +382,7 @@ export function SearchPanel({
       const containerWidth = container.clientWidth
       if (containerWidth <= 0) return
 
+      setSplitContainerWidth(containerWidth)
       setListPaneWidth(current => {
         if (current === null) {
           return clampListPaneWidth(containerWidth * DEFAULT_LIST_PANE_RATIO, containerWidth)
@@ -420,6 +435,46 @@ export function SearchPanel({
       document.body.style.userSelect = ''
     }
   }, [clampListPaneWidth, isResizingSplit])
+
+  const handleSplitKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    const container = splitContainerRef.current
+    if (!container) return
+
+    const containerWidth = container.clientWidth
+    const currentWidth =
+      listPaneWidth ?? clampListPaneWidth(containerWidth * DEFAULT_LIST_PANE_RATIO, containerWidth)
+    const step = event.shiftKey ? 48 : 16
+    let nextWidth: number | null = null
+
+    switch (event.key) {
+      case 'ArrowLeft':
+        nextWidth = currentWidth - step
+        break
+      case 'ArrowRight':
+        nextWidth = currentWidth + step
+        break
+      case 'Home':
+        nextWidth = EVERYTHING_LIST_PANE_MIN_WIDTH
+        break
+      case 'End':
+        nextWidth = containerWidth
+        break
+      default:
+        return
+    }
+
+    event.preventDefault()
+    setListPaneWidth(clampListPaneWidth(nextWidth, containerWidth))
+  }
+
+  const splitAriaMax = Math.max(
+    EVERYTHING_LIST_PANE_MIN_WIDTH,
+    splitContainerWidth - SPLIT_DIVIDER_WIDTH
+  )
+  const splitAriaNow = Math.round(
+    listPaneWidth ??
+      clampListPaneWidth(splitContainerWidth * DEFAULT_LIST_PANE_RATIO, splitContainerWidth)
+  )
 
   useEffect(() => {
     if (!visible || !isEverything) return
@@ -669,8 +724,14 @@ export function SearchPanel({
         <>
           <button
             type="button"
+            role="separator"
             aria-label={translate('调整预览宽度')}
-            className={`relative z-10 shrink-0 border-l border-r border-border/70 bg-background/30 transition hover:bg-accent/52 dark:bg-background/12 dark:hover:bg-accent/45 ${
+            aria-orientation="vertical"
+            aria-valuemin={EVERYTHING_LIST_PANE_MIN_WIDTH}
+            aria-valuemax={splitAriaMax}
+            aria-valuenow={splitAriaNow}
+            aria-keyshortcuts="ArrowLeft ArrowRight Home End"
+            className={`relative z-10 shrink-0 border-l border-r border-border/70 bg-background/30 transition hover:bg-accent/52 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/45 dark:bg-background/12 dark:hover:bg-accent/45 ${
               isResizingSplit ? 'bg-accent/70' : ''
             }`}
             style={{ width: SPLIT_DIVIDER_WIDTH, cursor: 'col-resize' }}
@@ -678,6 +739,7 @@ export function SearchPanel({
               event.preventDefault()
               setIsResizingSplit(true)
             }}
+            onKeyDown={handleSplitKeyDown}
           >
             <span className="absolute left-1/2 top-1/2 h-14 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground/20" />
           </button>
@@ -702,13 +764,25 @@ export function SearchPanel({
     <div ref={bodyContentRef}>
       {isEverything && error ? (
         <div
-          className={`px-4 py-3 text-sm ${
+          role="alert"
+          className={`flex min-w-0 items-start justify-between gap-3 px-4 py-3 text-sm ${
             isEverythingInitializing
               ? 'text-amber-700 dark:text-amber-300'
               : 'text-red-700 dark:text-red-300'
           }`}
         >
-          {error}
+          <span className="min-w-0 flex-1 break-words leading-5">{error}</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onRetry}
+            disabled={searchPending}
+            className="shrink-0"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            {translate('重试')}
+          </Button>
         </div>
       ) : null}
 
@@ -783,7 +857,7 @@ export function SearchPanel({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={panelTransition}
-            className="launchpad-glass-panel-strong search-panel-surface pointer-events-auto relative overflow-hidden rounded-2xl shadow-2xl will-change-opacity"
+            className="launchpad-glass-panel-strong search-panel-surface pointer-events-auto relative overflow-hidden rounded-xl will-change-opacity"
           >
             <div className="relative z-10">
               <div className="flex items-center justify-between gap-3 border-b border-border/70 px-3 py-2">

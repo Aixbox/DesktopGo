@@ -1106,6 +1106,7 @@ function IconManagerPanel() {
   const [addIconDialogOpen, setAddIconDialogOpen] = useState(false)
   const [mutating, setMutating] = useState(false)
   const [listLoading, setListLoading] = useState(false)
+  const [listError, setListError] = useState<string | null>(null)
   const [layoutResetting, setLayoutResetting] = useState(false)
   const [scanningInvalidIcons, setScanningInvalidIcons] = useState(false)
   const [deletingInvalidIcons, setDeletingInvalidIcons] = useState(false)
@@ -1123,10 +1124,12 @@ function IconManagerPanel() {
 
   const refreshIconManagerList = useCallback(async () => {
     setListLoading(true)
+    setListError(null)
     try {
       const icons = await invoke<IconManagerItem[]>('get_icon_manager_items', { iconSize: 48 })
       setAllIcons(icons)
     } catch (e) {
+      setListError(String(e))
       toast.error(translate('加载图标库失败：{error}', { error: String(e) }), {
         key: 'icon-library-list',
         title: translate('图标库'),
@@ -1499,6 +1502,25 @@ function IconManagerPanel() {
               <div className="col-span-full flex min-h-44 items-center justify-center text-sm text-muted-foreground">
                 <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                 {translate('图标库加载中...')}
+              </div>
+            ) : listError && allIcons.length === 0 ? (
+              <div
+                role="alert"
+                className="col-span-full flex min-h-44 flex-col items-center justify-center gap-3 px-4 text-center"
+              >
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-300" />
+                <div className="max-w-md space-y-1">
+                  <p className="text-sm font-medium">
+                    {translate('图标库加载失败，请重试。')}
+                  </p>
+                  <p className="break-words text-xs text-muted-foreground" title={listError}>
+                    {translate('现有布局不会被修改。')}
+                  </p>
+                </div>
+                <Button size="sm" onClick={() => void refreshIconManagerList()}>
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  {translate('重试')}
+                </Button>
               </div>
             ) : filteredIcons.length === 0 ? (
               <div className="col-span-full flex min-h-44 flex-col items-center justify-center gap-3 text-center">
@@ -2363,7 +2385,7 @@ export function Settings() {
     () =>
       NAV_ITEMS.map(item => ({
         ...item,
-        label: translate(item.label),
+        label: translate(item.label, undefined, language),
       })),
     [language]
   )

@@ -445,6 +445,21 @@ const EN_MESSAGES: Record<string, string> = {
   没有结果: 'No results',
   '正在加载更多...': 'Loading more...',
   调整预览宽度: 'Resize preview',
+  '重命名文件夹 {name}': 'Rename folder {name}',
+  关闭文件夹: 'Close folder',
+  '滚动 Dock': 'Scroll Dock',
+  界面暂时无法显示: 'The interface could not be displayed',
+  '重新加载 DesktopGo 后通常可以恢复，当前数据不会被修改。':
+    'Reloading DesktopGo usually resolves this issue. Your current data will not be changed.',
+  重新加载: 'Reload',
+  '图标库加载失败，请重试。': 'Could not load the icon library. Please try again.',
+  '现有布局不会被修改。': 'Your existing layout will not be changed.',
+  '添加应用、快捷方式或网页，开始创建你的启动台。':
+    'Add an app, shortcut, or website to start building your launchpad.',
+  启动失败: 'Launch failed',
+  '无法打开所选项目，请检查目标是否仍然可用。':
+    'Could not open the selected item. Check that the target is still available.',
+  '无法打开设置窗口，请重试。': 'Could not open Settings. Please try again.',
   '搜索文件、文件夹和应用...': 'Search files, folders, and apps...',
   '搜索图标库...': 'Search icon library...',
   搜索文件: 'Search files',

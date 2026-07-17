@@ -390,8 +390,8 @@ textarea {
 
 .launchpad-bg {
   background: rgba(240, 240, 245, 0.85);
-  backdrop-filter: blur(50px) saturate(180%);
-  -webkit-backdrop-filter: blur(50px) saturate(180%);
+  backdrop-filter: blur(32px) saturate(135%);
+  -webkit-backdrop-filter: blur(32px) saturate(135%);
 }
 
 .dark .launchpad-bg {
@@ -412,13 +412,13 @@ textarea {
 }
 
 .window-style-native-mica .launchpad-bg {
-  background: linear-gradient(180deg, rgba(244, 246, 250, 0.24) 0%, rgba(232, 236, 242, 0.12) 100%);
+  background: rgba(238, 242, 248, 0.18);
   backdrop-filter: blur(6px) saturate(140%) brightness(1.02);
   -webkit-backdrop-filter: blur(6px) saturate(140%) brightness(1.02);
 }
 
 .dark.window-style-native-mica .launchpad-bg {
-  background: linear-gradient(180deg, rgba(14, 18, 26, 0.28) 0%, rgba(8, 12, 18, 0.14) 100%);
+  background: rgba(10, 14, 22, 0.2);
   backdrop-filter: blur(8px) saturate(130%) brightness(0.96);
   -webkit-backdrop-filter: blur(8px) saturate(130%) brightness(0.96);
 }
@@ -431,7 +431,7 @@ textarea {
     color-mix(in oklch, var(--background) 74%, transparent) 100%
   );
   box-shadow:
-    0 18px 44px rgba(15, 23, 42, 0.14),
+    0 8px 24px rgba(15, 23, 42, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.52);
   backdrop-filter: blur(22px) saturate(156%);
   -webkit-backdrop-filter: blur(22px) saturate(156%);
@@ -445,7 +445,7 @@ textarea {
     color-mix(in oklch, var(--background) 80%, transparent) 100%
   );
   box-shadow:
-    0 24px 52px rgba(15, 23, 42, 0.16),
+    0 12px 32px rgba(15, 23, 42, 0.13),
     inset 0 1px 0 rgba(255, 255, 255, 0.58);
   backdrop-filter: blur(24px) saturate(160%);
   -webkit-backdrop-filter: blur(24px) saturate(160%);
@@ -459,7 +459,7 @@ textarea {
     color-mix(in oklch, var(--background) 84%, transparent) 100%
   );
   box-shadow:
-    0 24px 54px rgba(15, 23, 42, 0.16),
+    0 14px 36px rgba(15, 23, 42, 0.14),
     inset 0 1px 0 rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(26px) saturate(150%);
   -webkit-backdrop-filter: blur(26px) saturate(150%);
@@ -483,7 +483,7 @@ textarea {
     color-mix(in oklch, var(--background) 90%, transparent) 0%,
     color-mix(in oklch, var(--background) 82%, transparent) 100%
   );
-  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.16);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.15);
   backdrop-filter: blur(22px) saturate(156%);
   -webkit-backdrop-filter: blur(22px) saturate(156%);
 }
@@ -496,17 +496,17 @@ textarea {
 .launchpad-glass-panel {
   border: 1px solid color-mix(in oklch, var(--foreground) 14%, transparent);
   background: color-mix(in oklch, var(--background) 76%, transparent);
-  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.14);
-  backdrop-filter: blur(18px) saturate(160%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(16px) saturate(138%);
+  -webkit-backdrop-filter: blur(16px) saturate(138%);
 }
 
 .launchpad-glass-panel-strong {
   border: 1px solid color-mix(in oklch, var(--foreground) 16%, transparent);
   background: color-mix(in oklch, var(--background) 86%, transparent);
-  box-shadow: 0 24px 56px rgba(15, 23, 42, 0.18);
-  backdrop-filter: blur(20px) saturate(165%);
-  -webkit-backdrop-filter: blur(20px) saturate(165%);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+  backdrop-filter: blur(18px) saturate(142%);
+  -webkit-backdrop-filter: blur(18px) saturate(142%);
 }
 
 .search-panel-surface {
@@ -517,17 +517,17 @@ textarea {
     color-mix(in oklch, var(--background) 84%, transparent) 100%
   );
   box-shadow:
-    0 24px 56px rgba(15, 23, 42, 0.14),
+    0 14px 36px rgba(15, 23, 42, 0.14),
     inset 0 1px 0 rgba(255, 255, 255, 0.52);
-  backdrop-filter: blur(24px) saturate(145%);
-  -webkit-backdrop-filter: blur(24px) saturate(145%);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
 }
 
 .dark .search-panel-surface {
   border: 1px solid color-mix(in oklch, var(--foreground) 16%, transparent);
   background: color-mix(in oklch, var(--background) 84%, transparent);
   box-shadow:
-    0 24px 56px rgba(0, 0, 0, 0.42),
+    0 16px 40px rgba(0, 0, 0, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(20px) saturate(165%);
   -webkit-backdrop-filter: blur(20px) saturate(165%);
@@ -615,24 +615,24 @@ textarea {
 .search-control-indicator {
   border: 1px solid color-mix(in oklch, var(--foreground) 12%, transparent);
   background: color-mix(in oklch, var(--background) 88%, transparent);
-  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.1);
 }
 
 .dark .search-control-indicator {
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.32);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
 }
 
 .search-floating-menu {
   overflow: hidden;
   border: 1px solid color-mix(in oklch, var(--foreground) 14%, transparent);
   background: color-mix(in oklch, var(--background) 90%, transparent);
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
   backdrop-filter: blur(18px) saturate(160%);
   -webkit-backdrop-filter: blur(18px) saturate(160%);
 }
 
 .dark .search-floating-menu {
-  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.42);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.34);
 }
 
 .search-surface-card {
@@ -649,7 +649,7 @@ textarea {
     color-mix(in oklch, var(--background) 62%, transparent) 100%
   );
   box-shadow:
-    0 22px 56px rgba(0, 0, 0, 0.24),
+    0 10px 28px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.045);
   backdrop-filter: blur(22px) saturate(152%);
   -webkit-backdrop-filter: blur(22px) saturate(152%);
@@ -664,7 +664,7 @@ textarea {
     color-mix(in oklch, var(--background) 70%, transparent) 100%
   );
   box-shadow:
-    0 24px 56px rgba(0, 0, 0, 0.28),
+    0 14px 36px rgba(0, 0, 0, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(24px) saturate(150%);
   -webkit-backdrop-filter: blur(24px) saturate(150%);
@@ -679,7 +679,7 @@ textarea {
     color-mix(in oklch, var(--background) 72%, transparent) 100%
   );
   box-shadow:
-    0 24px 56px rgba(0, 0, 0, 0.32),
+    0 16px 40px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(26px) saturate(152%);
   -webkit-backdrop-filter: blur(26px) saturate(152%);
@@ -706,7 +706,7 @@ textarea {
     color-mix(in oklch, var(--background) 82%, transparent) 0%,
     color-mix(in oklch, var(--background) 74%, transparent) 100%
   );
-  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.34);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(22px) saturate(150%);
   -webkit-backdrop-filter: blur(22px) saturate(150%);
 }
@@ -725,11 +725,11 @@ textarea {
     color-mix(in oklch, var(--background) 82%, transparent) 100%
   );
   box-shadow:
-    0 24px 58px rgba(0, 0, 0, 0.5),
+    0 12px 32px rgba(0, 0, 0, 0.32),
     0 1px 0 rgba(255, 255, 255, 0.04),
     inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  backdrop-filter: blur(28px) saturate(158%);
-  -webkit-backdrop-filter: blur(28px) saturate(158%);
+  backdrop-filter: blur(24px) saturate(145%);
+  -webkit-backdrop-filter: blur(24px) saturate(145%);
 }
 
 .dark.window-style-native-mica .launchpad-glass-panel-strong {
@@ -740,11 +740,11 @@ textarea {
     color-mix(in oklch, var(--background) 88%, transparent) 100%
   );
   box-shadow:
-    0 30px 64px rgba(0, 0, 0, 0.54),
+    0 18px 44px rgba(0, 0, 0, 0.36),
     0 1px 0 rgba(255, 255, 255, 0.05),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(30px) saturate(160%);
-  -webkit-backdrop-filter: blur(30px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(148%);
+  -webkit-backdrop-filter: blur(24px) saturate(148%);
 }
 
 .dark.window-style-native-mica .search-panel-surface {
@@ -755,11 +755,11 @@ textarea {
     color-mix(in oklch, var(--background) 90%, transparent) 100%
   );
   box-shadow:
-    0 32px 70px rgba(0, 0, 0, 0.56),
+    0 20px 48px rgba(0, 0, 0, 0.4),
     0 1px 0 rgba(255, 255, 255, 0.05),
     inset 0 1px 0 rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(30px) saturate(160%);
-  -webkit-backdrop-filter: blur(30px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(148%);
+  -webkit-backdrop-filter: blur(24px) saturate(148%);
 }
 
 .dark.window-style-native-mica .launchpad-glass-button {
@@ -781,7 +781,7 @@ textarea {
     color-mix(in oklch, var(--background) 90%, transparent) 100%
   );
   box-shadow:
-    0 28px 60px rgba(0, 0, 0, 0.54),
+    0 18px 42px rgba(0, 0, 0, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(28px) saturate(160%);
   -webkit-backdrop-filter: blur(28px) saturate(160%);
@@ -790,4 +790,33 @@ textarea {
 .dark.window-style-native-mica .search-surface-card {
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: color-mix(in oklch, var(--background) 76%, transparent);
+}
+
+@media (forced-colors: active) {
+  .launchpad-bg,
+  .launchpad-glass-panel,
+  .launchpad-glass-panel-strong,
+  .search-panel-surface,
+  .search-floating-menu,
+  .search-surface-card {
+    border-color: ButtonText;
+    background: Canvas;
+    color: CanvasText;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  [role='button']:focus-visible,
+  [role='scrollbar']:focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 2px;
+  }
+
+  .icon-label {
+    text-shadow: none;
+  }
 }

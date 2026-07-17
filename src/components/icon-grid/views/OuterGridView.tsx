@@ -120,8 +120,7 @@ export function OuterGridView({
   const snapshotCloneRef = useRef<HTMLDivElement | null>(null)
   const prevGridSnapshotRef = useRef<string>('')
   const gridClipRef = useRef<HTMLDivElement | null>(null)
-  const highlightedOuterItemIdSet = useRef(new Set<string>())
-  highlightedOuterItemIdSet.current = new Set(highlightedOuterItemIds)
+  const highlightedOuterItemIdSet = new Set(highlightedOuterItemIds)
 
   // Capture grid innerHTML after every render for use as the "old page" snapshot
   useLayoutEffect(() => {
@@ -245,7 +244,7 @@ export function OuterGridView({
 
         {pageAnchorEntries.map(entry => {
           const hideItem = hiddenOuterItemIds.includes(entry.id)
-          const highlightedItem = highlightedOuterItemIdSet.current.has(entry.id)
+          const highlightedItem = highlightedOuterItemIdSet.has(entry.id)
           const folderPreview =
             (dragContext === 'outer' && dragFolderPreviewTargetId === entry.id) ||
             folderPreviewFreezeTargetId === entry.id ||
