@@ -43,7 +43,6 @@ import { getSearchPreview, recordSearchResultRun } from '@/lib/search/api'
 import { getSearchFilterLabel, getSearchFilterOptions } from '@/lib/search/filters'
 import { SearchFloatingMenu } from '@/components/search/SearchFloatingMenu'
 import { useSearch } from '@/lib/search/useSearch'
-import { SearchPanel } from '@/components/search/SearchPanel'
 import { LAUNCHPAD_LAYOUT_RESET_EVENT } from '@/components/icon-grid/services/layoutStore'
 import {
   ContextMenu,
@@ -67,7 +66,6 @@ import type {
   TitleLineCount,
   WindowMode,
 } from '@/types'
-import { IconGrid } from './IconGrid'
 import type { AiOrganizePanelRunState } from './ai/AiOrganizePanel'
 import type { AddIconDialogDraft } from './icons/AddIconDialog'
 import { Button } from './ui/button'
@@ -102,9 +100,13 @@ const GRID_VIEW_MODE_OPTIONS: { label: string; value: LaunchpadGridViewMode }[] 
   { label: '侧栏滚动', value: 'scroll' },
 ]
 
+const loadScrollableIconGrid = () => import('./ScrollableIconGrid')
 const ScrollableIconGrid = lazy(() =>
-  import('./ScrollableIconGrid').then(module => ({ default: module.ScrollableIconGrid }))
+  loadScrollableIconGrid().then(module => ({ default: module.ScrollableIconGrid }))
 )
+
+const loadIconGrid = () => import('./IconGrid')
+const IconGrid = lazy(() => loadIconGrid().then(module => ({ default: module.IconGrid })))
 
 const AddIconDialog = lazy(() =>
   import('./icons/AddIconDialog').then(module => ({ default: module.AddIconDialog }))
@@ -112,6 +114,10 @@ const AddIconDialog = lazy(() =>
 
 const AiOrganizePanel = lazy(() =>
   import('./ai/AiOrganizePanel').then(module => ({ default: module.AiOrganizePanel }))
+)
+
+const SearchPanel = lazy(() =>
+  import('./search/SearchPanel').then(module => ({ default: module.SearchPanel }))
 )
 
 const LONG_PRESS_MS = 420
@@ -307,6 +313,7 @@ export function Launchpad() {
   const filterButtonRef = useRef<HTMLButtonElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const [isSearchPanelOpen, setIsSearchPanelOpen] = useState(false)
+  const [searchPanelLoaded, setSearchPanelLoaded] = useState(false)
   const [isSearchPreviewVisible, setIsSearchPreviewVisible] = useState(true)
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false)
   const [selectedIconResultIndex, setSelectedIconResultIndex] = useState(-1)
@@ -322,6 +329,10 @@ export function Launchpad() {
   const [editingIcon, setEditingIcon] = useState<DesktopIcon | null>(null)
   const [addIconInitialDraft, setAddIconInitialDraft] = useState<AddIconDialogDraft | null>(null)
   const [addIconDialogOpen, setAddIconDialogOpen] = useState(false)
+  const openSearchPanel = useCallback(() => {
+    setSearchPanelLoaded(true)
+    setIsSearchPanelOpen(true)
+  }, [])
   const [marquee, setMarquee] = useState<{
     startX: number
     startY: number
@@ -441,7 +452,12 @@ export function Launchpad() {
     void (async () => {
       try {
         await hydrateSettings()
-        const { windowMode: currentWindowMode, applyWindowMode } = useIconStore.getState()
+        const {
+          windowMode: currentWindowMode,
+          launchpadGridViewMode: currentGridViewMode,
+          applyWindowMode,
+        } = useIconStore.getState()
+        void (currentGridViewMode === 'scroll' ? loadScrollableIconGrid() : loadIconGrid())
         await applyWindowMode(currentWindowMode)
         await waitForWindowGeometrySync()
         await fetchIcons()
@@ -1090,9 +1106,9 @@ export function Launchpad() {
     }
 
     if (hasSearchKeyword) {
-      setIsSearchPanelOpen(true)
+      openSearchPanel()
     }
-  }, [hasSearchKeyword, searchSource])
+  }, [hasSearchKeyword, openSearchPanel, searchSource])
 
   useEffect(() => {
     if (searchSource !== 'icons' || !isSearchPanelOpen || iconSearchResults.length === 0) {
@@ -1360,7 +1376,7 @@ export function Launchpad() {
       if (key === 'ArrowDown') {
         preventDefault()
         if (!isSearchPanelVisible && hasSearchKeyword) {
-          setIsSearchPanelOpen(true)
+          openSearchPanel()
         }
         moveSelection(1)
         return
@@ -1369,7 +1385,7 @@ export function Launchpad() {
       if (key === 'ArrowUp') {
         preventDefault()
         if (!isSearchPanelVisible && hasSearchKeyword) {
-          setIsSearchPanelOpen(true)
+          openSearchPanel()
         }
         moveSelection(-1)
         return
@@ -1378,7 +1394,7 @@ export function Launchpad() {
       if (key === 'Enter') {
         preventDefault()
         if (!isSearchPanelVisible && hasSearchKeyword) {
-          setIsSearchPanelOpen(true)
+          openSearchPanel()
         }
         if (!searchSettings.liveOnType) {
           if (!isKeywordCommitted) {
@@ -1423,6 +1439,7 @@ export function Launchpad() {
       iconSearchResults,
       isKeywordCommitted,
       isSearchPanelVisible,
+      openSearchPanel,
       moveSelection,
       requestSearchRange,
       searchSettings.liveOnType,
@@ -1687,11 +1704,11 @@ export function Launchpad() {
                 onChange={e => {
                   setKeyword(e.target.value)
                   if (!isSearchPanelOpen) {
-                    setIsSearchPanelOpen(true)
+                    openSearchPanel()
                   }
                 }}
                 onFocus={() => {
-                  setIsSearchPanelOpen(true)
+                  openSearchPanel()
                 }}
                 onKeyDown={handleSearchInputKeyDown}
                 placeholder={
@@ -1755,62 +1772,66 @@ export function Launchpad() {
             </div>
           </div>
 
-          <SearchPanel
-            source={searchSource}
-            keyword={keyword}
-            onSourceChange={setSearchSource}
-            visible={isSearchPanelOpen}
-            loading={searchLoading}
-            searchPending={searchPending}
-            loadingMore={searchLoadingMore}
-            error={searchError}
-            onRetry={submitSearch}
-            runtimeState={searchRuntimeState}
-            totalResults={searchTotalResults}
-            loadedCount={searchLoadedCount}
-            pageSize={searchSettings.maxResultsPerPage}
-            hasCommittedQuery={hasCommittedQuery}
-            getItemAt={getSearchItemAt}
-            selectedItem={selectedSearchItem}
-            selectedIndex={selectedIndex}
-            iconResults={iconSearchResults}
-            selectedIconIndex={selectedIconResultIndex}
-            onSelectIcon={setSelectedIconResultIndex}
-            onActivateIcon={icon => {
-              void launchIconItem(icon)
-            }}
-            matchPath={searchMatchPath}
-            onMatchPathChange={setSearchMatchPath}
-            matchCase={searchMatchCase}
-            onMatchCaseChange={setSearchMatchCase}
-            regex={searchRegex}
-            onRegexChange={setSearchRegex}
-            wholeWord={searchWholeWord}
-            onWholeWordChange={setSearchWholeWord}
-            sort={searchSort}
-            onSortChange={setSearchSort}
-            history={searchHistory}
-            onHistorySelect={applyHistoryEntry}
-            onHistoryRemove={id => {
-              void removeHistoryEntry(id)
-            }}
-            onHistoryClear={() => {
-              void clearHistory()
-            }}
-            preview={searchPreview}
-            previewLoading={searchPreviewLoading}
-            previewError={searchPreviewError}
-            previewVisible={isSearchPreviewVisible}
-            onPreviewToggle={() => {
-              setIsSearchPreviewVisible(visible => !visible)
-            }}
-            onVisibleRangeChange={setSearchVisibleRange}
-            onSelect={setSelectedIndex}
-            allowDoubleClickOpen={searchSettings.openOnDoubleClick}
-            onActivate={item => {
-              void launchSearchItem(item.path)
-            }}
-          />
+          {searchPanelLoaded ? (
+            <Suspense fallback={null}>
+              <SearchPanel
+                source={searchSource}
+                keyword={keyword}
+                onSourceChange={setSearchSource}
+                visible={isSearchPanelOpen}
+                loading={searchLoading}
+                searchPending={searchPending}
+                loadingMore={searchLoadingMore}
+                error={searchError}
+                onRetry={submitSearch}
+                runtimeState={searchRuntimeState}
+                totalResults={searchTotalResults}
+                loadedCount={searchLoadedCount}
+                pageSize={searchSettings.maxResultsPerPage}
+                hasCommittedQuery={hasCommittedQuery}
+                getItemAt={getSearchItemAt}
+                selectedItem={selectedSearchItem}
+                selectedIndex={selectedIndex}
+                iconResults={iconSearchResults}
+                selectedIconIndex={selectedIconResultIndex}
+                onSelectIcon={setSelectedIconResultIndex}
+                onActivateIcon={icon => {
+                  void launchIconItem(icon)
+                }}
+                matchPath={searchMatchPath}
+                onMatchPathChange={setSearchMatchPath}
+                matchCase={searchMatchCase}
+                onMatchCaseChange={setSearchMatchCase}
+                regex={searchRegex}
+                onRegexChange={setSearchRegex}
+                wholeWord={searchWholeWord}
+                onWholeWordChange={setSearchWholeWord}
+                sort={searchSort}
+                onSortChange={setSearchSort}
+                history={searchHistory}
+                onHistorySelect={applyHistoryEntry}
+                onHistoryRemove={id => {
+                  void removeHistoryEntry(id)
+                }}
+                onHistoryClear={() => {
+                  void clearHistory()
+                }}
+                preview={searchPreview}
+                previewLoading={searchPreviewLoading}
+                previewError={searchPreviewError}
+                previewVisible={isSearchPreviewVisible}
+                onPreviewToggle={() => {
+                  setIsSearchPreviewVisible(visible => !visible)
+                }}
+                onVisibleRangeChange={setSearchVisibleRange}
+                onSelect={setSelectedIndex}
+                allowDoubleClickOpen={searchSettings.openOnDoubleClick}
+                onActivate={item => {
+                  void launchSearchItem(item.path)
+                }}
+              />
+            </Suspense>
+          ) : null}
 
           {isAiOrganizeMode ? (
             <div
@@ -2118,11 +2139,17 @@ export function Launchpad() {
               />
             </Suspense>
           ) : (
-            <IconGrid
-              icons={icons}
-              layoutResetToken={layoutResetToken}
-              importPlacementRequest={importPlacementRequest}
-            />
+            <Suspense
+              fallback={
+                <span className="text-sm text-foreground/70">{translate('Loading...')}</span>
+              }
+            >
+              <IconGrid
+                icons={icons}
+                layoutResetToken={layoutResetToken}
+                importPlacementRequest={importPlacementRequest}
+              />
+            </Suspense>
           )}
         </div>
       </ContextMenuTrigger>
