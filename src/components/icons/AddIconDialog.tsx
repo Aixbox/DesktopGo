@@ -56,10 +56,14 @@ type IconSource = 'target' | 'custom' | 'text'
 const ICON_COLOR_LABELS: Record<IconColorId, string> = {
   none: '无色',
   ocean: '海蓝',
+  cyan: '湖青',
   emerald: '翠绿',
+  lime: '青柠',
   amber: '琥珀',
   coral: '珊瑚',
+  pink: '莓红',
   plum: '梅紫',
+  graphite: '石墨',
 }
 
 const DEFAULT_TEXT_ICON_TEXT = 'D'
@@ -164,6 +168,7 @@ export function AddIconDialog({
   const [targetPreviewLoading, setTargetPreviewLoading] = useState(false)
   const [customPreview, setCustomPreview] = useState('')
   const [customPreviewLoading, setCustomPreviewLoading] = useState(false)
+  const [customPreviewRevision, setCustomPreviewRevision] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const toast = useToast()
   const [websitePreview, setWebsitePreview] = useState('')
@@ -325,7 +330,7 @@ export function AddIconDialog({
     }, 280)
 
     return () => window.clearTimeout(timer)
-  }, [customIconPath, open])
+  }, [customIconPath, customPreviewRevision, open])
 
   const handleDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
@@ -507,6 +512,7 @@ export function AddIconDialog({
       setCustomIconPath(selected)
       setCustomPreview('')
       setCustomPreviewLoading(true)
+      setCustomPreviewRevision(current => current + 1)
       setSelectedIconSource('custom')
     } catch (error) {
       toast.error(translate('选择自定义图标失败：{error}', { error: String(error) }), {
@@ -904,16 +910,11 @@ export function AddIconDialog({
                 <div
                   role="radiogroup"
                   aria-label={translate('图标颜色')}
-                  className="flex min-h-9 flex-wrap items-center gap-2"
+                  className="flex min-h-9 flex-wrap items-center gap-1.5"
                 >
                   {ICON_COLOR_PRESETS.map(preset => {
                     const colorLabel = translate(ICON_COLOR_LABELS[preset.id])
                     const selected = iconColor === preset.id
-                    const disabled =
-                      submitting ||
-                      (preset.id !== 'none' &&
-                        selectedIconSource !== 'text' &&
-                        !selectedRasterPreview)
                     return (
                       <button
                         key={preset.id}
@@ -923,9 +924,9 @@ export function AddIconDialog({
                         aria-label={colorLabel}
                         title={colorLabel}
                         onClick={() => setIconColor(preset.id)}
-                        disabled={disabled}
+                        disabled={submitting}
                         className={cn(
-                          'relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-[border-color,box-shadow,transform] duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-35 motion-reduce:transform-none motion-reduce:transition-none',
+                          'relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-[border-color,box-shadow,transform] duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-35 motion-reduce:transform-none motion-reduce:transition-none',
                           selected
                             ? 'border-foreground ring-2 ring-foreground/15'
                             : 'border-border hover:border-foreground/40',
@@ -933,9 +934,9 @@ export function AddIconDialog({
                         )}
                         style={preset.id === 'none' ? undefined : { backgroundColor: preset.color }}
                       >
-                        {preset.id === 'none' ? <Ban className="h-4 w-4" /> : null}
+                        {preset.id === 'none' ? <Ban className="h-3.5 w-3.5" /> : null}
                         {selected && preset.id !== 'none' ? (
-                          <Check className="absolute h-4 w-4 text-white" />
+                          <Check className="absolute h-3.5 w-3.5 text-white" />
                         ) : null}
                       </button>
                     )
@@ -955,11 +956,11 @@ export function AddIconDialog({
                       if (selectedIconSource !== 'text') handleIconSourceChange('text')
                       setIconText(normalizeTextIconText(event.target.value))
                     }}
-                    placeholder={translate('输入一到两个字符')}
+                    placeholder={translate('输入最多六个字符')}
                     disabled={submitting}
                   />
                   <span className="block text-xs leading-5 text-muted-foreground">
-                    {translate('最多使用两个字符生成图标。')}
+                    {translate('最多使用六个字符生成图标，内容较长时会自动缩小并保持单行。')}
                   </span>
                 </div>
               </FormRow>
@@ -981,7 +982,7 @@ export function AddIconDialog({
                             : 'border-border hover:border-foreground/30'
                         )}
                         style={
-                          selectedIconSource === 'target' && iconColor !== 'none'
+                          iconColor !== 'none'
                             ? { backgroundColor: selectedColorPreset?.color }
                             : undefined
                         }
@@ -992,12 +993,7 @@ export function AddIconDialog({
                           <img
                             src={automaticPreview}
                             alt={automaticPreviewLabel}
-                            className={cn(
-                              'object-contain',
-                              selectedIconSource === 'target' && iconColor !== 'none'
-                                ? 'h-10 w-10'
-                                : 'h-full w-full'
-                            )}
+                            className="h-full w-full object-contain"
                           />
                         ) : entryKind === 'website' ? (
                           <Globe2 className="h-5 w-5 text-muted-foreground" />
@@ -1047,55 +1043,50 @@ export function AddIconDialog({
 
                     <div className="flex w-20 flex-col items-center gap-1.5">
                       {customIconPath ? (
-                        <div className="relative">
-                          <button
-                            type="button"
-                            aria-pressed={selectedIconSource === 'custom'}
-                            aria-label={translate('使用自定义图标')}
-                            onClick={() => handleIconSourceChange('custom')}
-                            disabled={submitting || !customPreview}
-                            className={cn(
-                              'relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
-                              selectedIconSource === 'custom'
-                                ? 'border-primary ring-2 ring-primary/20'
-                                : 'border-border hover:border-foreground/30'
-                            )}
-                            style={
-                              selectedIconSource === 'custom' && iconColor !== 'none'
-                                ? { backgroundColor: selectedColorPreset?.color }
-                                : undefined
+                        <button
+                          type="button"
+                          aria-pressed={selectedIconSource === 'custom'}
+                          aria-label={translate(
+                            selectedIconSource === 'custom' ? '更换自定义图标' : '使用自定义图标'
+                          )}
+                          title={translate(
+                            selectedIconSource === 'custom' ? '更换自定义图标' : '使用自定义图标'
+                          )}
+                          onClick={() => {
+                            if (selectedIconSource === 'custom') {
+                              void handlePickCustomIcon()
+                            } else {
+                              handleIconSourceChange('custom')
                             }
-                          >
-                            {customPreviewLoading ? (
-                              <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-                            ) : customPreview ? (
-                              <img
-                                src={customPreview}
-                                alt={translate('自定义图标')}
-                                className={cn(
-                                  'object-contain',
-                                  selectedIconSource === 'custom' && iconColor !== 'none'
-                                    ? 'h-10 w-10'
-                                    : 'h-full w-full'
-                                )}
-                              />
-                            ) : (
-                              <CircleAlert className="h-5 w-5 text-amber-500" />
-                            )}
-                            {selectedIconSource === 'custom' && customPreview ? (
-                              <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
-                            ) : null}
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={translate('更换自定义图标')}
-                            onClick={() => void handlePickCustomIcon()}
-                            disabled={submitting}
-                            className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-                          >
-                            <ImagePlus className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                          }}
+                          disabled={submitting || !customPreview}
+                          className={cn(
+                            'relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
+                            selectedIconSource === 'custom'
+                              ? 'border-primary ring-2 ring-primary/20'
+                              : 'border-border hover:border-foreground/30'
+                          )}
+                          style={
+                            iconColor !== 'none'
+                              ? { backgroundColor: selectedColorPreset?.color }
+                              : undefined
+                          }
+                        >
+                          {customPreviewLoading ? (
+                            <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                          ) : customPreview ? (
+                            <img
+                              src={customPreview}
+                              alt={translate('自定义图标')}
+                              className="h-full w-full object-contain"
+                            />
+                          ) : (
+                            <CircleAlert className="h-5 w-5 text-amber-500" />
+                          )}
+                          {selectedIconSource === 'custom' && customPreview ? (
+                            <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
+                          ) : null}
+                        </button>
                       ) : (
                         <button
                           type="button"

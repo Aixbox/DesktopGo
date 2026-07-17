@@ -396,6 +396,20 @@ pub async fn extract_website_icon(value: String) -> Result<WebsiteIconResult, St
 // ===== Windows implementations =====
 
 #[cfg(windows)]
+fn image_file_to_data_uri(path: &PathBuf, icon_size: i32) -> Option<String> {
+    let size = icon_size.max(1) as u32;
+    let image = image::open(path)
+        .ok()?
+        .resize(size, size, image::imageops::FilterType::Lanczos3);
+    let mut output = Cursor::new(Vec::new());
+    image.write_to(&mut output, image::ImageFormat::Png).ok()?;
+    Some(format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(output.into_inner())
+    ))
+}
+
+#[cfg(windows)]
 fn get_path_icon_base64_windows(path: &str, icon_size: i32) -> String {
     if is_special_shell_path(path) {
         return extract_special_shell_icon(path, icon_size).unwrap_or_default();
@@ -404,6 +418,11 @@ fn get_path_icon_base64_windows(path: &str, icon_size: i32) -> String {
     let item_path = PathBuf::from(path);
     if !item_path.exists() {
         return String::new();
+    }
+    if item_path.is_file() {
+        if let Some(data_uri) = image_file_to_data_uri(&item_path, icon_size) {
+            return data_uri;
+        }
     }
 
     let item_path_text = item_path.to_string_lossy().to_string();
@@ -728,6 +747,31 @@ fn build_custom_icon_paths(
     if !icon_path.is_file() {
         return Err("Custom icon path does not point to a file".to_string());
     }
+    if let Ok(source_image) = image::open(&icon_path) {
+        return Ok(SnapshotIconPaths {
+            small: save_data_icon_for_bucket(
+                app_handle,
+                &source_image,
+                id,
+                IconBucket::Small,
+                source,
+            )?,
+            medium: save_data_icon_for_bucket(
+                app_handle,
+                &source_image,
+                id,
+                IconBucket::Medium,
+                source,
+            )?,
+            large: save_data_icon_for_bucket(
+                app_handle,
+                &source_image,
+                id,
+                IconBucket::Large,
+                source,
+            )?,
+        });
+    }
     let icon_item = build_scanned_item_from_path(&icon_path)
         .ok_or_else(|| "Custom icon file does not exist or is not supported".to_string())?;
     let icons = SnapshotIconPaths {
@@ -873,7 +917,8 @@ fn normalize_icon_source(value: &str, custom_icon_path: &str) -> String {
 #[cfg(windows)]
 fn normalize_icon_color(value: &str) -> String {
     match value.trim() {
-        "ocean" | "emerald" | "amber" | "coral" | "plum" => value.trim().to_string(),
+        "ocean" | "cyan" | "emerald" | "lime" | "amber" | "coral" | "pink" | "plum"
+        | "graphite" => value.trim().to_string(),
         _ => "none".to_string(),
     }
 }
