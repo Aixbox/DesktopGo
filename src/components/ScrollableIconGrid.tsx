@@ -139,8 +139,17 @@ const getDefaultFolderColumnCount = (tileWidth: number) =>
 const EMPTY_SCROLL_RENDER_ORDER: Array<string | null> = []
 const EMPTY_SCROLL_GRID_SECTIONS: ScrollGridSection[] = []
 
-const getPageCountForSlots = (slots: Array<string | null>, pageSize: number) =>
-  Math.max(1, Math.ceil(Math.max(Math.max(1, pageSize), slots.length) / Math.max(1, pageSize)))
+const getOccupiedPageCountForSlots = (slots: Array<string | null>, pageSize: number) => {
+  const safePageSize = Math.max(1, pageSize)
+  let lastOccupiedIndex = -1
+  for (let index = slots.length - 1; index >= 0; index -= 1) {
+    const slot = slots[index]
+    if (typeof slot !== 'string' || slot === DRAG_HOLE_ID) continue
+    lastOccupiedIndex = index
+    break
+  }
+  return Math.max(1, Math.ceil((lastOccupiedIndex + 1) / safePageSize))
+}
 
 const padSlotsToPageCount = (
   slots: Array<string | null>,
@@ -629,7 +638,7 @@ export function ScrollableIconGrid({
         ? () =>
             Math.max(
               scrollGroupCount,
-              getPageCountForSlots(outerSlotsRef.current, pageSizeRef.current || pageSize)
+              getOccupiedPageCountForSlots(outerSlotsRef.current, pageSizeRef.current || pageSize)
             )
         : undefined,
     itemWidth,
@@ -1039,7 +1048,7 @@ export function ScrollableIconGrid({
             outerItems,
             layoutMetrics.pageSize,
             layoutMetrics.columns,
-            Math.max(scrollGroupCount, getPageCountForSlots(result, layoutMetrics.pageSize))
+            Math.max(scrollGroupCount, getOccupiedPageCountForSlots(result, layoutMetrics.pageSize))
           )
         : compactEmptyPages(result, layoutMetrics.pageSize)
 
@@ -1245,7 +1254,10 @@ export function ScrollableIconGrid({
   }, [columns, importPlacementRequest, outerItemIds, pageSize])
 
   const outerRenderCount = Math.max(pageSize, renderOrder.length)
-  const layoutPageCount = Math.max(1, Math.ceil(outerRenderCount / pageSize))
+  const layoutPageCount =
+    launchpadGridViewMode === 'scroll'
+      ? getOccupiedPageCountForSlots(renderOrder, pageSize)
+      : Math.max(1, Math.ceil(outerRenderCount / pageSize))
   const pageCount =
     launchpadGridViewMode === 'scroll'
       ? Math.max(layoutPageCount, scrollGroupCount)
