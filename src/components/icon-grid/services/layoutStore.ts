@@ -17,7 +17,13 @@ import type { DesktopIcon } from '../../../types'
 import { buildIconSelectionKey } from '../../../stores/iconStore'
 
 export const LAYOUT_KEY = 'desktopgo.launchpad.layout.v1'
+export const SCROLL_LAYOUT_KEY = 'desktopgo.launchpad.layout.scroll.v1'
 export const LAUNCHPAD_LAYOUT_RESET_EVENT = 'launchpad:layout-reset'
+
+export type LaunchpadLayoutScope = 'paged' | 'scroll'
+
+const getLayoutKey = (scope: LaunchpadLayoutScope) =>
+  scope === 'scroll' ? SCROLL_LAYOUT_KEY : LAYOUT_KEY
 
 export const serializeItems = (items: GridItem[]): PersistedItem[] =>
   items.map<PersistedItem>(item =>
@@ -85,9 +91,11 @@ const normalizePersistedItemCoordinates = (
   return result.length > 0 ? result : undefined
 }
 
-export const readLayout = async (): Promise<PersistedLayout | null> => {
+export const readLayout = async (
+  scope: LaunchpadLayoutScope = 'paged'
+): Promise<PersistedLayout | null> => {
   try {
-    const raw = await invoke<string | null>('get_layout_payload', { key: LAYOUT_KEY })
+    const raw = await invoke<string | null>('get_layout_payload', { key: getLayoutKey(scope) })
     if (!raw) return null
     const parsed = JSON.parse(raw) as
       | { version: 1; items: PersistedItem[] }
@@ -201,7 +209,8 @@ export const writeLayout = async (
   pageSize?: number,
   columns?: number,
   geometryKey?: string,
-  scrollGroups?: ScrollGroupMeta[]
+  scrollGroups?: ScrollGroupMeta[],
+  scope: LaunchpadLayoutScope = 'paged'
 ) => {
   const coordinates =
     typeof pageSize === 'number' && typeof columns === 'number' && pageSize > 0 && columns > 0
@@ -218,12 +227,18 @@ export const writeLayout = async (
     geometryKey,
     scrollGroups,
   }
-  await invoke('set_layout_payload', { key: LAYOUT_KEY, payload: JSON.stringify(payload) })
+  await invoke('set_layout_payload', {
+    key: getLayoutKey(scope),
+    payload: JSON.stringify(payload),
+  })
 }
 
-export const writePersistedLayout = async (layout: PersistedLayout | null) => {
+export const writePersistedLayout = async (
+  layout: PersistedLayout | null,
+  scope: LaunchpadLayoutScope = 'paged'
+) => {
   if (!layout) {
-    await writeLayout([], [], [])
+    await writeLayout([], [], [], undefined, undefined, undefined, undefined, scope)
     return
   }
 
@@ -238,11 +253,17 @@ export const writePersistedLayout = async (layout: PersistedLayout | null) => {
     geometryKey: layout.geometryKey,
     scrollGroups: layout.scrollGroups,
   }
-  await invoke('set_layout_payload', { key: LAYOUT_KEY, payload: JSON.stringify(payload) })
+  await invoke('set_layout_payload', {
+    key: getLayoutKey(scope),
+    payload: JSON.stringify(payload),
+  })
 }
 
 export const resetLaunchpadLayout = async () => {
-  await writeLayout([], [], [])
+  await Promise.all([
+    writeLayout([], [], []),
+    writeLayout([], [], [], undefined, undefined, undefined, undefined, 'scroll'),
+  ])
 }
 
 export const hydrateDockKeys = (

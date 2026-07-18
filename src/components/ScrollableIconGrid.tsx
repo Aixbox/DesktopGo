@@ -423,7 +423,7 @@ export function ScrollableIconGrid({
         }
         if (!persistedLayoutLoadedRef.current) {
           if (!persistedLayoutLoadPromiseRef.current) {
-            persistedLayoutLoadPromiseRef.current = readLayout()
+            persistedLayoutLoadPromiseRef.current = readLayout('scroll')
           }
           persistedLayoutRef.current = await persistedLayoutLoadPromiseRef.current
           persistedLayoutLoadedRef.current = true
@@ -523,7 +523,8 @@ export function ScrollableIconGrid({
           nextPageSize,
           nextColumns,
           nextGeometryKey,
-          scrollGroups
+          scrollGroups,
+          'scroll'
         )
       )
       .catch(e => {
