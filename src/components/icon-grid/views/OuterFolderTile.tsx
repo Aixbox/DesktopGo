@@ -400,7 +400,7 @@ export function OuterFolderTile({
             <button
               type="button"
               aria-label={folder.name}
-              className="flex max-w-full items-start justify-center overflow-hidden rounded-md text-center text-[11px] text-foreground transition hover:text-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+              className="flex max-w-full items-start justify-center overflow-hidden rounded-md border-none bg-transparent p-0 text-center text-[11px] font-medium leading-[13px] text-foreground shadow-none transition hover:text-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 active:bg-transparent"
               style={{
                 width: `${Math.min(footprintWidth, bodyWidth)}px`,
                 height: `${titleMetrics.height}px`,
@@ -412,7 +412,7 @@ export function OuterFolderTile({
               }}
             >
               <span
-                className="block w-full"
+                className="icon-label block w-full text-[11px] leading-[13px] text-foreground drop-shadow-md"
                 style={{
                   height: `${titleMetrics.height}px`,
                   lineHeight: `${titleMetrics.lineHeight}px`,
