@@ -5,6 +5,63 @@ import { getFootprintIndices, normalizeOuterSlots } from '../domain/topLevelLayo
 
 const buildItemMap = (items: GridItem[]) => new Map(items.map(item => [getId(item), item]))
 
+export const recoverInfiniteScrollGroupSlots = (
+  slots: Array<string | null>,
+  items: GridItem[],
+  previousPageSize: number,
+  columns: number,
+  groupCount: number
+): Array<string | null> => {
+  const safePreviousPageSize = Math.max(1, previousPageSize)
+  const safeColumns = Math.max(1, columns)
+  const safeGroupCount = Math.max(1, groupCount)
+  const itemById = buildItemMap(items)
+  const validItemIds = new Set(itemById.keys())
+  const consumed = new Set<string>()
+  const groups = Array.from({ length: safeGroupCount }, () => [] as string[])
+
+  const pushUnique = (groupIndex: number, id: string) => {
+    if (!validItemIds.has(id) || consumed.has(id)) return
+    consumed.add(id)
+    groups[groupIndex].push(id)
+  }
+
+  for (let groupIndex = 0; groupIndex < safeGroupCount; groupIndex += 1) {
+    const start = groupIndex * safePreviousPageSize
+    const end = start + safePreviousPageSize
+    slots.slice(start, end).forEach(slot => {
+      if (typeof slot === 'string' && slot !== DRAG_HOLE_ID) pushUnique(groupIndex, slot)
+    })
+  }
+
+  const lastGroupIndex = safeGroupCount - 1
+  slots.slice(safeGroupCount * safePreviousPageSize).forEach(slot => {
+    if (typeof slot === 'string' && slot !== DRAG_HOLE_ID) pushUnique(lastGroupIndex, slot)
+  })
+  items.forEach(item => pushUnique(lastGroupIndex, getId(item)))
+
+  const requiredCellCount = items.reduce((total, item) => {
+    const span = getGridItemSpan(item)
+    return total + span.cols * span.rows
+  }, 0)
+  const groupSize = Math.max(
+    safePreviousPageSize,
+    Math.ceil(Math.max(1, requiredCellCount) / safeColumns) * safeColumns
+  )
+
+  return groups.flatMap(ids => {
+    const groupItems = ids
+      .map(id => itemById.get(id))
+      .filter((item): item is GridItem => Boolean(item))
+    const normalized = normalizeOuterSlots(ids, groupItems, groupSize, safeColumns, {
+      preserveSourceAnchors: false,
+      spillStrategy: 'row-major-forward',
+    }).slice(0, groupSize)
+    while (normalized.length < groupSize) normalized.push(null)
+    return normalized
+  })
+}
+
 export const reorderScrollGroupPages = (
   slots: Array<string | null>,
   pageSize: number,

@@ -5,6 +5,7 @@ import {
   maskDraggingIdsInCompactOrder,
   resolveCompactStableTargetId,
   preserveCompactPreviewOrderForCommit,
+  recoverInfiniteScrollGroupSlots,
   remapScrollPageIndexAfterReorder,
   reorderScrollGroupPages,
 } from './scrollTopLevelLayout.ts'
@@ -41,6 +42,40 @@ const makeFolder = (id, size) => ({
   size,
   children: [],
 })
+
+const recoveredInfiniteGroups = recoverInfiniteScrollGroupSlots(
+  ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'],
+  ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'].map(makeIcon),
+  2,
+  2,
+  3
+)
+assertContainsEachIdOnce(
+  recoveredInfiniteGroups,
+  ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'],
+  'Recovering infinite scroll groups must retain every shared icon exactly once'
+)
+assert(
+  recoveredInfiniteGroups
+    .slice(0, 6)
+    .filter(id => typeof id === 'string')
+    .join(',') === 'a,b',
+  'Recovery must preserve the first existing group members'
+)
+assert(
+  recoveredInfiniteGroups
+    .slice(6, 12)
+    .filter(id => typeof id === 'string')
+    .join(',') === 'c,d',
+  'Recovery must preserve the second existing group members'
+)
+assert(
+  recoveredInfiniteGroups
+    .slice(12)
+    .filter(id => typeof id === 'string')
+    .join(',') === 'e,f,g,h,i',
+  'Icons from obsolete tail groups and missing shared icons must move into the last real group'
+)
 
 const buildPreview = overrides => {
   const slots = overrides.slots

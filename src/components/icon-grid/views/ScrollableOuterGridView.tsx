@@ -652,8 +652,8 @@ export function ScrollableOuterGridView({
                               data-grid-mode-nav
                               data-scroll-group-target={section.index}
                               className={[
-                                'relative flex min-w-0 max-w-full items-center overflow-hidden rounded-md transition-colors',
-                                sidebarCompact ? 'aspect-square min-h-0 w-full' : 'min-h-11',
+                                'scroll-grid-group-item relative min-w-0 max-w-full overflow-hidden rounded-md',
+                                sidebarCompact ? 'scroll-grid-group-item-compact' : '',
                                 sortable.isDragging ? 'opacity-0' : '',
                                 active
                                   ? 'scroll-grid-group-active'
@@ -665,13 +665,10 @@ export function ScrollableOuterGridView({
                                 data-grid-mode-nav
                                 aria-current={active ? 'page' : undefined}
                                 className={[
-                                  'flex w-full min-w-0 max-w-full flex-1 touch-none overflow-hidden rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45',
+                                  'scroll-grid-group-button relative block h-full w-full min-w-0 max-w-full touch-none overflow-hidden rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45',
                                   sections.length > 1
                                     ? 'cursor-grab active:cursor-grabbing'
                                     : 'cursor-default',
-                                  sidebarCompact
-                                    ? 'flex-col items-center justify-center gap-1 px-1 py-1.5 text-center'
-                                    : 'items-center gap-2 px-2.5 py-1.5 text-left',
                                 ].join(' ')}
                                 {...sortable.attributes}
                                 {...sortable.listeners}
@@ -683,48 +680,35 @@ export function ScrollableOuterGridView({
                                   selectSection(section.index)
                                 }}
                               >
-                                {section.meta ? (
-                                  <CustomGroupIcon icon={section.meta.icon} compact />
-                                ) : (
-                                  <GroupPreviewIcon items={section.previewItems} />
-                                )}
-                                <span
-                                  className={
-                                    sidebarCompact
-                                      ? 'w-full min-w-0 overflow-hidden'
-                                      : 'min-w-0 flex-1 overflow-hidden'
-                                  }
-                                >
+                                <span className="scroll-grid-group-icon absolute">
+                                  {section.meta ? (
+                                    <CustomGroupIcon icon={section.meta.icon} compact />
+                                  ) : (
+                                    <GroupPreviewIcon items={section.previewItems} />
+                                  )}
+                                </span>
+                                <span className="scroll-grid-group-copy absolute min-w-0 overflow-hidden">
                                   <span
                                     title={
                                       section.meta?.name ??
                                       translate('网格 {index}', { index: section.index + 1 })
                                     }
-                                    className={[
-                                      'block w-full truncate font-medium',
-                                      sidebarCompact
-                                        ? 'text-[11px] leading-3.5'
-                                        : 'text-[13px] leading-4',
-                                    ].join(' ')}
+                                    className="scroll-grid-group-title block w-full truncate font-medium"
                                   >
                                     {section.meta?.name ??
                                       translate('网格 {index}', { index: section.index + 1 })}
                                   </span>
-                                  {!sidebarCompact ? (
-                                    <span
-                                      data-scroll-group-count
-                                      className="mt-0.5 block text-[11px] leading-3.5 text-muted-foreground"
-                                    >
-                                      {translate('{count} 项', { count: section.itemCount })}
-                                    </span>
-                                  ) : null}
+                                  <span
+                                    data-scroll-group-count
+                                    className="scroll-grid-group-count mt-0.5 block text-[11px] leading-3.5 text-muted-foreground"
+                                  >
+                                    {translate('{count} 项', { count: section.itemCount })}
+                                  </span>
                                 </span>
-                                {!sidebarCompact ? (
-                                  <GripVertical
-                                    aria-hidden="true"
-                                    className="h-4 w-4 shrink-0 text-muted-foreground/55"
-                                  />
-                                ) : null}
+                                <GripVertical
+                                  aria-hidden="true"
+                                  className="scroll-grid-group-grip absolute h-4 w-4 text-muted-foreground/55"
+                                />
                               </button>
                             </div>
                           </ContextMenuTrigger>

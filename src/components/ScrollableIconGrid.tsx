@@ -47,6 +47,7 @@ import {
 } from './icon-grid/domain/topLevelLayout'
 import {
   compactOuterSlotsWithinPages,
+  recoverInfiniteScrollGroupSlots,
   remapScrollPageIndexAfterReorder,
   reorderScrollGroupPages,
 } from './icon-grid/scroll/scrollTopLevelLayout'
@@ -291,6 +292,7 @@ export function ScrollableIconGrid({
   const currentPageRef = useRef(0)
   const pageSizeRef = useRef(1)
   const layoutReadyRef = useRef(false)
+  const previousSidebarCompactRef = useRef(sidebarCompact)
   const wheelDeltaRef = useRef(0)
   const wheelCooldownUntilRef = useRef(0)
   const folderSharedLayoutTimerRef = useRef<number | null>(null)
@@ -325,6 +327,14 @@ export function ScrollableIconGrid({
   const [folderColumns, setFolderColumns] = useState<number>(() =>
     getDefaultFolderColumnCount(columnWidth)
   )
+
+  useEffect(() => {
+    if (launchpadGridViewMode !== 'scroll') return
+    const persistedGroupCount = Math.max(1, scrollGroups.length)
+    setScrollGroupCount(current =>
+      current === persistedGroupCount ? current : persistedGroupCount
+    )
+  }, [launchpadGridViewMode, scrollGroups.length])
 
   dockEnabledRef.current = dockEnabled
 
@@ -447,7 +457,7 @@ export function ScrollableIconGrid({
         ? hydrateDockKeys(nextItemIds, persisted?.dockKeys)
         : []
 
-      const rawSlots = (persisted?.slots ?? []).map(key =>
+      let rawSlots = (persisted?.slots ?? []).map(key =>
         key ? key.replace(/^(desktop|customapp):/, '') : null
       )
       const hasDims =
@@ -462,7 +472,12 @@ export function ScrollableIconGrid({
       // 仅在从持久化水合时重建锁；内存水合（icons 刷新）保留会话内已建立的锁，
       // 避免把 DPI 漂移期的实测值重新锁入。
       if (hydrationSource !== 'memory') {
-        if (hasDims && persisted?.geometryKey && persisted.geometryKey === geometryKey) {
+        if (
+          launchpadGridViewMode !== 'scroll' &&
+          hasDims &&
+          persisted?.geometryKey &&
+          persisted.geometryKey === geometryKey
+        ) {
           const lockedColumns = persisted!.columns!
           const lockedRows = Math.max(1, Math.round(persisted!.pageSize! / lockedColumns))
           lockedGeometryRef.current = {
@@ -480,6 +495,15 @@ export function ScrollableIconGrid({
       outerSlotsRef.current = rawSlots
       dockKeysRef.current = nextDockKeys
       const nextScrollGroups = persisted?.scrollGroups ?? []
+      if (launchpadGridViewMode === 'scroll') {
+        rawSlots = recoverInfiniteScrollGroupSlots(
+          rawSlots,
+          nextItems.filter(item => !nextDockKeys.includes(getId(item))),
+          persisted?.pageSize ?? Math.max(1, rawSlots.length),
+          persisted?.columns ?? Math.max(1, columns),
+          Math.max(1, nextScrollGroups.length)
+        )
+      }
       scrollGroupsRef.current = nextScrollGroups
       setItems(nextItems)
       setOuterSlots(rawSlots)
@@ -633,14 +657,7 @@ export function ScrollableIconGrid({
     columns,
     rows,
     outerDropMode: launchpadGridViewMode === 'scroll' ? 'compact-page' : 'paged',
-    getOuterMinPageCount:
-      launchpadGridViewMode === 'scroll'
-        ? () =>
-            Math.max(
-              scrollGroupCount,
-              getOccupiedPageCountForSlots(outerSlotsRef.current, pageSizeRef.current || pageSize)
-            )
-        : undefined,
+    getOuterMinPageCount: launchpadGridViewMode === 'scroll' ? () => scrollGroupCount : undefined,
     itemWidth,
     itemHeight,
     folderColumns,
@@ -869,6 +886,12 @@ export function ScrollableIconGrid({
     if (!el) return
 
     let raf = 0
+    let sidebarTransitionTimer = 0
+    let sidebarTransitioning =
+      launchpadGridViewMode === 'scroll' &&
+      previousSidebarCompactRef.current !== sidebarCompact &&
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    previousSidebarCompactRef.current = sidebarCompact
     const recalc = () => {
       let width = el.clientWidth
       let height = el.clientHeight
@@ -888,8 +911,24 @@ export function ScrollableIconGrid({
       const minRows = hasTallItems ? 2 : 1
       const baseRows = Math.max(minRows, fitCount(height, layoutRowHeight))
       const nextRowGridHeight = (baseRows + 1) * tileHeight + baseRows * GRID_GAP
-      const resolvedRows = !dockEnabled && nextRowGridHeight <= height ? baseRows + 1 : baseRows
       const nextColumns = Math.max(hasWideItems ? 2 : 1, fitCount(width, tileWidth))
+      const viewportRows = !dockEnabled && nextRowGridHeight <= height ? baseRows + 1 : baseRows
+      const outerItemIdsForLayout = resolveOuterItemIds(
+        itemsRef.current.map(getId),
+        dockEnabledRef.current ? dockKeysRef.current : []
+      )
+      const layoutItemById = new Map(itemsRef.current.map(item => [getId(item), item]))
+      const requiredCellCount = outerItemIdsForLayout.reduce((total, id) => {
+        const item = layoutItemById.get(id)
+        if (!item) return total
+        const span = getGridItemSpan(item)
+        return total + span.cols * span.rows
+      }, 0)
+      const requiredRowsForAnyGroup = Math.ceil(Math.max(1, requiredCellCount) / nextColumns)
+      const resolvedRows =
+        launchpadGridViewMode === 'scroll'
+          ? Math.max(viewportRows, requiredRowsForAnyGroup)
+          : viewportRows
       const nextPageSize = Math.max(1, nextColumns * resolvedRows)
 
       const locked = lockedGeometryRef.current
@@ -900,6 +939,7 @@ export function ScrollableIconGrid({
       if (launchpadGridViewMode === 'scroll') {
         finalColumns = nextColumns
         finalRows = resolvedRows
+        lockedGeometryRef.current = null
       } else if (isLockedForCurrentGeometry) {
         // 几何已锁定：丢弃实测值（DPI/分辨率切换会让实测值漂移甚至瞬时归零），
         // 始终沿用锁定的列数/行数，保证图标位置绝对不动。
@@ -929,17 +969,29 @@ export function ScrollableIconGrid({
       layoutReadyRef.current = true
     }
     const schedule = () => {
+      if (sidebarTransitioning) return
       cancelAnimationFrame(raf)
       raf = requestAnimationFrame(recalc)
     }
 
-    schedule()
+    if (sidebarTransitioning) {
+      sidebarTransitionTimer = window.setTimeout(
+        () => {
+          sidebarTransitioning = false
+          schedule()
+        },
+        sidebarCompact ? 180 : 220
+      )
+    } else {
+      schedule()
+    }
     const observer = new ResizeObserver(schedule)
     observer.observe(el)
     if (gridRef.current) observer.observe(gridRef.current)
     window.addEventListener('resize', schedule)
     return () => {
       cancelAnimationFrame(raf)
+      window.clearTimeout(sidebarTransitionTimer)
       observer.disconnect()
       window.removeEventListener('resize', schedule)
     }
@@ -953,6 +1005,8 @@ export function ScrollableIconGrid({
     geometryKey,
     launchpadGridViewMode,
     layoutHydrationTick,
+    sidebarCompact,
+    scrollGroupCount,
   ])
 
   useEffect(() => {
@@ -1048,7 +1102,7 @@ export function ScrollableIconGrid({
             outerItems,
             layoutMetrics.pageSize,
             layoutMetrics.columns,
-            Math.max(scrollGroupCount, getOccupiedPageCountForSlots(result, layoutMetrics.pageSize))
+            scrollGroupCount
           )
         : compactEmptyPages(result, layoutMetrics.pageSize)
 
@@ -1259,13 +1313,7 @@ export function ScrollableIconGrid({
       ? getOccupiedPageCountForSlots(renderOrder, pageSize)
       : Math.max(1, Math.ceil(outerRenderCount / pageSize))
   const pageCount =
-    launchpadGridViewMode === 'scroll'
-      ? Math.max(layoutPageCount, scrollGroupCount)
-      : layoutPageCount
-  useEffect(() => {
-    if (launchpadGridViewMode !== 'scroll') return
-    setScrollGroupCount(current => Math.max(current, layoutPageCount))
-  }, [launchpadGridViewMode, layoutPageCount])
+    launchpadGridViewMode === 'scroll' ? Math.max(1, scrollGroupCount) : layoutPageCount
   useEffect(() => {
     if (currentPage >= pageCount) {
       const nextPage = pageCount - 1

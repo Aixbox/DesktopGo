@@ -62,6 +62,7 @@ body,
   width: 0;
   height: 0;
 }
+
 .launchpad-scroll-layout {
   --scroll-grid-sidebar-width: 12rem;
 }
@@ -73,17 +74,15 @@ body,
 .launchpad-search-shell {
   left: 0;
   right: 0;
-  transition:
-    left 180ms cubic-bezier(0.22, 1, 0.36, 1),
-    right 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: left 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .launchpad-scroll-layout .launchpad-search-shell {
-  left: var(--scroll-grid-sidebar-width);
+  left: 12rem;
 }
 
-.scroll-grid-layout {
-  transition: grid-template-columns 180ms cubic-bezier(0.22, 1, 0.36, 1);
+.launchpad-scroll-layout.launchpad-scroll-sidebar-compact .launchpad-search-shell {
+  left: 4.5rem;
 }
 
 .scroll-grid-sidebar {
@@ -93,6 +92,10 @@ body,
   -webkit-backdrop-filter: blur(20px) saturate(0.86);
   backdrop-filter: blur(20px) saturate(0.86);
   box-shadow: 12px 0 32px color-mix(in oklch, var(--foreground) 5%, transparent);
+}
+
+.scroll-grid-layout {
+  transition: grid-template-columns 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .scroll-grid-sidebar-header,
@@ -109,6 +112,87 @@ body,
 
 .scroll-grid-group-active [data-scroll-group-count] {
   color: color-mix(in oklch, var(--scroll-group-active-foreground) 68%, transparent);
+}
+
+.scroll-grid-group-item {
+  width: 100%;
+  height: 2.75rem;
+  transition:
+    height 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 160ms ease,
+    background-color 160ms ease,
+    opacity 160ms ease;
+}
+
+.scroll-grid-group-item-compact {
+  height: 3.5rem;
+  transition-duration: 180ms;
+}
+
+.scroll-grid-group-icon {
+  left: 0.625rem;
+  top: 0.5rem;
+  transition:
+    left 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.scroll-grid-group-copy {
+  inset: 0.4375rem 2rem auto 3rem;
+  transition:
+    inset 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.scroll-grid-group-title {
+  font-size: 0.8125rem;
+  line-height: 1rem;
+  text-align: left;
+  transition:
+    font-size 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    line-height 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    text-align 0s linear 110ms;
+}
+
+.scroll-grid-group-count,
+.scroll-grid-group-grip {
+  opacity: 1;
+  transition:
+    opacity 120ms ease,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.scroll-grid-group-grip {
+  right: 0.5rem;
+  top: 0.875rem;
+}
+
+.scroll-grid-group-item-compact .scroll-grid-group-icon {
+  left: 50%;
+  top: 0.375rem;
+  transform: translateX(-50%);
+  transition-duration: 180ms;
+}
+
+.scroll-grid-group-item-compact .scroll-grid-group-copy {
+  inset: 2.25rem 0.25rem auto;
+  transform: translateY(0);
+  transition-duration: 180ms;
+}
+
+.scroll-grid-group-item-compact .scroll-grid-group-title {
+  font-size: 0.6875rem;
+  line-height: 0.875rem;
+  text-align: center;
+  transition-duration: 180ms;
+}
+
+.scroll-grid-group-item-compact .scroll-grid-group-count,
+.scroll-grid-group-item-compact .scroll-grid-group-grip {
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(0.375rem);
 }
 
 .dark .scroll-grid-group-active {
@@ -155,14 +239,49 @@ body,
 }
 
 .scroll-grid-dock {
-  left: calc(50% + (var(--scroll-grid-sidebar-width) / 2));
+  left: calc(50% + 6rem);
   transform: translateX(-50%);
-  transition: left 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: left 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.launchpad-scroll-sidebar-compact .scroll-grid-dock {
+  left: calc(50% + 2.25rem);
+  transition-duration: 180ms;
 }
 
 @media (max-width: 900px) {
   .launchpad-scroll-layout {
     --scroll-grid-sidebar-width: 10.5rem;
+  }
+
+  .launchpad-scroll-layout:not(.launchpad-scroll-sidebar-compact) .launchpad-search-shell {
+    left: 10.5rem;
+  }
+
+  .launchpad-scroll-layout:not(.launchpad-scroll-sidebar-compact) .scroll-grid-sidebar {
+    width: 10.5rem;
+  }
+
+  .launchpad-scroll-layout:not(.launchpad-scroll-sidebar-compact) .scroll-grid-content-scroll {
+    left: 10.5rem;
+  }
+
+  .launchpad-scroll-layout:not(.launchpad-scroll-sidebar-compact) .scroll-grid-dock {
+    left: calc(50% + 5.25rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .launchpad-search-shell,
+  .scroll-grid-sidebar,
+  .scroll-grid-dock,
+  .scroll-grid-group-item,
+  .scroll-grid-group-icon,
+  .scroll-grid-group-copy,
+  .scroll-grid-group-title,
+  .scroll-grid-group-count,
+  .scroll-grid-group-grip {
+    transition-duration: 0.01ms !important;
   }
 }
 
