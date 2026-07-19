@@ -87,10 +87,13 @@ import {
   DragOverlay,
   KeyboardSensor,
   PointerSensor,
+  pointerWithin,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragCancelEvent,
   type DragEndEvent,
+  type DragMoveEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
 import {
@@ -99,17 +102,19 @@ import {
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
+  type SortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { useReducedMotion } from 'framer-motion'
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type MutableRefObject,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
@@ -122,7 +127,9 @@ import {
   ICON_GRID_TITLE_GAP,
 } from '../../../types'
 import type { FolderSize, GridItem, ScrollGroupIcon, ScrollGroupMeta } from '../model'
+import { getGridItemSpan } from '../model'
 import type { PageAnchorEntry } from '../domain/topLevelLayout'
+import { buildScrollGroupEntries, isPointInScrollMergeZone } from '../scroll/scrollGroupLayout'
 import { FolderCreatePreview } from './FolderVisuals'
 import { OuterFolderTile } from './OuterFolderTile'
 import {
@@ -136,8 +143,16 @@ interface IconConfigLike {
   imgSize: number
 }
 
+const EMPTY_PAGE_ANCHOR_ENTRIES: PageAnchorEntry[] = []
+
+interface LogicalGridHit {
+  entry: PageAnchorEntry
+  rect: { left: number; top: number; width: number; height: number }
+}
+
 export interface ScrollGridSection {
   index: number
+  groupId: string
   entries: PageAnchorEntry[]
   itemCount: number
   previewItems: GridItem[]
@@ -169,14 +184,17 @@ interface ScrollableOuterGridViewProps {
   openFolderId: string | null
   activeFolderSharedLayoutId: string | null
   onActivePageChange: (page: number) => void
-  onAddGroup: (meta: ScrollGroupMeta) => void
-  onEditGroup: (page: number, meta: ScrollGroupMeta) => void
+  onAddGroup: (meta: Pick<ScrollGroupMeta, 'name' | 'icon'>) => void
+  onEditGroup: (page: number, meta: Pick<ScrollGroupMeta, 'name' | 'icon'>) => void
   onReorderGroup: (sourcePage: number, targetPage: number) => void
+  onCommitItemOrder: (groupId: string, itemIds: string[]) => void
+  onMoveItemToGroup: (itemId: string, targetGroupId: string) => void
+  onMoveItemToDock: (itemId: string, targetIndex: number) => void
+  onMergeItems: (sourceId: string, targetId: string) => void
   addIconDisabled: boolean
   onAddIcon?: () => void
   onDeleteGroup: (page: number) => void
   onToggleSelectIcon: (key: string) => void
-  onTilePointerDown: (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => void
   onTileClickCapture: (event: ReactMouseEvent<HTMLDivElement>) => void
   onOpenFolder: (folderId: string) => void
   onLaunchIcon: (path: string) => void
@@ -270,15 +288,12 @@ const GROUP_ICON_COMPONENTS: Record<ScrollGroupIcon, LucideIcon> = Object.fromEn
   GROUP_ICON_OPTIONS.map(option => [option.value, option.icon])
 ) as Record<ScrollGroupIcon, LucideIcon>
 
-let scrollGroupSortIdSeed = 0
-
-const createScrollGroupSortId = () => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return `scroll-group-${crypto.randomUUID()}`
-  }
-  scrollGroupSortIdSeed += 1
-  return `scroll-group-${Date.now()}-${scrollGroupSortIdSeed}`
+const pointerFirstCollisionDetection: CollisionDetection = args => {
+  const pointerCollisions = pointerWithin(args)
+  return pointerCollisions.length > 0 ? pointerCollisions : closestCenter(args)
 }
+
+const noSortableTransform: SortingStrategy = () => null
 
 function CustomGroupIcon({ icon, compact = false }: { icon: ScrollGroupIcon; compact?: boolean }) {
   const Glyph = GROUP_ICON_COMPONENTS[icon]
@@ -382,6 +397,35 @@ function SortableScrollGroup({
   })
 }
 
+type SortableGridItemBindings = {
+  attributes: ReturnType<typeof useSortable>['attributes']
+  listeners: ReturnType<typeof useSortable>['listeners']
+  setNodeRef: ReturnType<typeof useSortable>['setNodeRef']
+  isDragging: boolean
+}
+
+function SortableGridItem({
+  id,
+  disabled,
+  children,
+}: {
+  id: string
+  disabled: boolean
+  children: (bindings: SortableGridItemBindings) => ReactNode
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useSortable({
+    id,
+    disabled,
+    animateLayoutChanges: () => false,
+  })
+  return children({
+    attributes,
+    listeners,
+    setNodeRef,
+    isDragging,
+  })
+}
+
 export function ScrollableOuterGridView({
   containerRef,
   dockEnabled,
@@ -410,11 +454,14 @@ export function ScrollableOuterGridView({
   onAddGroup,
   onEditGroup,
   onReorderGroup,
+  onCommitItemOrder,
+  onMoveItemToGroup,
+  onMoveItemToDock,
+  onMergeItems,
   addIconDisabled,
   onAddIcon,
   onDeleteGroup,
   onToggleSelectIcon,
-  onTilePointerDown,
   onTileClickCapture,
   onOpenFolder,
   onLaunchIcon,
@@ -436,45 +483,83 @@ export function ScrollableOuterGridView({
   const [selectedGroupIcon, setSelectedGroupIcon] = useState<ScrollGroupIcon>('briefcase')
   const [groupName, setGroupName] = useState(() => translate('工作'))
   const [activeDraggedGroupIndex, setActiveDraggedGroupIndex] = useState<number | null>(null)
-  const [groupSortIds, setGroupSortIds] = useState<string[]>(() =>
-    sections.map(() => createScrollGroupSortId())
-  )
   const groupDragDidMoveRef = useRef(false)
+  const itemDragDidMoveRef = useRef(false)
+  const mergeHoverRef = useRef<{ targetId: string } | null>(null)
+  const mergeTimerRef = useRef<number | null>(null)
+  const layoutSettleTimerRef = useRef<number | null>(null)
+  const previewOrderRef = useRef<string[] | null>(null)
+  const lastOverIdRef = useRef<string | null>(null)
+  const lastPreviewShiftPointRef = useRef<{ x: number; y: number } | null>(null)
+  const previewShiftLockUntilRef = useRef(0)
+  const lastGridHitPointRef = useRef<{ x: number; y: number } | null>(null)
+  const lastGridHitIdRef = useRef<string | null>(null)
+  const gridElementRef = useRef<HTMLDivElement | null>(null)
+  const gridItemRefs = useRef(new Map<string, HTMLDivElement>())
+  const pendingFlipRectsRef = useRef<Map<string, DOMRect> | null>(null)
+  const gridFlipAnimationFramesRef = useRef(new Map<string, number>())
+  const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null)
+  const [mergeTargetId, setMergeTargetId] = useState<string | null>(null)
+  const [activeDraggedItemId, setActiveDraggedItemId] = useState<string | null>(null)
+  const [previewItemIds, setPreviewItemIds] = useState<string[] | null>(null)
+  const [layoutMotionActive, setLayoutMotionActive] = useState(false)
+  const reducedMotion = useReducedMotion()
   const groupSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
-  const entries = activeSection?.entries ?? []
-  const showAddIcon = activeSection !== null
+  const itemSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+  const groupSortIds = useMemo(() => sections.map(section => section.groupId), [sections])
+  const committedEntries = useMemo(
+    () => activeSection?.entries ?? EMPTY_PAGE_ANCHOR_ENTRIES,
+    [activeSection?.entries]
+  )
+  const activeItemById = useMemo(
+    () => new Map(committedEntries.map(entry => [entry.id, entry.item])),
+    [committedEntries]
+  )
+  const committedItemIds = activeSection?.meta?.itemIds ?? committedEntries.map(entry => entry.id)
+  const layoutColumns = committedEntries.reduce(
+    (maximum, entry) => Math.max(maximum, entry.span.cols),
+    Math.max(1, columns)
+  )
+  const entries = useMemo(() => {
+    if (!previewItemIds) return committedEntries
+    const previewEntries = buildScrollGroupEntries(previewItemIds, activeItemById, layoutColumns)
+    const activePlaceholder = activeDraggedItemId
+      ? previewEntries.filter(entry => entry.id === activeDraggedItemId)
+      : []
+    return activePlaceholder.length > 0
+      ? buildScrollGroupEntries(previewItemIds, activeItemById, layoutColumns, activePlaceholder)
+      : previewEntries
+  }, [activeDraggedItemId, activeItemById, committedEntries, layoutColumns, previewItemIds])
+  const activeDraggedItem = activeDraggedItemId
+    ? (activeItemById.get(activeDraggedItemId) ?? null)
+    : null
+  const activeDraggedSpan = activeDraggedItem ? getGridItemSpan(activeDraggedItem) : null
+  const hasAddIconSlot = activeSection !== null
+  const addIconVisible = hasAddIconSlot && !layoutMotionActive
   const addIconSlotIndex = entries.reduce((lastIndex, entry) => {
-    const footprintEnd = (entry.row + entry.span.rows - 1) * columns + entry.col + entry.span.cols
+    const footprintEnd =
+      (entry.row + entry.span.rows - 1) * layoutColumns + entry.col + entry.span.cols
     return Math.max(lastIndex, footprintEnd)
   }, 0)
-  const addIconRow = Math.floor(addIconSlotIndex / Math.max(1, columns))
-  const addIconCol = addIconSlotIndex % Math.max(1, columns)
+  const addIconRow = Math.floor(addIconSlotIndex / layoutColumns)
+  const addIconCol = addIconSlotIndex % layoutColumns
+  const committedGridRows = committedEntries.reduce(
+    (maxRow, entry) => Math.max(maxRow, entry.row + entry.span.rows),
+    1
+  )
   const gridRows = Math.max(
     1,
+    layoutMotionActive ? committedGridRows : 1,
     entries.reduce((maxRow, entry) => Math.max(maxRow, entry.row + entry.span.rows), 1),
-    showAddIcon ? addIconRow + 1 : 1
+    hasAddIconSlot ? addIconRow + 1 : 1
   )
   const gridHeight = gridRows * itemHeight + Math.max(0, gridRows - 1) * gridGap
-
-  useEffect(() => {
-    if (groupSortIds.length === sections.length) return
-    const frame = window.requestAnimationFrame(() => {
-      setGroupSortIds(current => {
-        if (current.length === sections.length) return current
-        if (current.length > sections.length) return current.slice(0, sections.length)
-        return [
-          ...current,
-          ...Array.from({ length: sections.length - current.length }, () =>
-            createScrollGroupSortId()
-          ),
-        ]
-      })
-    })
-    return () => window.cancelAnimationFrame(frame)
-  }, [groupSortIds.length, sections.length])
 
   const selectSection = (index: number) => {
     onActivePageChange(index)
@@ -515,7 +600,6 @@ export function ScrollableOuterGridView({
     if (!name) return
     const meta = { name, icon: selectedGroupIcon }
     if (editingGroupIndex === null) {
-      setGroupSortIds(current => [...current, createScrollGroupSortId()])
       onAddGroup(meta)
     } else {
       onEditGroup(editingGroupIndex, meta)
@@ -526,7 +610,6 @@ export function ScrollableOuterGridView({
   }
 
   const handleDeleteGroup = (sectionIndex: number) => {
-    setGroupSortIds(current => current.filter((_, index) => index !== sectionIndex))
     onDeleteGroup(sectionIndex)
   }
 
@@ -549,13 +632,461 @@ export function ScrollableOuterGridView({
     const targetIndex = groupSortIds.indexOf(String(event.over?.id))
     finishGroupDrag()
     if (sourceIndex >= 0 && targetIndex >= 0 && sourceIndex !== targetIndex) {
-      setGroupSortIds(current => arrayMove(current, sourceIndex, targetIndex))
       onReorderGroup(sourceIndex, targetIndex)
     }
   }
 
   const handleGroupDragCancel = (_event: DragCancelEvent) => {
     finishGroupDrag()
+  }
+
+  const resolveDragPoint = (event: DragMoveEvent | DragEndEvent) => {
+    const activator = event.activatorEvent as PointerEvent
+    if (typeof activator?.clientX === 'number' && typeof activator?.clientY === 'number') {
+      return {
+        x: activator.clientX + event.delta.x,
+        y: activator.clientY + event.delta.y,
+      }
+    }
+    const translated = event.active.rect.current.translated
+    return translated
+      ? { x: translated.left + translated.width / 2, y: translated.top + translated.height / 2 }
+      : null
+  }
+
+  const resolveDragRect = (
+    event: DragMoveEvent | DragEndEvent,
+    point: { x: number; y: number } | null
+  ) => {
+    const translated = event.active.rect.current.translated
+    if (translated) {
+      return {
+        left: translated.left,
+        top: translated.top,
+        width: translated.width,
+        height: translated.height,
+      }
+    }
+    return point
+      ? {
+          left: point.x - itemWidth / 2,
+          top: point.y - itemHeight / 2,
+          width: itemWidth,
+          height: itemHeight,
+        }
+      : null
+  }
+
+  const resolveElementAtDragPoint = (event: DragMoveEvent | DragEndEvent) => {
+    const point = resolveDragPoint(event)
+    return point ? (document.elementFromPoint(point.x, point.y) as HTMLElement | null) : null
+  }
+
+  // Resolve sortable targets from the logical grid instead of the rendered DOM. During a
+  // FLIP animation the DOM element under a stationary pointer can change while its item is
+  // moving out of the way, which otherwise causes an unintended A/B reorder loop. The small
+  // point cache mirrors iTab's 10px nearest-target hysteresis.
+  const resolveGridEntryAtPoint = (
+    point: { x: number; y: number },
+    dragRect: { left: number; top: number; width: number; height: number } | null,
+    activeId: string
+  ): LogicalGridHit | null => {
+    const grid = gridElementRef.current
+    if (!grid) return null
+
+    const rect = grid.getBoundingClientRect()
+    const strideX = itemWidth + gridGap
+    const strideY = itemHeight + gridGap
+
+    const getEntryRect = (entry: PageAnchorEntry) => ({
+      left: rect.left + entry.col * strideX,
+      top: rect.top + entry.row * strideY,
+      width: entry.span.cols * itemWidth + Math.max(0, entry.span.cols - 1) * gridGap,
+      height: entry.span.rows * itemHeight + Math.max(0, entry.span.rows - 1) * gridGap,
+    })
+    const overlapRate = (
+      first: { left: number; top: number; width: number; height: number },
+      second: { left: number; top: number; width: number; height: number }
+    ) => {
+      const overlapWidth = Math.max(
+        0,
+        Math.min(first.left + first.width, second.left + second.width) -
+          Math.max(first.left, second.left)
+      )
+      const overlapHeight = Math.max(
+        0,
+        Math.min(first.top + first.height, second.top + second.height) -
+          Math.max(first.top, second.top)
+      )
+      const overlapArea = overlapWidth * overlapHeight
+      if (overlapArea <= 0) return 0
+      return Math.max(
+        overlapArea / Math.max(1, first.width * first.height),
+        overlapArea / Math.max(1, second.width * second.height)
+      )
+    }
+    const cachedPoint = lastGridHitPointRef.current
+    const cachedId = lastGridHitIdRef.current
+    if (cachedPoint && cachedId) {
+      const movedX = point.x - cachedPoint.x
+      const movedY = point.y - cachedPoint.y
+      if (movedX * movedX + movedY * movedY < 10 * 10) {
+        const cachedEntry = entries.find(entry => entry.id === cachedId)
+        if (cachedEntry) return { entry: cachedEntry, rect: getEntryRect(cachedEntry) }
+      }
+    }
+
+    const localX = point.x - rect.left
+    const localY = point.y - rect.top
+    if (localX < 0 || localY < 0) return null
+
+    const col = Math.floor(localX / strideX)
+    const row = Math.floor(localY / strideY)
+    const withinX = localX % strideX
+    const withinY = localY % strideY
+    if (col < 0 || col >= layoutColumns || withinX > itemWidth || withinY > itemHeight) {
+      return null
+    }
+
+    const cellEntry = entries.find(
+      item =>
+        row >= item.row &&
+        row < item.row + item.span.rows &&
+        col >= item.col &&
+        col < item.col + item.span.cols
+    )
+    // The placeholder owns its entire logical footprint. Do not let overlap with a
+    // neighboring item steal the target while the pointer is still inside the active
+    // footprint; that is what makes large/tall items visibly reverse mid-flight.
+    if (cellEntry?.id === activeId) {
+      lastGridHitPointRef.current = point
+      lastGridHitIdRef.current = activeId
+      return { entry: cellEntry, rect: getEntryRect(cellEntry) }
+    }
+    // Between two mixed-size footprints there may be no logical cell under the pointer,
+    // while the dragged rectangle still overlaps both neighbors. Keep the current target
+    // as long as it still has iTab's 10% overlap; only then may a new neighbor win.
+    const stickyId = lastGridHitIdRef.current
+    if (!cellEntry && dragRect && stickyId && stickyId !== activeId) {
+      const stickyEntry = entries.find(entry => entry.id === stickyId)
+      if (stickyEntry && overlapRate(dragRect, getEntryRect(stickyEntry)) > 0.1) {
+        lastGridHitPointRef.current = point
+        return { entry: stickyEntry, rect: getEntryRect(stickyEntry) }
+      }
+    }
+
+    let resolvedEntry: PageAnchorEntry | null = null
+    if (dragRect) {
+      const dragCenterX = dragRect.left + dragRect.width / 2
+      const dragCenterY = dragRect.top + dragRect.height / 2
+      const nearest = entries
+        .filter(entry => entry.id !== activeId)
+        .reduce<{ entry: PageAnchorEntry; distance: number } | null>((best, entry) => {
+          const entryRect = getEntryRect(entry)
+          const entryCenterX = entryRect.left + entryRect.width / 2
+          const entryCenterY = entryRect.top + entryRect.height / 2
+          const distance = Math.hypot(dragCenterX - entryCenterX, dragCenterY - entryCenterY)
+          return best === null || distance < best.distance ? { entry, distance } : best
+        }, null)
+      if (nearest && overlapRate(dragRect, getEntryRect(nearest.entry)) > 0.1) {
+        resolvedEntry = nearest.entry
+      }
+    }
+
+    if (!resolvedEntry && cellEntry) {
+      if (
+        cellEntry.id === activeId ||
+        !dragRect ||
+        overlapRate(dragRect, getEntryRect(cellEntry)) > 0.1
+      ) {
+        resolvedEntry = cellEntry
+      }
+    }
+    if (!resolvedEntry) return null
+
+    lastGridHitPointRef.current = point
+    lastGridHitIdRef.current = resolvedEntry.id
+    return { entry: resolvedEntry, rect: getEntryRect(resolvedEntry) }
+  }
+
+  const clearMergeIntent = () => {
+    if (mergeTimerRef.current !== null) {
+      window.clearTimeout(mergeTimerRef.current)
+      mergeTimerRef.current = null
+    }
+    mergeHoverRef.current = null
+    setMergeTargetId(null)
+  }
+
+  const scheduleMergeIntent = (targetId: string) => {
+    if (mergeHoverRef.current?.targetId === targetId) return
+    clearMergeIntent()
+    mergeHoverRef.current = { targetId }
+    mergeTimerRef.current = window.setTimeout(() => {
+      if (mergeHoverRef.current?.targetId === targetId) {
+        setMergeTargetId(targetId)
+      }
+      mergeTimerRef.current = null
+    }, 520)
+  }
+
+  const captureGridItemRects = () => {
+    const previousRects = new Map<string, DOMRect>()
+    gridItemRefs.current.forEach((node, id) => {
+      previousRects.set(id, node.getBoundingClientRect())
+      const frame = gridFlipAnimationFramesRef.current.get(id)
+      if (frame !== undefined) window.cancelAnimationFrame(frame)
+      gridFlipAnimationFramesRef.current.delete(id)
+      node.style.transition = ''
+      node.style.transform = ''
+    })
+    pendingFlipRectsRef.current = previousRects
+  }
+
+  const updatePreviewOrder = (
+    activeId: string,
+    overId: string,
+    point: { x: number; y: number }
+  ) => {
+    if (activeId === overId || lastOverIdRef.current === overId) return
+    // Pointer sensors can emit several move events while the previous FLIP is still
+    // running. Keep one visual shift in flight at a time so a stationary pointer
+    // cannot make neighboring items ping-pong between cells.
+    if (performance.now() < previewShiftLockUntilRef.current) return
+    const lastPoint = lastPreviewShiftPointRef.current
+    if (lastPoint) {
+      const movedX = point.x - lastPoint.x
+      const movedY = point.y - lastPoint.y
+      if (movedX * movedX + movedY * movedY < 16 * 16) return
+    }
+    const currentOrder = previewOrderRef.current
+    if (!currentOrder) return
+    const sourceIndex = currentOrder.indexOf(activeId)
+    const targetIndex = currentOrder.indexOf(overId)
+    if (sourceIndex < 0 || targetIndex < 0) return
+    captureGridItemRects()
+    const nextOrder = arrayMove(currentOrder, sourceIndex, targetIndex)
+    previewOrderRef.current = nextOrder
+    lastOverIdRef.current = overId
+    lastPreviewShiftPointRef.current = point
+    previewShiftLockUntilRef.current = performance.now() + 90
+    setPreviewItemIds(nextOrder)
+  }
+
+  useLayoutEffect(() => {
+    const previousRects = pendingFlipRectsRef.current
+    pendingFlipRectsRef.current = null
+    if (!previousRects || reducedMotion) return
+
+    gridItemRefs.current.forEach((node, id) => {
+      if (id === activeDraggedItemId) return
+      const previousRect = previousRects.get(id)
+      if (!previousRect) return
+      const nextRect = node.getBoundingClientRect()
+      const deltaX = previousRect.left - nextRect.left
+      const deltaY = previousRect.top - nextRect.top
+      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return
+
+      node.style.transition = 'none'
+      node.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`
+      const frame = window.requestAnimationFrame(() => {
+        if (gridFlipAnimationFramesRef.current.get(id) !== frame) return
+        node.style.transition = `transform ${reorderAnimationMs}ms ease`
+        node.style.transform = ''
+        window.setTimeout(() => {
+          if (gridFlipAnimationFramesRef.current.get(id) === frame) {
+            gridFlipAnimationFramesRef.current.delete(id)
+            node.style.transition = ''
+          }
+        }, reorderAnimationMs + 40)
+      })
+      gridFlipAnimationFramesRef.current.set(id, frame)
+    })
+  }, [activeDraggedItemId, entries, reducedMotion, reorderAnimationMs])
+
+  const handleItemDragStart = (event: DragStartEvent) => {
+    const activeId = String(event.active.id)
+    const initialOrder = committedItemIds.filter(id => activeItemById.has(id))
+    itemDragDidMoveRef.current = true
+    if (layoutSettleTimerRef.current !== null) {
+      window.clearTimeout(layoutSettleTimerRef.current)
+      layoutSettleTimerRef.current = null
+    }
+    previewOrderRef.current = initialOrder
+    lastOverIdRef.current = activeId
+    lastPreviewShiftPointRef.current = null
+    previewShiftLockUntilRef.current = 0
+    lastGridHitPointRef.current = null
+    lastGridHitIdRef.current = null
+    setActiveDraggedItemId(activeId)
+    setPreviewItemIds(initialOrder)
+    setLayoutMotionActive(true)
+    clearMergeIntent()
+  }
+
+  const handleItemDragMove = (event: DragMoveEvent) => {
+    const activeId = String(event.active.id)
+    const point = resolveDragPoint(event)
+    const target = resolveElementAtDragPoint(event)
+    const groupId = target?.closest<HTMLElement>('[data-scroll-group-id]')?.dataset.scrollGroupId
+    setHoveredGroupId(current => (current === (groupId ?? null) ? current : (groupId ?? null)))
+    if (groupId || target?.closest('[data-dock-slot]')) {
+      lastOverIdRef.current = null
+      lastPreviewShiftPointRef.current = null
+      previewShiftLockUntilRef.current = 0
+      lastGridHitPointRef.current = null
+      lastGridHitIdRef.current = null
+      clearMergeIntent()
+      return
+    }
+
+    // Do not use `instanceof PointerEvent` here. Tauri/WebView can provide the
+    // activator event from another realm, making that check false for a real
+    // pointer drag and silently disabling folder merge detection.
+    const activator = event.activatorEvent as Partial<PointerEvent> | null
+    const pointerActivated =
+      typeof activator?.clientX === 'number' && typeof activator?.clientY === 'number'
+    const logicalHit =
+      pointerActivated && point
+        ? resolveGridEntryAtPoint(point, resolveDragRect(event, point), activeId)
+        : null
+    const overId = pointerActivated
+      ? (logicalHit?.entry.id ?? null)
+      : event.over
+        ? String(event.over.id)
+        : null
+    if (!overId || overId === activeId) {
+      clearMergeIntent()
+      return
+    }
+
+    const sourceItem = activeItemById.get(activeId)
+    const targetItem = activeItemById.get(overId)
+    const overRect = logicalHit?.rect ?? event.over?.rect
+    const pointerInMergeCenter =
+      pointerActivated &&
+      point !== null &&
+      overRect !== undefined &&
+      isPointInScrollMergeZone(point, overRect)
+    const canMerge =
+      sourceItem?.kind === 'icon' &&
+      Boolean(targetItem && (targetItem.kind === 'icon' || targetItem.kind === 'folder')) &&
+      pointerInMergeCenter
+    if (canMerge) {
+      scheduleMergeIntent(overId)
+    } else {
+      clearMergeIntent()
+      if (point) updatePreviewOrder(activeId, overId, point)
+    }
+  }
+
+  const finishItemDrag = () => {
+    setHoveredGroupId(null)
+    clearMergeIntent()
+    previewOrderRef.current = null
+    lastOverIdRef.current = null
+    lastPreviewShiftPointRef.current = null
+    previewShiftLockUntilRef.current = 0
+    lastGridHitPointRef.current = null
+    lastGridHitIdRef.current = null
+    setPreviewItemIds(null)
+    setActiveDraggedItemId(null)
+    layoutSettleTimerRef.current = window.setTimeout(() => {
+      setLayoutMotionActive(false)
+      layoutSettleTimerRef.current = null
+    }, 280)
+    window.setTimeout(() => {
+      itemDragDidMoveRef.current = false
+    }, 0)
+  }
+
+  const handleItemDragEnd = (event: DragEndEvent) => {
+    const activeId = String(event.active.id)
+    const point = resolveDragPoint(event)
+    const activator = event.activatorEvent as Partial<PointerEvent> | null
+    const pointerActivated =
+      typeof activator?.clientX === 'number' && typeof activator?.clientY === 'number'
+    const logicalDrop =
+      pointerActivated && point
+        ? resolveGridEntryAtPoint(point, resolveDragRect(event, point), activeId)
+        : null
+    const logicalDropItem = logicalDrop ? activeItemById.get(logicalDrop.entry.id) : null
+    const logicalDropCanMerge =
+      pointerActivated &&
+      point !== null &&
+      logicalDrop !== null &&
+      isPointInScrollMergeZone(point, logicalDrop.rect) &&
+      activeItemById.get(activeId)?.kind === 'icon' &&
+      Boolean(
+        logicalDropItem && (logicalDropItem.kind === 'icon' || logicalDropItem.kind === 'folder')
+      )
+    const target = resolveElementAtDragPoint(event)
+    const targetGroupId =
+      target?.closest<HTMLElement>('[data-scroll-group-id]')?.dataset.scrollGroupId
+    const dockSlot = target?.closest<HTMLElement>('[data-dock-slot]')
+    const droppedOnGrid = Boolean(target?.closest('[data-scroll-grid-inner]'))
+    const mergeHover = mergeHoverRef.current
+    const finalPreviewOrder = previewOrderRef.current
+    const mergeTargetId = pointerActivated
+      ? logicalDropCanMerge
+        ? (logicalDrop?.entry.id ?? null)
+        : null
+      : (mergeHover?.targetId ?? null)
+    const shouldMerge = mergeTargetId !== null && mergeTargetId !== activeId
+
+    captureGridItemRects()
+
+    finishItemDrag()
+    if (targetGroupId) {
+      if (targetGroupId !== activeSection?.groupId) {
+        onMoveItemToGroup(activeId, targetGroupId)
+      }
+      return
+    }
+    if (dockSlot) {
+      const dockSlots = Array.from(document.querySelectorAll<HTMLElement>('[data-dock-slot]'))
+      onMoveItemToDock(activeId, Math.max(0, dockSlots.indexOf(dockSlot)))
+      return
+    }
+    if (shouldMerge && mergeTargetId) {
+      onMergeItems(activeId, mergeTargetId)
+      return
+    }
+    if (droppedOnGrid && activeSection && finalPreviewOrder) {
+      onCommitItemOrder(activeSection.groupId, finalPreviewOrder)
+    }
+  }
+
+  const handleItemDragCancel = (_event: DragCancelEvent) => {
+    captureGridItemRects()
+    finishItemDrag()
+  }
+
+  useEffect(
+    () => () => {
+      if (mergeTimerRef.current !== null) {
+        window.clearTimeout(mergeTimerRef.current)
+      }
+      if (layoutSettleTimerRef.current !== null) {
+        window.clearTimeout(layoutSettleTimerRef.current)
+      }
+      gridFlipAnimationFramesRef.current.forEach(frame => window.cancelAnimationFrame(frame))
+      gridFlipAnimationFramesRef.current.clear()
+      gridItemRefs.current.forEach(node => {
+        node.style.transition = ''
+        node.style.transform = ''
+      })
+    },
+    []
+  )
+
+  const handleGridClickCapture = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (itemDragDidMoveRef.current) {
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
+    onTileClickCapture(event)
   }
 
   const activeDraggedSection =
@@ -651,10 +1182,14 @@ export function ScrollableOuterGridView({
                               style={sortable.style}
                               data-grid-mode-nav
                               data-scroll-group-target={section.index}
+                              data-scroll-group-id={section.groupId}
                               className={[
                                 'scroll-grid-group-item relative min-w-0 max-w-full overflow-hidden rounded-md',
                                 sidebarCompact ? 'scroll-grid-group-item-compact' : '',
                                 sortable.isDragging ? 'opacity-0' : '',
+                                hoveredGroupId === section.groupId
+                                  ? 'scroll-grid-group-drop-target'
+                                  : '',
                                 active
                                   ? 'scroll-grid-group-active'
                                   : 'text-foreground/72 hover:bg-accent/85 hover:text-foreground',
@@ -823,157 +1358,228 @@ export function ScrollableOuterGridView({
         </div>
       </aside>
 
-      <div
-        ref={containerRef}
-        className={`scroll-grid-content-scroll min-h-0 min-w-0 overflow-x-hidden overflow-y-auto px-6 pt-24 ${
-          dockEnabled ? 'pb-32' : 'pb-12'
-        }`}
+      <DndContext
+        sensors={itemSensors}
+        collisionDetection={pointerFirstCollisionDetection}
+        onDragStart={handleItemDragStart}
+        onDragMove={handleItemDragMove}
+        onDragEnd={handleItemDragEnd}
+        onDragCancel={handleItemDragCancel}
       >
-        <div className="flex min-h-full justify-center">
-          <div
-            data-scroll-grid-page={currentPage}
-            data-scroll-grid-inner={currentPage}
-            ref={node => {
-              bindGridPageRef(currentPage, node)
-            }}
-            className="relative grid max-w-full content-start"
-            style={{
-              width: `${gridWidth}px`,
-              height: `${gridHeight}px`,
-              gridTemplateColumns: `repeat(${columns}, ${itemWidth}px)`,
-              gridTemplateRows: `repeat(${gridRows}, ${itemHeight}px)`,
-              gap: `${gridGap}px`,
-            }}
-          >
-            {entries.map(entry => {
-              const hideItem = hiddenOuterItemIds.includes(entry.id)
-              const highlightedItem = highlightedOuterItemIdSet.has(entry.id)
-              const folderPreview =
-                (dragContext === 'outer' && dragFolderPreviewTargetId === entry.id) ||
-                folderPreviewFreezeTargetId === entry.id ||
-                folderCreateTransitionTargetId === entry.id
-
-              return (
-                <div
-                  key={entry.id}
-                  ref={node => {
-                    bindTileRef(entry.id, node)
-                  }}
-                  className={`relative justify-self-center self-start transition-opacity duration-150 ${
-                    hideItem ? 'opacity-0' : 'opacity-100'
-                  }`}
-                  style={{
-                    gridColumn: `${entry.col + 1} / span ${entry.span.cols}`,
-                    gridRow: `${entry.row + 1} / span ${entry.span.rows}`,
-                    width: `${entry.span.cols * itemWidth + Math.max(0, entry.span.cols - 1) * gridGap}px`,
-                    height: `${entry.span.rows * itemHeight + Math.max(0, entry.span.rows - 1) * gridGap}px`,
-                  }}
-                >
-                  {entry.item.kind === 'icon' ? (
-                    <div
-                      className="relative touch-none"
-                      onPointerDown={event => onTilePointerDown(event, entry.id)}
-                      onClickCapture={onTileClickCapture}
-                    >
-                      <div
-                        className={`transition-opacity duration-150 ${
-                          folderPreview ? 'opacity-0' : 'opacity-100'
-                        }`}
-                      >
-                        <Icon
-                          icon={entry.item.icon}
-                          selectionKey={entry.item.key}
-                          selectionMode={selectionMode}
-                          selected={selectedSet.has(entry.item.key)}
-                          onToggleSelect={onToggleSelectIcon}
-                          highlighted={highlightedItem}
-                        />
-                      </div>
-                      <FolderCreatePreview
-                        active={folderPreview}
-                        icon={entry.item.icon}
-                        imgSize={iconConfig.imgSize}
-                        reorderAnimationMs={reorderAnimationMs}
-                        tileWidth={itemWidth}
-                        tileHeight={itemHeight}
-                      />
-                    </div>
-                  ) : (
-                    <OuterFolderTile
-                      folder={entry.item}
-                      span={entry.span}
-                      slotWidth={itemWidth}
-                      slotHeight={itemHeight}
-                      gridGap={gridGap}
-                      folderPreview={folderPreview}
-                      folderOpen={openFolderId === entry.item.id}
-                      sharedLayoutActive={activeFolderSharedLayoutId === entry.item.id}
-                      selectionMode={selectionMode}
-                      onPointerDown={event => onTilePointerDown(event, entry.id)}
-                      onClickCapture={onTileClickCapture}
-                      onOpenFolder={onOpenFolder}
-                      onLaunchIcon={onLaunchIcon}
-                      onResizeFolder={onResizeFolder}
-                    />
-                  )}
-                </div>
-              )
-            })}
-            {showAddIcon ? (
-              <button
-                type="button"
-                data-no-window-drag="true"
-                aria-label={addIconLabel}
-                title={addIconLabel}
-                disabled={addIconDisabled || !onAddIcon}
-                className="icon-item group relative flex flex-col items-center justify-start justify-self-center self-start rounded-2xl border-none px-3 text-muted-foreground shadow-none transition-all duration-200 hover:bg-foreground/6 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 active:bg-foreground/10 disabled:pointer-events-none disabled:opacity-45 dark:hover:bg-white/10 dark:active:bg-white/20"
-                style={{
-                  gridColumn: addIconCol + 1,
-                  gridRow: addIconRow + 1,
-                  width: `${itemWidth}px`,
-                  height: `${itemHeight}px`,
-                  paddingTop: ICON_GRID_TILE_PADDING_Y,
-                  paddingBottom: ICON_GRID_TILE_PADDING_Y,
-                  rowGap: ICON_GRID_TITLE_GAP,
-                }}
-                onPointerDown={event => event.stopPropagation()}
-                onClick={onAddIcon}
+        <div
+          ref={containerRef}
+          className={`scroll-grid-content-scroll min-h-0 min-w-0 overflow-x-hidden overflow-y-auto px-6 pt-24 ${
+            dockEnabled ? 'pb-32' : 'pb-12'
+          }`}
+        >
+          <div className="flex min-h-full justify-center">
+            <div
+              data-scroll-grid-page={currentPage}
+              data-scroll-grid-inner={currentPage}
+              ref={node => {
+                gridElementRef.current = node
+                bindGridPageRef(currentPage, node)
+              }}
+              className="relative grid max-w-full content-start"
+              style={{
+                width: `${Math.max(
+                  gridWidth,
+                  layoutColumns * itemWidth + Math.max(0, layoutColumns - 1) * gridGap
+                )}px`,
+                height: `${gridHeight}px`,
+                gridTemplateColumns: `repeat(${layoutColumns}, ${itemWidth}px)`,
+                gridTemplateRows: `repeat(${gridRows}, ${itemHeight}px)`,
+                gap: `${gridGap}px`,
+              }}
+            >
+              <SortableContext
+                items={entries.map(entry => entry.id)}
+                strategy={noSortableTransform}
               >
-                <span
-                  className="icon-image flex flex-1 items-center justify-center overflow-hidden"
-                  style={{ width: iconConfig.imgSize, height: iconConfig.imgSize }}
-                >
-                  <span
-                    className="flex shrink-0 items-center justify-center rounded-md border border-dashed border-border/80 bg-foreground/3 transition-colors group-hover:border-foreground/35 group-hover:bg-accent dark:border-white/18 dark:bg-white/4"
+                {entries.map(entry => {
+                  const activeItem = activeDraggedItemId === entry.id
+                  const hideItem = hiddenOuterItemIds.includes(entry.id) || activeItem
+                  const highlightedItem = highlightedOuterItemIdSet.has(entry.id)
+                  const folderPreview =
+                    (dragContext === 'outer' && dragFolderPreviewTargetId === entry.id) ||
+                    mergeTargetId === entry.id ||
+                    folderPreviewFreezeTargetId === entry.id ||
+                    folderCreateTransitionTargetId === entry.id
+
+                  return (
+                    <SortableGridItem key={entry.id} id={entry.id} disabled={selectionMode}>
+                      {sortable => (
+                        <div
+                          ref={node => {
+                            sortable.setNodeRef(node)
+                            bindTileRef(entry.id, node)
+                            if (node) gridItemRefs.current.set(entry.id, node)
+                            else gridItemRefs.current.delete(entry.id)
+                          }}
+                          data-scroll-sortable-id={entry.id}
+                          className={`relative touch-none justify-self-center self-start ${
+                            activeItem
+                              ? 'pointer-events-none opacity-0'
+                              : `transition-opacity duration-[220ms] ${hideItem ? 'opacity-0' : 'opacity-100'}`
+                          } ${sortable.isDragging ? 'z-20 cursor-grabbing' : 'z-10'}`}
+                          style={{
+                            gridColumn: `${entry.col + 1} / span ${entry.span.cols}`,
+                            gridRow: `${entry.row + 1} / span ${entry.span.rows}`,
+                            width: `${entry.span.cols * itemWidth + Math.max(0, entry.span.cols - 1) * gridGap}px`,
+                            height: `${entry.span.rows * itemHeight + Math.max(0, entry.span.rows - 1) * gridGap}px`,
+                          }}
+                          {...sortable.attributes}
+                          {...sortable.listeners}
+                          onClickCapture={handleGridClickCapture}
+                        >
+                          {entry.item.kind === 'icon' ? (
+                            <div className="relative">
+                              <div
+                                className={`transition-opacity duration-[220ms] ${
+                                  folderPreview ? 'opacity-0' : 'opacity-100'
+                                }`}
+                              >
+                                <Icon
+                                  icon={entry.item.icon}
+                                  selectionKey={entry.item.key}
+                                  selectionMode={selectionMode}
+                                  selected={selectedSet.has(entry.item.key)}
+                                  onToggleSelect={onToggleSelectIcon}
+                                  highlighted={highlightedItem}
+                                  motionProfile="scroll"
+                                />
+                              </div>
+                              <FolderCreatePreview
+                                active={folderPreview}
+                                icon={entry.item.icon}
+                                imgSize={iconConfig.imgSize}
+                                reorderAnimationMs={reorderAnimationMs}
+                                tileWidth={itemWidth}
+                                tileHeight={itemHeight}
+                              />
+                            </div>
+                          ) : (
+                            <OuterFolderTile
+                              folder={entry.item}
+                              span={entry.span}
+                              slotWidth={itemWidth}
+                              slotHeight={itemHeight}
+                              gridGap={gridGap}
+                              folderPreview={folderPreview}
+                              folderOpen={openFolderId === entry.item.id}
+                              sharedLayoutActive={activeFolderSharedLayoutId === entry.item.id}
+                              selectionMode={selectionMode}
+                              onPointerDown={() => {}}
+                              onClickCapture={() => {}}
+                              onOpenFolder={onOpenFolder}
+                              onLaunchIcon={onLaunchIcon}
+                              onResizeFolder={onResizeFolder}
+                            />
+                          )}
+                        </div>
+                      )}
+                    </SortableGridItem>
+                  )
+                })}
+              </SortableContext>
+              <DragOverlay adjustScale={false} dropAnimation={null} zIndex={240}>
+                {activeDraggedItem ? (
+                  <div
+                    data-scroll-dragging="true"
+                    className="pointer-events-none relative cursor-grabbing drop-shadow-xl"
                     style={{
-                      width: iconConfig.imgSize,
-                      height: iconConfig.imgSize,
+                      width: `${(activeDraggedSpan?.cols ?? 1) * itemWidth + Math.max(0, (activeDraggedSpan?.cols ?? 1) - 1) * gridGap}px`,
+                      height: `${(activeDraggedSpan?.rows ?? 1) * itemHeight + Math.max(0, (activeDraggedSpan?.rows ?? 1) - 1) * gridGap}px`,
                     }}
                   >
-                    <Plus className="h-5 w-5" />
-                  </span>
-                </span>
-                <span
-                  className="icon-label text-center text-[11px] leading-[13px] text-foreground drop-shadow-md"
+                    {activeDraggedItem.kind === 'icon' ? (
+                      <Icon
+                        icon={activeDraggedItem.icon}
+                        selectionKey={activeDraggedItem.key}
+                        selectionMode={false}
+                        selected={false}
+                        onToggleSelect={() => {}}
+                        motionProfile="scroll"
+                      />
+                    ) : (
+                      <OuterFolderTile
+                        folder={activeDraggedItem}
+                        span={activeDraggedSpan ?? { cols: 1, rows: 1 }}
+                        slotWidth={itemWidth}
+                        slotHeight={itemHeight}
+                        gridGap={gridGap}
+                        folderPreview={false}
+                        folderOpen={false}
+                        sharedLayoutActive={false}
+                        selectionMode={false}
+                        onPointerDown={() => {}}
+                        onClickCapture={() => {}}
+                        onOpenFolder={() => {}}
+                        onLaunchIcon={() => {}}
+                        onResizeFolder={() => {}}
+                      />
+                    )}
+                  </div>
+                ) : null}
+              </DragOverlay>
+              {hasAddIconSlot ? (
+                <button
+                  type="button"
+                  data-no-window-drag="true"
+                  aria-label={addIconLabel}
+                  title={addIconLabel}
+                  disabled={addIconDisabled || !onAddIcon}
+                  className="icon-item group relative flex flex-col items-center justify-start justify-self-center self-start rounded-2xl border-none px-3 text-muted-foreground shadow-none transition-opacity duration-200 hover:bg-foreground/6 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 active:bg-foreground/10 disabled:pointer-events-none disabled:opacity-45 dark:hover:bg-white/10 dark:active:bg-white/20"
                   style={{
-                    maxWidth: itemWidth - 10,
-                    height: addIconTitleMetrics.height,
-                    display: addIconTitleMetrics.singleLine ? 'block' : '-webkit-box',
-                    WebkitLineClamp: addIconTitleMetrics.lineClamp,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: addIconTitleMetrics.singleLine ? 'nowrap' : 'normal',
-                    overflowWrap: 'anywhere',
+                    gridColumn: addIconCol + 1,
+                    gridRow: addIconRow + 1,
+                    width: `${itemWidth}px`,
+                    height: `${itemHeight}px`,
+                    paddingTop: ICON_GRID_TILE_PADDING_Y,
+                    paddingBottom: ICON_GRID_TILE_PADDING_Y,
+                    rowGap: ICON_GRID_TITLE_GAP,
+                    opacity: addIconVisible ? undefined : 0,
+                    pointerEvents: addIconVisible ? undefined : 'none',
                   }}
+                  onPointerDown={event => event.stopPropagation()}
+                  onClick={onAddIcon}
                 >
-                  {addIconLabel}
-                </span>
-              </button>
-            ) : null}
+                  <span
+                    className="icon-image flex flex-1 items-center justify-center overflow-hidden"
+                    style={{ width: iconConfig.imgSize, height: iconConfig.imgSize }}
+                  >
+                    <span
+                      className="flex shrink-0 items-center justify-center rounded-md border border-dashed border-border/80 bg-foreground/3 transition-colors group-hover:border-foreground/35 group-hover:bg-accent dark:border-white/18 dark:bg-white/4"
+                      style={{
+                        width: iconConfig.imgSize,
+                        height: iconConfig.imgSize,
+                      }}
+                    >
+                      <Plus className="h-5 w-5" />
+                    </span>
+                  </span>
+                  <span
+                    className="icon-label text-center text-[11px] leading-[13px] text-foreground drop-shadow-md"
+                    style={{
+                      maxWidth: itemWidth - 10,
+                      height: addIconTitleMetrics.height,
+                      display: addIconTitleMetrics.singleLine ? 'block' : '-webkit-box',
+                      WebkitLineClamp: addIconTitleMetrics.lineClamp,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: addIconTitleMetrics.singleLine ? 'nowrap' : 'normal',
+                      overflowWrap: 'anywhere',
+                    }}
+                  >
+                    {addIconLabel}
+                  </span>
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
-      </div>
+      </DndContext>
       {groupComposerOpen && typeof document !== 'undefined'
         ? createPortal(
             <div

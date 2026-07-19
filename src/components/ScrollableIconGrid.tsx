@@ -19,7 +19,7 @@ import type {
   PersistedLayout,
   ScrollGroupMeta,
 } from './icon-grid/model'
-import { getGridItemSpan, getId } from './icon-grid/model'
+import { getGridItemSpan, getId, makeFolderId } from './icon-grid/model'
 import { compactEmptyPages, DRAG_HOLE_ID, areSlotsEqual } from './icon-grid/domain/slots'
 import { clampNumber } from './icon-grid/domain/geometry'
 import {
@@ -45,12 +45,15 @@ import {
   normalizeOuterSlots,
   resizeSlotPages,
 } from './icon-grid/domain/topLevelLayout'
+import { compactOuterSlotsWithinPages } from './icon-grid/scroll/scrollTopLevelLayout'
 import {
-  compactOuterSlotsWithinPages,
-  recoverInfiniteScrollGroupSlots,
-  remapScrollPageIndexAfterReorder,
-  reorderScrollGroupPages,
-} from './icon-grid/scroll/scrollTopLevelLayout'
+  buildScrollGroupEntries,
+  commitScrollGroupItemOrder,
+  createScrollGroup,
+  deleteScrollGroup,
+  moveScrollGroupItem,
+  normalizeScrollGroups,
+} from './icon-grid/scroll/scrollGroupLayout'
 import {
   applyMultiOuterDropFromSession,
   applyOuterDropFromSession,
@@ -100,8 +103,8 @@ const WHEEL_PAGE_COOLDOWN_MS = 180
 const DRAG_LONG_PRESS_MS = 300
 const DRAG_PENDING_MOVE_TOLERANCE = 7
 const EVASION_REARM_DISTANCE = 14
-const EVASION_COOLDOWN_MS = 80
-const REORDER_ANIMATION_MS = 220
+const EVASION_COOLDOWN_MS = 120
+const REORDER_ANIMATION_MS = 300
 const FOLDER_SHARED_LAYOUT_WINDOW_MS = 320
 const IMPORT_HIGHLIGHT_MS = 4200
 const REORDER_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
@@ -150,20 +153,6 @@ const getOccupiedPageCountForSlots = (slots: Array<string | null>, pageSize: num
     break
   }
   return Math.max(1, Math.ceil((lastOccupiedIndex + 1) / safePageSize))
-}
-
-const padSlotsToPageCount = (
-  slots: Array<string | null>,
-  targetPageCount: number,
-  pageSize: number
-) => {
-  const safePageSize = Math.max(1, pageSize)
-  const targetLength = Math.max(safePageSize, Math.max(1, targetPageCount) * safePageSize)
-  const next = [...slots]
-  while (next.length < targetLength) {
-    next.push(null)
-  }
-  return next
 }
 
 const filterItemsByIds = (items: GridItem[], ids: string[]): GridItem[] => {
@@ -427,6 +416,8 @@ export function ScrollableIconGrid({
             prevColumnsRef.current
           ),
           geometryKey: persistedGeometryKeyRef.current ?? undefined,
+          scrollGroups: scrollGroupsRef.current,
+          scrollGroupItemsExplicit: true,
         }
       } else {
         if (
@@ -491,19 +482,18 @@ export function ScrollableIconGrid({
       }
       layoutBaselineRef.current = false
 
+      const nextOuterItemIds = resolveOuterItemIds(nextItemIds, nextDockKeys)
+      const nextScrollGroups = normalizeScrollGroups({
+        groups: persisted?.scrollGroups,
+        outerItemIds: nextOuterItemIds,
+        legacySlots: rawSlots,
+        legacyPageSize: persisted?.pageSize ?? Math.max(1, rawSlots.length),
+        hasExplicitItems: persisted?.scrollGroupItemsExplicit === true,
+        defaultName: index => translate('网格 {index}', { index: index + 1 }),
+      })
       itemsRef.current = nextItems
       outerSlotsRef.current = rawSlots
       dockKeysRef.current = nextDockKeys
-      const nextScrollGroups = persisted?.scrollGroups ?? []
-      if (launchpadGridViewMode === 'scroll') {
-        rawSlots = recoverInfiniteScrollGroupSlots(
-          rawSlots,
-          nextItems.filter(item => !nextDockKeys.includes(getId(item))),
-          persisted?.pageSize ?? Math.max(1, rawSlots.length),
-          persisted?.columns ?? Math.max(1, columns),
-          Math.max(1, nextScrollGroups.length)
-        )
-      }
       scrollGroupsRef.current = nextScrollGroups
       setItems(nextItems)
       setOuterSlots(rawSlots)
@@ -616,6 +606,21 @@ export function ScrollableIconGrid({
     () => resolveOuterItemIds(itemIds, activeDockKeys),
     [activeDockKeys, itemIds]
   )
+
+  useEffect(() => {
+    if (!hydratedRef.current || scrollGroupsRef.current.length === 0) return
+    const preferredGroupId = scrollGroupsRef.current[currentPageRef.current]?.id ?? null
+    const nextGroups = normalizeScrollGroups({
+      groups: scrollGroupsRef.current,
+      outerItemIds,
+      hasExplicitItems: true,
+      defaultName: index => translate('网格 {index}', { index: index + 1 }),
+      preferredGroupId,
+    })
+    if (JSON.stringify(nextGroups) === JSON.stringify(scrollGroupsRef.current)) return
+    scrollGroupsRef.current = nextGroups
+    setScrollGroups(nextGroups)
+  }, [outerItemIds])
   const pageSize = Math.max(1, columns * rows)
   const prevDockEnabledRef = useRef(dockEnabled)
   const prevPageSizeRef = useRef(pageSize)
@@ -1190,6 +1195,27 @@ export function ScrollableIconGrid({
     }
 
     const importedIdSet = new Set(importedIds)
+    if (launchpadGridViewMode === 'scroll') {
+      const preferredGroupId = scrollGroupsRef.current[currentPageRef.current]?.id ?? null
+      const nextGroups = normalizeScrollGroups({
+        groups: scrollGroupsRef.current,
+        outerItemIds,
+        hasExplicitItems: true,
+        defaultName: index => translate('网格 {index}', { index: index + 1 }),
+        preferredGroupId,
+      })
+      scrollGroupsRef.current = nextGroups
+      setScrollGroups(nextGroups)
+      appliedImportPlacementTokenRef.current = request.token
+      setImportHighlightIds(importedIds)
+      clearImportHighlightTimer()
+      importHighlightTimerRef.current = window.setTimeout(() => {
+        setImportHighlightIds(current => current.filter(id => !importedIdSet.has(id)))
+        importHighlightTimerRef.current = null
+      }, IMPORT_HIGHLIGHT_MS)
+      return
+    }
+
     const safeColumns = Math.max(1, prevColumnsRef.current || columns)
     const safePageSize = Math.max(1, prevPageSizeRef.current || pageSize)
     const activePage = clampNumber(currentPageRef.current, 0, Number.MAX_SAFE_INTEGER)
@@ -1305,7 +1331,7 @@ export function ScrollableIconGrid({
       currentPageRef.current = targetPage
       setCurrentPage(targetPage)
     }
-  }, [columns, importPlacementRequest, outerItemIds, pageSize])
+  }, [columns, importPlacementRequest, launchpadGridViewMode, outerItemIds, pageSize])
 
   const outerRenderCount = Math.max(pageSize, renderOrder.length)
   const layoutPageCount =
@@ -1515,40 +1541,24 @@ export function ScrollableIconGrid({
   ])
   const scrollGridSections = useMemo<ScrollGridSection[]>(() => {
     if (launchpadGridViewMode !== 'scroll') return EMPTY_SCROLL_GRID_SECTIONS
-    return Array.from({ length: pageCount }, (_, index) => {
-      const pageStart = index * pageSize
-      const pageEnd = pageStart + pageSize
-      const pageSlots = scrollRenderOrder.slice(pageStart, pageEnd)
+    return scrollGroups.map((group, index) => {
       const entries =
         index === currentPage
-          ? getPageAnchorEntries(scrollRenderOrder, outerViewItems, index, pageSize, columns)
+          ? buildScrollGroupEntries(group.itemIds, outerViewItemById, columns)
           : []
-      const itemCount = pageSlots.filter(
-        slot => typeof slot === 'string' && slot !== DRAG_HOLE_ID
-      ).length
       return {
         index,
-        itemCount,
+        groupId: group.id,
+        itemCount: group.itemIds.length,
         entries,
-        meta: scrollGroups[index],
-        previewItems: pageSlots
-          .filter((slot): slot is string => typeof slot === 'string' && slot !== DRAG_HOLE_ID)
+        meta: group,
+        previewItems: group.itemIds
           .map(id => outerViewItemById.get(id))
           .filter((item): item is GridItem => Boolean(item))
           .slice(0, 4),
       }
     })
-  }, [
-    columns,
-    currentPage,
-    launchpadGridViewMode,
-    outerViewItemById,
-    outerViewItems,
-    pageCount,
-    pageSize,
-    scrollRenderOrder,
-    scrollGroups,
-  ])
+  }, [columns, currentPage, launchpadGridViewMode, outerViewItemById, scrollGroups])
   const activeScrollGridSection =
     launchpadGridViewMode === 'scroll'
       ? (scrollGridSections.find(section => section.index === currentPage) ??
@@ -1845,138 +1855,129 @@ export function ScrollableIconGrid({
     setCurrentPage(nextPage)
   }
 
-  const handleAddScrollGroup = (meta: ScrollGroupMeta) => {
-    setScrollGroupCount(current => {
-      const nextCount = Math.max(current, pageCount) + 1
-      const nextGroups = Array.from({ length: nextCount }, (_, index) =>
-        index === nextCount - 1
-          ? meta
-          : (scrollGroupsRef.current[index] ?? {
-              name: translate('网格 {index}', { index: index + 1 }),
-              icon: 'grid' as const,
-            })
-      )
-      scrollGroupsRef.current = nextGroups
-      setScrollGroups(nextGroups)
-      const nextSlots = padSlotsToPageCount(
-        outerSlotsRef.current,
-        nextCount,
-        pageSizeRef.current || pageSize
-      )
-      outerSlotsRef.current = nextSlots
-      setOuterSlots(nextSlots)
-      const nextPage = nextCount - 1
-      currentPageRef.current = nextPage
-      setCurrentPage(nextPage)
-      return nextCount
-    })
+  const handleAddScrollGroup = (meta: Pick<ScrollGroupMeta, 'name' | 'icon'>) => {
+    const group = createScrollGroup(meta.name, meta.icon, scrollGroupsRef.current)
+    const nextGroups = [...scrollGroupsRef.current, group]
+    scrollGroupsRef.current = nextGroups
+    setScrollGroups(nextGroups)
+    setScrollGroupCount(nextGroups.length)
+    const nextPage = nextGroups.length - 1
+    currentPageRef.current = nextPage
+    setCurrentPage(nextPage)
   }
 
-  const handleEditScrollGroup = (page: number, meta: ScrollGroupMeta) => {
-    const targetPage = clampNumber(page, 0, pageCount - 1)
-    const nextGroups = Array.from({ length: pageCount }, (_, index) =>
-      index === targetPage
-        ? meta
-        : (scrollGroupsRef.current[index] ?? {
-            name: translate('网格 {index}', { index: index + 1 }),
-            icon: 'grid' as const,
-          })
+  const handleEditScrollGroup = (page: number, meta: Pick<ScrollGroupMeta, 'name' | 'icon'>) => {
+    const targetPage = clampNumber(page, 0, scrollGroupsRef.current.length - 1)
+    const nextGroups = scrollGroupsRef.current.map((group, index) =>
+      index === targetPage ? { ...group, ...meta } : group
     )
     scrollGroupsRef.current = nextGroups
     setScrollGroups(nextGroups)
   }
 
   const handleReorderScrollGroup = (sourcePage: number, targetPage: number) => {
-    const effectiveCount = Math.max(1, scrollGroupCount, pageCount)
+    const effectiveCount = Math.max(1, scrollGroupsRef.current.length)
     const safeSourcePage = clampNumber(sourcePage, 0, effectiveCount - 1)
     const safeTargetPage = clampNumber(targetPage, 0, effectiveCount - 1)
     if (safeSourcePage === safeTargetPage) return
 
-    const nextGroups = Array.from(
-      { length: effectiveCount },
-      (_, index) =>
-        scrollGroupsRef.current[index] ?? {
-          name: translate('网格 {index}', { index: index + 1 }),
-          icon: 'grid' as const,
-        }
-    )
+    const nextGroups = [...scrollGroupsRef.current]
+    const activeGroupId = nextGroups[currentPageRef.current]?.id
     const [movedGroup] = nextGroups.splice(safeSourcePage, 1)
     nextGroups.splice(safeTargetPage, 0, movedGroup)
     scrollGroupsRef.current = nextGroups
     setScrollGroups(nextGroups)
-
-    const safePageSize = Math.max(1, pageSizeRef.current || pageSize)
-    const nextSlots = reorderScrollGroupPages(
-      outerSlotsRef.current,
-      safePageSize,
-      effectiveCount,
-      safeSourcePage,
-      safeTargetPage
-    )
-    outerSlotsRef.current = nextSlots
-    setOuterSlots(nextSlots)
-
-    const nextPage = remapScrollPageIndexAfterReorder(
-      currentPageRef.current,
-      safeSourcePage,
-      safeTargetPage
+    const nextPage = Math.max(
+      0,
+      nextGroups.findIndex(group => group.id === activeGroupId)
     )
     currentPageRef.current = nextPage
     setCurrentPage(nextPage)
   }
 
   const handleDeleteScrollGroup = (page: number) => {
-    setScrollGroupCount(current => {
-      const effectiveCount = Math.max(current, pageCount)
-      if (effectiveCount <= 1) return current
+    const targetPage = clampNumber(page, 0, scrollGroupsRef.current.length - 1)
+    const targetId = scrollGroupsRef.current[targetPage]?.id
+    if (!targetId) return
+    const nextGroups = deleteScrollGroup(scrollGroupsRef.current, targetId)
+    if (nextGroups === scrollGroupsRef.current) return
+    scrollGroupsRef.current = nextGroups
+    setScrollGroups(nextGroups)
+    setScrollGroupCount(nextGroups.length)
+    const nextPage = clampNumber(
+      currentPageRef.current >= targetPage ? targetPage - 1 : currentPageRef.current,
+      0,
+      nextGroups.length - 1
+    )
+    currentPageRef.current = nextPage
+    setCurrentPage(nextPage)
+  }
 
-      const safePageSize = Math.max(1, pageSizeRef.current || pageSize)
-      const targetPage = clampNumber(page, 0, effectiveCount - 1)
-      const start = targetPage * safePageSize
-      const end = start + safePageSize
-      const paddedSlots = padSlotsToPageCount(outerSlotsRef.current, effectiveCount, safePageSize)
-      const removedItems = paddedSlots
-        .slice(start, end)
-        .filter((slot): slot is string => typeof slot === 'string' && slot !== DRAG_HOLE_ID)
-      const remainingSlots = [...paddedSlots.slice(0, start), ...paddedSlots.slice(end)]
-      const nextSlots = [...remainingSlots]
+  const handleCommitScrollGroupItemOrder = (groupId: string, itemIds: string[]) => {
+    const nextGroups = commitScrollGroupItemOrder(scrollGroupsRef.current, groupId, itemIds)
+    if (nextGroups === scrollGroupsRef.current) return
+    scrollGroupsRef.current = nextGroups
+    setScrollGroups(nextGroups)
+  }
 
-      removedItems.forEach(id => {
-        const emptyIndex = nextSlots.indexOf(null)
-        if (emptyIndex >= 0) {
-          nextSlots[emptyIndex] = id
-        } else {
-          nextSlots.push(id)
-        }
-      })
+  const handleMoveScrollGroupItem = (itemId: string, targetGroupId: string) => {
+    const nextGroups = moveScrollGroupItem(scrollGroupsRef.current, itemId, targetGroupId)
+    if (nextGroups === scrollGroupsRef.current) return
+    scrollGroupsRef.current = nextGroups
+    setScrollGroups(nextGroups)
+  }
 
-      const nextCount = effectiveCount - 1
-      const nextGroups = [...scrollGroupsRef.current]
-      nextGroups.splice(targetPage, 1)
-      scrollGroupsRef.current = nextGroups
-      setScrollGroups(nextGroups)
-      const outerItems = filterItemsByIds(
-        itemsRef.current,
-        resolveOuterItemIds(itemsRef.current.map(getId), dockEnabled ? dockKeysRef.current : [])
-      )
-      const normalizedSlots = compactOuterSlotsWithinPages(
-        nextSlots,
-        outerItems,
-        safePageSize,
-        Math.max(1, prevColumnsRef.current || columns),
-        nextCount
-      )
-      outerSlotsRef.current = normalizedSlots
-      setOuterSlots(normalizedSlots)
-      const nextPage = clampNumber(
-        currentPageRef.current >= targetPage ? targetPage : currentPageRef.current,
-        0,
-        nextCount - 1
-      )
-      currentPageRef.current = nextPage
-      setCurrentPage(nextPage)
-      return nextCount
+  const handleMoveScrollGroupItemToDock = (itemId: string, targetIndex: number) => {
+    const nextGroups = scrollGroupsRef.current.map(group => ({
+      ...group,
+      itemIds: group.itemIds.filter(id => id !== itemId),
+    }))
+    const compactDock = dockKeysRef.current.filter(
+      (id): id is string => typeof id === 'string' && id !== itemId
+    )
+    compactDock.splice(clampNumber(targetIndex, 0, compactDock.length), 0, itemId)
+    scrollGroupsRef.current = nextGroups
+    dockKeysRef.current = compactDock
+    setScrollGroups(nextGroups)
+    setDockKeys(compactDock)
+  }
+
+  const handleMergeScrollGroupItems = (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return
+    const source = itemsRef.current.find(item => getId(item) === sourceId)
+    const target = itemsRef.current.find(item => getId(item) === targetId)
+    if (!source || source.kind !== 'icon' || !target) return
+
+    let replacement: FolderItem
+    if (target.kind === 'folder') {
+      if (target.children.some(child => child.key === source.key)) return
+      replacement = { ...target, children: [...target.children, source] }
+    } else {
+      replacement = {
+        kind: 'folder',
+        id: makeFolderId(),
+        name: translate('New Folder'),
+        size: '1x1',
+        children: [target, source],
+      }
+    }
+    const replacementId = getId(replacement)
+    const nextItems = itemsRef.current.flatMap(item => {
+      const id = getId(item)
+      if (id === sourceId) return []
+      if (id === targetId) return [replacement]
+      return [item]
     })
+    const nextGroups = scrollGroupsRef.current.map(group => ({
+      ...group,
+      itemIds: group.itemIds
+        .filter(id => id !== sourceId)
+        .map(id => (id === targetId ? replacementId : id)),
+    }))
+    itemsRef.current = nextItems
+    scrollGroupsRef.current = nextGroups
+    setItems(nextItems)
+    setScrollGroups(nextGroups)
   }
 
   return (
@@ -2018,11 +2019,14 @@ export function ScrollableIconGrid({
             onAddGroup={handleAddScrollGroup}
             onEditGroup={handleEditScrollGroup}
             onReorderGroup={handleReorderScrollGroup}
+            onCommitItemOrder={handleCommitScrollGroupItemOrder}
+            onMoveItemToGroup={handleMoveScrollGroupItem}
+            onMoveItemToDock={handleMoveScrollGroupItemToDock}
+            onMergeItems={handleMergeScrollGroupItems}
             addIconDisabled={addIconDisabled}
             onAddIcon={onAddIcon}
             onDeleteGroup={handleDeleteScrollGroup}
             onToggleSelectIcon={toggleSelectIcon}
-            onTilePointerDown={handleTilePointerDown}
             onTileClickCapture={handleTileClickCapture}
             onOpenFolder={openFolderWithAnimation}
             onLaunchIcon={path => {

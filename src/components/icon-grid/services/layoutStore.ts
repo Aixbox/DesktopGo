@@ -140,6 +140,17 @@ export const readLayout = async (
           geometryKey?: unknown
           scrollGroups?: unknown
         }
+      | {
+          version: 9
+          items: PersistedItem[]
+          slots: unknown[]
+          dockKeys: unknown[]
+          pageSize?: number
+          columns?: number
+          coordinates?: unknown
+          geometryKey?: unknown
+          scrollGroups?: unknown
+        }
     if (!Array.isArray(parsed.items)) return null
     if (parsed.version === 1) return { items: parsed.items, slots: null, dockKeys: [] }
     if (parsed.version === 2 && Array.isArray(parsed.slots)) {
@@ -155,7 +166,8 @@ export const readLayout = async (
         parsed.version !== 5 &&
         parsed.version !== 6 &&
         parsed.version !== 7 &&
-        parsed.version !== 8) ||
+        parsed.version !== 8 &&
+        parsed.version !== 9) ||
       !Array.isArray(parsed.slots) ||
       !Array.isArray(parsed.dockKeys)
     ) {
@@ -177,7 +189,7 @@ export const readLayout = async (
       if (typeof parsed.columns === 'number' && parsed.columns > 0) result.columns = parsed.columns
       result.coordinates = normalizePersistedItemCoordinates(parsed.coordinates)
     }
-    if (parsed.version === 7 || parsed.version === 8) {
+    if (parsed.version === 7 || parsed.version === 8 || parsed.version === 9) {
       if (typeof parsed.pageSize === 'number' && parsed.pageSize > 0)
         result.pageSize = parsed.pageSize
       if (typeof parsed.columns === 'number' && parsed.columns > 0) result.columns = parsed.columns
@@ -185,15 +197,30 @@ export const readLayout = async (
       if (typeof parsed.geometryKey === 'string' && parsed.geometryKey.length > 0) {
         result.geometryKey = parsed.geometryKey
       }
-      if (parsed.version === 8 && Array.isArray(parsed.scrollGroups)) {
+      if ((parsed.version === 8 || parsed.version === 9) && Array.isArray(parsed.scrollGroups)) {
         const validIcons = new Set<ScrollGroupIcon>(SCROLL_GROUP_ICONS)
-        result.scrollGroups = parsed.scrollGroups.flatMap(entry => {
+        result.scrollGroups = parsed.scrollGroups.flatMap((entry, index) => {
           if (!entry || typeof entry !== 'object') return []
           const name = 'name' in entry && typeof entry.name === 'string' ? entry.name.trim() : ''
           const icon = 'icon' in entry && typeof entry.icon === 'string' ? entry.icon : ''
           if (!name || !validIcons.has(icon as ScrollGroupIcon)) return []
-          return [{ name, icon: icon as ScrollGroupIcon } satisfies ScrollGroupMeta]
+          const id = 'id' in entry && typeof entry.id === 'string' ? entry.id.trim() : ''
+          const itemIds =
+            'itemIds' in entry && Array.isArray(entry.itemIds)
+              ? entry.itemIds.filter(
+                  (itemId: unknown): itemId is string => typeof itemId === 'string'
+                )
+              : []
+          return [
+            {
+              id: id || `scroll-group-migrated-${index + 1}`,
+              name,
+              icon: icon as ScrollGroupIcon,
+              itemIds,
+            } satisfies ScrollGroupMeta,
+          ]
         })
+        result.scrollGroupItemsExplicit = parsed.version === 9
       }
     }
     return result
@@ -217,7 +244,7 @@ export const writeLayout = async (
       ? buildPersistedItemCoordinates(slots, items, pageSize, columns)
       : undefined
   const payload = {
-    version: 8,
+    version: 9,
     items: serializeItems(items),
     slots,
     dockKeys,
@@ -243,7 +270,7 @@ export const writePersistedLayout = async (
   }
 
   const payload = {
-    version: 8,
+    version: 9,
     items: layout.items,
     slots: layout.slots ?? [],
     dockKeys: layout.dockKeys ?? [],

@@ -24,6 +24,7 @@ interface IconProps {
   onToggleSelect: (key: string) => void
   onActivate?: (icon: DesktopIcon) => void
   highlighted?: boolean
+  motionProfile?: 'default' | 'scroll'
 }
 
 export function Icon({
@@ -34,6 +35,7 @@ export function Icon({
   onToggleSelect,
   onActivate,
   highlighted = false,
+  motionProfile = 'default',
 }: IconProps) {
   const {
     launchApp,
@@ -121,8 +123,13 @@ export function Icon({
     ? 'bg-transparent'
     : 'bg-transparent hover:bg-foreground/6 active:bg-foreground/10 dark:hover:bg-white/10 dark:active:bg-white/20'
   const layerClass = selectionMode ? (selected ? 'z-30' : 'z-10') : 'z-10 hover:z-20'
+  const usesScrollMotion = motionProfile === 'scroll'
   const imageMotionClass =
-    selectionMode || isRenaming ? '' : 'group-hover:scale-105 group-active:scale-95'
+    selectionMode || isRenaming
+      ? ''
+      : usesScrollMotion
+        ? 'scroll-grid-icon-surface'
+        : 'group-hover:scale-105 group-active:scale-95'
 
   return (
     <IconContextMenu icon={icon} disabled={selectionMode || isRenaming}>
@@ -130,7 +137,9 @@ export function Icon({
         data-icon
         data-selection-key={selectionKey}
         data-selection-mode={selectionMode ? 'on' : 'off'}
-        className={`icon-item relative flex flex-col items-center justify-start rounded-2xl border-none px-3 shadow-none transition-all duration-200 cursor-pointer group ${buttonStateClass} ${layerClass} ${
+        className={`icon-item relative flex flex-col items-center justify-start rounded-2xl border-none px-3 shadow-none cursor-pointer group ${
+          usesScrollMotion ? 'scroll-grid-icon-tile' : 'transition-all duration-200'
+        } ${buttonStateClass} ${layerClass} ${
           highlighted ? 'launchpad-import-highlight-edge' : ''
         }`}
         style={{
@@ -158,7 +167,9 @@ export function Icon({
         ) : null}
 
         <div
-          className={`icon-image flex flex-1 items-center justify-center overflow-hidden transition-all duration-200 ${imageMotionClass}`}
+          className={`icon-image flex flex-1 items-center justify-center overflow-hidden ${
+            usesScrollMotion ? '' : 'transition-all duration-200'
+          } ${imageMotionClass}`}
           style={{ width: config.imgSize, height: config.imgSize }}
         >
           {icon.icon_base64 ? (

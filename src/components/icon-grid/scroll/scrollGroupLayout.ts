@@ -1,0 +1,244 @@
+import type { PageAnchorEntry } from '../domain/topLevelLayout'
+import type { GridItem, ScrollGroupIcon, ScrollGroupMeta } from '../model'
+import { getGridItemSpan } from '../model'
+
+const LEGACY_GROUP_ID_PREFIX = 'scroll-group-migrated'
+
+export interface NormalizeScrollGroupsOptions {
+  groups: ScrollGroupMeta[] | null | undefined
+  outerItemIds: string[]
+  legacySlots?: Array<string | null> | null
+  legacyPageSize?: number
+  hasExplicitItems: boolean
+  defaultName: (index: number) => string
+  preferredGroupId?: string | null
+}
+
+const createUniqueGroupId = (requestedId: string, index: number, usedIds: Set<string>) => {
+  const base = requestedId.trim() || `${LEGACY_GROUP_ID_PREFIX}-${index + 1}`
+  let candidate = base
+  let suffix = 2
+  while (usedIds.has(candidate)) {
+    candidate = `${base}-${suffix}`
+    suffix += 1
+  }
+  usedIds.add(candidate)
+  return candidate
+}
+
+const createDefaultGroup = (
+  index: number,
+  defaultName: (index: number) => string
+): ScrollGroupMeta => ({
+  id: `${LEGACY_GROUP_ID_PREFIX}-${index + 1}`,
+  name: defaultName(index),
+  icon: 'grid',
+  itemIds: [],
+})
+
+export const normalizeScrollGroups = ({
+  groups,
+  outerItemIds,
+  legacySlots = [],
+  legacyPageSize = 1,
+  hasExplicitItems,
+  defaultName,
+  preferredGroupId = null,
+}: NormalizeScrollGroupsOptions): ScrollGroupMeta[] => {
+  const validItemIds = new Set(outerItemIds)
+  const safeLegacySlots = legacySlots ?? []
+  const sourceGroups = groups && groups.length > 0 ? groups : [createDefaultGroup(0, defaultName)]
+  const usedGroupIds = new Set<string>()
+  const normalized = sourceGroups.map((group, index) => ({
+    id: createUniqueGroupId(group.id ?? '', index, usedGroupIds),
+    name: group.name.trim() || defaultName(index),
+    icon: group.icon,
+    itemIds: [] as string[],
+  }))
+  const consumed = new Set<string>()
+
+  const appendUnique = (groupIndex: number, itemId: string | null | undefined) => {
+    if (!itemId || !validItemIds.has(itemId) || consumed.has(itemId)) return
+    consumed.add(itemId)
+    normalized[groupIndex].itemIds.push(itemId)
+  }
+
+  if (hasExplicitItems) {
+    sourceGroups.forEach((group, groupIndex) => {
+      group.itemIds.forEach(itemId => appendUnique(groupIndex, itemId))
+    })
+  } else {
+    const safePageSize = Math.max(1, Math.floor(legacyPageSize))
+    normalized.forEach((_, groupIndex) => {
+      const start = groupIndex * safePageSize
+      safeLegacySlots.slice(start, start + safePageSize).forEach(itemId => {
+        appendUnique(groupIndex, itemId)
+      })
+    })
+    safeLegacySlots.slice(normalized.length * safePageSize).forEach(itemId => {
+      appendUnique(normalized.length - 1, itemId)
+    })
+  }
+
+  const preferredIndex = preferredGroupId
+    ? normalized.findIndex(group => group.id === preferredGroupId)
+    : -1
+  const recoveryIndex = preferredIndex >= 0 ? preferredIndex : normalized.length - 1
+  outerItemIds.forEach(itemId => appendUnique(recoveryIndex, itemId))
+  return normalized
+}
+
+export const commitScrollGroupItemOrder = (
+  groups: ScrollGroupMeta[],
+  groupId: string,
+  requestedItemIds: string[]
+): ScrollGroupMeta[] => {
+  const groupIndex = groups.findIndex(group => group.id === groupId)
+  if (groupIndex < 0) return groups
+  const currentIds = groups[groupIndex].itemIds
+  const currentIdSet = new Set(currentIds)
+  const nextIds = Array.from(new Set(requestedItemIds)).filter(id => currentIdSet.has(id))
+  if (nextIds.length !== currentIds.length) return groups
+  if (nextIds.every((id, index) => id === currentIds[index])) return groups
+  return groups.map((group, index) =>
+    index === groupIndex ? { ...group, itemIds: nextIds } : group
+  )
+}
+
+export const buildScrollGroupEntries = (
+  itemIds: string[],
+  itemById: ReadonlyMap<string, GridItem>,
+  columns: number,
+  reservedEntries: PageAnchorEntry[] = []
+): PageAnchorEntry[] => {
+  const minimumColumns = itemIds.reduce((maximum, id) => {
+    const item = itemById.get(id)
+    return item ? Math.max(maximum, getGridItemSpan(item).cols) : maximum
+  }, 1)
+  const safeColumns = Math.max(minimumColumns, Math.floor(columns))
+  const occupiedCells = new Set<number>()
+  const reservedIds = new Set<string>()
+  const entries: PageAnchorEntry[] = []
+
+  reservedEntries.forEach(entry => {
+    if (reservedIds.has(entry.id)) return
+    reservedIds.add(entry.id)
+    entries.push(entry)
+    for (let rowOffset = 0; rowOffset < entry.span.rows; rowOffset += 1) {
+      for (let colOffset = 0; colOffset < entry.span.cols; colOffset += 1) {
+        occupiedCells.add((entry.row + rowOffset) * safeColumns + entry.col + colOffset)
+      }
+    }
+  })
+
+  itemIds.forEach(id => {
+    if (reservedIds.has(id)) return
+    const item = itemById.get(id)
+    if (!item) return
+    const rawSpan = getGridItemSpan(item)
+    const span = {
+      cols: Math.max(1, rawSpan.cols),
+      rows: Math.max(1, rawSpan.rows),
+    }
+    let anchorIndex = 0
+
+    while (true) {
+      const row = Math.floor(anchorIndex / safeColumns)
+      const col = anchorIndex % safeColumns
+      if (col + span.cols > safeColumns) {
+        anchorIndex += safeColumns - col
+        continue
+      }
+
+      const footprint: number[] = []
+      for (let rowOffset = 0; rowOffset < span.rows; rowOffset += 1) {
+        for (let colOffset = 0; colOffset < span.cols; colOffset += 1) {
+          footprint.push((row + rowOffset) * safeColumns + col + colOffset)
+        }
+      }
+      if (footprint.every(cell => !occupiedCells.has(cell))) {
+        footprint.forEach(cell => occupiedCells.add(cell))
+        entries.push({
+          id,
+          item,
+          globalIndex: anchorIndex,
+          localIndex: anchorIndex,
+          row,
+          col,
+          span,
+        })
+        break
+      }
+      anchorIndex += 1
+    }
+  })
+
+  return entries.sort((a, b) => a.row - b.row || a.col - b.col)
+}
+
+export const isPointInScrollMergeZone = (
+  point: { x: number; y: number },
+  rect: { left: number; top: number; width: number; height: number },
+  centerRatio = 0.6
+) => {
+  const halfWidth = (rect.width * centerRatio) / 2
+  const halfHeight = (rect.height * centerRatio) / 2
+  return (
+    Math.abs(point.x - (rect.left + rect.width / 2)) <= halfWidth &&
+    Math.abs(point.y - (rect.top + rect.height / 2)) <= halfHeight
+  )
+}
+
+export const moveScrollGroupItem = (
+  groups: ScrollGroupMeta[],
+  itemId: string,
+  targetGroupId: string
+): ScrollGroupMeta[] => {
+  const targetIndex = groups.findIndex(group => group.id === targetGroupId)
+  if (targetIndex < 0) return groups
+  const sourceIndex = groups.findIndex(group => group.itemIds.includes(itemId))
+  if (sourceIndex === targetIndex) return groups
+
+  return groups.map((group, index) => {
+    const itemIds = group.itemIds.filter(id => id !== itemId)
+    return index === targetIndex
+      ? { ...group, itemIds: [...itemIds, itemId] }
+      : { ...group, itemIds }
+  })
+}
+
+export const createScrollGroup = (
+  name: string,
+  icon: ScrollGroupIcon,
+  existingGroups: ScrollGroupMeta[]
+): ScrollGroupMeta => {
+  const usedIds = new Set(existingGroups.map(group => group.id))
+  const randomId =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? `scroll-group-${crypto.randomUUID()}`
+      : `scroll-group-${Date.now()}-${existingGroups.length + 1}`
+  return {
+    id: createUniqueGroupId(randomId, existingGroups.length, usedIds),
+    name,
+    icon,
+    itemIds: [],
+  }
+}
+
+export const deleteScrollGroup = (
+  groups: ScrollGroupMeta[],
+  groupId: string
+): ScrollGroupMeta[] => {
+  if (groups.length <= 1) return groups
+  const removedIndex = groups.findIndex(group => group.id === groupId)
+  if (removedIndex < 0) return groups
+  const targetIndex = removedIndex > 0 ? removedIndex - 1 : 1
+  const removedItemIds = groups[removedIndex].itemIds
+  return groups
+    .filter(group => group.id !== groupId)
+    .map(group =>
+      group.id === groups[targetIndex].id
+        ? { ...group, itemIds: [...group.itemIds, ...removedItemIds] }
+        : group
+    )
+}

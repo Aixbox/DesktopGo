@@ -105,8 +105,10 @@ export const SCROLL_GROUP_ICONS = [
 export type ScrollGroupIcon = (typeof SCROLL_GROUP_ICONS)[number]
 
 export interface ScrollGroupMeta {
+  id: string
   name: string
   icon: ScrollGroupIcon
+  itemIds: string[]
 }
 
 export type PersistedItem =
@@ -144,6 +146,8 @@ export interface PersistedLayout {
   // 只有该三元组变化时才重新测量列数/行数，避免 DPI/分辨率切换导致图标重排。
   geometryKey?: string
   scrollGroups?: ScrollGroupMeta[]
+  // v9 起滚动布局使用显式分组成员；v8 及更早版本仍需从 slots 一次性迁移。
+  scrollGroupItemsExplicit?: boolean
 }
 
 export const getId = (item: GridItem): string =>
