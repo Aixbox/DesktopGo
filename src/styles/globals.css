@@ -312,6 +312,7 @@ body,
 
 @media (prefers-reduced-motion: reduce) {
   .launchpad-search-shell,
+  .scroll-grid-layout,
   .scroll-grid-sidebar,
   .scroll-grid-dock,
   .scroll-grid-group-item,

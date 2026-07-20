@@ -309,6 +309,7 @@ export function ScrollableIconGrid({
       : buildGeometryKey(windowMode, iconSize, dockEnabled)
 
   const [columns, setColumns] = useState(1)
+  const latestColumnsRef = useRef(columns)
   const [rows, setRows] = useState(1)
   // 水合完成后自增，强制几何测量回调重跑一次，从而应用持久化/锁定几何。
   const [layoutHydrationTick, setLayoutHydrationTick] = useState(0)
@@ -1035,6 +1036,14 @@ export function ScrollableIconGrid({
         lockedGeometryRef.current = { key: geometryKey, columns: finalColumns, rows: finalRows }
       }
 
+      if (
+        launchpadGridViewMode === 'scroll' &&
+        layoutReadyRef.current &&
+        finalColumns !== latestColumnsRef.current
+      ) {
+        captureScrollGridItemPositions()
+      }
+      latestColumnsRef.current = finalColumns
       setItemWidth(tileWidth)
       setItemHeight(tileHeight)
       setColumns(finalColumns)
@@ -1080,7 +1089,12 @@ export function ScrollableIconGrid({
     layoutHydrationTick,
     sidebarCompact,
     scrollGroupCount,
+    captureScrollGridItemPositions,
   ])
+
+  useLayoutEffect(() => {
+    latestColumnsRef.current = columns
+  }, [columns])
 
   useEffect(() => {
     const container = folderGridContainerRef.current
