@@ -678,10 +678,13 @@ export function ScrollableIconGrid({
       })
       externalScrollPreviewSnapshotRef.current = null
       if (nextGroups === currentGroups) return
+      // The item and scroll-group writes are batched in the same drop callback. Capture the
+      // still-rendered layout now so the surviving icons use the same FLIP path as drag evasion.
+      captureScrollGridItemPositions()
       scrollGroupsRef.current = nextGroups
       setScrollGroups(nextGroups)
     },
-    [launchpadGridViewMode]
+    [captureScrollGridItemPositions, launchpadGridViewMode]
   )
 
   const {
