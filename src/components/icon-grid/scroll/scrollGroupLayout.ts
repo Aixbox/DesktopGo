@@ -3,6 +3,8 @@ import type { GridItem, ScrollGroupIcon, ScrollGroupMeta } from '../model'
 import { getGridItemSpan } from '../model'
 
 const LEGACY_GROUP_ID_PREFIX = 'scroll-group-migrated'
+export const SCROLL_PREVIEW_REORDER_DWELL_MS = 100
+export const SCROLL_PREVIEW_REORDER_LOCK_MS = 200
 
 export interface NormalizeScrollGroupsOptions {
   groups: ScrollGroupMeta[] | null | undefined
@@ -226,6 +228,64 @@ export const moveScrollItemRelative = (
   const nextIds = [...remainingIds]
   nextIds.splice(insertIndex, 0, activeId)
   return nextIds.every((id, index) => id === itemIds[index]) ? itemIds : nextIds
+}
+
+export const buildScrollGroupDragPreviewOrder = ({
+  groupItemIds,
+  workingOrder,
+  draggingIds,
+  availableIds,
+}: {
+  groupItemIds: string[]
+  workingOrder: Array<string | null>
+  draggingIds: string[]
+  availableIds: ReadonlySet<string>
+}): string[] => {
+  const draggingIdSet = new Set(draggingIds)
+  const allowedIds = new Set([...groupItemIds, ...draggingIdSet])
+  const consumed = new Set<string>()
+  let previewIds: string[] = []
+  const append = (id: string | null) => {
+    if (!id || consumed.has(id) || !allowedIds.has(id) || !availableIds.has(id)) return
+    consumed.add(id)
+    previewIds.push(id)
+  }
+
+  workingOrder.forEach(append)
+
+  // The legacy slot preview can omit scroll-group items (notably the source
+  // folder). Restore them beside their original neighbors instead of at the end.
+  const groupIdSet = new Set(groupItemIds)
+  const acceptedGroupIds = new Set(
+    previewIds.filter(id => groupIdSet.has(id) && availableIds.has(id))
+  )
+  const missingBeforeAnchor = new Map<string, string[]>()
+  let pendingMissingIds: string[] = []
+  groupItemIds.forEach(id => {
+    if (!availableIds.has(id)) return
+    if (!acceptedGroupIds.has(id) && !draggingIdSet.has(id)) {
+      pendingMissingIds.push(id)
+      consumed.add(id)
+      return
+    }
+    if (!acceptedGroupIds.has(id)) return
+    if (pendingMissingIds.length > 0) {
+      missingBeforeAnchor.set(id, pendingMissingIds)
+      pendingMissingIds = []
+    }
+  })
+
+  const restoredIds = previewIds.flatMap(id => [...(missingBeforeAnchor.get(id) ?? []), id])
+  if (pendingMissingIds.length > 0) {
+    let lastGroupAnchorIndex = -1
+    restoredIds.forEach((id, index) => {
+      if (acceptedGroupIds.has(id)) lastGroupAnchorIndex = index
+    })
+    restoredIds.splice(lastGroupAnchorIndex + 1, 0, ...pendingMissingIds)
+  }
+  previewIds = restoredIds
+  draggingIds.forEach(append)
+  return previewIds
 }
 
 export const moveScrollGroupItem = (

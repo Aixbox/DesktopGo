@@ -1,9 +1,11 @@
 import { useEffect, type MutableRefObject } from 'react'
+import { resolvePendingDragMoveAction } from './dragActivationPolicy'
 
 interface PendingPointerDrag {
   pointerId: number
   startX: number
   startY: number
+  activateOnMove?: boolean
 }
 
 interface ActivePointerDrag {
@@ -53,7 +55,10 @@ export function usePointerDragController<
       const pending = pendingRef.current
       if (!pending || pending.pointerId !== event.pointerId) return
       const distance = Math.hypot(event.clientX - pending.startX, event.clientY - pending.startY)
-      if (distance > pendingMoveTolerance) {
+      const action = resolvePendingDragMoveAction(pending, distance, pendingMoveTolerance)
+      if (action === 'begin') {
+        beginDragFnRef.current(pending, event.clientX, event.clientY)
+      } else if (action === 'abort') {
         abortPendingFnRef.current(event.pointerId)
       }
     }

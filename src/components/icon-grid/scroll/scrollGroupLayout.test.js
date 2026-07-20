@@ -1,5 +1,6 @@
 import {
   buildScrollGroupEntries,
+  buildScrollGroupDragPreviewOrder,
   commitScrollGroupItemOrder,
   deleteScrollGroup,
   isPointInScrollMergeZone,
@@ -203,6 +204,69 @@ assert(
   JSON.stringify(moveScrollItemRelative(['a', 'b', 'c', 'd'], 'd', 'b', 'before')) ===
     JSON.stringify(['a', 'd', 'b', 'c']),
   'Relative insertion must remain correct when moving backward through the order'
+)
+assert(
+  JSON.stringify(
+    buildScrollGroupDragPreviewOrder({
+      groupItemIds: ['folder:source', 'a', 'b', 'c'],
+      workingOrder: ['other-group', 'a', 'folder-child', 'b', 'c'],
+      draggingIds: ['folder-child'],
+      availableIds: new Set(['a', 'b', 'c', 'folder-child', 'other-group']),
+    })
+  ) === JSON.stringify(['a', 'folder-child', 'b', 'c']),
+  'A folder child preview must enter the active group order and exclude unrelated or removed items'
+)
+const sourceFolderPreviewInput = {
+  groupItemIds: ['a', 'folder:source', 'b', 'c'],
+  workingOrder: ['a', 'folder:source', 'b', 'c', 'folder-child'],
+  draggingIds: ['folder-child'],
+  availableIds: new Set(['a', 'folder:source', 'b', 'c', 'folder-child']),
+}
+assert(
+  JSON.stringify(
+    buildScrollGroupDragPreviewOrder({
+      ...sourceFolderPreviewInput,
+    })
+  ) === JSON.stringify(['a', 'folder:source', 'b', 'c', 'folder-child']),
+  'A source folder omitted by the legacy order must keep its original relative position'
+)
+assert(
+  JSON.stringify(
+    buildScrollGroupDragPreviewOrder({
+      ...sourceFolderPreviewInput,
+      workingOrder: ['a', 'folder-child', 'folder:source', 'b', 'c'],
+    })
+  ) === JSON.stringify(['a', 'folder-child', 'folder:source', 'b', 'c']),
+  'Dragging over the leading side of the source folder must place the child before it'
+)
+assert(
+  JSON.stringify(
+    buildScrollGroupDragPreviewOrder({
+      ...sourceFolderPreviewInput,
+      workingOrder: ['a', 'folder:source', 'folder-child', 'b', 'c'],
+    })
+  ) === JSON.stringify(['a', 'folder:source', 'folder-child', 'b', 'c']),
+  'Dragging over the trailing side of the source folder must place the child after it'
+)
+assert(
+  JSON.stringify(
+    buildScrollGroupDragPreviewOrder({
+      ...sourceFolderPreviewInput,
+      workingOrder: ['a', 'folder-child', 'folder:source', 'b', 'c'],
+    })
+  ) === JSON.stringify(['a', 'folder-child', 'folder:source', 'b', 'c']),
+  'Folder intent must preserve the last accepted ordering instead of forcing a side reorder'
+)
+assert(
+  JSON.stringify(
+    buildScrollGroupDragPreviewOrder({
+      groupItemIds: ['a', 'b', 'c'],
+      workingOrder: [null, 'b', 'c'],
+      draggingIds: ['a'],
+      availableIds: new Set(['a', 'b', 'c']),
+    })
+  ) === JSON.stringify(['b', 'c', 'a']),
+  'A dragged group item must not be mistaken for a missing group item during folder intent'
 )
 
 console.log('scrollGroupLayout tests passed')

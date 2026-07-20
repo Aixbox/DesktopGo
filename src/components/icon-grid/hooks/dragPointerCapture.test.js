@@ -1,7 +1,5 @@
-import {
-  activateDragPointerCapture,
-  releaseDragPointerCapture,
-} from './dragPointerCapture.ts'
+import { activateDragPointerCapture, releaseDragPointerCapture } from './dragPointerCapture.ts'
+import { resolvePendingDragMoveAction } from './dragActivationPolicy.ts'
 
 function assert(condition, message) {
   if (!condition) {
@@ -27,6 +25,18 @@ const target = {
 }
 
 assert(history.length === 0, '待定点击阶段不应主动设置 pointer capture')
+assert(
+  resolvePendingDragMoveAction({ activateOnMove: true }, 8, 7) === 'begin',
+  '滚动网格指针移动超过阈值后应立即进入拖拽'
+)
+assert(
+  resolvePendingDragMoveAction({ activateOnMove: false }, 8, 7) === 'abort',
+  '长按拖拽在计时完成前移动超过阈值时应取消'
+)
+assert(
+  resolvePendingDragMoveAction({ activateOnMove: true }, 7, 7) === 'wait',
+  '指针移动未超过阈值时不应提前进入拖拽'
+)
 
 const activeTarget = activateDragPointerCapture(target, 7)
 assert(activeTarget === target, '进入真实拖拽后应返回当前 capture 目标')

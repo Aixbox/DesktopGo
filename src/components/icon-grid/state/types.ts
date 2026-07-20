@@ -14,6 +14,7 @@ export interface DragState {
   offsetX: number
   offsetY: number
   workingOrder: Array<string | null>
+  scrollGroupOrder?: string[] | null
   sourceSlotIndex: number | null
   previewSlotIndex: number | null
   dockPreviewIndex: number | null
@@ -49,6 +50,7 @@ export interface OuterOverlapHit {
 export interface PendingDrag {
   context: DragContext
   sourceFolderId: string | null
+  activateOnMove?: boolean
   pointerId: number
   itemId: string
   startX: number

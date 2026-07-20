@@ -127,10 +127,13 @@ import {
 import type { FolderSize, GridItem, ScrollGroupIcon, ScrollGroupMeta } from '../model'
 import { getGridItemSpan } from '../model'
 import type { PageAnchorEntry } from '../domain/topLevelLayout'
+import { activateDragPointerCapture, releaseDragPointerCapture } from '../hooks/dragPointerCapture'
 import {
   buildScrollGroupEntries,
   moveScrollItemRelative,
   resolveScrollDropPosition,
+  SCROLL_PREVIEW_REORDER_DWELL_MS,
+  SCROLL_PREVIEW_REORDER_LOCK_MS,
   type ScrollDropPosition,
 } from '../scroll/scrollGroupLayout'
 import { FolderCreatePreview } from './FolderVisuals'
@@ -177,8 +180,6 @@ interface PointerDragSession {
 const POINTER_DRAG_DISTANCE = 4
 const TOUCH_DRAG_DELAY_MS = 200
 const POINTER_COLLISION_INTERVAL_MS = 40
-const PREVIEW_REORDER_DWELL_MS = 100
-const PREVIEW_REORDER_LOCK_MS = 200
 const EDGE_SCROLL_THRESHOLD_PX = 72
 const EDGE_SCROLL_MAX_SPEED_PX = 12
 const NOOP = () => {}
@@ -228,12 +229,14 @@ interface ScrollableOuterGridViewProps {
   onAddIcon?: () => void
   onDeleteGroup: (page: number) => void
   onToggleSelectIcon: (key: string) => void
+  onTilePointerDown: (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => void
   onTileClickCapture: (event: ReactMouseEvent<HTMLDivElement>) => void
   onOpenFolder: (folderId: string) => void
   onLaunchIcon: (path: string) => void
   onResizeFolder: (folderId: string, size: FolderSize) => void
   bindTileRef: (id: string, node: HTMLDivElement | null) => void
   bindGridPageRef: (page: number, node: HTMLDivElement | null) => void
+  externalGridFlipPositionsRef: MutableRefObject<Map<string, GridItemPosition> | null>
   reorderAnimationMs: number
 }
 
@@ -490,12 +493,14 @@ export function ScrollableOuterGridView({
   onAddIcon,
   onDeleteGroup,
   onToggleSelectIcon,
+  onTilePointerDown,
   onTileClickCapture,
   onOpenFolder,
   onLaunchIcon,
   onResizeFolder,
   bindTileRef,
   bindGridPageRef,
+  externalGridFlipPositionsRef,
   reorderAnimationMs,
 }: ScrollableOuterGridViewProps) {
   const groupItemRefs = useRef(new Map<number, HTMLDivElement>())
@@ -859,7 +864,7 @@ export function ScrollableOuterGridView({
     activeId: string,
     overId: string,
     position: Exclude<ScrollDropPosition, 'middle'>,
-    lockDuration = PREVIEW_REORDER_LOCK_MS
+    lockDuration = SCROLL_PREVIEW_REORDER_LOCK_MS
   ) => {
     if (
       activeId === overId ||
@@ -909,13 +914,21 @@ export function ScrollableOuterGridView({
       previewShiftTimerRef.current = null
       pendingPreviewShiftRef.current = null
       if (queued) commitPreviewOrder(queued.activeId, queued.overId, queued.position)
-    }, PREVIEW_REORDER_DWELL_MS)
+    }, SCROLL_PREVIEW_REORDER_DWELL_MS)
   }
 
   useLayoutEffect(() => {
-    const previousPositions = pendingGridFlipRef.current
+    const internalPositions = pendingGridFlipRef.current
+    const externalPositions = externalGridFlipPositionsRef.current
+    const previousPositions = internalPositions ?? externalPositions
     pendingGridFlipRef.current = null
+    externalGridFlipPositionsRef.current = null
     if (!previousPositions || reducedMotion) return
+
+    if (!internalPositions && externalPositions) {
+      gridFlipAnimationsRef.current.forEach(animation => animation.cancel())
+      gridFlipAnimationsRef.current.clear()
+    }
 
     const movedItems: Array<{
       id: string
@@ -954,7 +967,13 @@ export function ScrollableOuterGridView({
       animation.oncancel = clearAnimation
       gridFlipAnimationsRef.current.set(id, animation)
     })
-  }, [activeDraggedItemId, entries, reducedMotion, reorderAnimationMs])
+  }, [
+    activeDraggedItemId,
+    entries,
+    externalGridFlipPositionsRef,
+    reducedMotion,
+    reorderAnimationMs,
+  ])
 
   const startItemDrag = (activeId: string) => {
     const initialOrder = committedItemIds.filter(id => activeItemById.has(id))
@@ -1177,6 +1196,7 @@ export function ScrollableOuterGridView({
   }
 
   const activatePointerDrag = (session: PointerDragSession) => {
+    activateDragPointerCapture(gridElementRef.current, session.pointerId)
     const sourceRect = session.sourceNode.getBoundingClientRect()
     const gridRect = gridElementRef.current?.getBoundingClientRect() ?? null
     const containerRect = containerRef.current?.getBoundingClientRect() ?? null
@@ -1227,10 +1247,7 @@ export function ScrollableOuterGridView({
     stopEdgeScroll()
     session?.overlayNode?.remove()
     if (session?.sourceNode) session.sourceNode.style.opacity = ''
-    const grid = gridElementRef.current
-    if (session && grid?.hasPointerCapture(session.pointerId)) {
-      grid.releasePointerCapture(session.pointerId)
-    }
+    if (session) releaseDragPointerCapture(gridElementRef.current, session.pointerId)
   }
 
   const completePointerDrag = (session: PointerDragSession) => {
@@ -1337,7 +1354,6 @@ export function ScrollableOuterGridView({
       containerRect: null,
       startScrollTop: containerRef.current?.scrollTop ?? 0,
     }
-    event.currentTarget.setPointerCapture(event.pointerId)
   }
 
   const handleGridPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1352,9 +1368,6 @@ export function ScrollableOuterGridView({
       if (distance <= POINTER_DRAG_DISTANCE) return
       if (session.pointerType === 'touch' && performance.now() < session.activationTime) {
         cleanupPointerDrag()
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-          event.currentTarget.releasePointerCapture(event.pointerId)
-        }
         return
       }
       activatePointerDrag(session)
@@ -1374,9 +1387,6 @@ export function ScrollableOuterGridView({
       completePointerDrag(session)
     } else {
       cleanupPointerDrag()
-    }
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
     }
   }
 
@@ -1840,6 +1850,11 @@ export function ScrollableOuterGridView({
                           }}
                           {...sortable.attributes}
                           {...sortable.listeners}
+                          onPointerDown={event => {
+                            if (selectionMode) return
+                            event.stopPropagation()
+                            onTilePointerDown(event, entry.id)
+                          }}
                           onClickCapture={handleGridClickCapture}
                         >
                           {entry.item.kind === 'icon' ? (
