@@ -1,4 +1,5 @@
 import { AppWindow } from 'lucide-react'
+import { memo } from 'react'
 import type { DesktopIcon, TitleLineCount } from '../../../types'
 import {
   getIconGridTitleHeight,
@@ -87,10 +88,7 @@ export const getDesktopFolderTileMetrics = ({
   const bodyWidth = Math.max(40, footprintWidth - ICON_GRID_TILE_PADDING_Y * 2)
   const bodyHeight = Math.max(
     32,
-    footprintHeight -
-      ICON_GRID_TILE_PADDING_Y * 2 -
-      titleHeight -
-      ICON_GRID_TITLE_GAP
+    footprintHeight - ICON_GRID_TILE_PADDING_Y * 2 - titleHeight - ICON_GRID_TITLE_GAP
   )
   const singleSlotBodyExtent = Math.max(
     32,
@@ -98,10 +96,7 @@ export const getDesktopFolderTileMetrics = ({
   )
   const surfaceBodyHeight = Math.max(
     32,
-    footprintHeight -
-      ICON_GRID_TILE_PADDING_Y * 2 -
-      surfaceTitleHeight -
-      ICON_GRID_TITLE_GAP
+    footprintHeight - ICON_GRID_TILE_PADDING_Y * 2 - surfaceTitleHeight - ICON_GRID_TITLE_GAP
   )
   const surfaceSingleSlotBodyExtent = Math.max(
     32,
@@ -158,7 +153,8 @@ export const getDesktopSingleSlotFolderMetrics = (
     surfaceRadius: metrics.surfaceRadius,
     previewSize,
     surfaceLeft: (tileWidth - metrics.shapeWidth) / 2,
-    surfaceTop: ICON_GRID_TILE_PADDING_Y + Math.max(0, (metrics.bodyHeight - metrics.shapeHeight) / 2),
+    surfaceTop:
+      ICON_GRID_TILE_PADDING_Y + Math.max(0, (metrics.bodyHeight - metrics.shapeHeight) / 2),
   }
 }
 
@@ -177,7 +173,7 @@ interface FolderCreatePreviewProps {
   surfaceClassName?: string
 }
 
-export function FolderCreatePreview({
+export const FolderCreatePreview = memo(function FolderCreatePreview({
   active,
   icon,
   imgSize,
@@ -268,7 +264,7 @@ export function FolderCreatePreview({
       </div>
     </div>
   )
-}
+})
 
 interface FolderIconVisualProps {
   icons: DesktopIcon[]

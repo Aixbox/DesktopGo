@@ -3,8 +3,10 @@ import {
   commitScrollGroupItemOrder,
   deleteScrollGroup,
   isPointInScrollMergeZone,
+  moveScrollItemRelative,
   moveScrollGroupItem,
   normalizeScrollGroups,
+  resolveScrollDropPosition,
 } from './scrollGroupLayout.ts'
 
 function assert(condition, message) {
@@ -171,6 +173,36 @@ assert(
 assert(
   !isPointInScrollMergeZone({ x: 110, y: 200 }, { left: 100, top: 100, width: 200, height: 200 }),
   'The edge of a large folder must remain a reorder target'
+)
+
+const dropRect = { left: 100, top: 100, width: 100, height: 100 }
+assert(
+  resolveScrollDropPosition({ x: 149, y: 150 }, dropRect, false) === 'before' &&
+    resolveScrollDropPosition({ x: 150, y: 150 }, dropRect, false) === 'after',
+  'Normal targets must split into exact before and after halves'
+)
+assert(
+  resolveScrollDropPosition({ x: 150, y: 150 }, dropRect, true) === 'middle' &&
+    resolveScrollDropPosition({ x: 124, y: 150 }, dropRect, true) === 'before' &&
+    resolveScrollDropPosition({ x: 176, y: 150 }, dropRect, true) === 'after' &&
+    resolveScrollDropPosition({ x: 150, y: 124 }, dropRect, true) === 'before' &&
+    resolveScrollDropPosition({ x: 150, y: 176 }, dropRect, true) === 'after',
+  'Merge-capable targets must reserve only the center 50% and keep every edge sortable'
+)
+assert(
+  JSON.stringify(moveScrollItemRelative(['a', 'b', 'c', 'd'], 'a', 'c', 'before')) ===
+    JSON.stringify(['b', 'a', 'c', 'd']),
+  'Before insertion must place the active item immediately before the target'
+)
+assert(
+  JSON.stringify(moveScrollItemRelative(['a', 'b', 'c', 'd'], 'a', 'c', 'after')) ===
+    JSON.stringify(['b', 'c', 'a', 'd']),
+  'After insertion must place the active item immediately after the target'
+)
+assert(
+  JSON.stringify(moveScrollItemRelative(['a', 'b', 'c', 'd'], 'd', 'b', 'before')) ===
+    JSON.stringify(['a', 'd', 'b', 'c']),
+  'Relative insertion must remain correct when moving backward through the order'
 )
 
 console.log('scrollGroupLayout tests passed')

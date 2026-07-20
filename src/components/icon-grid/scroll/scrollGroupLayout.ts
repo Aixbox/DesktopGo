@@ -189,6 +189,45 @@ export const isPointInScrollMergeZone = (
   )
 }
 
+export type ScrollDropPosition = 'before' | 'after' | 'middle'
+
+export const resolveScrollDropPosition = (
+  point: { x: number; y: number },
+  rect: { left: number; top: number; width: number; height: number },
+  mergeAllowed: boolean
+): ScrollDropPosition => {
+  const centerX = rect.left + rect.width / 2
+  const centerY = rect.top + rect.height / 2
+  if (!mergeAllowed) return point.x >= centerX ? 'after' : 'before'
+
+  const centerHalfWidth = rect.width / 4
+  const centerHalfHeight = rect.height / 4
+  if (point.x >= centerX + centerHalfWidth) return 'after'
+  if (point.x < centerX - centerHalfWidth) return 'before'
+  if (point.y >= centerY + centerHalfHeight) return 'after'
+  if (point.y < centerY - centerHalfHeight) return 'before'
+  return 'middle'
+}
+
+export const moveScrollItemRelative = (
+  itemIds: string[],
+  activeId: string,
+  overId: string,
+  position: Exclude<ScrollDropPosition, 'middle'>
+): string[] => {
+  if (activeId === overId) return itemIds
+  const sourceIndex = itemIds.indexOf(activeId)
+  if (sourceIndex < 0 || !itemIds.includes(overId)) return itemIds
+
+  const remainingIds = itemIds.filter(id => id !== activeId)
+  const targetIndex = remainingIds.indexOf(overId)
+  if (targetIndex < 0) return itemIds
+  const insertIndex = targetIndex + (position === 'after' ? 1 : 0)
+  const nextIds = [...remainingIds]
+  nextIds.splice(insertIndex, 0, activeId)
+  return nextIds.every((id, index) => id === itemIds[index]) ? itemIds : nextIds
+}
+
 export const moveScrollGroupItem = (
   groups: ScrollGroupMeta[],
   itemId: string,

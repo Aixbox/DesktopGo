@@ -1,6 +1,10 @@
 import { AppWindow } from 'lucide-react'
 import { motion } from 'framer-motion'
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
+import {
+  memo,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import {
   getIconGridTitleMetrics,
   ICON_GRID_TILE_PADDING_Y,
@@ -333,7 +337,7 @@ function FolderBody({
   )
 }
 
-export function OuterFolderTile({
+function OuterFolderTileComponent({
   folder,
   span,
   slotWidth,
@@ -470,3 +474,23 @@ export function OuterFolderTile({
     </ContextMenu>
   )
 }
+
+export const OuterFolderTile = memo(
+  OuterFolderTileComponent,
+  (previous, next) =>
+    previous.folder === next.folder &&
+    previous.span.cols === next.span.cols &&
+    previous.span.rows === next.span.rows &&
+    previous.slotWidth === next.slotWidth &&
+    previous.slotHeight === next.slotHeight &&
+    previous.gridGap === next.gridGap &&
+    previous.folderPreview === next.folderPreview &&
+    previous.folderOpen === next.folderOpen &&
+    previous.sharedLayoutActive === next.sharedLayoutActive &&
+    previous.selectionMode === next.selectionMode &&
+    previous.onPointerDown === next.onPointerDown &&
+    previous.onClickCapture === next.onClickCapture &&
+    previous.onOpenFolder === next.onOpenFolder &&
+    previous.onLaunchIcon === next.onLaunchIcon &&
+    previous.onResizeFolder === next.onResizeFolder
+)

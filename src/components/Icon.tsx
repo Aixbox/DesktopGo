@@ -9,6 +9,7 @@ import { useIconStore } from '../stores/iconStore'
 import { IconContextMenu } from './icons/IconContextMenu'
 import { AppWindow, Check } from 'lucide-react'
 import {
+  memo,
   useEffect,
   useRef,
   useState,
@@ -27,7 +28,7 @@ interface IconProps {
   motionProfile?: 'default' | 'scroll'
 }
 
-export function Icon({
+export const Icon = memo(function Icon({
   icon,
   selectionKey,
   selectionMode,
@@ -37,20 +38,18 @@ export function Icon({
   highlighted = false,
   motionProfile = 'default',
 }: IconProps) {
-  const {
-    launchApp,
-    iconSize,
-    titleLineCount,
-    customNames,
-    setCustomName,
-    clearCustomName,
-    renameTriggerPath,
-    clearRenameTrigger,
-  } = useIconStore()
+  const launchApp = useIconStore(state => state.launchApp)
+  const iconSize = useIconStore(state => state.iconSize)
+  const titleLineCount = useIconStore(state => state.titleLineCount)
+  const customName = useIconStore(state => state.customNames[icon.path])
+  const setCustomName = useIconStore(state => state.setCustomName)
+  const clearCustomName = useIconStore(state => state.clearCustomName)
+  const renameTriggerPath = useIconStore(state => state.renameTriggerPath)
+  const clearRenameTrigger = useIconStore(state => state.clearRenameTrigger)
   const config = ICON_SIZE_CONFIG[iconSize]
   const tileHeight = getIconGridRowHeight(iconSize)
   const isSingleLineTitle = titleLineCount === 'one'
-  const displayName = customNames[icon.path] ?? icon.name
+  const displayName = customName ?? icon.name
 
   const [isRenaming, setIsRenaming] = useState(false)
   const [draftName, setDraftName] = useState(displayName)
@@ -224,4 +223,4 @@ export function Icon({
       </button>
     </IconContextMenu>
   )
-}
+})

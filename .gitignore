@@ -27,3 +27,5 @@ updater-env.ps1
 build-script/
 
 helloagents/
+
+.codex/wetab-research/
