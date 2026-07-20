@@ -63,6 +63,7 @@ interface UseDragDropCommitParams {
   clearEdgeSwitchTimer: () => void
   resolveNearestDropOrderByContext: (state: DragState) => Array<string | null>
   resolveNearestSlotIndexByContext: (state: DragState) => number | null
+  onFolderCreateCommitted?: (session: DragState, createdFolderId: string, targetId: string) => void
 }
 
 interface UseDragDropCommitResult {
@@ -95,6 +96,7 @@ export function useScrollableDragDropCommit({
   clearEdgeSwitchTimer,
   resolveNearestDropOrderByContext,
   resolveNearestSlotIndexByContext,
+  onFolderCreateCommitted,
 }: UseDragDropCommitParams): UseDragDropCommitResult {
   const folderDropFlightTimerRef = useRef<number | null>(null)
   const multiDropFlightTimerRef = useRef<number | null>(null)
@@ -637,6 +639,9 @@ export function useScrollableDragDropCommit({
               targetContext,
               result
             )
+            if (createdFolderId) {
+              onFolderCreateCommitted?.(current, createdFolderId, targetId)
+            }
             scheduleFolderCreateTransition(createdFolderId)
             setFolderDropFlight(prev => (prev && prev.id === flightId ? null : prev))
             setFolderPreviewFreezeTargetId(prev => (prev === targetId ? null : prev))
@@ -667,6 +672,9 @@ export function useScrollableDragDropCommit({
             targetContext,
             result
           )
+          if (createdFolderId) {
+            onFolderCreateCommitted?.(current, createdFolderId, targetId)
+          }
           scheduleFolderCreateTransition(createdFolderId)
         }
       } else {

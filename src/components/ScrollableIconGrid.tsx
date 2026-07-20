@@ -23,6 +23,7 @@ import type {
 import { getGridItemSpan, getId, makeFolderId } from './icon-grid/model'
 import { compactEmptyPages, DRAG_HOLE_ID, areSlotsEqual } from './icon-grid/domain/slots'
 import { clampNumber } from './icon-grid/domain/geometry'
+import type { DragState } from './icon-grid/state/types'
 import {
   hydrateDockKeys,
   hydrateItems,
@@ -50,6 +51,7 @@ import { compactOuterSlotsWithinPages } from './icon-grid/scroll/scrollTopLevelL
 import {
   buildScrollGroupDragPreviewOrder,
   buildScrollGroupEntries,
+  commitScrollFolderCreation,
   commitScrollGroupItemOrder,
   createScrollGroup,
   deleteScrollGroup,
@@ -647,6 +649,41 @@ export function ScrollableIconGrid({
     scrollGridPendingFlipPositionsRef.current = positions
   }, [launchpadGridViewMode])
 
+  const captureFinishedScrollDrag = useCallback(
+    (session: DragState, _folderCreateTargetId: string | null) => {
+      if (launchpadGridViewMode !== 'scroll') return
+      const activeGroup = scrollGroupsRef.current[currentPageRef.current]
+      if (!activeGroup) return
+      externalScrollPreviewSnapshotRef.current = {
+        groupId: activeGroup.id,
+        itemIds: Array.from(
+          new Set(session.scrollGroupOrder ?? [...activeGroup.itemIds, ...session.draggingIds])
+        ),
+        draggingIds: session.draggingIds,
+      }
+    },
+    [launchpadGridViewMode]
+  )
+
+  const commitCreatedFolderToScrollGroup = useCallback(
+    (session: DragState, createdFolderId: string, targetId: string) => {
+      if (launchpadGridViewMode !== 'scroll') return
+      const currentGroups = scrollGroupsRef.current
+      const nextGroups = commitScrollFolderCreation({
+        groups: currentGroups,
+        previewItemIds: session.scrollGroupOrder,
+        sourceIds: session.draggingIds,
+        targetId,
+        folderId: createdFolderId,
+      })
+      externalScrollPreviewSnapshotRef.current = null
+      if (nextGroups === currentGroups) return
+      scrollGroupsRef.current = nextGroups
+      setScrollGroups(nextGroups)
+    },
+    [launchpadGridViewMode]
+  )
+
   const {
     dragState,
     dragRef,
@@ -723,6 +760,8 @@ export function ScrollableIconGrid({
         ? () => scrollGroupsRef.current[currentPageRef.current]?.itemIds ?? []
         : undefined,
     onBeforeOuterPreviewChange: captureScrollGridItemPositions,
+    onOuterDragFinished: captureFinishedScrollDrag,
+    onFolderCreateCommitted: commitCreatedFolderToScrollGroup,
     dockContainerRef,
     dockGridRef,
     tileRefs,
@@ -1577,24 +1616,13 @@ export function ScrollableIconGrid({
       availableIds: new Set(outerViewItemById.keys()),
     })
   }, [currentPage, dragState, launchpadGridViewMode, outerViewItemById, scrollGroups])
-  useEffect(() => {
-    if (dragState?.context === 'outer' && externalScrollPreviewItemIds) {
-      const activeGroup = scrollGroups[currentPage]
-      if (activeGroup) {
-        externalScrollPreviewSnapshotRef.current = {
-          groupId: activeGroup.id,
-          itemIds: externalScrollPreviewItemIds,
-          draggingIds: dragState.draggingIds,
-        }
-      }
-      return
-    }
+  useLayoutEffect(() => {
     if (dragState !== null) return
 
     const snapshot = externalScrollPreviewSnapshotRef.current
-    externalScrollPreviewSnapshotRef.current = null
     if (!snapshot) return
     const outerIdSet = new Set(outerItemIds)
+    externalScrollPreviewSnapshotRef.current = null
     const droppedIds = snapshot.draggingIds.filter(id => outerIdSet.has(id))
     if (droppedIds.length === 0) return
 

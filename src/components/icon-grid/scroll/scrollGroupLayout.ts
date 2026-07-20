@@ -288,6 +288,60 @@ export const buildScrollGroupDragPreviewOrder = ({
   return previewIds
 }
 
+export const replaceScrollPreviewItemsWithFolder = ({
+  itemIds,
+  sourceIds,
+  targetId,
+  folderId,
+}: {
+  itemIds: string[]
+  sourceIds: string[]
+  targetId: string
+  folderId: string
+}): string[] => {
+  const sourceIdSet = new Set(sourceIds)
+  const consumed = new Set<string>()
+  const nextIds: string[] = []
+  itemIds.forEach(id => {
+    const replacementId = id === targetId ? folderId : id
+    if (sourceIdSet.has(id) || consumed.has(replacementId)) return
+    consumed.add(replacementId)
+    nextIds.push(replacementId)
+  })
+  return nextIds
+}
+
+export const commitScrollFolderCreation = ({
+  groups,
+  previewItemIds,
+  sourceIds,
+  targetId,
+  folderId,
+}: {
+  groups: ScrollGroupMeta[]
+  previewItemIds: string[] | null | undefined
+  sourceIds: string[]
+  targetId: string
+  folderId: string
+}): ScrollGroupMeta[] => {
+  const targetGroup = groups.find(group => group.itemIds.includes(targetId))
+  if (!targetGroup) return groups
+  const sourceIdSet = new Set(sourceIds)
+  const replace = (itemIds: string[]) =>
+    replaceScrollPreviewItemsWithFolder({ itemIds, sourceIds, targetId, folderId })
+  const previewOrder = replace(previewItemIds ?? targetGroup.itemIds)
+  const committedFallback = replace(targetGroup.itemIds)
+  const targetItemIds = Array.from(new Set([...previewOrder, ...committedFallback]))
+
+  return groups.map(group => ({
+    ...group,
+    itemIds:
+      group.id === targetGroup.id
+        ? targetItemIds
+        : group.itemIds.filter(id => !sourceIdSet.has(id) && id !== folderId),
+  }))
+}
+
 export const moveScrollGroupItem = (
   groups: ScrollGroupMeta[],
   itemId: string,

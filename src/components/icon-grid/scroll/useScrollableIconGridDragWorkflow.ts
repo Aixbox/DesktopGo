@@ -108,6 +108,8 @@ interface UseIconGridDragWorkflowParams {
   } | null
   getActiveScrollGroupItemIds?: () => string[]
   onBeforeOuterPreviewChange?: () => void
+  onOuterDragFinished?: (session: DragState, folderCreateTargetId: string | null) => void
+  onFolderCreateCommitted?: (session: DragState, createdFolderId: string, targetId: string) => void
   dockContainerRef: MutableRefObject<HTMLDivElement | null>
   dockGridRef: MutableRefObject<HTMLDivElement | null>
   tileRefs: MutableRefObject<Map<string, HTMLDivElement>>
@@ -175,6 +177,8 @@ export function useScrollableIconGridDragWorkflow({
   getOuterGridElementAtPoint,
   getActiveScrollGroupItemIds,
   onBeforeOuterPreviewChange,
+  onOuterDragFinished,
+  onFolderCreateCommitted,
   dockContainerRef,
   dockGridRef,
   tileRefs,
@@ -1762,6 +1766,7 @@ export function useScrollableIconGridDragWorkflow({
     resolveNearestSlotIndexByContext,
     outerDropMode,
     getOuterMinPageCount,
+    onFolderCreateCommitted,
   })
 
   const moveDragToTopLevelContext = (
@@ -2588,7 +2593,16 @@ export function useScrollableIconGridDragWorkflow({
   useEffect(() => {
     finishDragFnRef.current = (pointerId: number) => {
       const completedDrag = dragRef.current
+      const completedFolderTargetId = completedDrag?.folderPreviewTargetId ?? null
+      const completedFolderTarget = completedFolderTargetId
+        ? itemsRef.current.find(item => getId(item) === completedFolderTargetId)
+        : null
+      const folderCreateTargetId =
+        completedFolderTarget?.kind === 'icon' ? completedFolderTargetId : null
       if (!finishDrag(pointerId)) return
+      if (completedDrag?.context === 'outer' && folderCreateTargetId === null) {
+        onOuterDragFinished?.(completedDrag, folderCreateTargetId)
+      }
       dragPointerCaptureTargetRef.current = releaseDragPointerCapture(
         dragPointerCaptureTargetRef.current,
         pointerId
@@ -2599,7 +2613,7 @@ export function useScrollableIconGridDragWorkflow({
       clearOuterDwellTimer()
       suppressClickUntilRef.current = performance.now() + 300
     }
-  }, [finishDrag, unselectIcons])
+  }, [finishDrag, onOuterDragFinished, unselectIcons])
 
   useEffect(() => {
     clearPendingFnRef.current = clearPending

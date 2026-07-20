@@ -1,12 +1,14 @@
 import {
   buildScrollGroupEntries,
   buildScrollGroupDragPreviewOrder,
+  commitScrollFolderCreation,
   commitScrollGroupItemOrder,
   deleteScrollGroup,
   isPointInScrollMergeZone,
   moveScrollItemRelative,
   moveScrollGroupItem,
   normalizeScrollGroups,
+  replaceScrollPreviewItemsWithFolder,
   resolveScrollDropPosition,
 } from './scrollGroupLayout.ts'
 
@@ -267,6 +269,29 @@ assert(
     })
   ) === JSON.stringify(['b', 'c', 'a']),
   'A dragged group item must not be mistaken for a missing group item during folder intent'
+)
+assert(
+  JSON.stringify(
+    replaceScrollPreviewItemsWithFolder({
+      itemIds: ['a', 'source', 'target', 'b'],
+      sourceIds: ['source'],
+      targetId: 'target',
+      folderId: 'folder:new',
+    })
+  ) === JSON.stringify(['a', 'folder:new', 'b']),
+  'A newly created folder must replace the merge target instead of being appended'
+)
+assert(
+  JSON.stringify(
+    commitScrollFolderCreation({
+      groups: [meta('group-a', ['a', 'source', 'target', 'b']), meta('group-b', ['c'])],
+      previewItemIds: ['a', 'source', 'target', 'b'],
+      sourceIds: ['source'],
+      targetId: 'target',
+      folderId: 'folder:new',
+    })
+  ) === JSON.stringify([meta('group-a', ['a', 'folder:new', 'b']), meta('group-b', ['c'])]),
+  'Folder creation must update the target scroll group in the same transaction'
 )
 
 console.log('scrollGroupLayout tests passed')
