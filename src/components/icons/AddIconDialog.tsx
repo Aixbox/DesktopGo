@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleAlert,
+  Crop as CropIcon,
   FileSearch,
   FolderOpen,
   Globe2,
@@ -24,6 +25,7 @@ import {
   Images,
   Link2,
   Monitor,
+  Pencil,
   RefreshCw,
   Type,
   Upload,
@@ -44,6 +46,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/components/ui/toast'
+import { IconCropDialog, type IconCropResult } from './IconCropDialog'
 
 type ImportIconsResult = {
   imported_count: number
@@ -75,6 +78,11 @@ type WebsiteIconResult = {
   icon_base64: string
   icons?: string[]
 }
+
+type CropEditorTarget =
+  | { kind: 'target'; source: string }
+  | { kind: 'custom'; source: string }
+  | { kind: 'website'; source: string; index: number }
 
 export type AddIconDialogCreatedEntry = {
   displayName: string
@@ -133,6 +141,32 @@ function FormRow({
   )
 }
 
+function CropEditButton({
+  label,
+  disabled,
+  onClick,
+}: {
+  label: string
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={event => {
+        event.stopPropagation()
+        onClick()
+      }}
+      disabled={disabled}
+      className="absolute bottom-1 right-1 z-10 flex h-6 w-6 items-center justify-center rounded-md border border-border/80 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-[background-color,transform] duration-150 hover:scale-105 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 motion-reduce:transform-none"
+    >
+      <CropIcon className="h-3.5 w-3.5" />
+    </button>
+  )
+}
+
 export function AddIconDialog({
   open,
   onOpenChange,
@@ -177,6 +211,8 @@ export function AddIconDialog({
   const [websitePreviewLoading, setWebsitePreviewLoading] = useState(false)
   const [websitePreviewError, setWebsitePreviewError] = useState('')
   const [websitePreviewResolved, setWebsitePreviewResolved] = useState(false)
+  const [cropEditorTarget, setCropEditorTarget] = useState<CropEditorTarget | null>(null)
+  const [editedRasterPreviews, setEditedRasterPreviews] = useState<string[]>([])
   const textIconPreview = useMemo(
     () => createTextIconDataUri(iconText, iconColor),
     [iconColor, iconText]
@@ -206,6 +242,8 @@ export function AddIconDialog({
     setWebsitePreviewLoading(false)
     setWebsitePreviewError('')
     setWebsitePreviewResolved(false)
+    setCropEditorTarget(null)
+    setEditedRasterPreviews([])
   }
 
   const closeDialog = () => {
@@ -255,16 +293,24 @@ export function AddIconDialog({
     )
     setIconColor(initialDraft.iconColor ?? 'none')
     setIconText(initialDraft.iconText ?? '')
-    setTargetPreview('')
-    setTargetPreviewLoading(nextEntryKind === 'app' && Boolean(initialDraft.targetPath.trim()))
-    setCustomPreview('')
-    setCustomPreviewLoading(Boolean(initialDraft.customIconPath.trim()))
+    const initialGeneratedPreview = initialDraft.generatedIconBase64 ?? ''
+    const initialTargetPreview =
+      nextEntryKind === 'app' && initialDraft.iconSource === 'target' ? initialGeneratedPreview : ''
+    const initialCustomPreview = initialDraft.iconSource === 'custom' ? initialGeneratedPreview : ''
+    setTargetPreview(initialTargetPreview)
+    setTargetPreviewLoading(
+      nextEntryKind === 'app' && Boolean(initialDraft.targetPath.trim()) && !initialTargetPreview
+    )
+    setCustomPreview(initialCustomPreview)
+    setCustomPreviewLoading(Boolean(initialDraft.customIconPath.trim()) && !initialCustomPreview)
     const initialWebsitePreview = initialDraft.websiteIconBase64 ?? ''
     setWebsitePreview(initialWebsitePreview)
     setWebsitePreviews(initialWebsitePreview ? [initialWebsitePreview] : [])
     setWebsitePreviewLoading(false)
     setWebsitePreviewError('')
     setWebsitePreviewResolved(Boolean(initialDraft.websiteIconBase64))
+    setCropEditorTarget(null)
+    setEditedRasterPreviews([])
   }, [initialDraft, open])
 
   useEffect(() => {
@@ -281,6 +327,20 @@ export function AddIconDialog({
     targetPreviewRequestRef.current += 1
     const requestId = targetPreviewRequestRef.current
     const previewPath = targetPath.trim()
+
+    const initialGeneratedPreview =
+      initialDraft?.entryKind !== 'website' && initialDraft?.iconSource === 'target'
+        ? (initialDraft.generatedIconBase64 ?? '')
+        : ''
+    if (
+      open &&
+      entryKind === 'app' &&
+      previewPath &&
+      previewPath === initialDraft?.targetPath.trim() &&
+      initialGeneratedPreview
+    ) {
+      return
+    }
 
     if (!open || entryKind !== 'app' || !previewPath) {
       setTargetPreview('')
@@ -305,12 +365,23 @@ export function AddIconDialog({
     }, 280)
 
     return () => window.clearTimeout(timer)
-  }, [entryKind, open, targetPath])
+  }, [entryKind, initialDraft, open, targetPath])
 
   useEffect(() => {
     customPreviewRequestRef.current += 1
     const requestId = customPreviewRequestRef.current
     const previewPath = customIconPath.trim()
+
+    const initialGeneratedPreview =
+      initialDraft?.iconSource === 'custom' ? (initialDraft.generatedIconBase64 ?? '') : ''
+    if (
+      open &&
+      previewPath &&
+      previewPath === initialDraft?.customIconPath.trim() &&
+      initialGeneratedPreview
+    ) {
+      return
+    }
 
     if (!open || !previewPath) {
       setCustomPreview('')
@@ -335,7 +406,7 @@ export function AddIconDialog({
     }, 280)
 
     return () => window.clearTimeout(timer)
-  }, [customIconPath, customPreviewRevision, open])
+  }, [customIconPath, customPreviewRevision, initialDraft, open])
 
   const handleDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
@@ -373,6 +444,8 @@ export function AddIconDialog({
 
   const updateTargetPath = (nextPath: string) => {
     setTargetPath(nextPath)
+    setCropEditorTarget(null)
+    setEditedRasterPreviews([])
     if (entryKind === 'website') {
       websitePreviewRequestRef.current += 1
       setWebsitePreview('')
@@ -526,12 +599,49 @@ export function AddIconDialog({
       setCustomPreviewLoading(true)
       setCustomPreviewRevision(current => current + 1)
       setSelectedIconSource('custom')
+      setCropEditorTarget(null)
+      setEditedRasterPreviews([])
     } catch (error) {
       toast.error(translate('选择自定义图标失败：{error}', { error: String(error) }), {
         key: 'add-icon-dialog-custom-icon',
         title: translate('添加图标'),
       })
     }
+  }
+
+  const openCropEditor = (target: CropEditorTarget) => {
+    if (!target.source || submitting) return
+    if (target.kind === 'website') {
+      setWebsitePreview(target.source)
+      setSelectedIconSource('target')
+    } else {
+      setSelectedIconSource(target.kind)
+    }
+    setCropEditorTarget(target)
+  }
+
+  const handleCropApply = ({ dataUri, colorId }: IconCropResult) => {
+    if (!cropEditorTarget) return
+
+    if (cropEditorTarget.kind === 'website') {
+      setWebsitePreviews(current =>
+        current.map((preview, index) => (index === cropEditorTarget.index ? dataUri : preview))
+      )
+      setWebsitePreview(dataUri)
+      setSelectedIconSource('target')
+    } else if (cropEditorTarget.kind === 'custom') {
+      setCustomPreview(dataUri)
+      setSelectedIconSource('custom')
+    } else {
+      setTargetPreview(dataUri)
+      setSelectedIconSource('target')
+    }
+
+    setIconColor(colorId)
+    setEditedRasterPreviews(current =>
+      current.includes(dataUri) ? current : [...current, dataUri]
+    )
+    setCropEditorTarget(null)
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -574,6 +684,7 @@ export function AddIconDialog({
         : ''
       const canReuseGeneratedIcon = Boolean(
         initialDraft?.generatedIconBase64 &&
+        !editedRasterPreviews.includes(selectedPreview) &&
         selectedIconSource === initialDraft.iconSource &&
         iconColor === initialDraft.iconColor &&
         normalizedTargetPath === initialTargetPath &&
@@ -586,9 +697,12 @@ export function AddIconDialog({
         ? (initialDraft?.generatedIconBase64 ?? '')
         : selectedIconSource === 'text'
           ? textIconPreview
-          : iconColor === 'none'
-            ? ''
-            : await createColoredIconDataUri(selectedPreview, iconColor)
+          : iconColor !== 'none'
+            ? await createColoredIconDataUri(selectedPreview, iconColor)
+            : editedRasterPreviews.includes(selectedPreview) &&
+                !(entryKind === 'website' && selectedIconSource === 'target')
+              ? selectedPreview
+              : ''
       const draft: AddIconDialogDraft = {
         entryKind,
         displayName,
@@ -671,7 +785,7 @@ export function AddIconDialog({
   const selectedColoredIconInvalid =
     selectedIconSource !== 'text' && iconColor !== 'none' && !selectedRasterPreview
 
-  return createPortal(
+  const dialogPortal = createPortal(
     <div
       className="fixed inset-0 z-[300] flex items-center justify-center bg-black/25 p-3 backdrop-blur-[2px] dark:bg-black/55 sm:p-5"
       onMouseDown={event => {
@@ -988,80 +1102,97 @@ export function AddIconDialog({
                             selectedIconSource === 'target' && websitePreview === preview
                           const candidateLabel = `${automaticPreviewLabel} ${index + 1}`
                           return (
-                            <button
+                            <div
                               key={`${index}-${preview.slice(-32)}`}
-                              type="button"
-                              aria-pressed={selected}
-                              aria-label={candidateLabel}
-                              title={candidateLabel}
-                              onClick={() => {
-                                setWebsitePreview(preview)
-                                handleIconSourceChange('target')
-                              }}
-                              disabled={submitting}
-                              className={cn(
-                                'relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
-                                selected
-                                  ? 'border-primary ring-2 ring-primary/20'
-                                  : 'border-border hover:border-foreground/30'
-                              )}
-                              style={
-                                iconColor !== 'none'
-                                  ? { backgroundColor: selectedColorPreset?.color }
-                                  : undefined
-                              }
+                              className="group relative h-16 w-16 shrink-0"
                             >
-                              <img
-                                src={preview}
-                                alt=""
-                                draggable={false}
-                                className="h-full w-full object-contain"
-                              />
-                              {selected ? (
-                                <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
-                              ) : null}
-                            </button>
+                              <button
+                                type="button"
+                                aria-pressed={selected}
+                                aria-label={translate('编辑 {name}', { name: candidateLabel })}
+                                title={translate('裁剪图标')}
+                                onClick={() =>
+                                  openCropEditor({ kind: 'website', source: preview, index })
+                                }
+                                disabled={submitting}
+                                className={cn(
+                                  'relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transition-none',
+                                  selected
+                                    ? 'border-primary ring-2 ring-primary/20'
+                                    : 'border-border hover:border-foreground/30'
+                                )}
+                                style={
+                                  iconColor !== 'none'
+                                    ? { backgroundColor: selectedColorPreset?.color }
+                                    : undefined
+                                }
+                              >
+                                <img
+                                  src={preview}
+                                  alt=""
+                                  draggable={false}
+                                  className="h-full w-full object-contain"
+                                />
+                                {selected ? (
+                                  <CheckCircle2 className="absolute right-1 top-1 z-10 h-4 w-4 fill-primary text-primary-foreground" />
+                                ) : null}
+                                <span className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[inherit] bg-black/60 text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                                  <Pencil className="h-5 w-5" />
+                                </span>
+                              </button>
+                            </div>
                           )
                         })
                       : null}
 
                     {entryKind !== 'website' || websitePreviews.length === 0 ? (
                       <div className="flex w-20 shrink-0 flex-col items-center gap-1.5">
-                        <button
-                          type="button"
-                          aria-pressed={selectedIconSource === 'target'}
-                          aria-label={automaticPreviewLabel}
-                          onClick={() => handleIconSourceChange('target')}
-                          disabled={submitting}
-                          className={cn(
-                            'relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
-                            selectedIconSource === 'target'
-                              ? 'border-primary ring-2 ring-primary/20'
-                              : 'border-border hover:border-foreground/30'
-                          )}
-                          style={
-                            iconColor !== 'none'
-                              ? { backgroundColor: selectedColorPreset?.color }
-                              : undefined
-                          }
-                        >
-                          {automaticPreviewLoading ? (
-                            <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-                          ) : automaticPreview ? (
-                            <img
-                              src={automaticPreview}
-                              alt={automaticPreviewLabel}
-                              className="h-full w-full object-contain"
+                        <div className="relative h-16 w-16">
+                          <button
+                            type="button"
+                            aria-pressed={selectedIconSource === 'target'}
+                            aria-label={automaticPreviewLabel}
+                            onClick={() => handleIconSourceChange('target')}
+                            disabled={submitting}
+                            className={cn(
+                              'relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
+                              selectedIconSource === 'target'
+                                ? 'border-primary ring-2 ring-primary/20'
+                                : 'border-border hover:border-foreground/30'
+                            )}
+                            style={
+                              iconColor !== 'none'
+                                ? { backgroundColor: selectedColorPreset?.color }
+                                : undefined
+                            }
+                          >
+                            {automaticPreviewLoading ? (
+                              <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                            ) : automaticPreview ? (
+                              <img
+                                src={automaticPreview}
+                                alt={automaticPreviewLabel}
+                                className="h-full w-full object-contain"
+                              />
+                            ) : entryKind === 'website' ? (
+                              <Globe2 className="h-5 w-5 text-muted-foreground" />
+                            ) : (
+                              <Images className="h-5 w-5 text-muted-foreground" />
+                            )}
+                            {selectedIconSource === 'target' ? (
+                              <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
+                            ) : null}
+                          </button>
+                          {automaticPreview && !automaticPreviewLoading ? (
+                            <CropEditButton
+                              label={translate('编辑 {name}', { name: automaticPreviewLabel })}
+                              disabled={submitting}
+                              onClick={() =>
+                                openCropEditor({ kind: 'target', source: automaticPreview })
+                              }
                             />
-                          ) : entryKind === 'website' ? (
-                            <Globe2 className="h-5 w-5 text-muted-foreground" />
-                          ) : (
-                            <Images className="h-5 w-5 text-muted-foreground" />
-                          )}
-                          {selectedIconSource === 'target' ? (
-                            <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
                           ) : null}
-                        </button>
+                        </div>
                         <span className="whitespace-nowrap text-center text-[11px] leading-4 text-muted-foreground">
                           {automaticPreviewLabel}
                         </span>
@@ -1102,50 +1233,61 @@ export function AddIconDialog({
 
                     <div className="flex w-20 shrink-0 flex-col items-center gap-1.5">
                       {customIconPath ? (
-                        <button
-                          type="button"
-                          aria-pressed={selectedIconSource === 'custom'}
-                          aria-label={translate(
-                            selectedIconSource === 'custom' ? '更换自定义图标' : '使用自定义图标'
-                          )}
-                          title={translate(
-                            selectedIconSource === 'custom' ? '更换自定义图标' : '使用自定义图标'
-                          )}
-                          onClick={() => {
-                            if (selectedIconSource === 'custom') {
-                              void handlePickCustomIcon()
-                            } else {
-                              handleIconSourceChange('custom')
+                        <div className="relative h-16 w-16">
+                          <button
+                            type="button"
+                            aria-pressed={selectedIconSource === 'custom'}
+                            aria-label={translate(
+                              selectedIconSource === 'custom' ? '更换自定义图标' : '使用自定义图标'
+                            )}
+                            title={translate(
+                              selectedIconSource === 'custom' ? '更换自定义图标' : '使用自定义图标'
+                            )}
+                            onClick={() => {
+                              if (selectedIconSource === 'custom') {
+                                void handlePickCustomIcon()
+                              } else {
+                                handleIconSourceChange('custom')
+                              }
+                            }}
+                            disabled={submitting || !customPreview}
+                            className={cn(
+                              'relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
+                              selectedIconSource === 'custom'
+                                ? 'border-primary ring-2 ring-primary/20'
+                                : 'border-border hover:border-foreground/30'
+                            )}
+                            style={
+                              iconColor !== 'none'
+                                ? { backgroundColor: selectedColorPreset?.color }
+                                : undefined
                             }
-                          }}
-                          disabled={submitting || !customPreview}
-                          className={cn(
-                            'relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
-                            selectedIconSource === 'custom'
-                              ? 'border-primary ring-2 ring-primary/20'
-                              : 'border-border hover:border-foreground/30'
-                          )}
-                          style={
-                            iconColor !== 'none'
-                              ? { backgroundColor: selectedColorPreset?.color }
-                              : undefined
-                          }
-                        >
-                          {customPreviewLoading ? (
-                            <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-                          ) : customPreview ? (
-                            <img
-                              src={customPreview}
-                              alt={translate('自定义图标')}
-                              className="h-full w-full object-contain"
+                          >
+                            {customPreviewLoading ? (
+                              <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                            ) : customPreview ? (
+                              <img
+                                src={customPreview}
+                                alt={translate('自定义图标')}
+                                className="h-full w-full object-contain"
+                              />
+                            ) : (
+                              <CircleAlert className="h-5 w-5 text-amber-500" />
+                            )}
+                            {selectedIconSource === 'custom' && customPreview ? (
+                              <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
+                            ) : null}
+                          </button>
+                          {customPreview && !customPreviewLoading ? (
+                            <CropEditButton
+                              label={translate('编辑 {name}', { name: translate('自定义图标') })}
+                              disabled={submitting}
+                              onClick={() =>
+                                openCropEditor({ kind: 'custom', source: customPreview })
+                              }
                             />
-                          ) : (
-                            <CircleAlert className="h-5 w-5 text-amber-500" />
-                          )}
-                          {selectedIconSource === 'custom' && customPreview ? (
-                            <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
                           ) : null}
-                        </button>
+                        </div>
                       ) : (
                         <button
                           type="button"
@@ -1315,5 +1457,18 @@ export function AddIconDialog({
       </div>
     </div>,
     document.body
+  )
+
+  return (
+    <>
+      {dialogPortal}
+      <IconCropDialog
+        open={Boolean(cropEditorTarget)}
+        source={cropEditorTarget?.source ?? ''}
+        initialColor={iconColor}
+        onCancel={() => setCropEditorTarget(null)}
+        onApply={handleCropApply}
+      />
+    </>
   )
 }

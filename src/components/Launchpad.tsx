@@ -536,7 +536,8 @@ export function Launchpad() {
           : '',
       generatedIconBase64:
         iconSource === 'text' ||
-        (Boolean(editRequestedIcon.icon_color) && editRequestedIcon.icon_color !== 'none')
+        (Boolean(editRequestedIcon.icon_color) && editRequestedIcon.icon_color !== 'none') ||
+        (editRequestedIcon.item_type !== 'website' && Boolean(editRequestedIcon.icon_base64))
           ? editRequestedIcon.icon_base64
           : '',
       iconSource,

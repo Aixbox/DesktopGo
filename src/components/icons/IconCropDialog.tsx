@@ -1,0 +1,565 @@
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
+import { createPortal } from 'react-dom'
+import Cropper, { type MediaSize, type Point, type Size } from 'react-easy-crop'
+import { Check, Crop, RefreshCw, RotateCcw, RotateCw, X, ZoomIn, ZoomOut } from 'lucide-react'
+import {
+  constrainMediaPositionToViewport,
+  cropImageViewportDataUri,
+  getImageBoundedSquareCropSize,
+  getUpscaledContainObjectFit,
+  ICON_CROP_MAX_ZOOM,
+  ICON_CROP_MIN_ZOOM,
+  resizeSquareCrop,
+  type CropResizeHandle,
+  type UpscaledContainObjectFit,
+} from '@/lib/imageCrop'
+import { translate } from '@/lib/i18n'
+import { ICON_COLOR_PRESETS, type IconColorId } from '@/lib/textIcon'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+
+export type IconCropResult = {
+  dataUri: string
+  colorId: IconColorId
+}
+
+type IconCropDialogProps = {
+  open: boolean
+  source: string
+  initialColor: IconColorId
+  onCancel: () => void
+  onApply: (result: IconCropResult) => void
+}
+
+const INITIAL_CROP: Point = { x: 0, y: 0 }
+const MIN_CROP_SIZE = 10
+
+type CropResizeSession = {
+  pointerId: number
+  handle: CropResizeHandle
+  startX: number
+  startY: number
+  startSize: number
+  maxSize: number
+}
+
+const CROP_RESIZE_EDGES: Array<{
+  handle: Extract<CropResizeHandle, 'n' | 'e' | 's' | 'w'>
+  className: string
+}> = [
+  { handle: 'n', className: '-top-1 left-2 right-2 h-2 cursor-ns-resize' },
+  { handle: 'e', className: '-right-1 bottom-2 top-2 w-2 cursor-ew-resize' },
+  { handle: 's', className: '-bottom-1 left-2 right-2 h-2 cursor-ns-resize' },
+  { handle: 'w', className: '-left-1 bottom-2 top-2 w-2 cursor-ew-resize' },
+]
+
+const CROP_RESIZE_POINTS: Array<{ handle: CropResizeHandle; className: string }> = [
+  { handle: 'nw', className: '-left-1.5 -top-1.5 cursor-nwse-resize' },
+  { handle: 'n', className: '-top-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize' },
+  { handle: 'ne', className: '-right-1.5 -top-1.5 cursor-nesw-resize' },
+  { handle: 'w', className: '-left-1.5 top-1/2 -translate-y-1/2 cursor-ew-resize' },
+  { handle: 'e', className: '-right-1.5 top-1/2 -translate-y-1/2 cursor-ew-resize' },
+  { handle: 'sw', className: '-bottom-1.5 -left-1.5 cursor-nesw-resize' },
+  { handle: 's', className: '-bottom-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize' },
+  { handle: 'se', className: '-bottom-1.5 -right-1.5 cursor-nwse-resize' },
+]
+
+export function IconCropDialog({
+  open,
+  source,
+  initialColor,
+  onCancel,
+  onApply,
+}: IconCropDialogProps) {
+  if (!open || !source) return null
+
+  return (
+    <IconCropDialogContent
+      key={source}
+      open={open}
+      source={source}
+      initialColor={initialColor}
+      onCancel={onCancel}
+      onApply={onApply}
+    />
+  )
+}
+
+function IconCropDialogContent({ source, initialColor, onCancel, onApply }: IconCropDialogProps) {
+  const titleId = useId()
+  const descriptionId = useId()
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const cropViewportRef = useRef<HTMLDivElement | null>(null)
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+  const initialCropSizeRef = useRef<Size | null>(null)
+  const resizeSessionRef = useRef<CropResizeSession | null>(null)
+  const [crop, setCrop] = useState<Point>(INITIAL_CROP)
+  const [zoom, setZoom] = useState(1)
+  const [rotation, setRotation] = useState(0)
+  const [cropSize, setCropSize] = useState<Size | undefined>()
+  const [mediaSize, setMediaSize] = useState<MediaSize | null>(null)
+  const [mediaObjectFit, setMediaObjectFit] = useState<UpscaledContainObjectFit | null>(null)
+  const [viewportSize, setViewportSize] = useState(0)
+  const [colorId, setColorId] = useState<IconColorId>(initialColor)
+  const [applying, setApplying] = useState(false)
+  const [error, setError] = useState('')
+
+  const constrainCropPosition = (
+    nextCrop: Point,
+    nextZoom = zoom,
+    nextRotation = rotation
+  ): Point => {
+    if (!mediaSize || viewportSize <= 0) return nextCrop
+    return constrainMediaPositionToViewport(
+      nextCrop,
+      mediaSize.width,
+      mediaSize.height,
+      nextRotation,
+      nextZoom,
+      viewportSize,
+      viewportSize
+    )
+  }
+
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement as HTMLElement | null
+    const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus())
+
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      window.requestAnimationFrame(() => previousFocusRef.current?.focus())
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    const image = new Image()
+    image.onload = () => {
+      if (active) {
+        setMediaObjectFit(getUpscaledContainObjectFit(image.naturalWidth, image.naturalHeight))
+      }
+    }
+    image.onerror = () => {
+      if (active) setMediaObjectFit('horizontal-cover')
+    }
+    image.src = source
+
+    return () => {
+      active = false
+    }
+  }, [source])
+
+  const resetCrop = () => {
+    setCrop(INITIAL_CROP)
+    setZoom(ICON_CROP_MAX_ZOOM)
+    setRotation(0)
+    setCropSize(initialCropSizeRef.current ?? undefined)
+    setError('')
+  }
+
+  const rotateBy = (amount: number) => {
+    const nextRotation = rotation + amount
+    setRotation(nextRotation)
+    setCrop(constrainCropPosition(INITIAL_CROP, zoom, nextRotation))
+    setError('')
+  }
+
+  const handleCropChange = (nextCrop: Point) => {
+    setCrop(constrainCropPosition(nextCrop))
+  }
+
+  const handleZoomChange = (nextZoom: number) => {
+    const constrainedZoom = Math.min(ICON_CROP_MAX_ZOOM, Math.max(ICON_CROP_MIN_ZOOM, nextZoom))
+    setZoom(constrainedZoom)
+    setCrop(current => constrainCropPosition(current, constrainedZoom))
+  }
+
+  const changeZoom = (amount: number) => {
+    handleZoomChange(Number((zoom + amount).toFixed(2)))
+  }
+
+  const updateCropSize = (
+    handle: CropResizeHandle,
+    startSize: number,
+    deltaX: number,
+    deltaY: number,
+    maxSize: number
+  ) => {
+    setCropSize(resizeSquareCrop(startSize, deltaX, deltaY, handle, MIN_CROP_SIZE, maxSize))
+    setError('')
+  }
+
+  const startCropResize = (handle: CropResizeHandle, event: ReactPointerEvent<HTMLElement>) => {
+    if (!cropSize || applying) return
+    event.preventDefault()
+    event.stopPropagation()
+    const maxSize = cropViewportRef.current?.clientWidth ?? cropSize.width
+    resizeSessionRef.current = {
+      pointerId: event.pointerId,
+      handle,
+      startX: event.clientX,
+      startY: event.clientY,
+      startSize: cropSize.width,
+      maxSize,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const continueCropResize = (event: ReactPointerEvent<HTMLElement>) => {
+    const session = resizeSessionRef.current
+    if (!session || session.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    updateCropSize(
+      session.handle,
+      session.startSize,
+      event.clientX - session.startX,
+      event.clientY - session.startY,
+      session.maxSize
+    )
+  }
+
+  const finishCropResize = (event: ReactPointerEvent<HTMLElement>) => {
+    if (resizeSessionRef.current?.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    resizeSessionRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
+
+  const handleResizeKeyDown = (
+    handle: CropResizeHandle,
+    event: KeyboardEvent<HTMLButtonElement>
+  ) => {
+    if (!cropSize || applying) return
+    const step = event.shiftKey ? 10 : 2
+    const keyboardDelta = {
+      ArrowLeft: { x: -step, y: 0 },
+      ArrowRight: { x: step, y: 0 },
+      ArrowUp: { x: 0, y: -step },
+      ArrowDown: { x: 0, y: step },
+    }[event.key]
+    if (!keyboardDelta) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    updateCropSize(
+      handle,
+      cropSize.width,
+      keyboardDelta.x,
+      keyboardDelta.y,
+      cropViewportRef.current?.clientWidth ?? cropSize.width
+    )
+  }
+
+  const handleApply = async () => {
+    if (!cropSize || !mediaSize || applying) return
+    setApplying(true)
+    setError('')
+    try {
+      const dataUri = await cropImageViewportDataUri(source, {
+        crop,
+        cropSize,
+        mediaSize,
+        zoom,
+        rotation,
+      })
+      if (!dataUri) throw new Error('The cropped icon is empty')
+      onApply({ dataUri, colorId })
+    } catch {
+      setError(translate('无法生成裁剪后的图标，请重试。'))
+      setApplying(false)
+    }
+  }
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    event.stopPropagation()
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      if (!applying) onCancel()
+      return
+    }
+    if (event.key !== 'Tab' || !panelRef.current) return
+
+    const focusable = Array.from(
+      panelRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+    )
+    if (focusable.length === 0) return
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
+
+  const selectedColor = ICON_COLOR_PRESETS.find(preset => preset.id === colorId)
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[360] flex items-center justify-center bg-black/35 p-3 backdrop-blur-[3px] dark:bg-black/65 sm:p-5"
+      onMouseDown={event => {
+        event.stopPropagation()
+        if (event.target === event.currentTarget && !applying) onCancel()
+      }}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        className="relative flex max-h-[calc(100vh-1.5rem)] w-full max-w-[25rem] flex-col overflow-hidden rounded-lg border border-border bg-background shadow-2xl sm:max-h-[calc(100vh-2.5rem)]"
+        onKeyDown={handleKeyDown}
+      >
+        <Button
+          ref={closeButtonRef}
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={translate('关闭')}
+          title={translate('关闭')}
+          onClick={onCancel}
+          disabled={applying}
+          className="absolute right-0 top-0 z-20 h-10 w-10 rounded-none text-muted-foreground hover:text-foreground"
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 pt-5 sm:px-[58px] sm:pb-10">
+          <h2 id={titleId} className="mb-2.5 text-center text-xl font-semibold text-foreground">
+            {translate('裁剪图标')}
+          </h2>
+          <p id={descriptionId} className="sr-only">
+            {translate('拖动图标调整位置，拖动裁剪框边缘调整大小。')}
+          </p>
+
+          <div
+            className="relative mx-auto aspect-square w-full overflow-hidden bg-muted/60 p-1.5"
+            style={colorId === 'none' ? undefined : { backgroundColor: selectedColor?.color }}
+          >
+            <div
+              ref={cropViewportRef}
+              className="relative isolate h-full w-full overflow-hidden [contain:paint]"
+            >
+              {mediaObjectFit ? (
+                <Cropper
+                  image={source}
+                  crop={crop}
+                  cropSize={cropSize}
+                  zoom={zoom}
+                  rotation={rotation}
+                  aspect={1}
+                  minZoom={ICON_CROP_MIN_ZOOM}
+                  maxZoom={ICON_CROP_MAX_ZOOM}
+                  objectFit={mediaObjectFit}
+                  showGrid
+                  zoomWithScroll
+                  restrictPosition={false}
+                  onCropChange={handleCropChange}
+                  onZoomChange={handleZoomChange}
+                  onMediaLoaded={nextMediaSize => {
+                    const nextCropSize = getImageBoundedSquareCropSize(
+                      nextMediaSize.width,
+                      nextMediaSize.height
+                    )
+                    const nextViewportSize = cropViewportRef.current?.clientWidth ?? 0
+                    setMediaSize(nextMediaSize)
+                    setViewportSize(nextViewportSize)
+                    setZoom(ICON_CROP_MAX_ZOOM)
+                    setCrop(INITIAL_CROP)
+                    initialCropSizeRef.current = nextCropSize
+                    setCropSize(nextCropSize ?? undefined)
+                  }}
+                  mediaProps={{ draggable: false, alt: '' }}
+                  classes={{ cropAreaClassName: '!border-2 !border-foreground' }}
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              )}
+            </div>
+
+            {cropSize ? (
+              <div
+                className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
+                style={{ width: cropSize.width, height: cropSize.height }}
+              >
+                {CROP_RESIZE_EDGES.map(({ handle, className }) => (
+                  <span
+                    key={`edge-${handle}`}
+                    className={cn('pointer-events-auto absolute touch-none', className)}
+                    onPointerDown={event => startCropResize(handle, event)}
+                    onPointerMove={continueCropResize}
+                    onPointerUp={finishCropResize}
+                    onPointerCancel={finishCropResize}
+                  />
+                ))}
+                {CROP_RESIZE_POINTS.map(({ handle, className }) => (
+                  <button
+                    key={handle}
+                    type="button"
+                    aria-label={translate('调整裁剪框大小')}
+                    title={translate('调整裁剪框大小')}
+                    onKeyDown={event => handleResizeKeyDown(handle, event)}
+                    onPointerDown={event => startCropResize(handle, event)}
+                    onPointerMove={continueCropResize}
+                    onPointerUp={finishCropResize}
+                    onPointerCancel={finishCropResize}
+                    disabled={applying}
+                    className={cn(
+                      'pointer-events-auto absolute z-10 h-3 w-3 touch-none rounded-full border-2 border-background bg-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none',
+                      className
+                    )}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mt-[18px] flex items-center justify-between text-muted-foreground">
+            <div className="flex items-center gap-4">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={translate('向右旋转')}
+                title={translate('向右旋转')}
+                onClick={() => rotateBy(90)}
+                disabled={applying}
+                className="h-8 w-8 hover:text-foreground"
+              >
+                <RotateCw className="h-5 w-5" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={translate('向左旋转')}
+                title={translate('向左旋转')}
+                onClick={() => rotateBy(-90)}
+                disabled={applying}
+                className="h-8 w-8 hover:text-foreground"
+              >
+                <RotateCcw className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={translate('复位')}
+              title={translate('复位')}
+              onClick={resetCrop}
+              disabled={applying}
+              className="h-8 w-8 hover:text-foreground"
+            >
+              <RefreshCw className="h-5 w-5" />
+            </Button>
+
+            <div className="flex items-center gap-4">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={translate('缩小')}
+                title={translate('缩小')}
+                onClick={() => changeZoom(-0.1)}
+                disabled={applying || zoom <= ICON_CROP_MIN_ZOOM}
+                className="h-8 w-8 hover:text-foreground"
+              >
+                <ZoomOut className="h-5 w-5" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={translate('放大')}
+                title={translate('放大')}
+                onClick={() => changeZoom(0.1)}
+                disabled={applying || zoom >= ICON_CROP_MAX_ZOOM}
+                className="h-8 w-8 hover:text-foreground"
+              >
+                <ZoomIn className="h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+
+          <div
+            role="radiogroup"
+            aria-label={translate('图标背景')}
+            className="mt-6 grid grid-cols-5 justify-items-center gap-x-2 gap-y-2"
+          >
+            {ICON_COLOR_PRESETS.map(preset => {
+              const selected = preset.id === colorId
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={translate(preset.id === 'none' ? '透明背景' : '选择图标背景')}
+                  title={translate(preset.id === 'none' ? '透明背景' : '选择图标背景')}
+                  onClick={() => setColorId(preset.id)}
+                  disabled={applying}
+                  className={cn(
+                    'relative flex h-7 w-7 items-center justify-center rounded-full border transition-[border-color,box-shadow,transform] duration-150 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transform-none',
+                    selected
+                      ? 'border-foreground ring-2 ring-foreground/15'
+                      : 'border-border hover:border-foreground/40',
+                    preset.id === 'none' && 'bg-background'
+                  )}
+                  style={preset.id === 'none' ? undefined : { backgroundColor: preset.color }}
+                >
+                  {preset.id === 'none' ? (
+                    <X className="h-3.5 w-3.5 text-muted-foreground" />
+                  ) : selected ? (
+                    <Check className="h-3.5 w-3.5 text-white" />
+                  ) : null}
+                </button>
+              )
+            })}
+          </div>
+
+          {error ? (
+            <p role="alert" className="mt-3 text-xs leading-5 text-destructive">
+              {error}
+            </p>
+          ) : null}
+
+          <Button
+            type="button"
+            onClick={() => void handleApply()}
+            disabled={applying || !cropSize || !mediaSize}
+            className="mt-6 w-full"
+          >
+            {applying ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Crop className="h-4 w-4" />
+            )}
+            {applying ? translate('正在生成...') : translate('完成')}
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
