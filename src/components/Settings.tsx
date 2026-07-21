@@ -2491,42 +2491,17 @@ export function Settings() {
   }
 
   return (
-    <div className="settings-shell flex h-screen w-screen flex-col bg-background text-foreground">
-      <header
-        onPointerDown={handleWindowDragStart}
-        onDoubleClick={handleTitlebarDoubleClick}
-        className="flex h-12 items-center gap-3 border-b border-border/80 bg-card px-4 cursor-grab active:cursor-grabbing"
-      >
-        <div className="flex min-w-0 flex-1 items-center gap-3 h-full">
+    <div className="settings-shell flex h-screen w-screen bg-card text-foreground">
+      <aside className="flex w-48 shrink-0 flex-col bg-card">
+        <div
+          onPointerDown={handleWindowDragStart}
+          onDoubleClick={handleTitlebarDoubleClick}
+          className="flex h-12 shrink-0 cursor-grab items-center px-4 active:cursor-grabbing"
+        >
           <Logo iconSize={20} textSize="sm" className="shrink-0" />
-          <span className="h-1 w-1 shrink-0 rounded-full bg-muted-foreground/60" />
-          <p className="truncate text-sm text-muted-foreground">
-            {translate('设置 / {label}', { label: activeNavItem.label })}
-          </p>
         </div>
 
-        <div data-no-window-drag="true" className="flex items-center gap-1">
-          <WindowControlButton label={translate('最小化')} onClick={handleMinimizeWindow}>
-            <Minus className="h-4 w-4" />
-          </WindowControlButton>
-          <WindowControlButton
-            label={isMaximized ? translate('还原窗口') : translate('最大化')}
-            onClick={handleToggleMaximizeWindow}
-          >
-            {isMaximized ? <Copy className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-          </WindowControlButton>
-          <WindowControlButton
-            label={translate('关闭')}
-            tone="danger"
-            onClick={() => void closeSettingsWindow()}
-          >
-            <X className="h-4 w-4" />
-          </WindowControlButton>
-        </div>
-      </header>
-
-      <div className="flex min-h-0 flex-1">
-        <nav className="flex w-48 flex-col border-r border-border/80 bg-card px-3 py-3">
+        <nav className="flex min-h-0 flex-1 flex-col px-3 py-3">
           <ul className="flex flex-col gap-1">
             {navItems.map(item => (
               <li key={item.key}>
@@ -2545,8 +2520,39 @@ export function Settings() {
             ))}
           </ul>
         </nav>
+      </aside>
 
-        <main className="settings-main-scroll min-h-0 flex-1 overflow-y-auto px-6 py-6 xl:px-8">
+      <div className="flex min-w-0 flex-1 flex-col bg-card">
+        <header
+          onPointerDown={handleWindowDragStart}
+          onDoubleClick={handleTitlebarDoubleClick}
+          className="flex h-12 shrink-0 cursor-grab items-center gap-3 px-4 active:cursor-grabbing"
+        >
+          <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+            {translate('设置 / {label}', { label: activeNavItem.label })}
+          </p>
+
+          <div data-no-window-drag="true" className="flex items-center gap-1">
+            <WindowControlButton label={translate('最小化')} onClick={handleMinimizeWindow}>
+              <Minus className="h-4 w-4" />
+            </WindowControlButton>
+            <WindowControlButton
+              label={isMaximized ? translate('还原窗口') : translate('最大化')}
+              onClick={handleToggleMaximizeWindow}
+            >
+              {isMaximized ? <Copy className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+            </WindowControlButton>
+            <WindowControlButton
+              label={translate('关闭')}
+              tone="danger"
+              onClick={() => void closeSettingsWindow()}
+            >
+              <X className="h-4 w-4" />
+            </WindowControlButton>
+          </div>
+        </header>
+
+        <main className="settings-content-surface settings-main-scroll min-h-0 flex-1 overflow-y-auto rounded-tl-xl border-l border-t border-border/80 bg-background px-6 py-6 xl:px-8">
           <div className={cn('mx-auto w-full', NAV_CONTENT_WIDTH[activeNav])}>
             {activeNav === 'settings' && <SettingsPanel />}
             {activeNav === 'search' && <SearchSettingsPanel />}

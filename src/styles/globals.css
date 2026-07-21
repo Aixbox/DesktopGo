@@ -365,6 +365,10 @@ body,
 }
 
 /* 设置页右侧主滚动区域需要更高可见性和更大的命中面积，避免沿用全局细滚动条后难以发现和点击。 */
+.settings-content-surface {
+  box-shadow: var(--settings-content-shadow);
+}
+
 .settings-main-scroll {
   scrollbar-gutter: stable;
   scrollbar-width: auto;
@@ -525,6 +529,7 @@ body,
   --border: oklch(0.88 0.008 255);
   --input: oklch(0.855 0.01 255);
   --ring: oklch(0.61 0.08 255);
+  --settings-content-shadow: -7px -7px 18px -12px oklch(0.24 0.018 255 / 32%);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -547,6 +552,7 @@ body,
   --border: oklch(0.74 0.012 255 / 22%);
   --input: oklch(0.82 0.012 255 / 28%);
   --ring: oklch(0.72 0.08 255);
+  --settings-content-shadow: -7px -7px 20px -12px oklch(0.025 0.008 255 / 78%);
 }
 
 @layer base {
