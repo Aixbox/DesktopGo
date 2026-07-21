@@ -834,6 +834,8 @@ export function ScrollableIconGrid({
     onBeforeOuterPreviewChange: captureScrollGridItemPositions,
     onOuterDragFinished: captureFinishedScrollDrag,
     onFolderCreateCommitted: commitCreatedFolderToScrollGroup,
+    onOpenFolder: openFolderWithAnimation,
+    onCloseFolder: closeFolderWithAnimation,
     dockContainerRef,
     dockGridRef,
     tileRefs,

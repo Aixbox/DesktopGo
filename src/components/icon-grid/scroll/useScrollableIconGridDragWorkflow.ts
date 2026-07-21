@@ -47,10 +47,15 @@ import { useEdgeAutoPaging } from '../hooks/useEdgeAutoPaging'
 import { useScrollableDragDropCommit } from './useScrollableDragDropCommit'
 import {
   buildScrollGroupDragPreviewOrder,
+  buildScrollFolderAutoOpenOrder,
   buildScrollGroupEntries,
+  canExitScrollFolderThroughMask,
   hasScrollEvasionRearmed,
   isPointInsideScrollDropTarget,
+  isPointOutsideScrollFolderContent,
   resolveScrollDropPosition,
+  SCROLL_FOLDER_AUTO_OPEN_DWELL_MS,
+  SCROLL_FOLDER_EXIT_DWELL_MS,
   SCROLL_FOLDER_PREVIEW_DWELL_MS,
   SCROLL_PREVIEW_REORDER_DWELL_MS,
   SCROLL_PREVIEW_REORDER_LOCK_MS,
@@ -117,6 +122,8 @@ interface UseIconGridDragWorkflowParams {
     sourceFolderReplacementId: string | null
   ) => void
   onFolderCreateCommitted?: (session: DragState, createdFolderId: string, targetId: string) => void
+  onOpenFolder?: (folderId: string) => void
+  onCloseFolder?: () => void
   dockContainerRef: MutableRefObject<HTMLDivElement | null>
   dockGridRef: MutableRefObject<HTMLDivElement | null>
   tileRefs: MutableRefObject<Map<string, HTMLDivElement>>
@@ -188,6 +195,8 @@ export function useScrollableIconGridDragWorkflow({
   onBeforeOuterPreviewChange,
   onOuterDragFinished,
   onFolderCreateCommitted,
+  onOpenFolder,
+  onCloseFolder,
   dockContainerRef,
   dockGridRef,
   tileRefs,
@@ -225,6 +234,11 @@ export function useScrollableIconGridDragWorkflow({
   const outerDwellTimerRef = useRef<number | null>(null)
   const outerDwellTargetIdRef = useRef<string | null>(null)
   const outerDwellZoneRef = useRef<HoverZone | null>(null)
+  const folderAutoOpenTimerRef = useRef<number | null>(null)
+  const folderAutoOpenTargetIdRef = useRef<string | null>(null)
+  const folderExitTimerRef = useRef<number | null>(null)
+  const dragStartedInFolderRef = useRef(false)
+  const enteredFolderContentRef = useRef(false)
   const suppressClickUntilRef = useRef(0)
   const dragMoveRafRef = useRef<number | null>(null)
   const queuedDragMoveRef = useRef<{ pointerId: number; x: number; y: number } | null>(null)
@@ -290,6 +304,21 @@ export function useScrollableIconGridDragWorkflow({
     outerDwellZoneRef.current = null
   }
 
+  const clearFolderAutoOpenTimer = () => {
+    if (folderAutoOpenTimerRef.current !== null) {
+      window.clearTimeout(folderAutoOpenTimerRef.current)
+      folderAutoOpenTimerRef.current = null
+    }
+    folderAutoOpenTargetIdRef.current = null
+  }
+
+  const clearFolderExitTimer = () => {
+    if (folderExitTimerRef.current !== null) {
+      window.clearTimeout(folderExitTimerRef.current)
+      folderExitTimerRef.current = null
+    }
+  }
+
   const cancelQueuedDragMove = () => {
     queuedDragMoveRef.current = null
     if (dragMoveRafRef.current !== null) {
@@ -309,8 +338,20 @@ export function useScrollableIconGridDragWorkflow({
   }
 
   const syncDragRuntime = (next: DragState | null) => {
+    if (
+      folderAutoOpenTargetIdRef.current &&
+      (next?.context !== 'outer' ||
+        next.folderPreviewTargetId !== folderAutoOpenTargetIdRef.current)
+    ) {
+      clearFolderAutoOpenTimer()
+    }
+    if (next?.context !== 'folder') {
+      clearFolderExitTimer()
+    }
     dragRef.current = next
     if (!next) {
+      dragStartedInFolderRef.current = false
+      enteredFolderContentRef.current = false
       dragPointerRef.current = null
       compactOuterDragBaseOrderRef.current = null
       compactOuterDragBaseWithoutDraggingRef.current = null
@@ -1625,6 +1666,9 @@ export function useScrollableIconGridDragWorkflow({
       dwellStartedAt: null,
       lastEvasionSignature: null,
     })
+    if (target.kind === 'folder') {
+      scheduleFolderAutoOpen(expectedTargetId)
+    }
   }
 
   const triggerTopLevelDwellEvasion = (
@@ -1777,6 +1821,7 @@ export function useScrollableIconGridDragWorkflow({
     hiddenOuterItemIds,
     frozenOuterOrder,
     resetDropVisuals,
+    commitIntoExistingFolderForAutoOpen,
     finishDrag,
   } = useScrollableDragDropCommit({
     reorderAnimationMs: config.reorderAnimationMs,
@@ -1800,6 +1845,128 @@ export function useScrollableIconGridDragWorkflow({
     onFolderCreateCommitted,
   })
 
+  const openExistingFolderDuringDrag = (expectedTargetId: string) => {
+    const latest = dragRef.current
+    if (
+      !latest ||
+      latest.context !== 'outer' ||
+      latest.draggingIds.length !== 1 ||
+      latest.draggingItem.kind !== 'icon' ||
+      latest.folderPreviewTargetId !== expectedTargetId ||
+      latest.hoverTargetId !== expectedTargetId ||
+      latest.hoverZone !== 'center'
+    ) {
+      return
+    }
+
+    const target = itemsRef.current.find(
+      item => item.kind === 'folder' && getId(item) === expectedTargetId
+    )
+    if (!target || target.kind !== 'folder') return
+
+    const pointer = dragPointerRef.current
+    const validationState = pointer
+      ? { ...latest, pointerX: pointer.pointerX, pointerY: pointer.pointerY }
+      : latest
+    const currentOverlap = isCompactOuterDrop
+      ? findCompactScrollGroupOverlapHit(validationState)
+      : findTopLevelMaxOverlapHit(validationState)
+    if (!currentOverlap || currentOverlap.targetId !== expectedTargetId) return
+    const currentZone = isCompactOuterDrop
+      ? resolveCompactScrollHoverZone(validationState, target, currentOverlap)
+      : currentOverlap.zone
+    if (currentZone !== 'center') return
+
+    const sourceFolderReplacementId = latest.sourceFolderId
+      ? (() => {
+          const draggingIdSet = new Set(latest.draggingIds)
+          const remainingChildren = getFolderChildrenById(
+            itemsRef.current,
+            latest.sourceFolderId
+          ).filter(child => !draggingIdSet.has(child.key))
+          return remainingChildren.length === 1 ? remainingChildren[0].key : null
+        })()
+      : null
+    const nextChildren = commitIntoExistingFolderForAutoOpen(latest, expectedTargetId)
+    if (!nextChildren) return
+    const nextWorkingOrder = buildScrollFolderAutoOpenOrder(
+      nextChildren.map(child => child.key),
+      latest.draggingId
+    )
+    if (!nextWorkingOrder) return
+
+    clearOuterDwellTimer()
+    clearFolderAutoOpenTimer()
+    onOuterDragFinished?.(latest, null, sourceFolderReplacementId)
+    dragPointerCaptureTargetRef.current = releaseDragPointerCapture(
+      dragPointerCaptureTargetRef.current,
+      latest.pointerId
+    )
+    dragPointerCaptureTargetRef.current = activateDragPointerCapture(
+      containerRef.current,
+      latest.pointerId
+    )
+    if (onOpenFolder) onOpenFolder(target.id)
+    else setOpenFolderId(target.id)
+
+    commitDragState({
+      ...latest,
+      context: 'folder',
+      sourceFolderId: target.id,
+      workingOrder: nextWorkingOrder,
+      scrollGroupOrder: null,
+      sourceSlotIndex: null,
+      previewSlotIndex: null,
+      dockPreviewIndex: null,
+      hoverTargetId: null,
+      hoverZone: null,
+      hoverIou: 0,
+      centerStartedAt: null,
+      dwellStartedAt: null,
+      folderPreviewTargetId: null,
+      lastEvasionSignature: null,
+      lastEvasionTriggerPointer: null,
+      lastEvasionAt: null,
+      initialCenters: {
+        ...collectCenters(folderTileRefs.current),
+        [latest.draggingId]: { x: latest.pointerX, y: latest.pointerY },
+      },
+    })
+  }
+
+  const scheduleFolderAutoOpen = (targetFolderId: string) => {
+    const current = dragRef.current
+    const target = itemsRef.current.find(
+      item => item.kind === 'folder' && getId(item) === targetFolderId
+    )
+    if (
+      !current ||
+      current.context !== 'outer' ||
+      current.draggingIds.length !== 1 ||
+      current.draggingItem.kind !== 'icon' ||
+      !target ||
+      target.kind !== 'folder'
+    ) {
+      clearFolderAutoOpenTimer()
+      return
+    }
+    if (
+      folderAutoOpenTimerRef.current !== null &&
+      folderAutoOpenTargetIdRef.current === targetFolderId
+    ) {
+      return
+    }
+
+    clearFolderAutoOpenTimer()
+    folderAutoOpenTargetIdRef.current = targetFolderId
+    folderAutoOpenTimerRef.current = window.setTimeout(() => {
+      const expectedTargetId = folderAutoOpenTargetIdRef.current
+      folderAutoOpenTimerRef.current = null
+      folderAutoOpenTargetIdRef.current = null
+      if (expectedTargetId) openExistingFolderDuringDrag(expectedTargetId)
+    }, SCROLL_FOLDER_AUTO_OPEN_DWELL_MS)
+  }
+
   const moveDragToTopLevelContext = (
     state: DragState,
     context: 'outer' | 'dock',
@@ -1810,7 +1977,8 @@ export function useScrollableIconGridDragWorkflow({
       return { ...state, pointerX: x, pointerY: y }
     }
     if (state.context === 'folder') {
-      setOpenFolderId(null)
+      if (onCloseFolder) onCloseFolder()
+      else setOpenFolderId(null)
     }
 
     const nextOrder = resolveTopLevelOrder(context)
@@ -1881,9 +2049,54 @@ export function useScrollableIconGridDragWorkflow({
     }
   }
 
+  const scheduleFolderExit = () => {
+    if (
+      !canExitScrollFolderThroughMask({
+        dragStartedInFolder: dragStartedInFolderRef.current,
+        enteredFolderContent: enteredFolderContentRef.current,
+      })
+    ) {
+      clearFolderExitTimer()
+      return
+    }
+    if (folderExitTimerRef.current !== null) return
+    folderExitTimerRef.current = window.setTimeout(() => {
+      folderExitTimerRef.current = null
+      const latest = dragRef.current
+      const pointer = dragPointerRef.current
+      const panel = folderPanelRef.current
+      if (!latest || latest.context !== 'folder' || !pointer || !panel) return
+      const panelRect = panel.getBoundingClientRect()
+      if (
+        !canExitScrollFolderThroughMask({
+          dragStartedInFolder: dragStartedInFolderRef.current,
+          enteredFolderContent: enteredFolderContentRef.current,
+        })
+      ) {
+        return
+      }
+      if (
+        !isPointOutsideScrollFolderContent({ x: pointer.pointerX, y: pointer.pointerY }, panelRect)
+      ) {
+        return
+      }
+      commitDragState(
+        moveDragToTopLevelContext(
+          { ...latest, pointerX: pointer.pointerX, pointerY: pointer.pointerY },
+          resolveTopLevelContextAtPoint(pointer.pointerX, pointer.pointerY),
+          pointer.pointerX,
+          pointer.pointerY
+        )
+      )
+    }, SCROLL_FOLDER_EXIT_DWELL_MS)
+  }
+
   const beginDrag = (pending: PendingDrag, x: number, y: number) => {
     clearTimer()
     clearOuterDwellTimer()
+    clearFolderExitTimer()
+    dragStartedInFolderRef.current = pending.context === 'folder'
+    enteredFolderContentRef.current = false
     resetDropVisuals()
     compactOuterDragBaseOrderRef.current = null
     compactOuterDragBaseWithoutDraggingRef.current = null
@@ -2054,15 +2267,12 @@ export function useScrollableIconGridDragWorkflow({
       const panel = folderPanelRef.current
       if (panel) {
         const panelRect = panel.getBoundingClientRect()
-        const outsidePanel =
-          x < panelRect.left || x > panelRect.right || y < panelRect.top || y > panelRect.bottom
+        const outsidePanel = isPointOutsideScrollFolderContent({ x, y }, panelRect)
         if (outsidePanel) {
-          baseState = moveDragToTopLevelContext(
-            baseState,
-            resolveTopLevelContextAtPoint(x, y),
-            x,
-            y
-          )
+          scheduleFolderExit()
+        } else {
+          enteredFolderContentRef.current = true
+          clearFolderExitTimer()
         }
       }
     }
@@ -2387,6 +2597,9 @@ export function useScrollableIconGridDragWorkflow({
             next.dwellStartedAt = null
             next.lastEvasionSignature = null
             publishMoveDragState(next)
+            if (target.kind === 'folder') {
+              scheduleFolderAutoOpen(overlapHit.targetId)
+            }
             return
           }
 
@@ -2423,6 +2636,9 @@ export function useScrollableIconGridDragWorkflow({
         next.dwellStartedAt = null
         next.lastEvasionSignature = null
         publishMoveDragState(next)
+        if (baseState.context === 'outer' && target.kind === 'folder') {
+          scheduleFolderAutoOpen(overlapHit.targetId)
+        }
         return
       }
 
@@ -2655,7 +2871,36 @@ export function useScrollableIconGridDragWorkflow({
 
   useEffect(() => {
     finishDragFnRef.current = (pointerId: number) => {
-      const completedDrag = dragRef.current
+      let completedDrag = dragRef.current
+      if (completedDrag?.context === 'folder') {
+        const pointer = dragPointerRef.current
+        const panel = folderPanelRef.current
+        if (pointer && panel) {
+          const panelRect = panel.getBoundingClientRect()
+          const releasedOnFolderMask = isPointOutsideScrollFolderContent(
+            { x: pointer.pointerX, y: pointer.pointerY },
+            panelRect
+          )
+          const canExitThroughMask = canExitScrollFolderThroughMask({
+            dragStartedInFolder: dragStartedInFolderRef.current,
+            enteredFolderContent: enteredFolderContentRef.current,
+          })
+          if (releasedOnFolderMask && canExitThroughMask) {
+            clearFolderExitTimer()
+            completedDrag = moveDragToTopLevelContext(
+              {
+                ...completedDrag,
+                pointerX: pointer.pointerX,
+                pointerY: pointer.pointerY,
+              },
+              resolveTopLevelContextAtPoint(pointer.pointerX, pointer.pointerY),
+              pointer.pointerX,
+              pointer.pointerY
+            )
+            commitDragState(completedDrag)
+          }
+        }
+      }
       const completedFolderTargetId = completedDrag?.folderPreviewTargetId ?? null
       const completedFolderTarget = completedFolderTargetId
         ? itemsRef.current.find(item => getId(item) === completedFolderTargetId)
@@ -2684,6 +2929,7 @@ export function useScrollableIconGridDragWorkflow({
         unselectIcons(completedDrag.draggingIds)
       }
       clearOuterDwellTimer()
+      clearFolderExitTimer()
       suppressClickUntilRef.current = performance.now() + 300
     }
   }, [finishDrag, onOuterDragFinished, unselectIcons])

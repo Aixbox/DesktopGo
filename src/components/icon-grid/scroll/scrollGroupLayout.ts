@@ -1,4 +1,5 @@
 import type { PageAnchorEntry } from '../domain/topLevelLayout'
+import { DRAG_HOLE_ID } from '../domain/slots'
 import type { GridItem, ScrollGroupIcon, ScrollGroupMeta } from '../model'
 import { getGridItemSpan } from '../model'
 
@@ -6,6 +7,27 @@ const LEGACY_GROUP_ID_PREFIX = 'scroll-group-migrated'
 export const SCROLL_PREVIEW_REORDER_DWELL_MS = 100
 export const SCROLL_PREVIEW_REORDER_LOCK_MS = 200
 export const SCROLL_FOLDER_PREVIEW_DWELL_MS = 350
+export const SCROLL_FOLDER_AUTO_OPEN_DWELL_MS = 500
+export const SCROLL_FOLDER_EXIT_DWELL_MS = 200
+
+export const buildScrollFolderAutoOpenOrder = (
+  folderChildIds: string[],
+  draggingId: string
+): Array<string | null> | null => {
+  const draggingIndex = folderChildIds.indexOf(draggingId)
+  if (draggingIndex < 0) return null
+  const nextOrder: Array<string | null> = [...folderChildIds]
+  nextOrder[draggingIndex] = DRAG_HOLE_ID
+  return nextOrder
+}
+
+export const canExitScrollFolderThroughMask = ({
+  dragStartedInFolder,
+  enteredFolderContent,
+}: {
+  dragStartedInFolder: boolean
+  enteredFolderContent: boolean
+}) => dragStartedInFolder || enteredFolderContent
 
 export const hasScrollEvasionRearmed = (
   point: { x: number; y: number },
@@ -210,6 +232,11 @@ export const isPointInsideScrollDropTarget = (
   point.x <= rect.left + rect.width &&
   point.y >= rect.top &&
   point.y <= rect.top + rect.height
+
+export const isPointOutsideScrollFolderContent = (
+  point: { x: number; y: number },
+  rect: { left: number; top: number; width: number; height: number }
+) => !isPointInsideScrollDropTarget(point, rect)
 
 export const resolveScrollDropPosition = (
   point: { x: number; y: number },

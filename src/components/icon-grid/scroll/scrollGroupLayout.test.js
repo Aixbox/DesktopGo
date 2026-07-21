@@ -1,12 +1,15 @@
 import {
+  buildScrollFolderAutoOpenOrder,
   buildScrollGroupEntries,
   buildScrollGroupDragPreviewOrder,
   commitScrollFolderCreation,
   commitScrollGroupDragResult,
   commitScrollGroupItemOrder,
+  canExitScrollFolderThroughMask,
   deleteScrollGroup,
   hasScrollEvasionRearmed,
   isPointInsideScrollDropTarget,
+  isPointOutsideScrollFolderContent,
   isPointInScrollMergeZone,
   moveScrollItemRelative,
   moveScrollGroupItem,
@@ -14,6 +17,7 @@ import {
   replaceScrollPreviewItemsWithFolder,
   resolveScrollDropPosition,
 } from './scrollGroupLayout.ts'
+import { DRAG_HOLE_ID } from '../domain/slots.ts'
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
@@ -31,12 +35,50 @@ assert(
   'A target dwell may begin once the detection point actually enters the target'
 )
 assert(
+  !isPointOutsideScrollFolderContent(
+    { x: 100, y: 50 },
+    { left: 0, top: 0, width: 100, height: 100 }
+  ),
+  'The folder content boundary must remain inside so edge contact does not start closing it'
+)
+assert(
+  isPointOutsideScrollFolderContent(
+    { x: 101, y: 50 },
+    { left: 0, top: 0, width: 100, height: 100 }
+  ),
+  'Folder exit dwell must start only after the pointer enters the surrounding mask'
+)
+assert(
   !hasScrollEvasionRearmed({ x: 13, y: 0 }, { x: 0, y: 0 }, 14),
   'The same collision target must remain locked before the pointer moves far enough'
 )
 assert(
   hasScrollEvasionRearmed({ x: 14, y: 0 }, { x: 0, y: 0 }, 14),
   'The same collision target must rearm after the pointer follows it beyond the threshold'
+)
+assert(
+  JSON.stringify(buildScrollFolderAutoOpenOrder(['a', 'dragged', 'b'], 'dragged')) ===
+    JSON.stringify(['a', DRAG_HOLE_ID, 'b']),
+  'Auto-opening a folder must keep the dragged icon position as the live folder drop hole'
+)
+assert(
+  buildScrollFolderAutoOpenOrder(['a', 'b'], 'missing') === null,
+  'Auto-open must abort when the committed folder does not contain the dragged icon'
+)
+assert(
+  !canExitScrollFolderThroughMask({
+    dragStartedInFolder: false,
+    enteredFolderContent: false,
+  }),
+  'A grid icon that remains on the mask after auto-open must keep the folder open'
+)
+assert(
+  canExitScrollFolderThroughMask({ dragStartedInFolder: false, enteredFolderContent: true }),
+  'A grid icon may exit after it has genuinely entered the open folder content'
+)
+assert(
+  canExitScrollFolderThroughMask({ dragStartedInFolder: true, enteredFolderContent: false }),
+  'An icon dragged from a folder may exit directly through the surrounding mask'
 )
 
 const migrated = normalizeScrollGroups({
