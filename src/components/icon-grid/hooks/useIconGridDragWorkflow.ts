@@ -82,6 +82,7 @@ interface UseIconGridDragWorkflowParams {
   gridRef: MutableRefObject<HTMLDivElement | null>
   folderPanelRef: MutableRefObject<HTMLDivElement | null>
   folderGridRef: MutableRefObject<HTMLDivElement | null>
+  onBeforeOuterPreviewChange?: () => void
   dockContainerRef: MutableRefObject<HTMLDivElement | null>
   dockGridRef: MutableRefObject<HTMLDivElement | null>
   tileRefs: MutableRefObject<Map<string, HTMLDivElement>>
@@ -144,6 +145,7 @@ export function useIconGridDragWorkflow({
   gridRef,
   folderPanelRef,
   folderGridRef,
+  onBeforeOuterPreviewChange,
   dockContainerRef,
   dockGridRef,
   tileRefs,
@@ -288,9 +290,27 @@ export function useIconGridDragWorkflow({
     return previous.initialCenters !== next.initialCenters
   }
 
+  const captureOuterPreviewBeforeChange = (previous: DragState | null, next: DragState | null) => {
+    if (!onBeforeOuterPreviewChange) return
+    const previousIsOuter = previous?.context === 'outer'
+    const nextIsOuter = next?.context === 'outer'
+    if (!previousIsOuter && !nextIsOuter) return
+    if (
+      previousIsOuter &&
+      nextIsOuter &&
+      previous &&
+      next &&
+      areSlotsEqual(previous.workingOrder, next.workingOrder)
+    ) {
+      return
+    }
+    onBeforeOuterPreviewChange()
+  }
+
   const commitDragState: Dispatch<SetStateAction<DragState | null>> = update => {
     const previous = dragRef.current
     const next = typeof update === 'function' ? update(previous) : update
+    captureOuterPreviewBeforeChange(previous, next)
     syncDragRuntime(next)
     renderedDragStateRef.current = next
     setDragState(next)
@@ -299,6 +319,7 @@ export function useIconGridDragWorkflow({
   const publishMoveDragState = (next: DragState | null) => {
     syncDragRuntime(next)
     if (!hasRenderableDragStateChanged(renderedDragStateRef.current, next)) return
+    captureOuterPreviewBeforeChange(renderedDragStateRef.current, next)
     renderedDragStateRef.current = next
     setDragState(next)
   }

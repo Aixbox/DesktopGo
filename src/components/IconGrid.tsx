@@ -1,5 +1,6 @@
 import { LayoutGroup } from 'framer-motion'
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -78,11 +79,11 @@ const WHEEL_PAGE_COOLDOWN_MS = 180
 const DRAG_LONG_PRESS_MS = 300
 const DRAG_PENDING_MOVE_TOLERANCE = 7
 const EVASION_REARM_DISTANCE = 14
-const EVASION_COOLDOWN_MS = 80
-const REORDER_ANIMATION_MS = 220
+const EVASION_COOLDOWN_MS = 200
+const REORDER_ANIMATION_MS = 300
 const FOLDER_SHARED_LAYOUT_WINDOW_MS = 320
 const IMPORT_HIGHLIGHT_MS = 4200
-const REORDER_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
+const REORDER_EASING = 'ease'
 const fitCount = (container: number, item: number) => {
   if (item <= 0 || container <= item) return 1
   return Math.floor((container - item) / (item + GRID_GAP)) + 1
@@ -183,14 +184,15 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   const dockContainerRef = useRef<HTMLDivElement>(null)
   const dockGridRef = useRef<HTMLDivElement>(null)
   const tileRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const pendingGridFlipPositionsRef = useRef<Map<string, { left: number; top: number }> | null>(
+    null
+  )
+  const gridFlipAnimationsRef = useRef<Map<string, Animation>>(new Map())
   const folderTileRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const dockSlotRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const dockItemRefs = useRef<Map<string, HTMLDivElement>>(new Map())
-  const prevPageEntriesRef = useRef<Array<string | null>>([])
-  const prevPageRef = useRef<number>(0)
   const prevFolderEntriesRef = useRef<Array<string | null>>([])
   const prevDockEntriesRef = useRef<Array<string | null>>([])
-  const tileAnimationTimerRef = useRef<Map<string, number>>(new Map())
   const folderTileAnimationTimerRef = useRef<Map<string, number>>(new Map())
   const dockTileAnimationTimerRef = useRef<Map<string, number>>(new Map())
   const importHighlightTimerRef = useRef<number | null>(null)
@@ -510,6 +512,20 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   const prevPageSizeRef = useRef(pageSize)
   const prevColumnsRef = useRef(columns)
 
+  const capturePagedGridItemPositions = useCallback(() => {
+    const positions = new Map<string, { left: number; top: number }>()
+    tileRefs.current.forEach((node, id) => {
+      const rect = node.getBoundingClientRect()
+      positions.set(id, { left: rect.left, top: rect.top })
+    })
+    pendingGridFlipPositionsRef.current = positions
+
+    // Preserve the current visual positions above, then remove old transforms so the next
+    // layout measurement sees the actual destination rects.
+    gridFlipAnimationsRef.current.forEach(animation => animation.cancel())
+    gridFlipAnimationsRef.current.clear()
+  }, [])
+
   const {
     dragState,
     dragRef,
@@ -556,6 +572,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     gridRef,
     folderPanelRef,
     folderGridRef,
+    onBeforeOuterPreviewChange: capturePagedGridItemPositions,
     dockContainerRef,
     dockGridRef,
     tileRefs,
@@ -1319,63 +1336,52 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   }, [columns, currentPage, dragState, outerViewItemById, pageSize, renderOrder])
 
   useLayoutEffect(() => {
-    const currentPageEntries = pageItems
-    if (prevPageRef.current !== currentPage) {
-      prevPageRef.current = currentPage
-      prevPageEntriesRef.current = currentPageEntries
-      return
-    }
+    const previousPositions = pendingGridFlipPositionsRef.current
+    pendingGridFlipPositionsRef.current = null
+    if (!previousPositions) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
-    const prevIndexMap = new Map<string, number>()
-    prevPageEntriesRef.current.forEach((entry, index) => {
-      if (entry === null || entry === DRAG_HOLE_ID) return
-      const id = entry
-      prevIndexMap.set(id, index)
-    })
-
-    const stepX = itemWidth + GRID_GAP
-    const stepY = itemHeight + GRID_GAP
-    currentPageEntries.forEach((entry, newIndex) => {
-      if (entry === null || entry === DRAG_HOLE_ID) return
-      const id = entry
-      const prevIndex = prevIndexMap.get(id)
-      if (prevIndex === undefined || prevIndex === newIndex) return
-
-      const prevRow = Math.floor(prevIndex / columns)
-      const prevCol = prevIndex % columns
-      const newRow = Math.floor(newIndex / columns)
-      const newCol = newIndex % columns
-      const deltaX = (prevCol - newCol) * stepX
-      const deltaY = (prevRow - newRow) * stepY
-      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return
-
+    // Read all destination rects before starting any animation so layout reads and writes stay
+    // separated. This is the same FLIP ordering used by WeTab's Vue TransitionGroup.
+    const movedItems: Array<{
+      id: string
+      node: HTMLDivElement
+      deltaX: number
+      deltaY: number
+    }> = []
+    previousPositions.forEach((previous, id) => {
+      if (activeDragIdSet.has(id)) return
       const node = tileRefs.current.get(id)
       if (!node) return
-
-      const existingTimer = tileAnimationTimerRef.current.get(id)
-      if (existingTimer !== undefined) {
-        window.clearTimeout(existingTimer)
-        tileAnimationTimerRef.current.delete(id)
-      }
-
-      node.style.transition = 'none'
-      node.style.willChange = 'transform'
-      node.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0px)`
-      void node.offsetWidth
-      node.style.transition = `transform ${REORDER_ANIMATION_MS}ms ${REORDER_EASING}`
-      node.style.transform = 'translate3d(0px, 0px, 0px)'
-
-      const timer = window.setTimeout(() => {
-        node.style.transition = ''
-        node.style.transform = ''
-        node.style.willChange = ''
-        tileAnimationTimerRef.current.delete(id)
-      }, REORDER_ANIMATION_MS + 40)
-      tileAnimationTimerRef.current.set(id, timer)
+      const next = node.getBoundingClientRect()
+      const deltaX = previous.left - next.left
+      const deltaY = previous.top - next.top
+      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return
+      movedItems.push({ id, node, deltaX, deltaY })
     })
 
-    prevPageEntriesRef.current = currentPageEntries
-  }, [pageItems, currentPage, columns, itemWidth, itemHeight])
+    movedItems.forEach(({ id, node, deltaX, deltaY }) => {
+      node.style.willChange = 'transform'
+      const animation = node.animate(
+        [
+          { transform: `translate3d(${deltaX}px, ${deltaY}px, 0)` },
+          { transform: 'translate3d(0, 0, 0)' },
+        ],
+        {
+          duration: REORDER_ANIMATION_MS,
+          easing: REORDER_EASING,
+        }
+      )
+      const clearAnimation = () => {
+        if (gridFlipAnimationsRef.current.get(id) !== animation) return
+        gridFlipAnimationsRef.current.delete(id)
+        node.style.willChange = ''
+      }
+      animation.onfinish = clearAnimation
+      animation.oncancel = clearAnimation
+      gridFlipAnimationsRef.current.set(id, animation)
+    })
+  }, [activeDragIdSet, pageItems])
 
   useLayoutEffect(() => {
     if (!openFolder) {
@@ -1480,19 +1486,20 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   }, [dockRenderSlots, iconConfig.imgSize])
 
   useEffect(() => {
+    const gridFlipAnimations = gridFlipAnimationsRef.current
+    const folderTileAnimationTimers = folderTileAnimationTimerRef.current
+    const dockTileAnimationTimers = dockTileAnimationTimerRef.current
     return () => {
-      tileAnimationTimerRef.current.forEach(timer => {
+      gridFlipAnimations.forEach(animation => animation.cancel())
+      gridFlipAnimations.clear()
+      folderTileAnimationTimers.forEach(timer => {
         window.clearTimeout(timer)
       })
-      tileAnimationTimerRef.current.clear()
-      folderTileAnimationTimerRef.current.forEach(timer => {
+      folderTileAnimationTimers.clear()
+      dockTileAnimationTimers.forEach(timer => {
         window.clearTimeout(timer)
       })
-      folderTileAnimationTimerRef.current.clear()
-      dockTileAnimationTimerRef.current.forEach(timer => {
-        window.clearTimeout(timer)
-      })
-      dockTileAnimationTimerRef.current.clear()
+      dockTileAnimationTimers.clear()
       clearFolderSharedLayoutTimer()
       cancelPendingFolderClose()
       clearEdgeSwitchTimer()
