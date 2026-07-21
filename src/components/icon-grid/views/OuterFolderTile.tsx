@@ -202,6 +202,35 @@ interface FolderBodyProps {
   onLaunchIcon: (path: string) => void
 }
 
+interface FolderDropReceiverBackdropProps {
+  active: boolean
+  shapeWidth: number
+  shapeHeight: number
+  surfaceRadius: number
+}
+
+function FolderDropReceiverBackdrop({
+  active,
+  shapeWidth,
+  shapeHeight,
+  surfaceRadius,
+}: FolderDropReceiverBackdropProps) {
+  const expansion = active ? 8 : 0
+
+  return (
+    <div
+      className="folder-drop-receiver-backdrop"
+      data-folder-drop-receiver={active ? 'active' : 'idle'}
+      aria-hidden="true"
+      style={{
+        width: `${shapeWidth + expansion}px`,
+        height: `${shapeHeight + expansion}px`,
+        borderRadius: `${surfaceRadius + 4}px`,
+      }}
+    />
+  )
+}
+
 function FolderBody({
   folder,
   bodyWidth,
@@ -219,7 +248,7 @@ function FolderBody({
 }: FolderBodyProps) {
   const innerPadding = Math.min(INNER_PADDING, Math.max(4, Math.floor(panelBase / 8)))
   const innerGap = Math.min(INNER_GAP, Math.max(4, Math.floor(panelBase / 16)))
-  const highlightSurface = folderPreview || folderOpen
+  const highlightSurface = folderOpen
 
   if (folder.size === '1x1') {
     const previewInset = getSingleSlotPreviewInset(panelBase)
@@ -227,7 +256,7 @@ function FolderBody({
 
     return (
       <div
-        className="relative flex cursor-pointer items-center justify-center transition"
+        className="relative isolate flex cursor-pointer items-center justify-center transition"
         style={{
           width: `${bodyWidth}px`,
           height: `${bodyHeight}px`,
@@ -239,10 +268,16 @@ function FolderBody({
           onOpenFolder(folder.id)
         }}
       >
+        <FolderDropReceiverBackdrop
+          active={folderPreview}
+          shapeWidth={shapeWidth}
+          shapeHeight={shapeHeight}
+          surfaceRadius={surfaceRadius}
+        />
         <motion.div
           layoutId={sharedLayoutActive ? getFolderSharedLayoutId(folder.id) : undefined}
           transition={FOLDER_SHARED_LAYOUT_TRANSITION}
-          className={`${DESKTOP_FOLDER_SURFACE_CLASS} flex items-center justify-center transition-all duration-200 ${
+          className={`${DESKTOP_FOLDER_SURFACE_CLASS} z-10 flex items-center justify-center transition-all duration-200 ${
             highlightSurface
               ? 'border-border/70 bg-background/72 shadow-[0_0_0_1px_rgba(15,23,42,0.06),0_10px_26px_rgba(15,23,42,0.14)] dark:border-white/40 dark:bg-black/40 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_10px_26px_rgba(0,0,0,0.26)]'
               : ''
@@ -283,7 +318,7 @@ function FolderBody({
 
   return (
     <div
-      className="relative flex cursor-pointer items-center justify-center transition"
+      className="relative isolate flex cursor-pointer items-center justify-center transition"
       style={{
         width: `${bodyWidth}px`,
         height: `${bodyHeight}px`,
@@ -295,10 +330,16 @@ function FolderBody({
         onOpenFolder(folder.id)
       }}
     >
+      <FolderDropReceiverBackdrop
+        active={folderPreview}
+        shapeWidth={shapeWidth}
+        shapeHeight={shapeHeight}
+        surfaceRadius={surfaceRadius}
+      />
       <motion.div
         layoutId={sharedLayoutActive ? getFolderSharedLayoutId(folder.id) : undefined}
         transition={FOLDER_SHARED_LAYOUT_TRANSITION}
-        className={`${DESKTOP_FOLDER_SURFACE_CLASS} transition-all duration-200 ${
+        className={`${DESKTOP_FOLDER_SURFACE_CLASS} z-10 transition-all duration-200 ${
           highlightSurface
             ? 'border-border/70 bg-background/72 shadow-[0_0_0_1px_rgba(15,23,42,0.06),0_10px_26px_rgba(15,23,42,0.14)] dark:border-white/40 dark:bg-black/40 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_10px_26px_rgba(0,0,0,0.26)]'
             : ''
