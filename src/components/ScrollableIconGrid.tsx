@@ -734,7 +734,14 @@ export function ScrollableIconGrid({
       if (nextGroups === currentGroups) return
       // The item and scroll-group writes are batched in the same drop callback. Capture the
       // still-rendered layout now so the surviving icons use the same FLIP path as drag evasion.
+      // Folder creation replaces the target item with a new React key, so bridge the target's
+      // old position to the new folder id. Without this alias, FLIP has no starting rect for the
+      // folder and it snaps into the source icon's newly-vacated slot while the other items move.
       captureScrollGridItemPositions()
+      const targetPosition = scrollGridPendingFlipPositionsRef.current?.get(targetId)
+      if (targetPosition) {
+        scrollGridPendingFlipPositionsRef.current?.set(createdFolderId, targetPosition)
+      }
       scrollGroupsRef.current = nextGroups
       setScrollGroups(nextGroups)
     },
