@@ -770,6 +770,8 @@ export function ScrollableIconGrid({
     handleTileClickCapture,
     clearEdgeSwitchTimer,
     clearOuterDragInteractionForPageSwitch,
+    retargetOuterDragToScrollGroup,
+    syncOuterDragPreview,
     syncDockDragPreview,
     dragEdgeDirection,
   } = useScrollableIconGridDragWorkflow({
@@ -850,10 +852,12 @@ export function ScrollableIconGrid({
     openFolderId,
     setOpenFolderId,
   })
-  const clearOuterDragInteractionForPageSwitchRef = useRef(clearOuterDragInteractionForPageSwitch)
+  const retargetOuterDragToScrollGroupRef = useRef(retargetOuterDragToScrollGroup)
+  const syncOuterDragPreviewRef = useRef(syncOuterDragPreview)
   useLayoutEffect(() => {
-    clearOuterDragInteractionForPageSwitchRef.current = clearOuterDragInteractionForPageSwitch
-  }, [clearOuterDragInteractionForPageSwitch])
+    retargetOuterDragToScrollGroupRef.current = retargetOuterDragToScrollGroup
+    syncOuterDragPreviewRef.current = syncOuterDragPreview
+  }, [retargetOuterDragToScrollGroup, syncOuterDragPreview])
   const activeDragIdSet = useMemo(() => new Set(dragState?.draggingIds ?? []), [dragState])
   const folderRenderOrder =
     dragState && dragState.context === 'folder' ? dragState.workingOrder : folderOrder
@@ -2075,6 +2079,7 @@ export function ScrollableIconGrid({
 
   useEffect(() => {
     const publishSidebarFeedback = (active: boolean, groupId: string | null) => {
+      const wasActive = scrollSidebarDragActiveRef.current
       if (scrollSidebarDragActiveRef.current !== active) {
         scrollSidebarDragActiveRef.current = active
         setScrollSidebarDragActive(active)
@@ -2082,6 +2087,11 @@ export function ScrollableIconGrid({
       if (scrollSidebarHoveredGroupIdRef.current !== groupId) {
         scrollSidebarHoveredGroupIdRef.current = groupId
         setScrollSidebarHoveredGroupId(groupId)
+      }
+      if (wasActive && !active) {
+        // The pointer can stop immediately after crossing back into the grid. Force one
+        // collision pass so the destination does not remain as a trailing empty slot.
+        syncOuterDragPreviewRef.current()
       }
     }
 
@@ -2106,10 +2116,13 @@ export function ScrollableIconGrid({
 
       if (groupId && groupId !== scrollGroupsRef.current[currentPageRef.current]?.id) {
         const targetPage = scrollGroupsRef.current.findIndex(group => group.id === groupId)
-        if (targetPage >= 0) {
+        const targetGroup = scrollGroupsRef.current[targetPage]
+        if (targetPage >= 0 && targetGroup) {
           // A rendered snapshot from the source group must never win a same-frame pointer-up.
           externalScrollPreviewSnapshotRef.current = null
-          clearOuterDragInteractionForPageSwitchRef.current()
+          // Collision and folder intent must immediately use the destination group's ids.
+          // Keeping the source scrollGroupOrder here creates the trailing hole deadlock.
+          retargetOuterDragToScrollGroupRef.current(targetGroup.itemIds)
           currentPageRef.current = targetPage
           setCurrentPage(targetPage)
           containerRef.current?.scrollTo({ top: 0, behavior: 'auto' })

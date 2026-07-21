@@ -331,5 +331,16 @@ assert(
   ) === JSON.stringify([meta('group-a', ['a', 'b']), meta('group-b', ['c', 'd', 'dragged'])]),
   'Dropping on a sidebar group must move the dragged item to that group even before a grid slot is targeted'
 )
+assert(
+  JSON.stringify(
+    buildScrollGroupDragPreviewOrder({
+      groupItemIds: ['target-a', 'target-b'],
+      workingOrder: ['target-a', 'target-b'],
+      draggingIds: ['dragged'],
+      availableIds: new Set(['source-a', 'dragged', 'source-b', 'target-a', 'target-b']),
+    })
+  ) === JSON.stringify(['target-a', 'target-b', 'dragged']),
+  'Retargeting a sidebar drag must replace the source collision order with the destination group order'
+)
 
 console.log('scrollGroupLayout tests passed')

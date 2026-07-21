@@ -153,6 +153,8 @@ interface UseIconGridDragWorkflowResult {
   handleTileClickCapture: (event: ReactMouseEvent<HTMLDivElement>) => void
   clearEdgeSwitchTimer: () => void
   clearOuterDragInteractionForPageSwitch: () => void
+  retargetOuterDragToScrollGroup: (targetItemIds: string[]) => void
+  syncOuterDragPreview: () => void
   syncDockDragPreview: () => void
   dragEdgeDirection: import('../hooks/useEdgeAutoPaging').DragEdgeDirection
 }
@@ -2809,6 +2811,52 @@ export function useScrollableIconGridDragWorkflow({
     commitDragState(next)
   }
 
+  const retargetOuterDragToScrollGroup = (targetItemIds: string[]) => {
+    const current = dragRef.current
+    if (!current || current.context !== 'outer' || !isCompactOuterDrop) return
+
+    clearOuterDwellTimer()
+    compactScrollLastHitPointRef.current = null
+    compactScrollLastHitIdRef.current = null
+    compactOuterPreviewResultRef.current = null
+
+    const availableIds = new Set(resolveCompactOuterPreviewItems(current).map(getId))
+    const scrollGroupOrder = buildScrollGroupDragPreviewOrder({
+      groupItemIds: targetItemIds,
+      workingOrder: targetItemIds,
+      draggingIds: current.draggingIds,
+      availableIds,
+    })
+    const next: DragState = {
+      ...current,
+      scrollGroupOrder,
+      previewSlotIndex: null,
+      dockPreviewIndex: null,
+      hoverTargetId: null,
+      hoverZone: null,
+      hoverIou: 0,
+      centerStartedAt: null,
+      dwellStartedAt: null,
+      folderPreviewTargetId: null,
+      lastEvasionSignature: null,
+      lastEvasionTriggerPointer: null,
+      lastEvasionAt: null,
+    }
+    commitDragState(next)
+  }
+
+  const syncOuterDragPreview = () => {
+    const current = dragRef.current
+    if (!current || current.context !== 'outer') return
+
+    const pointer = dragPointerRef.current
+    scheduleDragMove(
+      current.pointerId,
+      pointer?.pointerX ?? current.pointerX,
+      pointer?.pointerY ?? current.pointerY
+    )
+  }
+
   const syncDockDragPreview = () => {
     const current = dragRef.current
     if (!current || current.context !== 'dock') return
@@ -2856,6 +2904,8 @@ export function useScrollableIconGridDragWorkflow({
     handleTileClickCapture,
     clearEdgeSwitchTimer,
     clearOuterDragInteractionForPageSwitch,
+    retargetOuterDragToScrollGroup,
+    syncOuterDragPreview,
     syncDockDragPreview,
     dragEdgeDirection,
   }
