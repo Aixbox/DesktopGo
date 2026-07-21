@@ -1989,6 +1989,12 @@ export function ScrollableIconGrid({
     if (!dragState) {
       return []
     }
+    // A folder child is added to the scroll preview before it exists in the committed outer
+    // layout. Hide that keyed placeholder from its first outer frame so only the drag overlay
+    // is visible while the placeholder participates in FLIP reordering.
+    if (dragState.context === 'outer') {
+      return dragState.draggingIds
+    }
     const renderedOuterIdSet = new Set(
       renderOrder.filter(
         (slot): slot is string => typeof slot === 'string' && slot !== DRAG_HOLE_ID
