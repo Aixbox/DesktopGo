@@ -1,5 +1,6 @@
 import { AppWindow } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from 'react'
+import { useReducedMotion } from 'framer-motion'
 import type { DesktopIcon } from '../../../types'
 import { useIconStore } from '../../../stores/iconStore'
 import type { FolderItem, GridItem } from '../model'
@@ -24,6 +25,7 @@ interface DragOverlaysProps {
   slotHeight: number
   gridGap: number
   dragSessionId: number | null
+  compactPreview: boolean
   stackedIcons: Array<{
     id: string
     icon: DesktopIcon
@@ -39,6 +41,8 @@ const GHOST_FOLDER_INNER_PADDING = 8
 const GHOST_FOLDER_INNER_GAP = 6
 const GHOST_PREVIEW_ICON_SCALE = 0.84
 const GHOST_PREVIEW_ICON_FALLBACK_SCALE = 0.68
+const SIDEBAR_GHOST_SIZE = 30
+const GHOST_SCALE_TRANSITION = 'transform 200ms cubic-bezier(0.22, 1, 0.36, 1)'
 
 const clampNumber = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
@@ -165,15 +169,17 @@ function FolderGhost({
   titleLineCount: 'one' | 'two'
 }) {
   const span = getGridItemSpan(folder)
-  const { bodyWidth, bodyHeight, shapeWidth, shapeHeight, panelBase } = getDesktopFolderTileMetrics({
-    span,
-    slotWidth,
-    slotHeight,
-    gridGap,
-    folderSize: folder.size,
-    titleLineCount,
-    surfaceTitleLineCount: 'two',
-  })
+  const { bodyWidth, bodyHeight, shapeWidth, shapeHeight, panelBase } = getDesktopFolderTileMetrics(
+    {
+      span,
+      slotWidth,
+      slotHeight,
+      gridGap,
+      folderSize: folder.size,
+      titleLineCount,
+      surfaceTitleLineCount: 'two',
+    }
+  )
   const surfaceRadius = getGhostFolderSurfaceRadius(panelBase)
   const innerPadding = Math.min(GHOST_FOLDER_INNER_PADDING, Math.max(4, Math.floor(panelBase / 8)))
   const innerGap = Math.min(GHOST_FOLDER_INNER_GAP, Math.max(4, Math.floor(panelBase / 16)))
@@ -268,6 +274,7 @@ export function DragOverlays({
   slotHeight,
   gridGap,
   dragSessionId,
+  compactPreview,
   stackedIcons,
   folderDropFlight,
   multiDropFlight,
@@ -275,6 +282,7 @@ export function DragOverlays({
   folderPreviewEasing,
 }: DragOverlaysProps) {
   const titleLineCount = useIconStore(state => state.titleLineCount)
+  const reducedMotion = useReducedMotion()
   const pointerAnimationFrameRef = useRef<number | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const leaderNodeRef = useRef<HTMLDivElement | null>(null)
@@ -285,7 +293,9 @@ export function DragOverlays({
   const lastMoveAtRef = useRef(0)
   const stackedIconSignature = stackedIcons.map(entry => entry.id).join('|')
 
-  stackedIconsRef.current = stackedIcons
+  useLayoutEffect(() => {
+    stackedIconsRef.current = stackedIcons
+  }, [stackedIcons])
 
   const folderSpan = ghostItem?.kind === 'folder' ? getGridItemSpan(ghostItem) : null
   const folderFootprintWidth = folderSpan
@@ -296,7 +306,10 @@ export function DragOverlays({
     : 0
   const ghostWidth = ghostItem?.kind === 'folder' ? folderFootprintWidth : iconImageSize
   const ghostHeight = ghostItem?.kind === 'folder' ? folderFootprintHeight : iconImageSize
-  const initialDragPointer = dragPointerRef.current
+  const compactScale = compactPreview
+    ? Math.min(1, SIDEBAR_GHOST_SIZE / Math.max(1, ghostWidth, ghostHeight))
+    : 1
+  const scaleTransition = reducedMotion ? 'none' : GHOST_SCALE_TRANSITION
 
   const setStackNodeRef = (id: string, node: HTMLDivElement | null) => {
     if (node) {
@@ -498,7 +511,7 @@ export function DragOverlays({
 
   return (
     <>
-      {initialDragPointer && ghostItem ? (
+      {dragSessionId && ghostItem ? (
         <>
           {ghostItem.kind === 'icon' && stackedIcons.length > 0
             ? stackedIcons.map((entry, index) => {
@@ -520,7 +533,11 @@ export function DragOverlays({
                   >
                     <div
                       className="flex h-full w-full items-center justify-center"
-                      style={{ transform: `scale(${scale})` }}
+                      style={{
+                        transform: `scale(${scale * compactScale})`,
+                        transition: scaleTransition,
+                        willChange: compactPreview ? 'transform' : undefined,
+                      }}
                     >
                       {entry.icon.icon_base64 ? (
                         <img
@@ -552,7 +569,13 @@ export function DragOverlays({
           >
             <div
               className="flex items-center justify-center"
-              style={{ width: ghostWidth, height: ghostHeight }}
+              style={{
+                width: ghostWidth,
+                height: ghostHeight,
+                transform: `scale(${compactScale})`,
+                transition: scaleTransition,
+                willChange: compactPreview ? 'transform' : undefined,
+              }}
             >
               {ghostItem.kind === 'icon' ? (
                 ghostItem.icon.icon_base64 ? (

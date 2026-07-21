@@ -319,5 +319,17 @@ assert(
   ) === JSON.stringify([meta('group-a', ['a', 'remaining-child', 'b', 'folder-child', 'c'])]),
   'Collapsing the source folder must replace it in place while preserving the dragged child drop'
 )
+assert(
+  JSON.stringify(
+    commitScrollGroupDragResult({
+      groups: [meta('group-a', ['a', 'dragged', 'b']), meta('group-b', ['c', 'd'])],
+      targetGroupId: 'group-b',
+      previewItemIds: ['c', 'd'],
+      availableItemIds: ['a', 'dragged', 'b', 'c', 'd'],
+      draggingIds: ['dragged'],
+    })
+  ) === JSON.stringify([meta('group-a', ['a', 'b']), meta('group-b', ['c', 'd', 'dragged'])]),
+  'Dropping on a sidebar group must move the dragged item to that group even before a grid slot is targeted'
+)
 
 console.log('scrollGroupLayout tests passed')

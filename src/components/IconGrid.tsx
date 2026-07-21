@@ -1729,6 +1729,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
           slotHeight={itemHeight}
           gridGap={GRID_GAP}
           dragSessionId={dragState?.dragStartedAt ?? null}
+          compactPreview={false}
           stackedIcons={multiDragStackItems}
           folderDropFlight={folderDropFlight}
           multiDropFlight={multiDropFlight}

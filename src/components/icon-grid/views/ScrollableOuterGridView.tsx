@@ -206,6 +206,7 @@ interface ScrollableOuterGridViewProps {
   sections: ScrollGridSection[]
   activeSection: ScrollGridSection | null
   currentPage: number
+  dragHoveredGroupId: string | null
   dragContext: 'outer' | 'folder' | null
   dragFolderPreviewTargetId: string | null
   folderPreviewFreezeTargetId: string | null
@@ -470,6 +471,7 @@ export function ScrollableOuterGridView({
   sections,
   activeSection,
   currentPage,
+  dragHoveredGroupId,
   dragContext,
   dragFolderPreviewTargetId,
   folderPreviewFreezeTargetId,
@@ -1533,6 +1535,7 @@ export function ScrollableOuterGridView({
       <aside
         data-grid-mode-nav
         data-no-window-drag="true"
+        data-scroll-group-sidebar
         className="scroll-grid-sidebar relative z-30 flex h-full min-h-0 min-w-0 flex-col border-r"
       >
         <div
@@ -1602,7 +1605,7 @@ export function ScrollableOuterGridView({
                                 'scroll-grid-group-item relative min-w-0 max-w-full overflow-hidden rounded-md',
                                 sidebarCompact ? 'scroll-grid-group-item-compact' : '',
                                 sortable.isDragging ? 'opacity-0' : '',
-                                hoveredGroupId === section.groupId
+                                (dragHoveredGroupId ?? hoveredGroupId) === section.groupId
                                   ? 'scroll-grid-group-drop-target'
                                   : '',
                                 active

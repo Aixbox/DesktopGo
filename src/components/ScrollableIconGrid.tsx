@@ -317,6 +317,12 @@ export function ScrollableIconGrid({
   const [currentPage, setCurrentPage] = useState(0)
   const [scrollGroupCount, setScrollGroupCount] = useState(1)
   const [scrollGroups, setScrollGroups] = useState<ScrollGroupMeta[]>([])
+  const [scrollSidebarDragActive, setScrollSidebarDragActive] = useState(false)
+  const [scrollSidebarHoveredGroupId, setScrollSidebarHoveredGroupId] = useState<string | null>(
+    null
+  )
+  const scrollSidebarDragActiveRef = useRef(false)
+  const scrollSidebarHoveredGroupIdRef = useRef<string | null>(null)
   const [hoverPage, setHoverPage] = useState<number | null>(null)
   const [itemWidth, setItemWidth] = useState<number>(columnWidth)
   const [itemHeight, setItemHeight] = useState<number>(rowHeight)
@@ -844,6 +850,10 @@ export function ScrollableIconGrid({
     openFolderId,
     setOpenFolderId,
   })
+  const clearOuterDragInteractionForPageSwitchRef = useRef(clearOuterDragInteractionForPageSwitch)
+  useLayoutEffect(() => {
+    clearOuterDragInteractionForPageSwitchRef.current = clearOuterDragInteractionForPageSwitch
+  }, [clearOuterDragInteractionForPageSwitch])
   const activeDragIdSet = useMemo(() => new Set(dragState?.draggingIds ?? []), [dragState])
   const folderRenderOrder =
     dragState && dragState.context === 'folder' ? dragState.workingOrder : folderOrder
@@ -1686,13 +1696,24 @@ export function ScrollableIconGrid({
     const activeGroup = scrollGroups[currentPage]
     if (!activeGroup) return null
 
+    // WeTab keeps the destination group untouched while the pointer is still over the
+    // sidebar. The dragged item only enters the visible layout after returning to the grid.
+    if (scrollSidebarDragActive) return activeGroup.itemIds
+
     return buildScrollGroupDragPreviewOrder({
       groupItemIds: activeGroup.itemIds,
       workingOrder: dragState.scrollGroupOrder ?? dragState.workingOrder,
       draggingIds: dragState.draggingIds,
       availableIds: new Set(outerViewItemById.keys()),
     })
-  }, [currentPage, dragState, launchpadGridViewMode, outerViewItemById, scrollGroups])
+  }, [
+    currentPage,
+    dragState,
+    launchpadGridViewMode,
+    outerViewItemById,
+    scrollGroups,
+    scrollSidebarDragActive,
+  ])
   useLayoutEffect(() => {
     if (
       launchpadGridViewMode !== 'scroll' ||
@@ -2052,6 +2073,56 @@ export function ScrollableIconGrid({
     setCurrentPage(nextPage)
   }
 
+  useEffect(() => {
+    const publishSidebarFeedback = (active: boolean, groupId: string | null) => {
+      if (scrollSidebarDragActiveRef.current !== active) {
+        scrollSidebarDragActiveRef.current = active
+        setScrollSidebarDragActive(active)
+      }
+      if (scrollSidebarHoveredGroupIdRef.current !== groupId) {
+        scrollSidebarHoveredGroupIdRef.current = groupId
+        setScrollSidebarHoveredGroupId(groupId)
+      }
+    }
+
+    if (launchpadGridViewMode !== 'scroll' || dragState?.context !== 'outer') {
+      publishSidebarFeedback(false, null)
+      return
+    }
+
+    let frame = 0
+    const detectSidebarTarget = () => {
+      const pointer = dragPointerRef.current
+      const target = pointer
+        ? (document.elementFromPoint(pointer.pointerX, pointer.pointerY) as HTMLElement | null)
+        : null
+      const sidebar = target?.closest<HTMLElement>('[data-scroll-group-sidebar]') ?? null
+      const groupTarget = sidebar
+        ? (target?.closest<HTMLElement>('[data-scroll-group-id]') ?? null)
+        : null
+      const groupId = groupTarget?.dataset.scrollGroupId ?? null
+
+      publishSidebarFeedback(Boolean(sidebar), groupId)
+
+      if (groupId && groupId !== scrollGroupsRef.current[currentPageRef.current]?.id) {
+        const targetPage = scrollGroupsRef.current.findIndex(group => group.id === groupId)
+        if (targetPage >= 0) {
+          // A rendered snapshot from the source group must never win a same-frame pointer-up.
+          externalScrollPreviewSnapshotRef.current = null
+          clearOuterDragInteractionForPageSwitchRef.current()
+          currentPageRef.current = targetPage
+          setCurrentPage(targetPage)
+          containerRef.current?.scrollTo({ top: 0, behavior: 'auto' })
+        }
+      }
+
+      frame = window.requestAnimationFrame(detectSidebarTarget)
+    }
+
+    detectSidebarTarget()
+    return () => window.cancelAnimationFrame(frame)
+  }, [dragPointerRef, dragState?.context, dragState?.dragStartedAt, launchpadGridViewMode])
+
   const handleAddScrollGroup = (meta: Pick<ScrollGroupMeta, 'name' | 'icon'>) => {
     const group = createScrollGroup(meta.name, meta.icon, scrollGroupsRef.current)
     const nextGroups = [...scrollGroupsRef.current, group]
@@ -2201,6 +2272,7 @@ export function ScrollableIconGrid({
             sections={scrollGridSections}
             activeSection={activeScrollGridSection}
             currentPage={currentPage}
+            dragHoveredGroupId={scrollSidebarHoveredGroupId}
             dragContext={dragState?.context === 'dock' ? null : (dragState?.context ?? null)}
             dragFolderPreviewTargetId={dragState?.folderPreviewTargetId ?? null}
             folderPreviewFreezeTargetId={folderPreviewFreezeTargetId}
@@ -2435,6 +2507,7 @@ export function ScrollableIconGrid({
           slotHeight={itemHeight}
           gridGap={GRID_GAP}
           dragSessionId={dragState?.dragStartedAt ?? null}
+          compactPreview={scrollSidebarDragActive}
           stackedIcons={multiDragStackItems}
           folderDropFlight={folderDropFlight}
           multiDropFlight={multiDropFlight}
