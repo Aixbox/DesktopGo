@@ -1,6 +1,28 @@
-import type { EvasionDirection } from '../model'
+import type { EvasionDirection, HoverZone } from '../model'
 import { clampNumber } from './geometry'
-import { DRAG_HOLE_ID, getSlotRowColWithinPage } from './slots'
+import { DRAG_HOLE_ID, getSlotRowColWithinPage, isVacantSlot } from './slots'
+
+export const getEvasionIntentSignature = (targetId: string, zone: HoverZone) =>
+  `${targetId}:${zone}`
+
+export const getEvasionReadyDelay = ({
+  now,
+  dwellStartedAt,
+  dwellMs,
+  lastEvasionAt,
+  cooldownMs,
+}: {
+  now: number
+  dwellStartedAt: number
+  dwellMs: number
+  lastEvasionAt: number | null
+  cooldownMs: number
+}) => {
+  const dwellRemaining = Math.max(0, dwellMs - (now - dwellStartedAt))
+  const cooldownRemaining =
+    lastEvasionAt === null ? 0 : Math.max(0, cooldownMs - (now - lastEvasionAt))
+  return Math.ceil(Math.max(dwellRemaining, cooldownRemaining))
+}
 
 const collectDirectionalIndices = (
   targetIndex: number,
@@ -55,8 +77,11 @@ export const evaluateDirectionalEvasion = (
   columns: number
 ): DirectionalEvasionCandidate => {
   const indices = collectDirectionalIndices(targetIndex, direction, pageStart, pageSize, columns)
-  const emptyCount = indices.reduce((count, index) => (slots[index] === null ? count + 1 : count), 0)
-  const emptyIndex = indices.find(index => slots[index] === null) ?? null
+  const emptyCount = indices.reduce(
+    (count, index) => (isVacantSlot(slots[index]) ? count + 1 : count),
+    0
+  )
+  const emptyIndex = indices.find(index => isVacantSlot(slots[index])) ?? null
   const releaseScore = emptyCount * 100 + indices.length
   return {
     direction,
@@ -104,10 +129,11 @@ export const applyDirectionalShift = (
           ? -safeColumns
           : safeColumns
   const next = [...slots]
+  const vacancy = next[emptyIndex] ?? null
   for (let index = emptyIndex; index !== targetIndex; index -= step) {
     next[index] = next[index - step]
   }
-  next[targetIndex] = null
+  next[targetIndex] = vacancy
   return next
 }
 

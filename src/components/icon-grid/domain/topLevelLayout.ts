@@ -118,7 +118,11 @@ const getLocalAnchorIndexFromCoordinate = (
   columns: number,
   pageSize: number
 ): number | null => {
-  const globalAnchorIndex = getAnchorIndexFromCoordinate({ ...coordinate, page: 0 }, columns, pageSize)
+  const globalAnchorIndex = getAnchorIndexFromCoordinate(
+    { ...coordinate, page: 0 },
+    columns,
+    pageSize
+  )
   if (globalAnchorIndex === null) return null
   return globalAnchorIndex
 }
@@ -306,8 +310,7 @@ export const buildPersistedItemCoordinates = (
     if (!item) return
 
     const span = getGridItemSpan(item)
-    const footprint =
-      getFootprintIndices(index, span, safeColumns, safePageSize) ?? [index]
+    const footprint = getFootprintIndices(index, span, safeColumns, safePageSize) ?? [index]
 
     coordinates.push({
       id: slot,
@@ -484,7 +487,10 @@ export const normalizeOuterSlots = (
 
     for (;;) {
       ensureAnchorCapacity(searchIndex)
-      if (!anchors[searchIndex] && canPlaceAtIndex(occupied, searchIndex, span, safeColumns, safePageSize)) {
+      if (
+        !anchors[searchIndex] &&
+        canPlaceAtIndex(occupied, searchIndex, span, safeColumns, safePageSize)
+      ) {
         return searchIndex
       }
       searchIndex += 1
@@ -495,7 +501,10 @@ export const normalizeOuterSlots = (
     let searchIndex = Math.max(0, originIndex)
     for (;;) {
       ensureAnchorCapacity(searchIndex)
-      if (!anchors[searchIndex] && canPlaceAtIndex(occupied, searchIndex, span, safeColumns, safePageSize)) {
+      if (
+        !anchors[searchIndex] &&
+        canPlaceAtIndex(occupied, searchIndex, span, safeColumns, safePageSize)
+      ) {
         return searchIndex
       }
       searchIndex += 1
@@ -530,7 +539,9 @@ export const normalizeOuterSlots = (
       anchorIndex = findForwardAvailableAnchorIndex(span, originIndex)
     } else {
       anchorIndex =
-        originIndex >= 0 ? findNearestAvailableAnchorIndex(span, originIndex) : findAppendAnchorIndex(span)
+        originIndex >= 0
+          ? findNearestAvailableAnchorIndex(span, originIndex)
+          : findAppendAnchorIndex(span)
     }
     if (anchorIndex === null) {
       for (let index = 0; anchorIndex === null; index += 1) {
@@ -558,6 +569,43 @@ export const normalizeOuterSlots = (
   }
 
   return anchors
+}
+
+export const repairPathologicallySparsePages = (
+  source: Array<string | null>,
+  items: GridItem[],
+  pageSize: number,
+  columns: number
+): Array<string | null> => {
+  const safePageSize = Math.max(1, pageSize)
+  const safeColumns = Math.max(1, columns)
+  const normalized = normalizeOuterSlots(source, items, safePageSize, safeColumns)
+  const currentPageCount = Math.max(1, Math.ceil(normalized.length / safePageSize))
+
+  const itemById = buildItemMap(items)
+  const orderedItems: GridItem[] = []
+  const seen = new Set<string>()
+  normalized.forEach(slot => {
+    if (!slot || slot === DRAG_HOLE_ID || seen.has(slot)) return
+    const item = itemById.get(slot)
+    if (!item) return
+    orderedItems.push(item)
+    seen.add(slot)
+  })
+  items.forEach(item => {
+    const id = getId(item)
+    if (seen.has(id)) return
+    orderedItems.push(item)
+    seen.add(id)
+  })
+
+  const packedSource = orderedItems.map(getId)
+  const packed = normalizeOuterSlots(packedSource, orderedItems, safePageSize, safeColumns)
+  const packedPageCount = Math.max(1, Math.ceil(packed.length / safePageSize))
+  const isPathological =
+    currentPageCount >= packedPageCount + 2 && currentPageCount >= packedPageCount * 2
+
+  return isPathological ? packed : normalized
 }
 
 export const findBestResizeAnchorIndex = ({

@@ -8,10 +8,14 @@ import {
   type PointerEvent as ReactPointerEvent,
   type SetStateAction,
 } from 'react'
-import type { EvasionDirection, GridItem, IconItem } from '../model'
+import type { EvasionDirection, GridItem, HoverZone, IconItem } from '../model'
 import { getGridItemSpan, getId } from '../model'
 import { DRAG_HOLE_ID, areSlotsEqual } from '../domain/slots'
-import { moveDragHoleToIndex } from '../domain/evasionPolicy'
+import {
+  getEvasionIntentSignature,
+  getEvasionReadyDelay,
+  moveDragHoleToIndex,
+} from '../domain/evasionPolicy'
 import { getFolderChildSelectionsByIds, getFolderChildrenById } from '../domain/folderPolicy'
 import { clampNumber, classifyZone, getRectArea, getRectIntersection } from '../domain/geometry'
 import {
@@ -56,6 +60,7 @@ interface DragWorkflowConfig {
   dragPendingMoveTolerance: number
   evasionRearmDistance: number
   evasionCooldownMs: number
+  evasionDwellMs: number
   reorderAnimationMs: number
 }
 
@@ -180,7 +185,7 @@ export function useIconGridDragWorkflow({
   const cancelDragFnRef = useRef<(pointerId: number) => void>(() => undefined)
   const timerRef = useRef<number | null>(null)
   const outerDwellTimerRef = useRef<number | null>(null)
-  const outerDwellTargetIdRef = useRef<string | null>(null)
+  const outerDwellIntentRef = useRef<{ targetId: string; zone: HoverZone } | null>(null)
   const suppressClickUntilRef = useRef(0)
   const dragMoveRafRef = useRef<number | null>(null)
   const queuedDragMoveRef = useRef<{ pointerId: number; x: number; y: number } | null>(null)
@@ -230,7 +235,7 @@ export function useIconGridDragWorkflow({
       window.clearTimeout(outerDwellTimerRef.current)
       outerDwellTimerRef.current = null
     }
-    outerDwellTargetIdRef.current = null
+    outerDwellIntentRef.current = null
   }
 
   const cancelQueuedDragMove = () => {
@@ -1032,18 +1037,12 @@ export function useIconGridDragWorkflow({
     overlapHit: OuterOverlapHit,
     now: number
   ): DragState => {
-    const movedSinceLastEvasion =
-      !state.lastEvasionTriggerPointer ||
-      Math.hypot(
-        state.pointerX - state.lastEvasionTriggerPointer.x,
-        state.pointerY - state.lastEvasionTriggerPointer.y
-      ) >= config.evasionRearmDistance
     const cooledDownSinceLastEvasion =
       state.lastEvasionAt === null || now - state.lastEvasionAt >= config.evasionCooldownMs
-    if (!movedSinceLastEvasion || !cooledDownSinceLastEvasion) return state
+    if (!cooledDownSinceLastEvasion) return state
 
     const evasionResult = applyTopLevelEvasion(state, overlapHit)
-    const nextEvasionSignature = `${overlapHit.targetId}:${state.previewSlotIndex ?? overlapHit.targetIndex}:${evasionResult.direction ?? 'fallback'}`
+    const nextEvasionSignature = getEvasionIntentSignature(overlapHit.targetId, overlapHit.zone)
     if (nextEvasionSignature === state.lastEvasionSignature) return state
     if (areSlotsEqual(evasionResult.order, state.workingOrder)) return state
 
@@ -1063,16 +1062,27 @@ export function useIconGridDragWorkflow({
     }
   }
 
-  const triggerTopLevelDwellEvasion = (expectedTargetId: string) => {
+  const triggerTopLevelDwellEvasion = (expectedIntent: { targetId: string; zone: HoverZone }) => {
     const latest = dragRef.current
     if (!latest || latest.context === 'folder') return
     if (latest.context === 'dock' && !isDraggingFromDock(latest.draggingId)) return
-    if (latest.hoverTargetId !== expectedTargetId) return
+    if (
+      latest.hoverTargetId !== expectedIntent.targetId ||
+      latest.hoverZone !== expectedIntent.zone
+    ) {
+      return
+    }
     if (latest.folderPreviewTargetId) return
     const isMultiOuterDrag = latest.context === 'outer' && latest.draggingIds.length > 1
 
     const overlapHit = findTopLevelMaxOverlapHit(latest)
-    if (!overlapHit || overlapHit.targetId !== expectedTargetId) return
+    if (
+      !overlapHit ||
+      overlapHit.targetId !== expectedIntent.targetId ||
+      overlapHit.zone !== expectedIntent.zone
+    ) {
+      return
+    }
 
     const itemMap = resolveDragItemMap(latest)
     const source = latest.draggingItem
@@ -1594,26 +1604,46 @@ export function useIconGridDragWorkflow({
       }
 
       next.folderPreviewTargetId = null
-      const sameTarget = baseState.hoverTargetId === overlapHit.targetId
+      const intentSignature = getEvasionIntentSignature(overlapHit.targetId, overlapHit.zone)
+      const sameIntent =
+        baseState.hoverTargetId === overlapHit.targetId && baseState.hoverZone === overlapHit.zone
       next.dwellStartedAt =
-        sameTarget && baseState.dwellStartedAt !== null ? baseState.dwellStartedAt : now
-      if (!sameTarget) {
+        sameIntent && baseState.dwellStartedAt !== null ? baseState.dwellStartedAt : now
+      if (!sameIntent) {
         next.lastEvasionSignature = null
       }
 
+      if (next.lastEvasionSignature === intentSignature) {
+        clearOuterDwellTimer()
+        publishMoveDragState(next)
+        return
+      }
+
       const dwellSince = next.dwellStartedAt ?? now
-      const remainingMs = Math.max(0, OUTER_DRAG_RULES.evasionDwellMs - (now - dwellSince))
-      const targetChanged = outerDwellTargetIdRef.current !== overlapHit.targetId
-      if (targetChanged) {
+      const remainingMs = getEvasionReadyDelay({
+        now,
+        dwellStartedAt: dwellSince,
+        dwellMs: config.evasionDwellMs,
+        lastEvasionAt: next.lastEvasionAt,
+        cooldownMs: config.evasionCooldownMs,
+      })
+      const pendingIntent = outerDwellIntentRef.current
+      const intentChanged =
+        pendingIntent?.targetId !== overlapHit.targetId || pendingIntent?.zone !== overlapHit.zone
+      if (intentChanged) {
         clearOuterDwellTimer()
       }
       if (outerDwellTimerRef.current === null) {
-        outerDwellTargetIdRef.current = overlapHit.targetId
+        outerDwellIntentRef.current = {
+          targetId: overlapHit.targetId,
+          zone: overlapHit.zone,
+        }
         outerDwellTimerRef.current = window.setTimeout(() => {
-          const targetId = outerDwellTargetIdRef.current
+          const intent = outerDwellIntentRef.current
           outerDwellTimerRef.current = null
-          if (!targetId) return
-          triggerTopLevelDwellEvasion(targetId)
+          outerDwellIntentRef.current = null
+          if (!intent) return
+          triggerTopLevelDwellEvasion(intent)
         }, remainingMs)
       }
 

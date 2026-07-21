@@ -34,7 +34,7 @@ import {
   getFolderPreviewFrameSize,
   getFolderPreviewSlotSize,
 } from '../views/FolderVisuals'
-import { normalizeOuterSlots } from '../domain/topLevelLayout'
+import { normalizeOuterSlots, repairPathologicallySparsePages } from '../domain/topLevelLayout'
 
 interface IconConfigLike {
   imgSize: number
@@ -179,7 +179,13 @@ export function useDragDropCommit({
       pageSizeRef.current,
       Math.max(1, columns)
     )
-    const compactedOuterSlots = compactEmptyPages(normalizedOuterSlots, pageSizeRef.current)
+    const repairedOuterSlots = repairPathologicallySparsePages(
+      normalizedOuterSlots,
+      filterItemsByIds(nextItems, nextOuterItemIds),
+      pageSizeRef.current,
+      Math.max(1, columns)
+    )
+    const compactedOuterSlots = compactEmptyPages(repairedOuterSlots, pageSizeRef.current)
     itemsRef.current = nextItems
     outerSlotsRef.current = compactedOuterSlots
     dockKeysRef.current = normalizedDockKeys

@@ -36,6 +36,7 @@ import {
   getFootprintIndices,
   getPageAnchorEntries,
   normalizeOuterSlots,
+  repairPathologicallySparsePages,
   resizeSlotPages,
 } from './icon-grid/domain/topLevelLayout'
 import {
@@ -79,6 +80,7 @@ const WHEEL_PAGE_COOLDOWN_MS = 180
 const DRAG_LONG_PRESS_MS = 300
 const DRAG_PENDING_MOVE_TOLERANCE = 7
 const EVASION_REARM_DISTANCE = 14
+const EVASION_DWELL_MS = 100
 const EVASION_COOLDOWN_MS = 200
 const REORDER_ANIMATION_MS = 300
 const FOLDER_SHARED_LAYOUT_WINDOW_MS = 320
@@ -553,6 +555,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       dragPendingMoveTolerance: DRAG_PENDING_MOVE_TOLERANCE,
       evasionRearmDistance: EVASION_REARM_DISTANCE,
       evasionCooldownMs: EVASION_COOLDOWN_MS,
+      evasionDwellMs: EVASION_DWELL_MS,
       reorderAnimationMs: REORDER_ANIMATION_MS,
     },
     selectionMode,
@@ -913,7 +916,13 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
         currentCoordinates
       )
     }
-    const compacted = compactEmptyPages(result, layoutMetrics.pageSize)
+    const repaired = repairPathologicallySparsePages(
+      result,
+      outerItems,
+      layoutMetrics.pageSize,
+      layoutMetrics.columns
+    )
+    const compacted = compactEmptyPages(repaired, layoutMetrics.pageSize)
 
     prevDockEnabledRef.current = dockEnabled
     prevPageSizeRef.current = layoutMetrics.pageSize

@@ -8,6 +8,7 @@ import {
   getPageCountBySlots,
   getPageStartBySlotIndex,
   getSlotRowColWithinPage,
+  isVacantSlot,
 } from './slots'
 import { getFootprintIndices } from './topLevelLayout'
 import {
@@ -559,7 +560,13 @@ const buildSingleStepDirectionalOverlapCandidatePredicate = (
 ) => {
   return (entry: PagePlacementEntry, context: PlacementCandidateFilterContext) => {
     if (!entry.overlapsReserved) return true
-    return movesEntrySingleStepInDirection(entry, context.anchorIndex, pageStart, columns, direction)
+    return movesEntrySingleStepInDirection(
+      entry,
+      context.anchorIndex,
+      pageStart,
+      columns,
+      direction
+    )
   }
 }
 
@@ -1480,11 +1487,12 @@ const applyForwardSpillEvasion = (
   while (next.length < pageEndExclusive) next.push(null)
 
   for (let index = targetIndex + 1; index < pageEndExclusive; index += 1) {
-    if (next[index] === null) {
+    if (isVacantSlot(next[index])) {
+      const vacancy = next[index] ?? null
       for (let cursor = index; cursor > targetIndex; cursor -= 1) {
         next[cursor] = next[cursor - 1]
       }
-      next[targetIndex] = null
+      next[targetIndex] = vacancy
       return next
     }
   }
@@ -1510,7 +1518,6 @@ const applyForwardSpillEvasion = (
   next.splice(pageEndExclusive, 0, ...newPage)
   return next
 }
-
 
 const resolveAlignedFallbackDirection = (
   targetIndex: number,
@@ -1655,7 +1662,8 @@ export const applyOuterEvasionPolicy = (
   }
 
   const next = [...order]
+  const vacancy = next[fallbackIndex] ?? null
   next[fallbackIndex] = next[hit.targetIndex]
-  next[hit.targetIndex] = null
+  next[hit.targetIndex] = vacancy
   return { order: next, direction: null }
 }

@@ -1,5 +1,8 @@
 export const DRAG_HOLE_ID = '__desktopgo.drag-hole__'
 
+export const isVacantSlot = (slot: string | null | undefined): boolean =>
+  slot === null || slot === DRAG_HOLE_ID
+
 export const normalizeOuterSlots = (
   source: Array<string | null> | null | undefined,
   itemIds: string[],
@@ -165,7 +168,7 @@ export const findNearestEmptyOnPageByManhattan = (
   let bestIndex: number | null = null
   let bestDistance = Number.POSITIVE_INFINITY
   for (let index = pageStart; index < pageEnd; index += 1) {
-    if (index === originIndex || slots[index] !== null) continue
+    if (index === originIndex || !isVacantSlot(slots[index])) continue
     const distance = getManhattanDistanceBySlotIndex(originIndex, index, pageStart, columns)
     if (distance < bestDistance) {
       bestDistance = distance
