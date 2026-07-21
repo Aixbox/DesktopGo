@@ -9,6 +9,13 @@ export const SCROLL_PREVIEW_REORDER_LOCK_MS = 200
 export const SCROLL_FOLDER_PREVIEW_DWELL_MS = 350
 export const SCROLL_FOLDER_AUTO_OPEN_DWELL_MS = 500
 export const SCROLL_FOLDER_EXIT_DWELL_MS = 200
+export const WETAB_SIDEBAR_DROP_TARGET_SIZE = 36
+export const WETAB_SIDEBAR_GHOST_SIZE = 30
+
+export const resolveScrollSidebarGhostSize = (targetHeight: number) =>
+  Math.round(
+    Math.max(1, targetHeight) * (WETAB_SIDEBAR_GHOST_SIZE / WETAB_SIDEBAR_DROP_TARGET_SIZE)
+  )
 
 export const buildScrollFolderAutoOpenOrder = (
   folderChildIds: string[],

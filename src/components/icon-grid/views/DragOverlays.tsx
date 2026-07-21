@@ -26,6 +26,7 @@ interface DragOverlaysProps {
   gridGap: number
   dragSessionId: number | null
   compactPreview: boolean
+  compactPreviewSize?: number
   stackedIcons: Array<{
     id: string
     icon: DesktopIcon
@@ -41,7 +42,6 @@ const GHOST_FOLDER_INNER_PADDING = 8
 const GHOST_FOLDER_INNER_GAP = 6
 const GHOST_PREVIEW_ICON_SCALE = 0.84
 const GHOST_PREVIEW_ICON_FALLBACK_SCALE = 0.68
-const SIDEBAR_GHOST_SIZE = 30
 const GHOST_SCALE_TRANSITION = 'transform 200ms cubic-bezier(0.22, 1, 0.36, 1)'
 
 const clampNumber = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
@@ -275,6 +275,7 @@ export function DragOverlays({
   gridGap,
   dragSessionId,
   compactPreview,
+  compactPreviewSize = 30,
   stackedIcons,
   folderDropFlight,
   multiDropFlight,
@@ -307,7 +308,7 @@ export function DragOverlays({
   const ghostWidth = ghostItem?.kind === 'folder' ? folderFootprintWidth : iconImageSize
   const ghostHeight = ghostItem?.kind === 'folder' ? folderFootprintHeight : iconImageSize
   const compactScale = compactPreview
-    ? Math.min(1, SIDEBAR_GHOST_SIZE / Math.max(1, ghostWidth, ghostHeight))
+    ? Math.min(1, compactPreviewSize / Math.max(1, ghostWidth, ghostHeight))
     : 1
   const scaleTransition = reducedMotion ? 'none' : GHOST_SCALE_TRANSITION
 

@@ -58,6 +58,7 @@ import {
   deleteScrollGroup,
   moveScrollGroupItem,
   normalizeScrollGroups,
+  resolveScrollSidebarGhostSize,
 } from './icon-grid/scroll/scrollGroupLayout'
 import {
   applyMultiOuterDropFromSession,
@@ -2523,6 +2524,7 @@ export function ScrollableIconGrid({
           gridGap={GRID_GAP}
           dragSessionId={dragState?.dragStartedAt ?? null}
           compactPreview={scrollSidebarDragActive}
+          compactPreviewSize={resolveScrollSidebarGhostSize(sidebarCompact ? 56 : 44)}
           stackedIcons={multiDragStackItems}
           folderDropFlight={folderDropFlight}
           multiDropFlight={multiDropFlight}

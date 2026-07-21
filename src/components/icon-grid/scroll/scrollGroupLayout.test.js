@@ -15,6 +15,7 @@ import {
   moveScrollGroupItem,
   normalizeScrollGroups,
   replaceScrollPreviewItemsWithFolder,
+  resolveScrollSidebarGhostSize,
   resolveScrollDropPosition,
 } from './scrollGroupLayout.ts'
 import { DRAG_HOLE_ID } from '../domain/slots.ts'
@@ -79,6 +80,14 @@ assert(
 assert(
   canExitScrollFolderThroughMask({ dragStartedInFolder: true, enteredFolderContent: false }),
   'An icon dragged from a folder may exit directly through the surrounding mask'
+)
+assert(
+  resolveScrollSidebarGhostSize(44) === 37,
+  'The expanded sidebar ghost must preserve the WeTab 30-to-36 target-size ratio'
+)
+assert(
+  resolveScrollSidebarGhostSize(56) === 47,
+  'The compact sidebar ghost must preserve the WeTab ratio against its taller target item'
 )
 
 const migrated = normalizeScrollGroups({
