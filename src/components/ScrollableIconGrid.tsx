@@ -52,6 +52,7 @@ import {
   buildScrollGroupDragPreviewOrder,
   buildScrollGroupEntries,
   commitScrollFolderCreation,
+  commitScrollGroupDragResult,
   commitScrollGroupItemOrder,
   createScrollGroup,
   deleteScrollGroup,
@@ -651,19 +652,71 @@ export function ScrollableIconGrid({
   }, [launchpadGridViewMode])
 
   const captureFinishedScrollDrag = useCallback(
-    (session: DragState, _folderCreateTargetId: string | null) => {
+    (
+      session: DragState,
+      _folderCreateTargetId: string | null,
+      sourceFolderReplacementId: string | null
+    ) => {
       if (launchpadGridViewMode !== 'scroll') return
-      const activeGroup = scrollGroupsRef.current[currentPageRef.current]
-      if (!activeGroup) return
-      externalScrollPreviewSnapshotRef.current = {
-        groupId: activeGroup.id,
-        itemIds: Array.from(
-          new Set(session.scrollGroupOrder ?? [...activeGroup.itemIds, ...session.draggingIds])
-        ),
+      const snapshot = externalScrollPreviewSnapshotRef.current
+      const currentGroups = scrollGroupsRef.current
+      const snapshotMatchesSession = Boolean(
+        snapshot &&
+        snapshot.draggingIds.length === session.draggingIds.length &&
+        snapshot.draggingIds.every((id, index) => id === session.draggingIds[index])
+      )
+      const fallbackGroup = currentGroups[currentPageRef.current]
+      const targetGroupId = (snapshotMatchesSession ? snapshot?.groupId : null) ?? fallbackGroup?.id
+      if (!targetGroupId) return
+      const targetGroup = currentGroups.find(group => group.id === targetGroupId)
+      if (!targetGroup) return
+
+      const availableItemIds = resolveOuterItemIds(
+        itemsRef.current.map(getId),
+        dockEnabledRef.current ? dockKeysRef.current : []
+      )
+      const fallbackPreviewItemIds = buildScrollGroupDragPreviewOrder({
+        groupItemIds: targetGroup.itemIds,
+        workingOrder: session.scrollGroupOrder ?? session.workingOrder,
         draggingIds: session.draggingIds,
+        availableIds: new Set([
+          ...availableItemIds,
+          ...targetGroup.itemIds,
+          ...session.draggingIds,
+        ]),
+      })
+      const sourceFolderEntryId = session.sourceFolderId ? `folder:${session.sourceFolderId}` : null
+      const replacementById =
+        sourceFolderEntryId && !availableItemIds.includes(sourceFolderEntryId)
+          ? { [sourceFolderEntryId]: sourceFolderReplacementId }
+          : undefined
+      const nextGroups = commitScrollGroupDragResult({
+        groups: currentGroups,
+        targetGroupId,
+        previewItemIds:
+          snapshotMatchesSession && snapshot ? snapshot.itemIds : fallbackPreviewItemIds,
+        availableItemIds,
+        draggingIds: session.draggingIds,
+        replacementById,
+      })
+      externalScrollPreviewSnapshotRef.current = null
+      if (nextGroups === currentGroups) return
+      captureScrollGridItemPositions()
+      scrollGroupsRef.current = nextGroups
+      setScrollGroups(nextGroups)
+    },
+    [captureScrollGridItemPositions, launchpadGridViewMode]
+  )
+
+  const captureRenderedScrollPreview = useCallback(
+    (groupId: string, itemIds: string[], draggingIds: string[]) => {
+      externalScrollPreviewSnapshotRef.current = {
+        groupId,
+        itemIds,
+        draggingIds,
       }
     },
-    [launchpadGridViewMode]
+    []
   )
 
   const commitCreatedFolderToScrollGroup = useCallback(
@@ -1634,47 +1687,26 @@ export function ScrollableIconGrid({
     })
   }, [currentPage, dragState, launchpadGridViewMode, outerViewItemById, scrollGroups])
   useLayoutEffect(() => {
-    if (dragState !== null) return
-
-    const snapshot = externalScrollPreviewSnapshotRef.current
-    if (!snapshot) return
-    const outerIdSet = new Set(outerItemIds)
-    externalScrollPreviewSnapshotRef.current = null
-    const droppedIds = snapshot.draggingIds.filter(id => outerIdSet.has(id))
-    if (droppedIds.length === 0) return
-
-    const currentGroups = scrollGroupsRef.current
-    const representedIds = new Set(
-      currentGroups.flatMap(group => group.itemIds.filter(id => outerIdSet.has(id)))
+    if (
+      launchpadGridViewMode !== 'scroll' ||
+      dragState?.context !== 'outer' ||
+      !externalScrollPreviewItemIds
+    ) {
+      return
+    }
+    const activeGroup = scrollGroups[currentPage]
+    if (!activeGroup) return
+    captureRenderedScrollPreview(
+      activeGroup.id,
+      externalScrollPreviewItemIds,
+      dragState.draggingIds
     )
-    const unassignedIds = outerItemIds.filter(id => !representedIds.has(id))
-    const desiredTargetIds = Array.from(
-      new Set([
-        ...snapshot.itemIds.filter(id => outerIdSet.has(id)),
-        ...unassignedIds,
-        ...(currentGroups.find(group => group.id === snapshot.groupId)?.itemIds ?? []).filter(id =>
-          outerIdSet.has(id)
-        ),
-      ])
-    )
-    const nextGroups = currentGroups.map(group => ({
-      ...group,
-      itemIds:
-        group.id === snapshot.groupId
-          ? desiredTargetIds
-          : group.itemIds.filter(id => !droppedIds.includes(id)),
-    }))
-    if (JSON.stringify(nextGroups) === JSON.stringify(currentGroups)) return
-
-    captureScrollGridItemPositions()
-    scrollGroupsRef.current = nextGroups
-    setScrollGroups(nextGroups)
   }, [
-    captureScrollGridItemPositions,
+    captureRenderedScrollPreview,
     currentPage,
     dragState,
     externalScrollPreviewItemIds,
-    outerItemIds,
+    launchpadGridViewMode,
     scrollGroups,
   ])
   const scrollGridSections = useMemo<ScrollGridSection[]>(() => {

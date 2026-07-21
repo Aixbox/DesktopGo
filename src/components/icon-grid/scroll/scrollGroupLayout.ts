@@ -342,6 +342,63 @@ export const commitScrollFolderCreation = ({
   }))
 }
 
+export const commitScrollGroupDragResult = ({
+  groups,
+  targetGroupId,
+  previewItemIds,
+  availableItemIds,
+  draggingIds,
+  replacementById = {},
+}: {
+  groups: ScrollGroupMeta[]
+  targetGroupId: string
+  previewItemIds: string[]
+  availableItemIds: string[]
+  draggingIds: string[]
+  replacementById?: Record<string, string | null | undefined>
+}): ScrollGroupMeta[] => {
+  const targetGroupIndex = groups.findIndex(group => group.id === targetGroupId)
+  if (targetGroupIndex < 0) return groups
+
+  const availableIdSet = new Set(availableItemIds)
+  const draggingIdSet = new Set(draggingIds)
+  const normalizeIds = (itemIds: string[], excludeDragging: boolean): string[] => {
+    const consumed = new Set<string>()
+    const normalized: string[] = []
+    itemIds.forEach(id => {
+      if (excludeDragging && draggingIdSet.has(id)) return
+      const replacementId = Object.prototype.hasOwnProperty.call(replacementById, id)
+        ? replacementById[id]
+        : id
+      if (!replacementId || !availableIdSet.has(replacementId) || consumed.has(replacementId))
+        return
+      consumed.add(replacementId)
+      normalized.push(replacementId)
+    })
+    return normalized
+  }
+
+  const normalizedGroups = groups.map((group, index) => ({
+    ...group,
+    itemIds: normalizeIds(group.itemIds, index !== targetGroupIndex),
+  }))
+  const representedIds = new Set(normalizedGroups.flatMap(group => group.itemIds))
+  const unassignedIds = availableItemIds.filter(id => !representedIds.has(id))
+  const desiredTargetIds = Array.from(
+    new Set([
+      ...normalizeIds(previewItemIds, false),
+      ...unassignedIds,
+      ...normalizedGroups[targetGroupIndex].itemIds,
+    ])
+  )
+  normalizedGroups[targetGroupIndex] = {
+    ...normalizedGroups[targetGroupIndex],
+    itemIds: desiredTargetIds,
+  }
+
+  return JSON.stringify(normalizedGroups) === JSON.stringify(groups) ? groups : normalizedGroups
+}
+
 export const moveScrollGroupItem = (
   groups: ScrollGroupMeta[],
   itemId: string,

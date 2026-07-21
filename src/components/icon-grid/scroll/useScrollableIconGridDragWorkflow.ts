@@ -46,9 +46,9 @@ import { usePointerDragController } from '../hooks/usePointerDragController'
 import { useEdgeAutoPaging } from '../hooks/useEdgeAutoPaging'
 import { useScrollableDragDropCommit } from './useScrollableDragDropCommit'
 import {
+  buildScrollGroupDragPreviewOrder,
   buildScrollGroupEntries,
   resolveScrollDropPosition,
-  moveScrollItemRelative,
   SCROLL_PREVIEW_REORDER_DWELL_MS,
   SCROLL_PREVIEW_REORDER_LOCK_MS,
 } from './scrollGroupLayout'
@@ -108,7 +108,11 @@ interface UseIconGridDragWorkflowParams {
   } | null
   getActiveScrollGroupItemIds?: () => string[]
   onBeforeOuterPreviewChange?: () => void
-  onOuterDragFinished?: (session: DragState, folderCreateTargetId: string | null) => void
+  onOuterDragFinished?: (
+    session: DragState,
+    folderCreateTargetId: string | null,
+    sourceFolderReplacementId: string | null
+  ) => void
   onFolderCreateCommitted?: (session: DragState, createdFolderId: string, targetId: string) => void
   dockContainerRef: MutableRefObject<HTMLDivElement | null>
   dockGridRef: MutableRefObject<HTMLDivElement | null>
@@ -660,6 +664,21 @@ export function useScrollableIconGridDragWorkflow({
     getActiveScrollGroupItemIds().forEach(append)
     state.draggingIds.forEach(append)
     return order
+  }
+
+  const resolveScrollGroupOrderFromWorkingOrder = (
+    state: DragState,
+    workingOrder: Array<string | null>
+  ): string[] | null => {
+    if (!isCompactOuterDrop || !getActiveScrollGroupItemIds || !state.scrollGroupOrder) {
+      return state.scrollGroupOrder ?? null
+    }
+    return buildScrollGroupDragPreviewOrder({
+      groupItemIds: getActiveScrollGroupItemIds(),
+      workingOrder,
+      draggingIds: state.draggingIds,
+      availableIds: new Set(resolveCompactOuterPreviewItems(state).map(getId)),
+    })
   }
 
   const buildDockLinearPreviewOrder = (
@@ -1636,14 +1655,10 @@ export function useScrollableIconGridDragWorkflow({
       }
 
       const compactPreview = buildCompactOuterPreviewOrder(latest, overlapHit)
-      const nextScrollGroupOrder = latest.scrollGroupOrder
-        ? moveScrollItemRelative(
-            latest.scrollGroupOrder,
-            latest.draggingId,
-            overlapHit.targetId,
-            overlapHit.zone === 'left' || overlapHit.zone === 'up' ? 'before' : 'after'
-          )
-        : null
+      const nextScrollGroupOrder = resolveScrollGroupOrderFromWorkingOrder(
+        latest,
+        compactPreview.order
+      )
       if (
         areSlotsEqual(compactPreview.order, latest.workingOrder) &&
         areSlotsEqual(nextScrollGroupOrder ?? [], latest.scrollGroupOrder ?? [])
@@ -2149,6 +2164,10 @@ export function useScrollableIconGridDragWorkflow({
           publishMoveDragState({
             ...baseState,
             workingOrder: compactPreview.order,
+            scrollGroupOrder: resolveScrollGroupOrderFromWorkingOrder(
+              baseState,
+              compactPreview.order
+            ),
             previewSlotIndex: compactPreview.previewSlotIndex,
             dockPreviewIndex: null,
             hoverTargetId: compactGridHit.targetId,
@@ -2599,9 +2618,19 @@ export function useScrollableIconGridDragWorkflow({
         : null
       const folderCreateTargetId =
         completedFolderTarget?.kind === 'icon' ? completedFolderTargetId : null
+      const sourceFolderReplacementId = completedDrag?.sourceFolderId
+        ? (() => {
+            const draggingIdSet = new Set(completedDrag.draggingIds)
+            const remainingChildren = getFolderChildrenById(
+              itemsRef.current,
+              completedDrag.sourceFolderId
+            ).filter(child => !draggingIdSet.has(child.key))
+            return remainingChildren.length === 1 ? remainingChildren[0].key : null
+          })()
+        : null
       if (!finishDrag(pointerId)) return
       if (completedDrag?.context === 'outer' && folderCreateTargetId === null) {
-        onOuterDragFinished?.(completedDrag, folderCreateTargetId)
+        onOuterDragFinished?.(completedDrag, folderCreateTargetId, sourceFolderReplacementId)
       }
       dragPointerCaptureTargetRef.current = releaseDragPointerCapture(
         dragPointerCaptureTargetRef.current,

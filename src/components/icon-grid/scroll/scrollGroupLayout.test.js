@@ -2,6 +2,7 @@ import {
   buildScrollGroupEntries,
   buildScrollGroupDragPreviewOrder,
   commitScrollFolderCreation,
+  commitScrollGroupDragResult,
   commitScrollGroupItemOrder,
   deleteScrollGroup,
   isPointInScrollMergeZone,
@@ -292,6 +293,31 @@ assert(
     })
   ) === JSON.stringify([meta('group-a', ['a', 'folder:new', 'b']), meta('group-b', ['c'])]),
   'Folder creation must update the target scroll group in the same transaction'
+)
+assert(
+  JSON.stringify(
+    commitScrollGroupDragResult({
+      groups: [meta('group-a', ['a', 'folder:source', 'b', 'c'])],
+      targetGroupId: 'group-a',
+      previewItemIds: ['a', 'folder:source', 'b', 'folder-child', 'c'],
+      availableItemIds: ['a', 'folder:source', 'b', 'folder-child', 'c'],
+      draggingIds: ['folder-child'],
+    })
+  ) === JSON.stringify([meta('group-a', ['a', 'folder:source', 'b', 'folder-child', 'c'])]),
+  'A folder child drop must commit the exact visible preview position instead of appending'
+)
+assert(
+  JSON.stringify(
+    commitScrollGroupDragResult({
+      groups: [meta('group-a', ['a', 'folder:source', 'b', 'c'])],
+      targetGroupId: 'group-a',
+      previewItemIds: ['a', 'folder:source', 'b', 'folder-child', 'c'],
+      availableItemIds: ['a', 'remaining-child', 'b', 'folder-child', 'c'],
+      draggingIds: ['folder-child'],
+      replacementById: { 'folder:source': 'remaining-child' },
+    })
+  ) === JSON.stringify([meta('group-a', ['a', 'remaining-child', 'b', 'folder-child', 'c'])]),
+  'Collapsing the source folder must replace it in place while preserving the dragged child drop'
 )
 
 console.log('scrollGroupLayout tests passed')
