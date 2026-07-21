@@ -5,6 +5,8 @@ import {
   commitScrollGroupDragResult,
   commitScrollGroupItemOrder,
   deleteScrollGroup,
+  hasScrollEvasionRearmed,
+  isPointInsideScrollDropTarget,
   isPointInScrollMergeZone,
   moveScrollItemRelative,
   moveScrollGroupItem,
@@ -19,6 +21,23 @@ function assert(condition, message) {
 
 const defaultName = index => `Group ${index + 1}`
 const meta = (id, itemIds = []) => ({ id, name: id, icon: 'grid', itemIds })
+
+assert(
+  !isPointInsideScrollDropTarget({ x: -1, y: 50 }, { left: 0, top: 0, width: 100, height: 100 }),
+  'A dragged rectangle touching a target is not a collision until its detection point enters'
+)
+assert(
+  isPointInsideScrollDropTarget({ x: 0, y: 50 }, { left: 0, top: 0, width: 100, height: 100 }),
+  'A target dwell may begin once the detection point actually enters the target'
+)
+assert(
+  !hasScrollEvasionRearmed({ x: 13, y: 0 }, { x: 0, y: 0 }, 14),
+  'The same collision target must remain locked before the pointer moves far enough'
+)
+assert(
+  hasScrollEvasionRearmed({ x: 14, y: 0 }, { x: 0, y: 0 }, 14),
+  'The same collision target must rearm after the pointer follows it beyond the threshold'
+)
 
 const migrated = normalizeScrollGroups({
   groups: [meta('work'), meta('games'), meta('tools')],

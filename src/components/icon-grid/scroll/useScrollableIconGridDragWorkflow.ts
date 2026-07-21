@@ -48,7 +48,10 @@ import { useScrollableDragDropCommit } from './useScrollableDragDropCommit'
 import {
   buildScrollGroupDragPreviewOrder,
   buildScrollGroupEntries,
+  hasScrollEvasionRearmed,
+  isPointInsideScrollDropTarget,
   resolveScrollDropPosition,
+  SCROLL_FOLDER_PREVIEW_DWELL_MS,
   SCROLL_PREVIEW_REORDER_DWELL_MS,
   SCROLL_PREVIEW_REORDER_LOCK_MS,
 } from './scrollGroupLayout'
@@ -878,13 +881,17 @@ export function useScrollableIconGridDragWorkflow({
       return { order: state.workingOrder, previewSlotIndex: state.previewSlotIndex }
     }
 
-    const sourceOrder = compactOuterDragBaseOrderRef.current ?? resolveCompactOuterTopLevelOrder()
+    const currentPreviewContainsDrag = state.draggingIds.some(id => state.workingOrder.includes(id))
+    const sourceOrder = currentPreviewContainsDrag
+      ? state.workingOrder
+      : (compactOuterDragBaseOrderRef.current ?? resolveCompactOuterTopLevelOrder())
+    const currentSourceIndex = sourceOrder.indexOf(state.draggingId)
     const safePageSize = Math.max(1, pageSizeRef.current)
     const signature = [
       hit.targetId,
       targetIndex,
       hit.zone,
-      state.sourceSlotIndex ?? 'external',
+      currentSourceIndex >= 0 ? currentSourceIndex : (state.sourceSlotIndex ?? 'external'),
       state.draggingIds.join(','),
       safePageSize,
       columns,
@@ -902,13 +909,14 @@ export function useScrollableIconGridDragWorkflow({
       slots: sourceOrder,
       items: resolveCompactOuterPreviewItems(state),
       draggingIds: state.draggingIds,
-      sourceIndex: state.sourceSlotIndex,
+      sourceIndex: currentSourceIndex >= 0 ? currentSourceIndex : state.sourceSlotIndex,
       targetIndex,
       targetId: hit.targetId,
       zone: hit.zone,
       pageSize: safePageSize,
       columns,
       minPageCount: getOuterMinPageCount?.(),
+      respectDropZone: true,
     })
     compactOuterPreviewResultRef.current = {
       signature,
@@ -1313,10 +1321,15 @@ export function useScrollableIconGridDragWorkflow({
       dragWidth,
       dragHeight
     )
-    const point = {
-      x: dragRect.left + dragRect.width / 2,
-      y: dragRect.top + dragRect.height / 2,
-    }
+    // WeTab resolves small tiles from the dragged clone's center and larger tiles from the
+    // pointer itself. It does not start a target dwell merely because two rectangles overlap.
+    const point =
+      draggingSpan.cols === 1 && draggingSpan.rows === 1
+        ? {
+            x: dragRect.left + dragRect.width / 2,
+            y: dragRect.top + dragRect.height / 2,
+          }
+        : { x: state.pointerX, y: state.pointerY }
     const getEntryRect = (entry: (typeof entries)[number]) =>
       new DOMRect(
         gridRect.left + entry.col * strideX,
@@ -1324,53 +1337,21 @@ export function useScrollableIconGridDragWorkflow({
         entry.span.cols * itemWidth + Math.max(0, entry.span.cols - 1) * config.gridGap,
         entry.span.rows * itemHeight + Math.max(0, entry.span.rows - 1) * config.gridGap
       )
-    const overlapRate = (targetRect: DOMRect) => {
-      const overlap = getRectIntersection(dragRect, targetRect)
-      if (!overlap) return 0
-      const overlapArea = getRectArea(overlap)
-      return Math.max(
-        overlapArea / Math.max(1, getRectArea(dragRect)),
-        overlapArea / Math.max(1, getRectArea(targetRect))
-      )
-    }
-
     const draggedIdSet = new Set(state.draggingIds)
     const candidates = entries.filter(entry => !draggedIdSet.has(entry.id))
     const cachedPoint = compactScrollLastHitPointRef.current
     const cachedId = compactScrollLastHitIdRef.current
     let resolvedEntry =
       cachedPoint && cachedId && Math.hypot(point.x - cachedPoint.x, point.y - cachedPoint.y) < 10
-        ? (candidates.find(entry => entry.id === cachedId) ?? null)
+        ? (candidates.find(
+            entry =>
+              entry.id === cachedId && isPointInsideScrollDropTarget(point, getEntryRect(entry))
+          ) ?? null)
         : null
 
     if (!resolvedEntry) {
       resolvedEntry =
-        candidates.find(entry => {
-          const rect = getEntryRect(entry)
-          return (
-            point.x >= rect.left &&
-            point.x <= rect.right &&
-            point.y >= rect.top &&
-            point.y <= rect.bottom
-          )
-        }) ?? null
-    }
-    if (!resolvedEntry) {
-      resolvedEntry = candidates.reduce<(typeof entries)[number] | null>((best, entry) => {
-        if (overlapRate(getEntryRect(entry)) <= 0.1) return best
-        if (!best) return entry
-        const rect = getEntryRect(entry)
-        const bestRect = getEntryRect(best)
-        const distance = Math.hypot(
-          point.x - (rect.left + rect.width / 2),
-          point.y - (rect.top + rect.height / 2)
-        )
-        const bestDistance = Math.hypot(
-          point.x - (bestRect.left + bestRect.width / 2),
-          point.y - (bestRect.top + bestRect.height / 2)
-        )
-        return distance < bestDistance ? entry : best
-      }, null)
+        candidates.find(entry => isPointInsideScrollDropTarget(point, getEntryRect(entry))) ?? null
     }
     if (!resolvedEntry) return null
 
@@ -1618,6 +1599,34 @@ export function useScrollableIconGridDragWorkflow({
     return position === 'middle' ? 'center' : position === 'before' ? 'left' : 'right'
   }
 
+  const triggerCompactFolderPreview = (expectedTargetId: string) => {
+    const latest = dragRef.current
+    if (!latest || latest.context !== 'outer' || !isCompactOuterDrop) return
+    if (latest.hoverTargetId !== expectedTargetId || latest.hoverZone !== 'center') return
+
+    const overlapHit = findCompactScrollGroupOverlapHit(latest)
+    if (!overlapHit || overlapHit.targetId !== expectedTargetId) return
+    const target = resolveDragItemMap(latest).get(expectedTargetId)
+    if (!target) return
+    const zone = resolveCompactScrollHoverZone(latest, target, overlapHit)
+    if (zone !== 'center') return
+
+    const canCreateFolder =
+      latest.draggingIds.length === 1 &&
+      latest.draggingItem.kind === 'icon' &&
+      target.kind === 'icon'
+    const canAddToFolder = latest.draggingItem.kind === 'icon' && target.kind === 'folder'
+    if (!canCreateFolder && !canAddToFolder) return
+
+    publishMoveDragState({
+      ...latest,
+      hoverIou: overlapHit.iou,
+      folderPreviewTargetId: expectedTargetId,
+      dwellStartedAt: null,
+      lastEvasionSignature: null,
+    })
+  }
+
   const triggerTopLevelDwellEvasion = (
     expectedTargetId: string,
     expectedZone: HoverZone | null = null
@@ -1647,7 +1656,12 @@ export function useScrollableIconGridDragWorkflow({
       if (overlapHit.zone === 'center') return
 
       const signature = `compact-overlap:${overlapHit.targetId}:${overlapHit.zone}`
-      if (latest.lastEvasionSignature === signature) return
+      const rearmed = hasScrollEvasionRearmed(
+        { x: latest.pointerX, y: latest.pointerY },
+        latest.lastEvasionTriggerPointer,
+        config.evasionRearmDistance
+      )
+      if (latest.lastEvasionSignature === signature && !rearmed) return
       const now = performance.now()
       if (
         latest.lastEvasionAt !== null &&
@@ -2360,28 +2374,51 @@ export function useScrollableIconGridDragWorkflow({
       }
 
       const canFolderPreview = !isMultiOuterDrag && source.kind === 'icon' && target.kind === 'icon'
-      if (
-        canFolderPreview &&
+      const canAddToExistingFolder = source.kind === 'icon' && target.kind === 'folder'
+      const canPreviewFolderAtCenter =
         overlapHit.zone === 'center' &&
-        overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
-      ) {
-        clearOuterDwellTimer()
-        // Keep the accepted compact preview: folder intent must not collapse the drag gap.
-        next.folderPreviewTargetId = overlapHit.targetId
-        next.dwellStartedAt = null
-        next.lastEvasionSignature = null
-        publishMoveDragState(next)
-        return
-      }
+        (canFolderPreview || canAddToExistingFolder) &&
+        (isCompactOuterDrop || overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold)
+      if (canPreviewFolderAtCenter) {
+        if (isCompactOuterDrop && baseState.context === 'outer') {
+          if (baseState.folderPreviewTargetId === overlapHit.targetId) {
+            clearOuterDwellTimer()
+            next.folderPreviewTargetId = overlapHit.targetId
+            next.dwellStartedAt = null
+            next.lastEvasionSignature = null
+            publishMoveDragState(next)
+            return
+          }
 
-      const canAddToExistingFolder =
-        source.kind === 'icon' &&
-        target.kind === 'folder' &&
-        overlapHit.zone === 'center' &&
-        overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
-      if (canAddToExistingFolder) {
+          const now = performance.now()
+          const sameTargetAndZone =
+            baseState.hoverTargetId === overlapHit.targetId && baseState.hoverZone === 'center'
+          next.folderPreviewTargetId = null
+          next.dwellStartedAt =
+            sameTargetAndZone && baseState.dwellStartedAt !== null ? baseState.dwellStartedAt : now
+          next.lastEvasionSignature = null
+          const dwellElapsed = now - (next.dwellStartedAt ?? now)
+          const targetChanged =
+            outerDwellTargetIdRef.current !== overlapHit.targetId ||
+            outerDwellZoneRef.current !== 'center'
+          if (targetChanged) clearOuterDwellTimer()
+          if (outerDwellTimerRef.current === null) {
+            outerDwellTargetIdRef.current = overlapHit.targetId
+            outerDwellZoneRef.current = 'center'
+            outerDwellTimerRef.current = window.setTimeout(
+              () => {
+                const targetId = outerDwellTargetIdRef.current
+                outerDwellTimerRef.current = null
+                if (targetId) triggerCompactFolderPreview(targetId)
+              },
+              Math.max(0, SCROLL_FOLDER_PREVIEW_DWELL_MS - dwellElapsed)
+            )
+          }
+          publishMoveDragState(next)
+          return
+        }
+
         clearOuterDwellTimer()
-        // Folder intent must not alter the already accepted compact ordering.
         next.folderPreviewTargetId = overlapHit.targetId
         next.dwellStartedAt = null
         next.lastEvasionSignature = null
@@ -2392,7 +2429,12 @@ export function useScrollableIconGridDragWorkflow({
       if (isCompactOuterDrop && baseState.context === 'outer') {
         next.folderPreviewTargetId = null
         const signature = `compact-overlap:${overlapHit.targetId}:${overlapHit.zone}`
-        if (baseState.lastEvasionSignature === signature) {
+        const rearmed = hasScrollEvasionRearmed(
+          { x, y },
+          baseState.lastEvasionTriggerPointer,
+          config.evasionRearmDistance
+        )
+        if (baseState.lastEvasionSignature === signature && !rearmed) {
           clearOuterDwellTimer()
           next.dwellStartedAt = null
           publishMoveDragState(next)

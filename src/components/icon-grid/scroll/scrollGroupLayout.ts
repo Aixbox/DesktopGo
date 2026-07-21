@@ -5,6 +5,15 @@ import { getGridItemSpan } from '../model'
 const LEGACY_GROUP_ID_PREFIX = 'scroll-group-migrated'
 export const SCROLL_PREVIEW_REORDER_DWELL_MS = 100
 export const SCROLL_PREVIEW_REORDER_LOCK_MS = 200
+export const SCROLL_FOLDER_PREVIEW_DWELL_MS = 350
+
+export const hasScrollEvasionRearmed = (
+  point: { x: number; y: number },
+  previousTriggerPoint: { x: number; y: number } | null,
+  minimumDistance: number
+) =>
+  previousTriggerPoint === null ||
+  Math.hypot(point.x - previousTriggerPoint.x, point.y - previousTriggerPoint.y) >= minimumDistance
 
 export interface NormalizeScrollGroupsOptions {
   groups: ScrollGroupMeta[] | null | undefined
@@ -192,6 +201,15 @@ export const isPointInScrollMergeZone = (
 }
 
 export type ScrollDropPosition = 'before' | 'after' | 'middle'
+
+export const isPointInsideScrollDropTarget = (
+  point: { x: number; y: number },
+  rect: { left: number; top: number; width: number; height: number }
+) =>
+  point.x >= rect.left &&
+  point.x <= rect.left + rect.width &&
+  point.y >= rect.top &&
+  point.y <= rect.top + rect.height
 
 export const resolveScrollDropPosition = (
   point: { x: number; y: number },

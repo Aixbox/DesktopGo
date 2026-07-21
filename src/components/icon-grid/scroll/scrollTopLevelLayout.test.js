@@ -93,6 +93,7 @@ const buildPreview = overrides => {
     pageSize: overrides.pageSize ?? 4,
     columns: overrides.columns ?? 2,
     minPageCount: overrides.minPageCount ?? 1,
+    respectDropZone: overrides.respectDropZone ?? false,
   })
 }
 
@@ -232,6 +233,36 @@ assertOrder(
   forwardFromRightEdge.order,
   ['b', 'c', 'a', 'd'],
   'A forward drag must remain stable after crossing to the target right edge'
+)
+
+const wetabBeforeCurrentTarget = buildPreview({
+  slots: ['b', 'a', 'c', null],
+  draggingIds: ['a'],
+  sourceIndex: 1,
+  targetIndex: 0,
+  targetId: 'b',
+  zone: 'left',
+  respectDropZone: true,
+})
+const wetabAfterCurrentTarget = buildPreview({
+  slots: ['a', 'b', 'c', null],
+  draggingIds: ['a'],
+  sourceIndex: 0,
+  targetIndex: 0,
+  targetId: 'b',
+  zone: 'right',
+  respectDropZone: true,
+})
+
+assertOrder(
+  wetabBeforeCurrentTarget.order,
+  ['a', 'b', 'c', null],
+  'WeTab-style repeated collision must use the current left zone to move before the same target'
+)
+assertOrder(
+  wetabAfterCurrentTarget.order,
+  ['b', 'a', 'c', null],
+  'WeTab-style collision must use the current right zone to move after the target'
 )
 
 const blankPageTail = buildPreview({

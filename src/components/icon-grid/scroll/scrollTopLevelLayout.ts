@@ -284,13 +284,19 @@ interface CompactOuterDropPreviewParams {
   pageSize: number
   columns: number
   minPageCount?: number
+  respectDropZone?: boolean
 }
 
 const shouldInsertAfterTarget = (
   zone: HoverZone | null | undefined,
   sourceIndex: number | null,
-  targetSourceIndex: number
+  targetSourceIndex: number,
+  respectDropZone = false
 ) => {
+  if (respectDropZone) {
+    if (zone === 'right' || zone === 'down') return true
+    if (zone === 'left' || zone === 'up') return false
+  }
   if (sourceIndex !== null && targetSourceIndex >= 0 && sourceIndex !== targetSourceIndex) {
     return sourceIndex < targetSourceIndex
   }
@@ -331,6 +337,7 @@ export const buildCompactOuterDropPreview = ({
   pageSize,
   columns,
   minPageCount = 1,
+  respectDropZone = false,
 }: CompactOuterDropPreviewParams): {
   order: Array<string | null>
   previewSlotIndex: number | null
@@ -377,7 +384,8 @@ export const buildCompactOuterDropPreview = ({
     const targetCompactIndex = targetPageIds.indexOf(resolvedTargetId)
     const targetSourceIndex = slots.indexOf(resolvedTargetId)
     insertIndex =
-      targetCompactIndex + (shouldInsertAfterTarget(zone, sourceIndex, targetSourceIndex) ? 1 : 0)
+      targetCompactIndex +
+      (shouldInsertAfterTarget(zone, sourceIndex, targetSourceIndex, respectDropZone) ? 1 : 0)
   } else {
     const clampedTargetIndex = Math.min(Math.max(pageStart, targetIndex), pageEnd)
     insertIndex = baseOrder
