@@ -519,9 +519,9 @@ body,
 }
 
 .settings-shell {
-  --background: oklch(0.975 0.004 255);
-  --card: oklch(0.995 0.002 255);
-  --popover: oklch(0.995 0.002 255);
+  --background: oklch(0.965 0.001 255);
+  --card: oklch(0.982 0.002 255);
+  --popover: oklch(0.99 0.002 255);
   --secondary: oklch(0.945 0.006 255);
   --muted: oklch(0.955 0.005 255);
   --muted-foreground: oklch(0.47 0.012 255);
