@@ -576,6 +576,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     folderPanelRef,
     folderGridRef,
     onBeforeOuterPreviewChange: capturePagedGridItemPositions,
+    onOpenFolder: openFolderWithAnimation,
     dockContainerRef,
     dockGridRef,
     tileRefs,

@@ -67,6 +67,10 @@ interface UseDragDropCommitResult {
   hiddenOuterItemIds: string[]
   frozenOuterOrder: Array<string | null> | null
   resetDropVisuals: () => void
+  commitIntoExistingFolderForAutoOpen: (
+    session: DragState,
+    targetFolderId: string
+  ) => IconItem[] | null
   finishDrag: (pointerId: number) => boolean
 }
 
@@ -432,6 +436,45 @@ export function useDragDropCommit({
     setFrozenOuterOrder(null)
   }
 
+  const commitIntoExistingFolderForAutoOpen = (
+    session: DragState,
+    targetFolderId: string
+  ): IconItem[] | null => {
+    if (session.context === 'folder' || session.draggingItem.kind !== 'icon') return null
+
+    const originalItems = itemsRef.current
+    const targetFolder = originalItems.find(
+      item => item.kind === 'folder' && getId(item) === targetFolderId
+    )
+    if (!targetFolder || targetFolder.kind !== 'folder') return null
+
+    const originalOuterSlots = outerSlotsRef.current
+    const originalDockKeys = dockKeysRef.current
+    const baseForDrop = extractDraggedIconsFromSourceFolders(originalItems, session)
+    const result = applyAddToFolderFromSession(baseForDrop, session, targetFolderId)
+    const nextTargetFolder = result.items.find(
+      item => item.kind === 'folder' && getId(item) === targetFolderId
+    )
+    if (
+      !nextTargetFolder ||
+      nextTargetFolder.kind !== 'folder' ||
+      !nextTargetFolder.children.some(child => child.key === session.draggingId)
+    ) {
+      return null
+    }
+
+    resetDropVisuals()
+    commitTopLevelSessionResult(
+      session,
+      originalItems,
+      originalOuterSlots,
+      originalDockKeys,
+      session.context,
+      result
+    )
+    return nextTargetFolder.children
+  }
+
   const finishDrag = (pointerId: number): boolean => {
     const current = dragRef.current
     if (!current || current.pointerId !== pointerId) return false
@@ -715,6 +758,7 @@ export function useDragDropCommit({
     hiddenOuterItemIds,
     frozenOuterOrder,
     resetDropVisuals,
+    commitIntoExistingFolderForAutoOpen,
     finishDrag,
   }
 }

@@ -1,5 +1,11 @@
 import type { PageAnchorEntry } from '../domain/topLevelLayout'
-import { DRAG_HOLE_ID } from '../domain/slots'
+import {
+  buildFolderAutoOpenOrder,
+  canExitFolderThroughMask,
+  FOLDER_AUTO_OPEN_DWELL_MS,
+  FOLDER_EXIT_DWELL_MS,
+  isPointOutsideFolderContent,
+} from '../domain/folderPolicy'
 import type { GridItem, ScrollGroupIcon, ScrollGroupMeta } from '../model'
 import { getGridItemSpan } from '../model'
 
@@ -7,8 +13,8 @@ const LEGACY_GROUP_ID_PREFIX = 'scroll-group-migrated'
 export const SCROLL_PREVIEW_REORDER_DWELL_MS = 100
 export const SCROLL_PREVIEW_REORDER_LOCK_MS = 200
 export const SCROLL_FOLDER_PREVIEW_DWELL_MS = 350
-export const SCROLL_FOLDER_AUTO_OPEN_DWELL_MS = 500
-export const SCROLL_FOLDER_EXIT_DWELL_MS = 200
+export const SCROLL_FOLDER_AUTO_OPEN_DWELL_MS = FOLDER_AUTO_OPEN_DWELL_MS
+export const SCROLL_FOLDER_EXIT_DWELL_MS = FOLDER_EXIT_DWELL_MS
 export const WETAB_SIDEBAR_DROP_TARGET_SIZE = 36
 export const WETAB_SIDEBAR_GHOST_SIZE = 30
 
@@ -17,24 +23,9 @@ export const resolveScrollSidebarGhostSize = (targetHeight: number) =>
     Math.max(1, targetHeight) * (WETAB_SIDEBAR_GHOST_SIZE / WETAB_SIDEBAR_DROP_TARGET_SIZE)
   )
 
-export const buildScrollFolderAutoOpenOrder = (
-  folderChildIds: string[],
-  draggingId: string
-): Array<string | null> | null => {
-  const draggingIndex = folderChildIds.indexOf(draggingId)
-  if (draggingIndex < 0) return null
-  const nextOrder: Array<string | null> = [...folderChildIds]
-  nextOrder[draggingIndex] = DRAG_HOLE_ID
-  return nextOrder
-}
+export const buildScrollFolderAutoOpenOrder = buildFolderAutoOpenOrder
 
-export const canExitScrollFolderThroughMask = ({
-  dragStartedInFolder,
-  enteredFolderContent,
-}: {
-  dragStartedInFolder: boolean
-  enteredFolderContent: boolean
-}) => dragStartedInFolder || enteredFolderContent
+export const canExitScrollFolderThroughMask = canExitFolderThroughMask
 
 export const hasScrollEvasionRearmed = (
   point: { x: number; y: number },
@@ -240,10 +231,7 @@ export const isPointInsideScrollDropTarget = (
   point.y >= rect.top &&
   point.y <= rect.top + rect.height
 
-export const isPointOutsideScrollFolderContent = (
-  point: { x: number; y: number },
-  rect: { left: number; top: number; width: number; height: number }
-) => !isPointInsideScrollDropTarget(point, rect)
+export const isPointOutsideScrollFolderContent = isPointOutsideFolderContent
 
 export const resolveScrollDropPosition = (
   point: { x: number; y: number },

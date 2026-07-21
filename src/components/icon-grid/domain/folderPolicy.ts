@@ -1,4 +1,65 @@
 import type { GridItem, IconItem } from '../model'
+import { DRAG_HOLE_ID } from './slots'
+
+export const FOLDER_AUTO_OPEN_DWELL_MS = 500
+export const FOLDER_EXIT_DWELL_MS = 200
+
+export const isPointInsideFolderContent = (
+  point: { x: number; y: number },
+  rect: { left: number; top: number; width: number; height: number }
+) =>
+  point.x >= rect.left &&
+  point.x <= rect.left + rect.width &&
+  point.y >= rect.top &&
+  point.y <= rect.top + rect.height
+
+export const isPointOutsideFolderContent = (
+  point: { x: number; y: number },
+  rect: { left: number; top: number; width: number; height: number }
+) => !isPointInsideFolderContent(point, rect)
+
+export const canExitFolderThroughMask = ({
+  dragStartedInFolder,
+  enteredFolderContent,
+}: {
+  dragStartedInFolder: boolean
+  enteredFolderContent: boolean
+}) => dragStartedInFolder || enteredFolderContent
+
+export const isFolderAutoOpenIntentValid = ({
+  context,
+  draggingCount,
+  draggingKind,
+  folderPreviewTargetId,
+  hoverTargetId,
+  hoverZone,
+  expectedTargetId,
+}: {
+  context: 'outer' | 'folder' | 'dock'
+  draggingCount: number
+  draggingKind: GridItem['kind']
+  folderPreviewTargetId: string | null
+  hoverTargetId: string | null
+  hoverZone: string | null
+  expectedTargetId: string
+}) =>
+  context === 'outer' &&
+  draggingCount === 1 &&
+  draggingKind === 'icon' &&
+  folderPreviewTargetId === expectedTargetId &&
+  hoverTargetId === expectedTargetId &&
+  hoverZone === 'center'
+
+export const buildFolderAutoOpenOrder = (
+  folderChildIds: string[],
+  draggingId: string
+): Array<string | null> | null => {
+  const draggingIndex = folderChildIds.indexOf(draggingId)
+  if (draggingIndex < 0) return null
+  const nextOrder: Array<string | null> = [...folderChildIds]
+  nextOrder[draggingIndex] = DRAG_HOLE_ID
+  return nextOrder
+}
 
 export const findFolderIndexById = (items: GridItem[], folderId: string): number =>
   items.findIndex(item => item.kind === 'folder' && item.id === folderId)
