@@ -355,7 +355,12 @@ function GroupPreviewGlyph({ item, compact = false }: { item: GridItem; compact?
   if (item.icon.icon_base64) {
     return (
       <span className="flex h-full w-full items-center justify-center">
-        <img src={item.icon.icon_base64} alt="" className={imageClassName} draggable={false} />
+        <img
+          src={item.icon.icon_base64}
+          alt=""
+          className={`launchpad-icon-artwork ${imageClassName}`}
+          draggable={false}
+        />
       </span>
     )
   }

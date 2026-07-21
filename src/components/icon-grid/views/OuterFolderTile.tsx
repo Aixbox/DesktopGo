@@ -166,7 +166,7 @@ function PreviewIconButton({
         <img
           src={iconBase64}
           alt={name}
-          className="object-contain transition-transform group-hover:scale-[1.04]"
+          className="launchpad-icon-artwork object-contain transition-transform group-hover:scale-[1.04]"
           style={{
             width: `${Math.max(20, Math.floor(size * PREVIEW_ICON_SCALE))}px`,
             height: `${Math.max(20, Math.floor(size * PREVIEW_ICON_SCALE))}px`,

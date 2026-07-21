@@ -34,6 +34,13 @@ export type TitleLineCount = 'one' | 'two'
 export type LaunchpadGridViewMode = 'paged' | 'scroll'
 export type IconContextMenuMode = 'custom' | 'system'
 
+export const ICON_CORNER_RADIUS_MIN = 0
+export const ICON_CORNER_RADIUS_MAX = 50
+export const DEFAULT_ICON_CORNER_RADIUS = 25
+export const ICON_OPACITY_MIN = 30
+export const ICON_OPACITY_MAX = 100
+export const DEFAULT_ICON_OPACITY = 100
+
 export const ICON_SIZE_CONFIG = {
   large: { logicalSize: 72, columnWidth: 100, imgSize: 72, containerWidth: 100 },
   medium: { logicalSize: 48, columnWidth: 76, imgSize: 48, containerWidth: 76 },

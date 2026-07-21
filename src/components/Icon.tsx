@@ -176,11 +176,11 @@ export const Icon = memo(function Icon({
               src={icon.icon_base64}
               alt={displayName}
               style={{ width: config.imgSize, height: config.imgSize }}
-              className="object-contain"
+              className="launchpad-icon-artwork object-contain"
               draggable={false}
             />
           ) : (
-            <AppWindow className="w-8 h-8 text-foreground/60" />
+            <AppWindow className="launchpad-icon-artwork h-8 w-8 text-foreground/60" />
           )}
         </div>
         {isRenaming ? (

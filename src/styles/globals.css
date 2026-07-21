@@ -115,6 +115,12 @@ body,
   will-change: transform;
 }
 
+.launchpad-icon-artwork {
+  border-radius: var(--launchpad-icon-corner-radius, 25%);
+  clip-path: inset(0 round var(--launchpad-icon-corner-radius, 25%));
+  opacity: var(--launchpad-icon-opacity, 1);
+}
+
 .scroll-grid-icon-tile:hover .scroll-grid-icon-surface {
   transform: translate3d(0, -2px, 0) scale(1.015);
   filter: drop-shadow(0 7px 8px color-mix(in oklch, var(--foreground) 18%, transparent));

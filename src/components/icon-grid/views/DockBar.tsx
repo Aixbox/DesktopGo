@@ -726,13 +726,13 @@ export function DockBar({
                                 <img
                                   src={item.icon.icon_base64}
                                   alt={customNames[item.icon.path] ?? item.icon.name}
-                                  className="icon-image object-contain"
+                                  className="icon-image launchpad-icon-artwork object-contain"
                                   style={{ width: iconImageSize, height: iconImageSize }}
                                   draggable={false}
                                 />
                               ) : (
                                 <div
-                                  className="icon-image rounded-xl bg-foreground/8 dark:bg-white/12"
+                                  className="icon-image launchpad-icon-artwork bg-foreground/8 dark:bg-white/12"
                                   style={{ width: iconImageSize, height: iconImageSize }}
                                   aria-hidden="true"
                                 />

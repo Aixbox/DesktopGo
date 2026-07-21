@@ -249,12 +249,12 @@ export const FolderCreatePreview = memo(function FolderCreatePreview({
         }`}
         style={surfaceStyle}
       >
-        <div className="absolute left-0 top-0 overflow-hidden rounded-[5px]" style={itemStyle}>
+        <div className="absolute left-0 top-0 overflow-hidden" style={itemStyle}>
           {icon.icon_base64 ? (
             <img
               src={icon.icon_base64}
               alt={icon.name}
-              className="h-full w-full object-contain"
+              className="launchpad-icon-artwork h-full w-full object-contain"
               draggable={false}
             />
           ) : (
@@ -316,7 +316,7 @@ export function FolderIconVisual({
           return (
             <div
               key={`${icon.id}-${idx}`}
-              className="absolute overflow-hidden rounded-[5px] transition-[left,top] duration-200 ease-out"
+              className="launchpad-icon-artwork absolute overflow-hidden transition-[left,top] duration-200 ease-out"
               style={{
                 left: `${left}px`,
                 top: `${top}px`,

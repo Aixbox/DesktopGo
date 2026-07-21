@@ -36,6 +36,7 @@ import {
   MAIN_WINDOW_APPEARANCE_SYNC_EVENT,
   SETTINGS_RETURNED_TO_MAIN_EVENT,
   WINDOW_PERSISTENT_SYNC_EVENT,
+  type MainWindowAppearanceSyncPayload,
   type WindowPersistentSyncPayload,
 } from '@/lib/windowPersistent'
 import { applyWindowStyle, getSavedWindowStyle } from '@/lib/windowStyle'
@@ -227,6 +228,8 @@ export function Launchpad() {
     fetchIcons,
     hydrateSettings,
     iconSize,
+    iconCornerRadius,
+    iconOpacity,
     setIconSize,
     windowMode,
     setWindowMode,
@@ -249,6 +252,12 @@ export function Launchpad() {
     editRequestedIcon,
     clearIconEditRequest,
   } = useIconStore()
+
+  useEffect(() => {
+    const root = document.documentElement
+    root.style.setProperty('--launchpad-icon-corner-radius', `${iconCornerRadius}%`)
+    root.style.setProperty('--launchpad-icon-opacity', `${iconOpacity / 100}`)
+  }, [iconCornerRadius, iconOpacity])
 
   const [isAiOrganizeMode, setIsAiOrganizeMode] = useState(false)
   const [isAiOrganizeSidebarOpen, setIsAiOrganizeSidebarOpen] = useState(false)
@@ -951,7 +960,20 @@ export function Launchpad() {
     let unlisten: (() => void) | null = null
 
     void getCurrentWindow()
-      .listen(MAIN_WINDOW_APPEARANCE_SYNC_EVENT, () => {
+      .listen<MainWindowAppearanceSyncPayload>(MAIN_WINDOW_APPEARANCE_SYNC_EVENT, event => {
+        const nextAppearance: Partial<{
+          iconCornerRadius: number
+          iconOpacity: number
+        }> = {}
+        if (typeof event.payload?.iconCornerRadius === 'number') {
+          nextAppearance.iconCornerRadius = event.payload.iconCornerRadius
+        }
+        if (typeof event.payload?.iconOpacity === 'number') {
+          nextAppearance.iconOpacity = event.payload.iconOpacity
+        }
+        if (Object.keys(nextAppearance).length > 0) {
+          useIconStore.setState(nextAppearance)
+        }
         void syncWindowAppearance()
       })
       .then(fn => {

@@ -10,6 +10,14 @@ import type {
   WindowMode,
 } from '../types'
 import { ICON_SIZE_CONFIG, WINDOW_SIZE_CONFIG } from '../types'
+import {
+  DEFAULT_ICON_CORNER_RADIUS,
+  DEFAULT_ICON_OPACITY,
+  ICON_CORNER_RADIUS_MAX,
+  ICON_CORNER_RADIUS_MIN,
+  ICON_OPACITY_MAX,
+  ICON_OPACITY_MIN,
+} from '../types'
 import { shouldRefreshAfterShellMenuVerb } from '../lib/shellContextMenu'
 import { getSetting, setSetting } from '../lib/settingsStore'
 import { loadCustomNames, saveCustomNames } from '../lib/customNamesStore'
@@ -25,6 +33,8 @@ interface IconStore {
   loading: boolean
   error: string | null
   iconSize: IconSize
+  iconCornerRadius: number
+  iconOpacity: number
   windowMode: WindowMode
   titleLineCount: TitleLineCount
   launchpadGridViewMode: LaunchpadGridViewMode
@@ -38,6 +48,8 @@ interface IconStore {
   fetchIcons: () => Promise<void>
   launchApp: (path: string) => Promise<void>
   setIconSize: (size: IconSize) => void
+  setIconCornerRadius: (radius: number) => void
+  setIconOpacity: (opacity: number) => void
   setWindowMode: (mode: WindowMode) => void
   setTitleLineCount: (count: TitleLineCount) => void
   setLaunchpadGridViewMode: (mode: LaunchpadGridViewMode) => void
@@ -66,6 +78,8 @@ export const useIconStore = create<IconStore>((set, get) => ({
   loading: false,
   error: null,
   iconSize: 'medium',
+  iconCornerRadius: DEFAULT_ICON_CORNER_RADIUS,
+  iconOpacity: DEFAULT_ICON_OPACITY,
   windowMode: 'medium',
   titleLineCount: 'two',
   launchpadGridViewMode: 'paged',
@@ -118,6 +132,26 @@ export const useIconStore = create<IconStore>((set, get) => ({
       console.error('Failed to persist icon size:', e)
     })
     get().fetchIcons()
+  },
+
+  setIconCornerRadius: (radius: number) => {
+    const normalizedRadius = Math.round(
+      Math.max(ICON_CORNER_RADIUS_MIN, Math.min(ICON_CORNER_RADIUS_MAX, radius))
+    )
+    set({ iconCornerRadius: normalizedRadius })
+    void setSetting('iconCornerRadius', normalizedRadius).catch(e => {
+      console.error('Failed to persist icon corner radius:', e)
+    })
+  },
+
+  setIconOpacity: (opacity: number) => {
+    const normalizedOpacity = Math.round(
+      Math.max(ICON_OPACITY_MIN, Math.min(ICON_OPACITY_MAX, opacity))
+    )
+    set({ iconOpacity: normalizedOpacity })
+    void setSetting('iconOpacity', normalizedOpacity).catch(e => {
+      console.error('Failed to persist icon opacity:', e)
+    })
   },
 
   setWindowMode: (mode: WindowMode) => {
@@ -306,6 +340,8 @@ export const useIconStore = create<IconStore>((set, get) => ({
   hydrateSettings: async () => {
     const [
       iconSize,
+      iconCornerRadius,
+      iconOpacity,
       windowMode,
       titleLineCount,
       launchpadGridViewMode,
@@ -314,6 +350,8 @@ export const useIconStore = create<IconStore>((set, get) => ({
       customNames,
     ] = await Promise.all([
       getSetting('iconSize'),
+      getSetting('iconCornerRadius'),
+      getSetting('iconOpacity'),
       getSetting('windowMode'),
       getSetting('titleLineCount'),
       getSetting('launchpadGridViewMode'),
@@ -326,6 +364,12 @@ export const useIconStore = create<IconStore>((set, get) => ({
 
     if (current.iconSize !== iconSize) {
       nextState.iconSize = iconSize
+    }
+    if (current.iconCornerRadius !== iconCornerRadius) {
+      nextState.iconCornerRadius = iconCornerRadius
+    }
+    if (current.iconOpacity !== iconOpacity) {
+      nextState.iconOpacity = iconOpacity
     }
     if (current.windowMode !== windowMode) {
       nextState.windowMode = windowMode

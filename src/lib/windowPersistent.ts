@@ -5,3 +5,8 @@ export const MAIN_WINDOW_APPEARANCE_SYNC_EVENT = 'desktopgo://main-window-appear
 export type WindowPersistentSyncPayload = {
   enabled: boolean
 }
+
+export type MainWindowAppearanceSyncPayload = {
+  iconCornerRadius?: number
+  iconOpacity?: number
+}

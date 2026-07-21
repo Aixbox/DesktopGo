@@ -142,6 +142,7 @@ pub struct WebsiteIconResult {
     pub url: String,
     pub title: String,
     pub icon_base64: String,
+    pub icons: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

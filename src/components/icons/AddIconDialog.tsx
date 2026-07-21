@@ -73,6 +73,7 @@ type WebsiteIconResult = {
   url: string
   title: string
   icon_base64: string
+  icons?: string[]
 }
 
 export type AddIconDialogCreatedEntry = {
@@ -172,6 +173,7 @@ export function AddIconDialog({
   const [submitting, setSubmitting] = useState(false)
   const toast = useToast()
   const [websitePreview, setWebsitePreview] = useState('')
+  const [websitePreviews, setWebsitePreviews] = useState<string[]>([])
   const [websitePreviewLoading, setWebsitePreviewLoading] = useState(false)
   const [websitePreviewError, setWebsitePreviewError] = useState('')
   const [websitePreviewResolved, setWebsitePreviewResolved] = useState(false)
@@ -200,6 +202,7 @@ export function AddIconDialog({
     setCustomPreview('')
     setCustomPreviewLoading(false)
     setWebsitePreview('')
+    setWebsitePreviews([])
     setWebsitePreviewLoading(false)
     setWebsitePreviewError('')
     setWebsitePreviewResolved(false)
@@ -256,7 +259,9 @@ export function AddIconDialog({
     setTargetPreviewLoading(nextEntryKind === 'app' && Boolean(initialDraft.targetPath.trim()))
     setCustomPreview('')
     setCustomPreviewLoading(Boolean(initialDraft.customIconPath.trim()))
-    setWebsitePreview(initialDraft.websiteIconBase64 ?? '')
+    const initialWebsitePreview = initialDraft.websiteIconBase64 ?? ''
+    setWebsitePreview(initialWebsitePreview)
+    setWebsitePreviews(initialWebsitePreview ? [initialWebsitePreview] : [])
     setWebsitePreviewLoading(false)
     setWebsitePreviewError('')
     setWebsitePreviewResolved(Boolean(initialDraft.websiteIconBase64))
@@ -371,6 +376,7 @@ export function AddIconDialog({
     if (entryKind === 'website') {
       websitePreviewRequestRef.current += 1
       setWebsitePreview('')
+      setWebsitePreviews([])
       setWebsitePreviewLoading(false)
       setWebsitePreviewError('')
       setWebsitePreviewResolved(false)
@@ -405,6 +411,7 @@ export function AddIconDialog({
     setCustomPreview('')
     setCustomPreviewLoading(false)
     setWebsitePreview('')
+    setWebsitePreviews([])
     setWebsitePreviewLoading(false)
     setWebsitePreviewError('')
     setWebsitePreviewResolved(false)
@@ -434,6 +441,7 @@ export function AddIconDialog({
     const requestId = ++websitePreviewRequestRef.current
     setTargetPath(normalizedUrl)
     setWebsitePreview('')
+    setWebsitePreviews([])
     setWebsitePreviewLoading(true)
     setWebsitePreviewError('')
     setWebsitePreviewResolved(false)
@@ -444,8 +452,12 @@ export function AddIconDialog({
       })
       if (websitePreviewRequestRef.current !== requestId) return
 
+      const extractedPreviews = Array.from(
+        new Set([...(result.icons ?? []), result.icon_base64].filter(Boolean))
+      ).slice(0, 6)
       setTargetPath(result.url)
-      setWebsitePreview(result.icon_base64)
+      setWebsitePreviews(extractedPreviews)
+      setWebsitePreview(extractedPreviews[0] ?? '')
       setWebsitePreviewResolved(true)
       if (!name.trim()) setName(result.title.trim() || deriveWebsiteName(result.url))
     } catch (error) {
@@ -855,7 +867,7 @@ export function AddIconDialog({
                         variant="outline"
                         onClick={() => void handleExtractWebsiteIcon()}
                         disabled={!normalizedTargetPath || websitePreviewLoading || submitting}
-                        className="min-w-0 flex-[1_1_8rem] sm:flex-none"
+                        className="min-w-0 flex-[1_1_8rem] whitespace-nowrap sm:flex-none"
                       >
                         {websitePreviewLoading ? (
                           <RefreshCw className="h-4 w-4 animate-spin" />
@@ -893,7 +905,9 @@ export function AddIconDialog({
                       ) : websitePreviewResolved && websitePreview ? (
                         <>
                           <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                          {translate('已提取网页图标。')}
+                          {translate('已提取 {count} 个网页图标。', {
+                            count: websitePreviews.length,
+                          })}
                         </>
                       ) : websitePreviewResolved ? (
                         <>
@@ -968,48 +982,93 @@ export function AddIconDialog({
               <FormRow label="">
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-start gap-3">
-                    <div className="flex w-20 flex-col items-center gap-1.5">
-                      <button
-                        type="button"
-                        aria-pressed={selectedIconSource === 'target'}
-                        aria-label={automaticPreviewLabel}
-                        onClick={() => handleIconSourceChange('target')}
-                        disabled={submitting}
-                        className={cn(
-                          'relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
-                          selectedIconSource === 'target'
-                            ? 'border-primary ring-2 ring-primary/20'
-                            : 'border-border hover:border-foreground/30'
-                        )}
-                        style={
-                          iconColor !== 'none'
-                            ? { backgroundColor: selectedColorPreset?.color }
-                            : undefined
-                        }
-                      >
-                        {automaticPreviewLoading ? (
-                          <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-                        ) : automaticPreview ? (
-                          <img
-                            src={automaticPreview}
-                            alt={automaticPreviewLabel}
-                            className="h-full w-full object-contain"
-                          />
-                        ) : entryKind === 'website' ? (
-                          <Globe2 className="h-5 w-5 text-muted-foreground" />
-                        ) : (
-                          <Images className="h-5 w-5 text-muted-foreground" />
-                        )}
-                        {selectedIconSource === 'target' ? (
-                          <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
-                        ) : null}
-                      </button>
-                      <span className="text-center text-[11px] leading-4 text-muted-foreground">
-                        {automaticPreviewLabel}
-                      </span>
-                    </div>
+                    {entryKind === 'website' && websitePreviews.length > 0
+                      ? websitePreviews.map((preview, index) => {
+                          const selected =
+                            selectedIconSource === 'target' && websitePreview === preview
+                          const candidateLabel = `${automaticPreviewLabel} ${index + 1}`
+                          return (
+                            <button
+                              key={`${index}-${preview.slice(-32)}`}
+                              type="button"
+                              aria-pressed={selected}
+                              aria-label={candidateLabel}
+                              title={candidateLabel}
+                              onClick={() => {
+                                setWebsitePreview(preview)
+                                handleIconSourceChange('target')
+                              }}
+                              disabled={submitting}
+                              className={cn(
+                                'relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
+                                selected
+                                  ? 'border-primary ring-2 ring-primary/20'
+                                  : 'border-border hover:border-foreground/30'
+                              )}
+                              style={
+                                iconColor !== 'none'
+                                  ? { backgroundColor: selectedColorPreset?.color }
+                                  : undefined
+                              }
+                            >
+                              <img
+                                src={preview}
+                                alt=""
+                                draggable={false}
+                                className="h-full w-full object-contain"
+                              />
+                              {selected ? (
+                                <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
+                              ) : null}
+                            </button>
+                          )
+                        })
+                      : null}
 
-                    <div className="flex w-20 flex-col items-center gap-1.5">
+                    {entryKind !== 'website' || websitePreviews.length === 0 ? (
+                      <div className="flex w-20 shrink-0 flex-col items-center gap-1.5">
+                        <button
+                          type="button"
+                          aria-pressed={selectedIconSource === 'target'}
+                          aria-label={automaticPreviewLabel}
+                          onClick={() => handleIconSourceChange('target')}
+                          disabled={submitting}
+                          className={cn(
+                            'relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
+                            selectedIconSource === 'target'
+                              ? 'border-primary ring-2 ring-primary/20'
+                              : 'border-border hover:border-foreground/30'
+                          )}
+                          style={
+                            iconColor !== 'none'
+                              ? { backgroundColor: selectedColorPreset?.color }
+                              : undefined
+                          }
+                        >
+                          {automaticPreviewLoading ? (
+                            <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                          ) : automaticPreview ? (
+                            <img
+                              src={automaticPreview}
+                              alt={automaticPreviewLabel}
+                              className="h-full w-full object-contain"
+                            />
+                          ) : entryKind === 'website' ? (
+                            <Globe2 className="h-5 w-5 text-muted-foreground" />
+                          ) : (
+                            <Images className="h-5 w-5 text-muted-foreground" />
+                          )}
+                          {selectedIconSource === 'target' ? (
+                            <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
+                          ) : null}
+                        </button>
+                        <span className="whitespace-nowrap text-center text-[11px] leading-4 text-muted-foreground">
+                          {automaticPreviewLabel}
+                        </span>
+                      </div>
+                    ) : null}
+
+                    <div className="flex w-20 shrink-0 flex-col items-center gap-1.5">
                       <button
                         type="button"
                         aria-pressed={selectedIconSource === 'text'}
@@ -1036,12 +1095,12 @@ export function AddIconDialog({
                           <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
                         ) : null}
                       </button>
-                      <span className="text-center text-[11px] leading-4 text-muted-foreground">
+                      <span className="whitespace-nowrap text-center text-[11px] leading-4 text-muted-foreground">
                         {translate('文字图标')}
                       </span>
                     </div>
 
-                    <div className="flex w-20 flex-col items-center gap-1.5">
+                    <div className="flex w-20 shrink-0 flex-col items-center gap-1.5">
                       {customIconPath ? (
                         <button
                           type="button"
@@ -1098,7 +1157,7 @@ export function AddIconDialog({
                           <ImagePlus className="h-5 w-5" />
                         </button>
                       )}
-                      <span className="text-center text-[11px] leading-4 text-muted-foreground">
+                      <span className="whitespace-nowrap text-center text-[11px] leading-4 text-muted-foreground">
                         {customIconPath ? translate('自定义图标') : translate('添加图标')}
                       </span>
                     </div>

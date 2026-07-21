@@ -135,3 +135,41 @@ export function OptionButton({ label, selected, onClick }: OptionButtonProps) {
     </button>
   )
 }
+
+interface RangeControlProps {
+  label: string
+  value: number
+  min: number
+  max: number
+  step?: number
+  valueLabel: string
+  onChange: (value: number) => void
+}
+
+export function RangeControl({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  valueLabel,
+  onChange,
+}: RangeControlProps) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <input
+        type="range"
+        aria-label={label}
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={event => onChange(Number(event.currentTarget.value))}
+        className="h-2 min-w-0 flex-1 cursor-pointer accent-blue-600 dark:accent-blue-400"
+      />
+      <output className="w-14 shrink-0 rounded-md border border-border/80 bg-background px-2 py-1 text-center text-xs tabular-nums text-foreground">
+        {valueLabel}
+      </output>
+    </div>
+  )
+}

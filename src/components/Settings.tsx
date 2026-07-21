@@ -52,6 +52,7 @@ import {
   SettingGroup,
   SettingCard,
   OptionButton,
+  RangeControl,
   ToggleRow,
 } from '@/components/ui/setting-components'
 import { useToast } from '@/components/ui/toast'
@@ -67,6 +68,12 @@ import type {
   TitleLineCount,
   WindowMode,
   WindowStyle,
+} from '@/types'
+import {
+  ICON_CORNER_RADIUS_MAX,
+  ICON_CORNER_RADIUS_MIN,
+  ICON_OPACITY_MAX,
+  ICON_OPACITY_MIN,
 } from '@/types'
 import {
   Settings as SettingsIcon,
@@ -396,7 +403,17 @@ function WindowControlButton({
 
 function SettingsPanel() {
   const { language, setLanguage } = useI18n()
-  const { iconSize, windowMode, titleLineCount, dockEnabled, setDockEnabled } = useIconStore()
+  const {
+    iconSize,
+    iconCornerRadius,
+    iconOpacity,
+    windowMode,
+    titleLineCount,
+    dockEnabled,
+    setIconCornerRadius,
+    setIconOpacity,
+    setDockEnabled,
+  } = useIconStore()
   const [themeMode, setThemeMode] = useState<ThemeMode>('system')
   const [windowStyle, setWindowStyle] = useState<WindowStyle>('default')
   const [windowPersistentEnabled, setWindowPersistentEnabled] = useState(false)
@@ -418,6 +435,8 @@ function SettingsPanel() {
       try {
         const [
           savedIconSize,
+          savedIconCornerRadius,
+          savedIconOpacity,
           savedWindowMode,
           savedTitleLineCount,
           savedDockEnabled,
@@ -429,6 +448,8 @@ function SettingsPanel() {
           savedLaunchpadOpenFocusTarget,
         ] = await Promise.all([
           getSetting('iconSize'),
+          getSetting('iconCornerRadius'),
+          getSetting('iconOpacity'),
           getSetting('windowMode'),
           getSetting('titleLineCount'),
           getSetting('dockEnabled'),
@@ -460,6 +481,8 @@ function SettingsPanel() {
 
         useIconStore.setState({
           iconSize: savedIconSize,
+          iconCornerRadius: savedIconCornerRadius,
+          iconOpacity: savedIconOpacity,
           windowMode: savedWindowMode,
           titleLineCount: savedTitleLineCount,
           dockEnabled: savedDockEnabled,
@@ -549,18 +572,31 @@ function SettingsPanel() {
     })
   }
 
-  const syncMainWindowAppearance = useCallback(async () => {
-    try {
-      const mainWindow = await WebviewWindow.getByLabel('main')
-      if (!mainWindow) {
-        return
-      }
+  const syncMainWindowAppearance = useCallback(
+    async (payload: { iconCornerRadius?: number; iconOpacity?: number } = {}) => {
+      try {
+        const mainWindow = await WebviewWindow.getByLabel('main')
+        if (!mainWindow) {
+          return
+        }
 
-      await mainWindow.emit(MAIN_WINDOW_APPEARANCE_SYNC_EVENT)
-    } catch (error) {
-      console.error('Failed to sync main window appearance:', error)
-    }
-  }, [])
+        await mainWindow.emit(MAIN_WINDOW_APPEARANCE_SYNC_EVENT, payload)
+      } catch (error) {
+        console.error('Failed to sync main window appearance:', error)
+      }
+    },
+    []
+  )
+
+  const handleIconCornerRadius = (value: number) => {
+    setIconCornerRadius(value)
+    void syncMainWindowAppearance({ iconCornerRadius: value })
+  }
+
+  const handleIconOpacity = (value: number) => {
+    setIconOpacity(value)
+    void syncMainWindowAppearance({ iconOpacity: value })
+  }
 
   const handleThemeMode = async (value: ThemeMode) => {
     setThemeMode(value)
@@ -910,6 +946,34 @@ function SettingsPanel() {
                 />
               ))}
             </div>
+          </SettingCard>
+
+          <SettingCard
+            label={translate('图标圆角')}
+            desc={translate('调整图标画面的圆角比例，文件夹缩略图会同比例变化。')}
+          >
+            <RangeControl
+              label={translate('图标圆角')}
+              value={iconCornerRadius}
+              min={ICON_CORNER_RADIUS_MIN}
+              max={ICON_CORNER_RADIUS_MAX}
+              valueLabel={`${iconCornerRadius}%`}
+              onChange={handleIconCornerRadius}
+            />
+          </SettingCard>
+
+          <SettingCard
+            label={translate('图标不透明度')}
+            desc={translate('只调整图标画面的透明度，不影响名称和点击区域。')}
+          >
+            <RangeControl
+              label={translate('图标不透明度')}
+              value={iconOpacity}
+              min={ICON_OPACITY_MIN}
+              max={ICON_OPACITY_MAX}
+              valueLabel={`${iconOpacity}%`}
+              onChange={handleIconOpacity}
+            />
           </SettingCard>
 
           <SettingCard label={translate('窗口大小')}>

@@ -135,7 +135,7 @@ function GhostPreviewIcon({ iconBase64, name, size }: GhostPreviewIconProps) {
         <img
           src={iconBase64}
           alt={name}
-          className="object-contain"
+          className="launchpad-icon-artwork object-contain"
           style={{
             width: `${Math.max(20, Math.floor(size * GHOST_PREVIEW_ICON_SCALE))}px`,
             height: `${Math.max(20, Math.floor(size * GHOST_PREVIEW_ICON_SCALE))}px`,
@@ -544,7 +544,7 @@ export function DragOverlays({
                         <img
                           src={entry.icon.icon_base64}
                           alt={entry.icon.name}
-                          className="object-contain"
+                          className="launchpad-icon-artwork object-contain"
                           style={{ width: iconImageSize, height: iconImageSize }}
                           draggable={false}
                         />
@@ -583,7 +583,7 @@ export function DragOverlays({
                   <img
                     src={ghostItem.icon.icon_base64}
                     alt={ghostItem.icon.name}
-                    className="object-contain"
+                    className="launchpad-icon-artwork object-contain"
                     style={{ width: iconImageSize, height: iconImageSize }}
                     draggable={false}
                   />
@@ -624,7 +624,7 @@ export function DragOverlays({
                 <img
                   src={item.icon.icon_base64}
                   alt={item.icon.name}
-                  className="object-contain"
+                  className="launchpad-icon-artwork object-contain"
                   style={{ width: iconImageSize, height: iconImageSize }}
                   draggable={false}
                 />
@@ -659,7 +659,7 @@ export function DragOverlays({
             <img
               src={folderDropFlight.icon.icon_base64}
               alt={folderDropFlight.icon.name}
-              className="h-full w-full object-contain"
+              className="launchpad-icon-artwork h-full w-full object-contain"
               draggable={false}
             />
           ) : (

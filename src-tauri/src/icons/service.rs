@@ -1,6 +1,7 @@
 use base64::Engine;
-use futures_util::StreamExt;
+use futures_util::{stream, StreamExt};
 use scraper::{Html, Selector};
+use std::cmp::Reverse;
 use std::collections::HashSet;
 use std::io::Cursor;
 use std::path::PathBuf;
@@ -244,6 +245,29 @@ pub fn update_icon_entry(
 
 const MAX_WEBSITE_HTML_BYTES: usize = 2 * 1024 * 1024;
 const MAX_WEBSITE_ICON_BYTES: usize = 5 * 1024 * 1024;
+const MAX_WEBSITE_MANIFEST_BYTES: usize = 1024 * 1024;
+const MAX_WEBSITE_ICON_CANDIDATES: usize = 20;
+const MAX_CONCURRENT_WEBSITE_ICON_REQUESTS: usize = 6;
+const MAX_WEBSITE_ICON_RESULTS: usize = 8;
+
+#[derive(Debug, Clone)]
+struct WebsiteIconCandidate {
+    url: Url,
+    declared_size: u32,
+    source_priority: u8,
+    discovery_index: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct WebsiteIconQuality {
+    resolution_tier: u8,
+    square_score: u16,
+    min_dimension: u32,
+    max_dimension: u32,
+    declared_size: u32,
+    source_priority: u8,
+    discovery_order: Reverse<usize>,
+}
 
 fn normalize_website_url(value: &str) -> Result<Url, String> {
     let trimmed = value.trim();
@@ -290,61 +314,228 @@ async fn read_response_limited(
     Ok((final_url, bytes))
 }
 
-fn website_icon_candidates(html: &str, page_url: &Url) -> (String, Vec<Url>) {
+fn declared_website_icon_size(value: Option<&str>) -> u32 {
+    value
+        .into_iter()
+        .flat_map(str::split_ascii_whitespace)
+        .filter_map(|size| {
+            if size.eq_ignore_ascii_case("any") {
+                return Some(1024);
+            }
+            let normalized = size.to_ascii_lowercase();
+            let (width, height) = normalized.split_once('x')?;
+            let width = width.parse::<u32>().ok()?;
+            let height = height.parse::<u32>().ok()?;
+            Some(width.min(height))
+        })
+        .max()
+        .unwrap_or_default()
+}
+
+fn looks_like_website_icon(value: &str) -> bool {
+    let normalized = value.to_ascii_lowercase();
+    normalized.contains("favicon")
+        || normalized.contains("apple-touch-icon")
+        || normalized.contains("logo")
+        || normalized.contains("site-icon")
+}
+
+fn website_icon_candidates(
+    html: &str,
+    page_url: &Url,
+) -> (String, Vec<WebsiteIconCandidate>, Vec<Url>) {
     let document = Html::parse_document(html);
     let title_selector = Selector::parse("title").expect("valid title selector");
     let link_selector = Selector::parse("link[href]").expect("valid link selector");
+    let image_selector = Selector::parse("img[src]").expect("valid image selector");
     let title = document
         .select(&title_selector)
         .next()
         .map(|element| element.text().collect::<String>().trim().to_string())
         .unwrap_or_default();
 
-    let mut scored_candidates = document
-        .select(&link_selector)
-        .filter_map(|element| {
-            let rel = element.value().attr("rel")?;
-            let is_icon = rel.split_ascii_whitespace().any(|value| {
-                value.eq_ignore_ascii_case("icon") || value.eq_ignore_ascii_case("apple-touch-icon")
+    let mut manifests = Vec::new();
+    let mut candidates = Vec::new();
+
+    for element in document.select(&link_selector) {
+        let rel = element.value().attr("rel").unwrap_or_default();
+        let rel_values = rel.split_ascii_whitespace().collect::<Vec<_>>();
+        let href = element.value().attr("href").unwrap_or_default();
+        let Ok(url) = page_url.join(href) else {
+            continue;
+        };
+        if !matches!(url.scheme(), "http" | "https") {
+            continue;
+        }
+
+        if rel_values
+            .iter()
+            .any(|value| value.eq_ignore_ascii_case("manifest"))
+        {
+            manifests.push(url.clone());
+        }
+
+        let is_apple_touch_icon = rel_values.iter().any(|value| {
+            value.eq_ignore_ascii_case("apple-touch-icon")
+                || value.eq_ignore_ascii_case("apple-touch-icon-precomposed")
+        });
+        let is_icon = is_apple_touch_icon
+            || rel_values.iter().any(|value| {
+                value.eq_ignore_ascii_case("icon") || value.eq_ignore_ascii_case("mask-icon")
             });
-            if !is_icon {
-                return None;
-            }
-            let href = element.value().attr("href")?;
-            let url = page_url.join(href).ok()?;
+        let is_image_preload = rel_values
+            .iter()
+            .any(|value| value.eq_ignore_ascii_case("preload"))
+            && element
+                .value()
+                .attr("as")
+                .is_some_and(|value| value.eq_ignore_ascii_case("image"))
+            && looks_like_website_icon(href);
+        if !is_icon && !is_image_preload {
+            continue;
+        }
+
+        candidates.push(WebsiteIconCandidate {
+            url,
+            declared_size: declared_website_icon_size(element.value().attr("sizes")),
+            source_priority: if is_apple_touch_icon {
+                4
+            } else if is_icon {
+                3
+            } else {
+                1
+            },
+            discovery_index: candidates.len(),
+        });
+    }
+
+    for element in document.select(&image_selector) {
+        let src = element.value().attr("src").unwrap_or_default();
+        let semantic_text = [
+            src,
+            element.value().attr("alt").unwrap_or_default(),
+            element.value().attr("class").unwrap_or_default(),
+            element.value().attr("id").unwrap_or_default(),
+        ]
+        .join(" ");
+        if !looks_like_website_icon(&semantic_text) {
+            continue;
+        }
+        let Ok(url) = page_url.join(src) else {
+            continue;
+        };
+        if !matches!(url.scheme(), "http" | "https") {
+            continue;
+        }
+        candidates.push(WebsiteIconCandidate {
+            url,
+            declared_size: element
+                .value()
+                .attr("width")
+                .and_then(|value| value.parse::<u32>().ok())
+                .unwrap_or_default(),
+            source_priority: 1,
+            discovery_index: candidates.len(),
+        });
+    }
+
+    for (path, declared_size, source_priority) in [
+        ("/apple-touch-icon.png", 180, 2),
+        ("/favicon.png", 64, 1),
+        ("/favicon.ico", 32, 1),
+    ] {
+        if let Ok(url) = page_url.join(path) {
+            candidates.push(WebsiteIconCandidate {
+                url,
+                declared_size,
+                source_priority,
+                discovery_index: candidates.len(),
+            });
+        }
+    }
+
+    (title, candidates, manifests)
+}
+
+fn website_manifest_icon_candidates(
+    bytes: &[u8],
+    manifest_url: &Url,
+    discovery_index: usize,
+) -> Vec<WebsiteIconCandidate> {
+    let Ok(manifest) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+        return Vec::new();
+    };
+    let Some(icons) = manifest.get("icons").and_then(|value| value.as_array()) else {
+        return Vec::new();
+    };
+
+    icons
+        .iter()
+        .enumerate()
+        .filter_map(|(index, icon)| {
+            let src = icon.get("src")?.as_str()?;
+            let url = manifest_url.join(src).ok()?;
             if !matches!(url.scheme(), "http" | "https") {
                 return None;
             }
-            let score = if rel.to_ascii_lowercase().contains("apple-touch-icon") {
-                30
-            } else if element.value().attr("sizes").is_some() {
-                20
-            } else {
-                10
-            };
-            Some((score, url))
+            Some(WebsiteIconCandidate {
+                url,
+                declared_size: declared_website_icon_size(
+                    icon.get("sizes").and_then(|value| value.as_str()),
+                ),
+                source_priority: 5,
+                discovery_index: discovery_index.saturating_add(index),
+            })
         })
-        .collect::<Vec<_>>();
-    scored_candidates.sort_by(|left, right| right.0.cmp(&left.0));
-
-    let mut seen = HashSet::new();
-    let mut candidates = scored_candidates
-        .into_iter()
-        .map(|(_, url)| url)
-        .filter(|url| seen.insert(url.as_str().to_string()))
-        .collect::<Vec<_>>();
-    if let Ok(fallback) = page_url.join("/favicon.ico") {
-        if seen.insert(fallback.as_str().to_string()) {
-            candidates.push(fallback);
-        }
-    }
-    (title, candidates)
+        .collect()
 }
 
-fn website_icon_to_data_uri(bytes: &[u8]) -> Result<String, String> {
-    let image = image::load_from_memory(bytes)
-        .map_err(|error| format!("Unsupported website icon format: {error}"))?
-        .thumbnail(256, 256);
+fn sort_and_deduplicate_website_icon_candidates(candidates: &mut Vec<WebsiteIconCandidate>) {
+    candidates.sort_by(|left, right| {
+        right
+            .declared_size
+            .cmp(&left.declared_size)
+            .then_with(|| right.source_priority.cmp(&left.source_priority))
+            .then_with(|| left.discovery_index.cmp(&right.discovery_index))
+    });
+    let mut seen = HashSet::new();
+    candidates.retain(|candidate| seen.insert(candidate.url.as_str().to_string()));
+    for (index, candidate) in candidates.iter_mut().enumerate() {
+        candidate.discovery_index = index;
+    }
+}
+
+fn website_icon_quality(
+    image: &image::DynamicImage,
+    candidate: &WebsiteIconCandidate,
+) -> WebsiteIconQuality {
+    let width = image.width().max(1);
+    let height = image.height().max(1);
+    let min_dimension = width.min(height);
+    let max_dimension = width.max(height);
+    let is_reasonable_shape = max_dimension < min_dimension.saturating_mul(5);
+    let resolution_tier = if is_reasonable_shape && min_dimension > 50 && max_dimension > 100 {
+        2
+    } else if is_reasonable_shape && (min_dimension > 50 || max_dimension > 100) {
+        1
+    } else {
+        0
+    };
+    let square_score = ((min_dimension as u64 * 1000) / max_dimension as u64) as u16;
+
+    WebsiteIconQuality {
+        resolution_tier,
+        square_score,
+        min_dimension,
+        max_dimension,
+        declared_size: candidate.declared_size,
+        source_priority: candidate.source_priority,
+        discovery_order: Reverse(candidate.discovery_index),
+    }
+}
+
+fn website_icon_to_data_uri(image: &image::DynamicImage) -> Result<String, String> {
+    let image = image.resize(256, 256, image::imageops::FilterType::Lanczos3);
     let mut output = Cursor::new(Vec::new());
     image
         .write_to(&mut output, image::ImageFormat::Png)
@@ -353,6 +544,19 @@ fn website_icon_to_data_uri(bytes: &[u8]) -> Result<String, String> {
         "data:image/png;base64,{}",
         base64::engine::general_purpose::STANDARD.encode(output.into_inner())
     ))
+}
+
+fn website_icon_data_uris(
+    mut decoded_candidates: Vec<(WebsiteIconQuality, image::DynamicImage)>,
+) -> Vec<String> {
+    decoded_candidates.sort_by_key(|(quality, _)| Reverse(*quality));
+    let mut seen_icons = HashSet::new();
+    decoded_candidates
+        .into_iter()
+        .filter_map(|(_, image)| website_icon_to_data_uri(&image).ok())
+        .filter(|icon| seen_icons.insert(icon.clone()))
+        .take(MAX_WEBSITE_ICON_RESULTS)
+        .collect()
 }
 
 pub async fn extract_website_icon(value: String) -> Result<WebsiteIconResult, String> {
@@ -370,27 +574,183 @@ pub async fn extract_website_icon(value: String) -> Result<WebsiteIconResult, St
         .map_err(|error| format!("Failed to open website: {error}"))?;
     let (page_url, html_bytes) = read_response_limited(response, MAX_WEBSITE_HTML_BYTES).await?;
     let html = String::from_utf8_lossy(&html_bytes);
-    let (title, candidates) = website_icon_candidates(&html, &page_url);
+    let (title, mut candidates, manifests) = website_icon_candidates(&html, &page_url);
 
-    let mut icon_base64 = String::new();
-    for candidate in candidates.into_iter().take(8) {
-        let Ok(response) = client.get(candidate).send().await else {
+    for manifest_url in manifests.into_iter().take(2) {
+        let Ok(response) = client.get(manifest_url.clone()).send().await else {
             continue;
         };
-        let Ok((_, bytes)) = read_response_limited(response, MAX_WEBSITE_ICON_BYTES).await else {
+        let Ok((final_manifest_url, bytes)) =
+            read_response_limited(response, MAX_WEBSITE_MANIFEST_BYTES).await
+        else {
             continue;
         };
-        if let Ok(data_uri) = website_icon_to_data_uri(&bytes) {
-            icon_base64 = data_uri;
-            break;
-        }
+        let discovery_index = candidates.len();
+        candidates.extend(website_manifest_icon_candidates(
+            &bytes,
+            &final_manifest_url,
+            discovery_index,
+        ));
     }
+
+    sort_and_deduplicate_website_icon_candidates(&mut candidates);
+    let decoded_candidates = stream::iter(candidates.into_iter().take(MAX_WEBSITE_ICON_CANDIDATES))
+        .map(|candidate| {
+            let client = client.clone();
+            async move {
+                let response = client.get(candidate.url.clone()).send().await.ok()?;
+                let (_, bytes) = read_response_limited(response, MAX_WEBSITE_ICON_BYTES)
+                    .await
+                    .ok()?;
+                let image = image::load_from_memory(&bytes).ok()?;
+                let quality = website_icon_quality(&image, &candidate);
+                Some((quality, image))
+            }
+        })
+        .buffer_unordered(MAX_CONCURRENT_WEBSITE_ICON_REQUESTS)
+        .filter_map(|candidate| async move { candidate })
+        .collect::<Vec<_>>()
+        .await;
+    let icons = website_icon_data_uris(decoded_candidates);
+    let icon_base64 = icons.first().cloned().unwrap_or_default();
 
     Ok(WebsiteIconResult {
         url: url.to_string(),
         title,
         icon_base64,
+        icons,
     })
+}
+
+#[cfg(test)]
+mod website_icon_tests {
+    use super::*;
+
+    fn candidate(url: &str, declared_size: u32, discovery_index: usize) -> WebsiteIconCandidate {
+        WebsiteIconCandidate {
+            url: Url::parse(url).expect("valid test URL"),
+            declared_size,
+            source_priority: 3,
+            discovery_index,
+        }
+    }
+
+    #[test]
+    fn parses_high_resolution_page_and_manifest_candidates() {
+        let page_url = Url::parse("https://example.com/path/").expect("valid page URL");
+        let html = r#"
+            <html>
+              <head>
+                <title>Example</title>
+                <link rel="icon" sizes="16x16 32x32" href="/favicon-32.png">
+                <link rel="apple-touch-icon" sizes="180x180" href="touch.png">
+                <link rel="manifest" href="/app.webmanifest">
+              </head>
+              <body><img class="site-logo" src="/brand/logo-512.png" width="512"></body>
+            </html>
+        "#;
+
+        let (title, candidates, manifests) = website_icon_candidates(html, &page_url);
+
+        assert_eq!(title, "Example");
+        assert!(candidates.iter().any(|candidate| {
+            candidate.url.as_str() == "https://example.com/path/touch.png"
+                && candidate.declared_size == 180
+        }));
+        assert!(candidates.iter().any(|candidate| {
+            candidate.url.as_str() == "https://example.com/brand/logo-512.png"
+                && candidate.declared_size == 512
+        }));
+        assert_eq!(manifests[0].as_str(), "https://example.com/app.webmanifest");
+
+        let manifest = br#"{
+            "icons": [
+                {"src": "icons/app-192.png", "sizes": "192x192"},
+                {"src": "/icons/app-512.png", "sizes": "512x512"}
+            ]
+        }"#;
+        let manifest_candidates =
+            website_manifest_icon_candidates(manifest, &manifests[0], candidates.len());
+        assert_eq!(manifest_candidates.len(), 2);
+        assert_eq!(manifest_candidates[1].declared_size, 512);
+        assert_eq!(
+            manifest_candidates[1].url.as_str(),
+            "https://example.com/icons/app-512.png"
+        );
+    }
+
+    #[test]
+    fn prefers_large_square_icons_over_small_icons_and_wide_images() {
+        let tiny = image::DynamicImage::new_rgba8(16, 16);
+        let touch = image::DynamicImage::new_rgba8(180, 180);
+        let wide = image::DynamicImage::new_rgba8(1200, 630);
+        let tiny_quality =
+            website_icon_quality(&tiny, &candidate("https://example.com/favicon.ico", 16, 0));
+        let touch_quality =
+            website_icon_quality(&touch, &candidate("https://example.com/touch.png", 180, 1));
+        let wide_quality =
+            website_icon_quality(&wide, &candidate("https://example.com/banner.png", 1200, 2));
+
+        assert!(touch_quality > tiny_quality);
+        assert!(touch_quality > wide_quality);
+    }
+
+    #[test]
+    fn sorts_by_declared_size_and_deduplicates_urls() {
+        let mut candidates = vec![
+            candidate("https://example.com/icon.png", 16, 0),
+            candidate("https://example.com/icon.png", 512, 1),
+            candidate("https://example.com/other.png", 180, 2),
+        ];
+
+        sort_and_deduplicate_website_icon_candidates(&mut candidates);
+
+        assert_eq!(candidates.len(), 2);
+        assert_eq!(candidates[0].url.as_str(), "https://example.com/icon.png");
+        assert_eq!(candidates[0].declared_size, 512);
+        assert_eq!(candidates[1].discovery_index, 1);
+    }
+
+    #[test]
+    fn returns_multiple_unique_icons_with_the_best_candidate_first() {
+        let tiny = image::DynamicImage::ImageRgba8(image::ImageBuffer::from_pixel(
+            16,
+            16,
+            image::Rgba([255, 0, 0, 255]),
+        ));
+        let touch = image::DynamicImage::ImageRgba8(image::ImageBuffer::from_pixel(
+            180,
+            180,
+            image::Rgba([0, 255, 0, 255]),
+        ));
+        let manifest = image::DynamicImage::ImageRgba8(image::ImageBuffer::from_pixel(
+            512,
+            512,
+            image::Rgba([0, 0, 255, 255]),
+        ));
+        let decoded = vec![
+            (
+                website_icon_quality(&tiny, &candidate("https://example.com/favicon.ico", 16, 0)),
+                tiny,
+            ),
+            (
+                website_icon_quality(&touch, &candidate("https://example.com/touch.png", 180, 1)),
+                touch,
+            ),
+            (
+                website_icon_quality(
+                    &manifest,
+                    &candidate("https://example.com/manifest.png", 512, 2),
+                ),
+                manifest.clone(),
+            ),
+        ];
+
+        let icons = website_icon_data_uris(decoded);
+
+        assert_eq!(icons.len(), 3);
+        assert_eq!(icons[0], website_icon_to_data_uri(&manifest).unwrap());
+    }
 }
 
 // ===== Windows implementations =====

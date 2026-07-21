@@ -11,6 +11,14 @@ import type {
   WindowMode,
   WindowStyle,
 } from '@/types'
+import {
+  DEFAULT_ICON_CORNER_RADIUS,
+  DEFAULT_ICON_OPACITY,
+  ICON_CORNER_RADIUS_MAX,
+  ICON_CORNER_RADIUS_MIN,
+  ICON_OPACITY_MAX,
+  ICON_OPACITY_MIN,
+} from '@/types'
 import { isIconManagerViewMode } from './iconManager'
 import {
   DEFAULT_LAUNCHPAD_OPEN_FOCUS_TARGET,
@@ -21,6 +29,8 @@ export const DEFAULT_LAUNCHPAD_SHORTCUT = 'Ctrl+Space'
 
 type SettingKey =
   | 'iconSize'
+  | 'iconCornerRadius'
+  | 'iconOpacity'
   | 'windowMode'
   | 'titleLineCount'
   | 'launchpadGridViewMode'
@@ -38,6 +48,8 @@ type ExtendedSettingKey = SettingKey
 
 type SettingValueMap = {
   iconSize: IconSize
+  iconCornerRadius: number
+  iconOpacity: number
   windowMode: WindowMode
   titleLineCount: TitleLineCount
   launchpadGridViewMode: LaunchpadGridViewMode
@@ -53,10 +65,12 @@ type SettingValueMap = {
   iconContextMenuMode: IconContextMenuMode
 }
 
-const SETTINGS_STORE_VERSION = 12
+const SETTINGS_STORE_VERSION = 13
 const SETTINGS_VERSION_KEY = 'settingsVersion'
 const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'iconSize',
+  'iconCornerRadius',
+  'iconOpacity',
   'windowMode',
   'titleLineCount',
   'launchpadGridViewMode',
@@ -74,6 +88,8 @@ const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
 
 const DEFAULT_SETTINGS: SettingValueMap = {
   iconSize: 'medium',
+  iconCornerRadius: DEFAULT_ICON_CORNER_RADIUS,
+  iconOpacity: DEFAULT_ICON_OPACITY,
   windowMode: 'medium',
   titleLineCount: 'two',
   launchpadGridViewMode: 'paged',
@@ -96,6 +112,18 @@ let storeReadyPromise: Promise<void> | null = null
 
 const isIconSize = (value: unknown): value is IconSize =>
   value === 'large' || value === 'medium' || value === 'small'
+
+const isIconCornerRadius = (value: unknown): value is number =>
+  typeof value === 'number' &&
+  Number.isFinite(value) &&
+  value >= ICON_CORNER_RADIUS_MIN &&
+  value <= ICON_CORNER_RADIUS_MAX
+
+const isIconOpacity = (value: unknown): value is number =>
+  typeof value === 'number' &&
+  Number.isFinite(value) &&
+  value >= ICON_OPACITY_MIN &&
+  value <= ICON_OPACITY_MAX
 
 const isWindowMode = (value: unknown): value is WindowMode =>
   value === 'fullscreen' || value === 'large' || value === 'medium' || value === 'small'
@@ -128,6 +156,8 @@ const validators: {
   [K in ExtendedSettingKey]: (value: unknown) => value is SettingValueMap[K]
 } = {
   iconSize: isIconSize,
+  iconCornerRadius: isIconCornerRadius,
+  iconOpacity: isIconOpacity,
   windowMode: isWindowMode,
   titleLineCount: isTitleLineCount,
   launchpadGridViewMode: isLaunchpadGridViewMode,
