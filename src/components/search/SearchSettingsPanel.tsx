@@ -13,7 +13,7 @@ import type { SearchSort } from '@/lib/search/types'
 import { Button } from '@/components/ui/button'
 import { NumberInput } from '@/components/ui/number-input'
 import { Select } from '@/components/ui/select'
-import { SettingCard, ToggleRow } from '@/components/ui/setting-components'
+import { SettingCard, SettingGroup, ToggleRow } from '@/components/ui/setting-components'
 import { useToast } from '@/components/ui/toast'
 import { translate, useI18n } from '@/lib/i18n'
 
@@ -59,10 +59,7 @@ export function SearchSettingsPanel() {
     return normalized
   }
 
-  async function updateSetting<K extends keyof SearchSettings>(
-    key: K,
-    value: SearchSettings[K]
-  ) {
+  async function updateSetting<K extends keyof SearchSettings>(key: K, value: SearchSettings[K]) {
     try {
       await persistSetting(key, value)
       toast.success(translate('搜索设置已保存。'), {
@@ -142,10 +139,7 @@ export function SearchSettingsPanel() {
 
       <div className="grid gap-6 xl:grid-cols-2 xl:items-start">
         <div className="space-y-6">
-          <section className="space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground">
-              {translate('基础交互')}
-            </h3>
+          <SettingGroup title={translate('基础交互')}>
             <ToggleRow
               title={translate('实时搜索')}
               description={translate('输入时立即搜索。关闭后仅在按下 Enter 时触发搜索。')}
@@ -184,12 +178,9 @@ export function SearchSettingsPanel() {
                 className="w-32"
               />
             </SettingCard>
-          </section>
+          </SettingGroup>
 
-          <section className="space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground">
-              {translate('搜索策略')}
-            </h3>
+          <SettingGroup title={translate('搜索策略')}>
             <SettingCard label={translate('默认筛选器')}>
               <Select
                 value={settings.defaultFilter}
@@ -230,14 +221,11 @@ export function SearchSettingsPanel() {
               checked={settings.rememberLastFilter}
               onChange={next => void updateSetting('rememberLastFilter', next)}
             />
-          </section>
+          </SettingGroup>
         </div>
 
         <div className="space-y-6">
-          <section className="space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground">
-              {translate('匹配与筛选')}
-            </h3>
+          <SettingGroup title={translate('匹配与筛选')}>
             <ToggleRow
               title={translate('匹配路径')}
               description={translate('让关键字匹配包含完整路径片段。')}
@@ -262,12 +250,9 @@ export function SearchSettingsPanel() {
               checked={settings.matchWholeWord}
               onChange={next => void updateSetting('matchWholeWord', next)}
             />
-          </section>
+          </SettingGroup>
 
-          <section className="space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground">
-              {translate('运行时')}
-            </h3>
+          <SettingGroup title={translate('运行时')}>
             <ToggleRow
               title={translate('自动连接运行时')}
               description={translate('自动检测并连接已安装的 Everything 运行时。')}
@@ -283,7 +268,7 @@ export function SearchSettingsPanel() {
                 {translate('如果搜索不可用，请重新安装 DesktopGo，并勾选 Everything 安装选项。')}
               </p>
             </SettingCard>
-          </section>
+          </SettingGroup>
         </div>
       </div>
     </div>

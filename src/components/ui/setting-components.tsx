@@ -1,15 +1,21 @@
-import type { ReactNode } from 'react'
+import { createContext, useContext, type ReactNode } from 'react'
 
 interface SettingGroupProps {
-  title: string
+  title?: string
   children: ReactNode
 }
 
+const SettingGroupContext = createContext(false)
+
 export function SettingGroup({ title, children }: SettingGroupProps) {
   return (
-    <div className="mb-5">
-      <h3 className="mb-2.5 text-xs font-semibold text-muted-foreground">{title}</h3>
-      <div className="flex flex-wrap gap-2">{children}</div>
+    <div className="space-y-2.5">
+      {title ? <h3 className="text-sm font-medium text-muted-foreground">{title}</h3> : null}
+      <SettingGroupContext.Provider value={true}>
+        <div className="divide-y divide-border/70 overflow-hidden rounded-md border border-border/80 bg-card">
+          {children}
+        </div>
+      </SettingGroupContext.Provider>
     </div>
   )
 }
@@ -21,8 +27,16 @@ interface SettingCardProps {
 }
 
 export function SettingCard({ label, desc, children }: SettingCardProps) {
+  const grouped = useContext(SettingGroupContext)
+
   return (
-    <div className="space-y-3 rounded-md border border-border/80 bg-card p-4">
+    <div
+      className={
+        grouped
+          ? 'space-y-3 px-4 py-3.5'
+          : 'space-y-3 rounded-md border border-border/80 bg-card p-4'
+      }
+    >
       <div className="space-y-1">
         <h4 className="text-sm font-medium text-foreground">{label}</h4>
         {desc ? <p className="text-xs leading-5 text-muted-foreground">{desc}</p> : null}
@@ -82,8 +96,14 @@ export function ToggleRow({
   onChange,
   disabled = false,
 }: ToggleRowProps) {
+  const grouped = useContext(SettingGroupContext)
+
   return (
-    <div className="flex min-h-20 items-center justify-between gap-4 rounded-md border border-border/80 bg-card px-4 py-3.5">
+    <div
+      className={`flex min-h-20 items-center justify-between gap-4 px-4 py-3.5 ${
+        grouped ? '' : 'rounded-md border border-border/80 bg-card'
+      }`}
+    >
       <div className="min-w-0 space-y-1">
         <h4 className="text-sm font-medium text-foreground">{title}</h4>
         <p className="text-xs leading-5 text-muted-foreground">{description}</p>

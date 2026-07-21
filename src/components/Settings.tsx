@@ -842,47 +842,51 @@ function SettingsPanel() {
             {translate('设置界面语言、明暗模式和窗口材质。')}
           </p>
         </div>
-      <SettingGroup title={translate('界面语言')}>
-        {LANGUAGE_OPTIONS.map(option => (
-          <OptionButton
-            key={option.value}
-            label={translate(option.label)}
-            selected={language === option.value}
-            onClick={() => {
-              void setLanguage(option.value)
-            }}
-          />
-        ))}
-      </SettingGroup>
+        <SettingGroup>
+          <SettingCard label={translate('界面语言')}>
+            <div className="flex flex-wrap gap-2">
+              {LANGUAGE_OPTIONS.map(option => (
+                <OptionButton
+                  key={option.value}
+                  label={translate(option.label)}
+                  selected={language === option.value}
+                  onClick={() => {
+                    void setLanguage(option.value)
+                  }}
+                />
+              ))}
+            </div>
+          </SettingCard>
 
-      <SettingGroup title={translate('主题模式')}>
-        {THEME_OPTIONS.map(opt => (
-          <OptionButton
-            key={opt.value}
-            label={translate(opt.label)}
-            selected={themeMode === opt.value}
-            onClick={() => handleThemeMode(opt.value)}
-          />
-        ))}
-      </SettingGroup>
+          <SettingCard label={translate('主题模式')}>
+            <div className="flex flex-wrap gap-2">
+              {THEME_OPTIONS.map(opt => (
+                <OptionButton
+                  key={opt.value}
+                  label={translate(opt.label)}
+                  selected={themeMode === opt.value}
+                  onClick={() => handleThemeMode(opt.value)}
+                />
+              ))}
+            </div>
+          </SettingCard>
 
-      <div className="mb-6">
-        <SettingCard label={translate('主题风格')}>
-          <div className="flex flex-wrap gap-2">
-            {WINDOW_STYLE_OPTIONS.map(option => (
-              <OptionButton
-                key={option.value}
-                label={translate(option.label)}
-                selected={windowStyle === option.value}
-                onClick={() => void handleWindowStyle(option.value)}
-              />
-            ))}
-          </div>
-          <p className="text-xs leading-5 text-muted-foreground">
-            {translate(selectedWindowStyleOption.description)}
-          </p>
-        </SettingCard>
-      </div>
+          <SettingCard label={translate('主题风格')}>
+            <div className="flex flex-wrap gap-2">
+              {WINDOW_STYLE_OPTIONS.map(option => (
+                <OptionButton
+                  key={option.value}
+                  label={translate(option.label)}
+                  selected={windowStyle === option.value}
+                  onClick={() => void handleWindowStyle(option.value)}
+                />
+              ))}
+            </div>
+            <p className="text-xs leading-5 text-muted-foreground">
+              {translate(selectedWindowStyleOption.description)}
+            </p>
+          </SettingCard>
+        </SettingGroup>
       </section>
 
       <section aria-labelledby="settings-layout-heading">
@@ -894,51 +898,57 @@ function SettingsPanel() {
             {translate('调整图标、窗口和 Dock 的显示方式。')}
           </p>
         </div>
-      <SettingGroup title={translate('图标大小')}>
-        {ICON_SIZE_OPTIONS.map(opt => (
-          <OptionButton
-            key={opt.value}
-            label={translate(opt.label)}
-            selected={iconSize === opt.value}
-            onClick={() => handleIconSize(opt.value)}
-          />
-        ))}
-      </SettingGroup>
+        <SettingGroup>
+          <SettingCard label={translate('图标大小')}>
+            <div className="flex flex-wrap gap-2">
+              {ICON_SIZE_OPTIONS.map(opt => (
+                <OptionButton
+                  key={opt.value}
+                  label={translate(opt.label)}
+                  selected={iconSize === opt.value}
+                  onClick={() => handleIconSize(opt.value)}
+                />
+              ))}
+            </div>
+          </SettingCard>
 
-      <SettingGroup title={translate('窗口大小')}>
-        {WINDOW_MODE_OPTIONS.map(opt => (
-          <OptionButton
-            key={opt.value}
-            label={translate(opt.label)}
-            selected={windowMode === opt.value}
-            onClick={() => handleWindowMode(opt.value)}
-          />
-        ))}
-      </SettingGroup>
+          <SettingCard label={translate('窗口大小')}>
+            <div className="flex flex-wrap gap-2">
+              {WINDOW_MODE_OPTIONS.map(opt => (
+                <OptionButton
+                  key={opt.value}
+                  label={translate(opt.label)}
+                  selected={windowMode === opt.value}
+                  onClick={() => handleWindowMode(opt.value)}
+                />
+              ))}
+            </div>
+          </SettingCard>
 
-      <SettingGroup title={translate('标题行数')}>
-        {TITLE_LINE_OPTIONS.map(opt => (
-          <OptionButton
-            key={opt.value}
-            label={translate(opt.label)}
-            selected={titleLineCount === opt.value}
-            onClick={() => handleTitleLineCount(opt.value)}
-          />
-        ))}
-      </SettingGroup>
+          <SettingCard label={translate('标题行数')}>
+            <div className="flex flex-wrap gap-2">
+              {TITLE_LINE_OPTIONS.map(opt => (
+                <OptionButton
+                  key={opt.value}
+                  label={translate(opt.label)}
+                  selected={titleLineCount === opt.value}
+                  onClick={() => handleTitleLineCount(opt.value)}
+                />
+              ))}
+            </div>
+          </SettingCard>
 
-      <div className="mb-6">
-        <ToggleRow
-          title={translate('显示 Dock 栏')}
-          description={
-            dockEnabled
-              ? translate('当前已开启，Dock 会在启动台底部显示。')
-              : translate('当前已关闭，Dock 中的图标会回到图标网格。')
-          }
-          checked={dockEnabled}
-          onChange={handleDockEnabled}
-        />
-      </div>
+          <ToggleRow
+            title={translate('显示 Dock 栏')}
+            description={
+              dockEnabled
+                ? translate('当前已开启，Dock 会在启动台底部显示。')
+                : translate('当前已关闭，Dock 中的图标会回到图标网格。')
+            }
+            checked={dockEnabled}
+            onChange={handleDockEnabled}
+          />
+        </SettingGroup>
       </section>
 
       <section aria-labelledby="settings-startup-heading">
@@ -950,22 +960,22 @@ function SettingsPanel() {
             {translate('控制窗口驻留和登录 Windows 后的启动方式。')}
           </p>
         </div>
-      <div className="mb-6">
-        <ToggleRow
-          title={translate('窗口常驻')}
-          description={
-            windowPersistentEnabled
-              ? translate(
-                  '当前已开启，点击窗口外部或全屏空白区域都不会自动隐藏，主窗口右上角会显示关闭按钮。'
-                )
-              : translate(
-                  '当前已关闭，点击窗口外部或全屏空白区域时，主窗口仍会按原来的行为自动隐藏。'
-                )
-          }
-          checked={windowPersistentEnabled}
-          onChange={handleWindowPersistent}
-        />
-      </div>
+        <SettingGroup>
+          <ToggleRow
+            title={translate('窗口常驻')}
+            description={
+              windowPersistentEnabled
+                ? translate(
+                    '当前已开启，点击窗口外部或全屏空白区域都不会自动隐藏，主窗口右上角会显示关闭按钮。'
+                  )
+                : translate(
+                    '当前已关闭，点击窗口外部或全屏空白区域时，主窗口仍会按原来的行为自动隐藏。'
+                  )
+            }
+            checked={windowPersistentEnabled}
+            onChange={handleWindowPersistent}
+          />
+        </SettingGroup>
       </section>
 
       <section aria-labelledby="settings-shortcut-heading">
@@ -977,120 +987,116 @@ function SettingsPanel() {
             {translate('设置唤起方式和主窗口打开后的默认位置。')}
           </p>
         </div>
-      <div className="mb-6">
-        <ToggleRow
-          title={translate('开机自启')}
-          description={
-            launchOnStartupEnabled
-              ? translate('当前已开启，登录 Windows 后会自动启动 DesktopGo 并保持后台待命。')
-              : translate('当前已关闭，登录 Windows 后需要手动启动 DesktopGo。')
-          }
-          checked={launchOnStartupEnabled}
-          onChange={handleLaunchOnStartup}
-          disabled={isSavingLaunchOnStartup}
-        />
-      </div>
+        <SettingGroup>
+          <ToggleRow
+            title={translate('开机自启')}
+            description={
+              launchOnStartupEnabled
+                ? translate('当前已开启，登录 Windows 后会自动启动 DesktopGo 并保持后台待命。')
+                : translate('当前已关闭，登录 Windows 后需要手动启动 DesktopGo。')
+            }
+            checked={launchOnStartupEnabled}
+            onChange={handleLaunchOnStartup}
+            disabled={isSavingLaunchOnStartup}
+          />
 
-      <div className="mb-6">
-        <SettingCard
-          label={translate('打开启动台快捷键')}
-          desc={translate(
-            '修改唤起启动台的全局快捷键。录制支持 Ctrl、Alt、Shift；像 Ctrl+Space 这种可能被系统或输入法拦截的组合，可以直接手动输入。'
-          )}
-        >
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span className="rounded-full border border-border/80 bg-background px-2.5 py-1">
-              {translate('当前生效：{shortcut}', {
-                shortcut: formatShortcutForDisplay(launchpadShortcut),
-              })}
-            </span>
-            {shortcutDraftChanged ? (
-              <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-amber-700 dark:text-amber-300">
-                {translate('待保存：{shortcut}', {
-                  shortcut: formatShortcutForDisplay(launchpadShortcutDraft),
+          <SettingCard
+            label={translate('打开启动台快捷键')}
+            desc={translate(
+              '修改唤起启动台的全局快捷键。录制支持 Ctrl、Alt、Shift；像 Ctrl+Space 这种可能被系统或输入法拦截的组合，可以直接手动输入。'
+            )}
+          >
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="rounded-full border border-border/80 bg-background px-2.5 py-1">
+                {translate('当前生效：{shortcut}', {
+                  shortcut: formatShortcutForDisplay(launchpadShortcut),
                 })}
               </span>
-            ) : null}
-            {isRecordingShortcut ? (
-              <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-blue-600 dark:text-blue-300">
-                {translate('录制中')}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-            <Input
-              ref={shortcutInputRef}
-              value={shortcutDisplayValue}
-              aria-label={translate('启动台快捷键')}
-              placeholder={translate('可手动输入，例如 Ctrl+Space')}
-              spellCheck={false}
-              autoCorrect="off"
-              autoCapitalize="off"
-              onChange={handleShortcutInputChange}
-              onKeyDown={handleShortcutInputKeyDown}
-              onBlur={handleShortcutInputBlur}
-              className={cn(
-                'font-medium',
-                isRecordingShortcut && 'border-blue-500/60 ring-2 ring-blue-500/15'
-              )}
-            />
-
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant={isRecordingShortcut ? 'secondary' : 'outline'}
-                onClick={handleToggleShortcutRecording}
-                disabled={isSavingShortcut}
-              >
-                {isRecordingShortcut ? translate('取消录制') : translate('录制快捷键')}
-              </Button>
-              <Button
-                type="button"
-                onClick={() => void handleSaveLaunchpadShortcut()}
-                disabled={isSavingShortcut || isRecordingShortcut || !shortcutDraftChanged}
-              >
-                {isSavingShortcut ? translate('保存中...') : translate('保存快捷键')}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleResetLaunchpadShortcut}
-                disabled={isSavingShortcut}
-              >
-                {translate('恢复默认')}
-              </Button>
+              {shortcutDraftChanged ? (
+                <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-amber-700 dark:text-amber-300">
+                  {translate('待保存：{shortcut}', {
+                    shortcut: formatShortcutForDisplay(launchpadShortcutDraft),
+                  })}
+                </span>
+              ) : null}
+              {isRecordingShortcut ? (
+                <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-blue-600 dark:text-blue-300">
+                  {translate('录制中')}
+                </span>
+              ) : null}
             </div>
-          </div>
 
-          <p className="text-xs leading-5 text-muted-foreground">
-            {translate(
-              '支持手动输入 `Ctrl+Space`、`Ctrl+Alt+K`、`Alt+Shift+P`。录制模式只识别 `Ctrl / Alt / Shift`。'
-            )}
-          </p>
-        </SettingCard>
-      </div>
-
-      <div className="mb-6">
-        <SettingCard
-          label={translate('打开启动台时默认焦点')}
-          desc={translate('选择唤起启动台后，默认把输入焦点放到搜索栏，还是仅显示主界面。')}
-        >
-          <div className="flex flex-wrap gap-2">
-            {LAUNCHPAD_OPEN_FOCUS_OPTIONS.map(option => (
-              <OptionButton
-                key={option.value}
-                label={translate(option.label)}
-                selected={launchpadOpenFocusTarget === option.value}
-                onClick={() => handleLaunchpadOpenFocusTarget(option.value)}
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+              <Input
+                ref={shortcutInputRef}
+                value={shortcutDisplayValue}
+                aria-label={translate('启动台快捷键')}
+                placeholder={translate('可手动输入，例如 Ctrl+Space')}
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="off"
+                onChange={handleShortcutInputChange}
+                onKeyDown={handleShortcutInputKeyDown}
+                onBlur={handleShortcutInputBlur}
+                className={cn(
+                  'font-medium',
+                  isRecordingShortcut && 'border-blue-500/60 ring-2 ring-blue-500/15'
+                )}
               />
-            ))}
-          </div>
-          <p className="text-xs leading-5 text-muted-foreground">
-            {translate(LAUNCHPAD_OPEN_FOCUS_DESCRIPTIONS[launchpadOpenFocusTarget])}
-          </p>
-        </SettingCard>
-      </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant={isRecordingShortcut ? 'secondary' : 'outline'}
+                  onClick={handleToggleShortcutRecording}
+                  disabled={isSavingShortcut}
+                >
+                  {isRecordingShortcut ? translate('取消录制') : translate('录制快捷键')}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void handleSaveLaunchpadShortcut()}
+                  disabled={isSavingShortcut || isRecordingShortcut || !shortcutDraftChanged}
+                >
+                  {isSavingShortcut ? translate('保存中...') : translate('保存快捷键')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleResetLaunchpadShortcut}
+                  disabled={isSavingShortcut}
+                >
+                  {translate('恢复默认')}
+                </Button>
+              </div>
+            </div>
+
+            <p className="text-xs leading-5 text-muted-foreground">
+              {translate(
+                '支持手动输入 `Ctrl+Space`、`Ctrl+Alt+K`、`Alt+Shift+P`。录制模式只识别 `Ctrl / Alt / Shift`。'
+              )}
+            </p>
+          </SettingCard>
+
+          <SettingCard
+            label={translate('打开启动台时默认焦点')}
+            desc={translate('选择唤起启动台后，默认把输入焦点放到搜索栏，还是仅显示主界面。')}
+          >
+            <div className="flex flex-wrap gap-2">
+              {LAUNCHPAD_OPEN_FOCUS_OPTIONS.map(option => (
+                <OptionButton
+                  key={option.value}
+                  label={translate(option.label)}
+                  selected={launchpadOpenFocusTarget === option.value}
+                  onClick={() => handleLaunchpadOpenFocusTarget(option.value)}
+                />
+              ))}
+            </div>
+            <p className="text-xs leading-5 text-muted-foreground">
+              {translate(LAUNCHPAD_OPEN_FOCUS_DESCRIPTIONS[launchpadOpenFocusTarget])}
+            </p>
+          </SettingCard>
+        </SettingGroup>
       </section>
     </div>
   )
@@ -1222,16 +1228,10 @@ function IconManagerPanel() {
             ? 'delete_icons'
             : 'hide_icons'
       const actionLabel =
-        mutation.type === 'unhide'
-          ? '显示'
-          : mutation.type === 'delete'
-            ? '移出图标库'
-            : '隐藏'
+        mutation.type === 'unhide' ? '显示' : mutation.type === 'delete' ? '移出图标库' : '隐藏'
       const affected = await invoke<number>(command, { targets })
       const visibilityMutation =
-        mutation.type === 'delete'
-          ? null
-          : { type: mutation.type, icon: mutation.icon }
+        mutation.type === 'delete' ? null : { type: mutation.type, icon: mutation.icon }
       await refreshIconManagerList()
       await notifyMainWindow()
       toast.success(
@@ -1243,13 +1243,12 @@ function IconManagerPanel() {
           key: 'icon-library-action',
           title: translate('图标库'),
           duration: visibilityMutation ? 8000 : undefined,
-          action:
-            visibilityMutation
-              ? {
-                  label: translate('撤销'),
-                  onClick: () => void undoVisibilityMutation(visibilityMutation),
-                }
-              : undefined,
+          action: visibilityMutation
+            ? {
+                label: translate('撤销'),
+                onClick: () => void undoVisibilityMutation(visibilityMutation),
+              }
+            : undefined,
         }
       )
     } catch (e) {
@@ -1510,9 +1509,7 @@ function IconManagerPanel() {
               >
                 <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-300" />
                 <div className="max-w-md space-y-1">
-                  <p className="text-sm font-medium">
-                    {translate('图标库加载失败，请重试。')}
-                  </p>
+                  <p className="text-sm font-medium">{translate('图标库加载失败，请重试。')}</p>
                   <p className="break-words text-xs text-muted-foreground" title={listError}>
                     {translate('现有布局不会被修改。')}
                   </p>
