@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import {
   createColoredIconDataUri,
+  createIconWithBackgroundColorDataUri,
   createTextIconDataUri,
   ICON_COLOR_PRESETS,
   normalizeTextIconText,
@@ -80,6 +81,10 @@ createTextIconDataUri('桌面工具栏', 'ocean')
 assert.ok(Number.parseInt(drawnFont.match(/700 (\d+)px/)?.[1] ?? '0', 10) < Math.round(256 * 0.41))
 assert.equal(
   await createColoredIconDataUri('data:image/png;base64,source', 'ocean'),
+  'data:image/png;base64,text-icon'
+)
+assert.equal(
+  await createIconWithBackgroundColorDataUri('data:image/png;base64,source', '#123456'),
   'data:image/png;base64,text-icon'
 )
 assert.deepEqual(drawnImageRect, [0, 64, 256, 128])

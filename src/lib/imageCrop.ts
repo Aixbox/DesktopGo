@@ -22,6 +22,11 @@ export type CropViewport = {
   rotation: number
 }
 
+export type NaturalImageSize = {
+  width: number
+  height: number
+}
+
 export const getImageBoundedSquareCropSize = (
   displayedWidth: number,
   displayedHeight: number
@@ -136,6 +141,89 @@ const loadImage = (source: string): Promise<HTMLImageElement> =>
     image.onerror = () => reject(new Error('Failed to load the icon for cropping'))
     image.src = source
   })
+
+export const getSourceImagePointAtViewportPoint = (
+  point: Point,
+  viewport: CropViewport,
+  naturalSize: NaturalImageSize
+): Point | null => {
+  const { crop, mediaSize, zoom, rotation } = viewport
+  if (
+    naturalSize.width <= 0 ||
+    naturalSize.height <= 0 ||
+    mediaSize.width <= 0 ||
+    mediaSize.height <= 0 ||
+    zoom <= 0
+  ) {
+    return null
+  }
+
+  const translatedX = point.x - crop.x
+  const translatedY = point.y - crop.y
+  const inverseRadians = (-normalizeRotation(rotation) * Math.PI) / 180
+  const cos = Math.cos(inverseRadians)
+  const sin = Math.sin(inverseRadians)
+  const unrotatedX = cos * translatedX - sin * translatedY
+  const unrotatedY = sin * translatedX + cos * translatedY
+  const displayedScaleX = mediaSize.width / naturalSize.width
+  const displayedScaleY = mediaSize.height / naturalSize.height
+  const sourcePoint = {
+    x: unrotatedX / (zoom * displayedScaleX) + naturalSize.width / 2,
+    y: unrotatedY / (zoom * displayedScaleY) + naturalSize.height / 2,
+  }
+
+  if (
+    sourcePoint.x < 0 ||
+    sourcePoint.x >= naturalSize.width ||
+    sourcePoint.y < 0 ||
+    sourcePoint.y >= naturalSize.height
+  ) {
+    return null
+  }
+
+  return sourcePoint
+}
+
+export const extractImageColorAtViewportPoint = async (
+  source: string,
+  viewport: CropViewport,
+  point: Point
+): Promise<string | null> => {
+  if (!source || typeof document === 'undefined') return null
+
+  const image = await loadImage(source)
+  const sourcePoint = getSourceImagePointAtViewportPoint(point, viewport, {
+    width: image.naturalWidth,
+    height: image.naturalHeight,
+  })
+  if (!sourcePoint) return null
+
+  const sampleCanvas = document.createElement('canvas')
+  sampleCanvas.width = 1
+  sampleCanvas.height = 1
+  const sampleContext = sampleCanvas.getContext('2d', { willReadFrequently: true })
+  if (!sampleContext) throw new Error('Unable to create the color sampling canvas')
+
+  sampleContext.clearRect(0, 0, 1, 1)
+  sampleContext.drawImage(
+    image,
+    Math.floor(sourcePoint.x),
+    Math.floor(sourcePoint.y),
+    1,
+    1,
+    0,
+    0,
+    1,
+    1
+  )
+  const [red, green, blue, alpha] = sampleContext.getImageData(0, 0, 1, 1).data
+  if (alpha < 16) return null
+
+  return `#${[red, green, blue]
+    .map(channel => channel.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase()}`
+}
 
 export const cropImageViewportDataUri = async (
   source: string,

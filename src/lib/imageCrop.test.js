@@ -3,9 +3,11 @@ import test from 'node:test'
 import {
   constrainCropFramePosition,
   constrainMediaPositionToViewport,
+  extractImageColorAtViewportPoint,
   getImageBoundedSquareCropSize,
   getNextIconCropWheelZoom,
   getRotatedImageSize,
+  getSourceImagePointAtViewportPoint,
   getUpscaledContainObjectFit,
   normalizeRotation,
   resizeSquareCrop,
@@ -123,4 +125,103 @@ test('a crop frame touching an edge moves inward as it grows', () => {
     x: -80,
     y: 0,
   })
+})
+
+test('viewport color sampling maps transformed display points back to source pixels', () => {
+  const viewport = {
+    crop: { x: 20, y: -10 },
+    cropSize: { width: 200, height: 200 },
+    mediaSize: { width: 200, height: 100, naturalWidth: 100, naturalHeight: 50 },
+    zoom: 2,
+    rotation: 0,
+  }
+
+  assert.deepEqual(
+    getSourceImagePointAtViewportPoint({ x: 60, y: 10 }, viewport, {
+      width: 100,
+      height: 50,
+    }),
+    { x: 60, y: 30 }
+  )
+})
+
+test('viewport color sampling accounts for image rotation and rejects points outside the image', () => {
+  const viewport = {
+    crop: { x: 0, y: 0 },
+    cropSize: { width: 200, height: 200 },
+    mediaSize: { width: 100, height: 50, naturalWidth: 100, naturalHeight: 50 },
+    zoom: 1,
+    rotation: 90,
+  }
+
+  const rotatedPoint = getSourceImagePointAtViewportPoint({ x: 0, y: 20 }, viewport, {
+    width: 100,
+    height: 50,
+  })
+  assert.ok(rotatedPoint)
+  assert.ok(Math.abs(rotatedPoint.x - 70) < 0.000001)
+  assert.ok(Math.abs(rotatedPoint.y - 25) < 0.000001)
+  assert.equal(
+    getSourceImagePointAtViewportPoint({ x: 80, y: 80 }, viewport, {
+      width: 100,
+      height: 50,
+    }),
+    null
+  )
+})
+
+test('image color sampling returns RGB hex and ignores transparent pixels', async () => {
+  let pixel = [12, 34, 56, 255]
+  let sampledSourceRect = []
+  const context = {
+    clearRect() {},
+    drawImage(_image, sourceX, sourceY, sourceWidth, sourceHeight) {
+      sampledSourceRect = [sourceX, sourceY, sourceWidth, sourceHeight]
+    },
+    getImageData: () => ({ data: Uint8ClampedArray.from(pixel) }),
+  }
+
+  globalThis.document = {
+    createElement: () => ({
+      width: 0,
+      height: 0,
+      getContext: () => context,
+    }),
+  }
+  globalThis.Image = class {
+    naturalWidth = 100
+    naturalHeight = 50
+
+    set src(_value) {
+      this.onload()
+    }
+  }
+
+  const viewport = {
+    crop: { x: 0, y: 0 },
+    cropSize: { width: 100, height: 100 },
+    mediaSize: { width: 100, height: 50, naturalWidth: 100, naturalHeight: 50 },
+    zoom: 1,
+    rotation: 0,
+  }
+  assert.equal(
+    await extractImageColorAtViewportPoint('data:image/png;base64,source', viewport, {
+      x: 0,
+      y: 0,
+    }),
+    '#0C2238'
+  )
+  assert.deepEqual(sampledSourceRect, [50, 25, 1, 1])
+
+  pixel = [255, 255, 255, 0]
+  assert.equal(
+    await extractImageColorAtViewportPoint('data:image/png;base64,source', viewport, {
+      x: 0,
+      y: 0,
+    }),
+    null
+  )
+
+  delete globalThis.document
+  delete globalThis.Image
 })

@@ -8,11 +8,22 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import Cropper, { type MediaSize, type Point, type Size } from 'react-easy-crop'
-import { Check, Crop, RefreshCw, RotateCcw, RotateCw, X, ZoomIn, ZoomOut } from 'lucide-react'
+import {
+  Check,
+  Crop,
+  Pipette,
+  RefreshCw,
+  RotateCcw,
+  RotateCw,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from 'lucide-react'
 import {
   constrainCropFramePosition,
   constrainMediaPositionToViewport,
   cropImageViewportDataUri,
+  extractImageColorAtViewportPoint,
   getImageBoundedSquareCropSize,
   getNextIconCropWheelZoom,
   getUpscaledContainObjectFit,
@@ -23,7 +34,11 @@ import {
   type UpscaledContainObjectFit,
 } from '@/lib/imageCrop'
 import { translate } from '@/lib/i18n'
-import { ICON_COLOR_PRESETS, type IconColorId } from '@/lib/textIcon'
+import {
+  createIconWithBackgroundColorDataUri,
+  ICON_COLOR_PRESETS,
+  type IconColorId,
+} from '@/lib/textIcon'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -121,6 +136,10 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
   const [mediaObjectFit, setMediaObjectFit] = useState<UpscaledContainObjectFit | null>(null)
   const [viewportSize, setViewportSize] = useState(0)
   const [colorId, setColorId] = useState<IconColorId>(initialColor)
+  const [customColor, setCustomColor] = useState<string | null>(null)
+  const [usingCustomColor, setUsingCustomColor] = useState(false)
+  const [extractingColor, setExtractingColor] = useState(false)
+  const [samplingColor, setSamplingColor] = useState(false)
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState('')
 
@@ -362,10 +381,47 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
         rotation,
       })
       if (!dataUri) throw new Error('The cropped icon is empty')
-      onApply({ dataUri, colorId })
+      const outputDataUri =
+        usingCustomColor && customColor
+          ? await createIconWithBackgroundColorDataUri(dataUri, customColor)
+          : dataUri
+      onApply({ dataUri: outputDataUri, colorId: usingCustomColor ? 'none' : colorId })
     } catch {
       setError(translate('无法生成裁剪后的图标，请重试。'))
       setApplying(false)
+    }
+  }
+
+  const handleColorSample = async (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!extractingColor || !cropSize || !mediaSize || samplingColor || applying) return
+    event.preventDefault()
+    event.stopPropagation()
+    const bounds = event.currentTarget.getBoundingClientRect()
+    setSamplingColor(true)
+    setError('')
+
+    try {
+      const sampledColor = await extractImageColorAtViewportPoint(
+        source,
+        { crop, cropSize, mediaSize, zoom, rotation },
+        {
+          x: event.clientX - bounds.left - bounds.width / 2,
+          y: event.clientY - bounds.top - bounds.height / 2,
+        }
+      )
+      if (!sampledColor) {
+        setError(translate('此处没有可提取的颜色，请选择图片中的其他位置。'))
+        return
+      }
+
+      setCustomColor(sampledColor)
+      setUsingCustomColor(true)
+      setColorId('none')
+      setExtractingColor(false)
+    } catch {
+      setError(translate('无法提取颜色，请重试。'))
+    } finally {
+      setSamplingColor(false)
     }
   }
 
@@ -373,6 +429,10 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
     event.stopPropagation()
     if (event.key === 'Escape') {
       event.preventDefault()
+      if (extractingColor) {
+        setExtractingColor(false)
+        return
+      }
       if (!applying) onCancel()
       return
     }
@@ -396,6 +456,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
   }
 
   const selectedColor = ICON_COLOR_PRESETS.find(preset => preset.id === colorId)
+  const visibleBackgroundColor = usingCustomColor ? customColor : selectedColor?.color
 
   return createPortal(
     <div
@@ -439,13 +500,13 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
           <div
             className="relative mx-auto aspect-square w-full bg-muted/60"
             style={
-              colorId === 'none'
+              !usingCustomColor && colorId === 'none'
                 ? {
                     backgroundColor: '#cbd5e1',
                     backgroundImage: TRANSPARENT_CHECKERBOARD,
                     backgroundSize: '16px 16px',
                   }
-                : { backgroundColor: selectedColor?.color }
+                : { backgroundColor: visibleBackgroundColor ?? undefined }
             }
           >
             <div
@@ -540,6 +601,24 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
                 ))}
               </div>
             ) : null}
+
+            {extractingColor && cropSize && mediaSize ? (
+              <div
+                aria-hidden="true"
+                title={translate('点击图片提取颜色')}
+                onPointerDown={event => void handleColorSample(event)}
+                className="absolute inset-0 z-30 cursor-crosshair touch-none"
+              >
+                <span className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 whitespace-nowrap rounded-md border border-border/70 bg-background/90 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm">
+                  {samplingColor ? (
+                    <RefreshCw className="mr-1.5 inline h-3 w-3 animate-spin" />
+                  ) : (
+                    <Pipette className="mr-1.5 inline h-3 w-3" />
+                  )}
+                  {translate('点击图片提取颜色')}
+                </span>
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-[18px] flex items-center justify-between text-muted-foreground">
@@ -611,13 +690,36 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
             </div>
           </div>
 
+          <div className="mt-6 flex items-center justify-between gap-3">
+            <span className="text-sm font-medium text-foreground">{translate('图标背景')}</span>
+            <Button
+              type="button"
+              variant={extractingColor ? 'secondary' : 'ghost'}
+              size="sm"
+              aria-pressed={extractingColor}
+              onClick={() => {
+                setExtractingColor(current => !current)
+                setError('')
+              }}
+              disabled={applying || !cropSize || !mediaSize}
+              className="h-8 gap-1.5 px-2.5 text-xs"
+            >
+              {samplingColor ? (
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Pipette className="h-3.5 w-3.5" />
+              )}
+              {translate('提取颜色')}
+            </Button>
+          </div>
+
           <div
             role="radiogroup"
             aria-label={translate('图标背景')}
-            className="mt-6 grid grid-cols-5 justify-items-center gap-x-2 gap-y-2"
+            className="mt-3 grid grid-cols-6 justify-items-center gap-x-2 gap-y-2"
           >
             {ICON_COLOR_PRESETS.map(preset => {
-              const selected = preset.id === colorId
+              const selected = !usingCustomColor && preset.id === colorId
               return (
                 <button
                   key={preset.id}
@@ -626,7 +728,12 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
                   aria-checked={selected}
                   aria-label={translate(preset.id === 'none' ? '透明背景' : '选择图标背景')}
                   title={translate(preset.id === 'none' ? '透明背景' : '选择图标背景')}
-                  onClick={() => setColorId(preset.id)}
+                  onClick={() => {
+                    setColorId(preset.id)
+                    setUsingCustomColor(false)
+                    setExtractingColor(false)
+                    setError('')
+                  }}
                   disabled={applying}
                   className={cn(
                     'relative flex h-7 w-7 items-center justify-center rounded-full border transition-[border-color,box-shadow,transform] duration-150 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transform-none',
@@ -652,6 +759,33 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
                 </button>
               )
             })}
+            {customColor ? (
+              <button
+                type="button"
+                role="radio"
+                aria-checked={usingCustomColor}
+                aria-label={translate('选择提取的颜色')}
+                title={`${translate('选择提取的颜色')} ${customColor}`}
+                onClick={() => {
+                  setUsingCustomColor(true)
+                  setColorId('none')
+                  setExtractingColor(false)
+                  setError('')
+                }}
+                disabled={applying}
+                className={cn(
+                  'relative flex h-7 w-7 items-center justify-center rounded-full border transition-[border-color,box-shadow,transform] duration-150 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transform-none',
+                  usingCustomColor
+                    ? 'border-foreground ring-2 ring-foreground/15'
+                    : 'border-border hover:border-foreground/40'
+                )}
+                style={{ backgroundColor: customColor }}
+              >
+                {usingCustomColor ? (
+                  <Check className="h-3.5 w-3.5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]" />
+                ) : null}
+              </button>
+            ) : null}
           </div>
 
           {error ? (

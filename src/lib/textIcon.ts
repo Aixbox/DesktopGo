@@ -101,6 +101,16 @@ export const createColoredIconDataUri = async (
   const preset = ICON_COLOR_PRESETS.find(candidate => candidate.id === colorId)
   if (!preset) return source
 
+  return createIconWithBackgroundColorDataUri(source, preset.color, size)
+}
+
+export const createIconWithBackgroundColorDataUri = async (
+  source: string,
+  color: string,
+  size = 256
+): Promise<string> => {
+  if (!source || !color || typeof document === 'undefined') return source
+
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const nextImage = new Image()
     nextImage.onload = () => resolve(nextImage)
@@ -115,7 +125,7 @@ export const createColoredIconDataUri = async (
   if (!context) return ''
 
   drawRoundedSquare(context, size, Math.round(size * 0.22))
-  context.fillStyle = preset.color
+  context.fillStyle = color
   context.fill()
 
   const availableSize = size
