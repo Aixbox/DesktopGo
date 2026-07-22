@@ -10,9 +10,11 @@ import { createPortal } from 'react-dom'
 import Cropper, { type MediaSize, type Point, type Size } from 'react-easy-crop'
 import { Check, Crop, RefreshCw, RotateCcw, RotateCw, X, ZoomIn, ZoomOut } from 'lucide-react'
 import {
+  constrainCropFramePosition,
   constrainMediaPositionToViewport,
   cropImageViewportDataUri,
   getImageBoundedSquareCropSize,
+  getNextIconCropWheelZoom,
   getUpscaledContainObjectFit,
   ICON_CROP_MAX_ZOOM,
   ICON_CROP_MIN_ZOOM,
@@ -52,14 +54,18 @@ type CropResizeSession = {
   maxSize: number
 }
 
-const CROP_RESIZE_EDGES: Array<{
-  handle: Extract<CropResizeHandle, 'n' | 'e' | 's' | 'w'>
-  className: string
-}> = [
-  { handle: 'n', className: '-top-1 left-2 right-2 h-2 cursor-ns-resize' },
-  { handle: 'e', className: '-right-1 bottom-2 top-2 w-2 cursor-ew-resize' },
-  { handle: 's', className: '-bottom-1 left-2 right-2 h-2 cursor-ns-resize' },
-  { handle: 'w', className: '-left-1 bottom-2 top-2 w-2 cursor-ew-resize' },
+type CropFrameMoveSession = {
+  pointerId: number
+  startX: number
+  startY: number
+  startPosition: Point
+}
+
+const CROP_MOVE_EDGES = [
+  '-top-1 left-3 right-3 h-2',
+  '-right-1 bottom-3 top-3 w-2',
+  '-bottom-1 left-3 right-3 h-2',
+  '-left-1 bottom-3 top-3 w-2',
 ]
 
 const CROP_RESIZE_POINTS: Array<{ handle: CropResizeHandle; className: string }> = [
@@ -103,9 +109,11 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
   const previousFocusRef = useRef<HTMLElement | null>(null)
   const initialCropSizeRef = useRef<Size | null>(null)
   const resizeSessionRef = useRef<CropResizeSession | null>(null)
+  const frameMoveSessionRef = useRef<CropFrameMoveSession | null>(null)
   const suppressCropChangeRef = useRef(false)
   const cropChangeUnlockFrameRef = useRef<number | null>(null)
   const [crop, setCrop] = useState<Point>(INITIAL_CROP)
+  const [cropFramePosition, setCropFramePosition] = useState<Point>(INITIAL_CROP)
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
   const [cropSize, setCropSize] = useState<Size | undefined>()
@@ -131,6 +139,11 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
       viewportSize,
       viewportSize
     )
+  }
+
+  const constrainFramePosition = (nextPosition: Point): Point => {
+    if (!cropSize || viewportSize <= 0) return nextPosition
+    return constrainCropFramePosition(nextPosition, cropSize, viewportSize, viewportSize)
   }
 
   useEffect(() => {
@@ -162,17 +175,19 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
   }, [source])
 
   const resetCrop = () => {
+    const nextCropSize = initialCropSizeRef.current ?? undefined
     setCrop(INITIAL_CROP)
-    setZoom(ICON_CROP_MAX_ZOOM)
+    setCropFramePosition(INITIAL_CROP)
+    setZoom(1)
     setRotation(0)
-    setCropSize(initialCropSizeRef.current ?? undefined)
+    setCropSize(nextCropSize)
     setError('')
   }
 
   const rotateBy = (amount: number) => {
     const nextRotation = rotation + amount
     setRotation(nextRotation)
-    setCrop(constrainCropPosition(INITIAL_CROP, zoom, nextRotation))
+    setCrop(current => constrainCropPosition(current, zoom, nextRotation))
     setError('')
   }
 
@@ -191,6 +206,14 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
     handleZoomChange(Number((zoom + amount).toFixed(2)))
   }
 
+  const handleCropWheelRequest = (event: WheelEvent) => {
+    if (event.deltaY === 0) return false
+    event.preventDefault()
+    event.stopPropagation()
+    handleZoomChange(getNextIconCropWheelZoom(zoom, event.deltaY < 0 ? 1 : -1))
+    return false
+  }
+
   const updateCropSize = (
     handle: CropResizeHandle,
     startSize: number,
@@ -206,7 +229,11 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
       cropChangeUnlockFrameRef.current = null
       if (!resizeSessionRef.current) suppressCropChangeRef.current = false
     })
-    setCropSize(resizeSquareCrop(startSize, deltaX, deltaY, handle, MIN_CROP_SIZE, maxSize))
+    const nextCropSize = resizeSquareCrop(startSize, deltaX, deltaY, handle, MIN_CROP_SIZE, maxSize)
+    setCropSize(nextCropSize)
+    setCropFramePosition(current =>
+      constrainCropFramePosition(current, nextCropSize, viewportSize, viewportSize)
+    )
     setError('')
   }
 
@@ -214,7 +241,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
     if (!cropSize || applying) return
     event.preventDefault()
     event.stopPropagation()
-    const maxSize = cropViewportRef.current?.clientWidth ?? cropSize.width
+    const maxSize = viewportSize > 0 ? viewportSize : cropSize.width
     resizeSessionRef.current = {
       pointerId: event.pointerId,
       handle,
@@ -257,6 +284,43 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
     })
   }
 
+  const startCropFrameMove = (event: ReactPointerEvent<HTMLElement>) => {
+    if (!cropSize || !mediaSize || applying) return
+    event.preventDefault()
+    event.stopPropagation()
+    frameMoveSessionRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startPosition: cropFramePosition,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const continueCropFrameMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const session = frameMoveSessionRef.current
+    if (!session || session.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    setCropFramePosition(
+      constrainFramePosition({
+        x: session.startPosition.x + event.clientX - session.startX,
+        y: session.startPosition.y + event.clientY - session.startY,
+      })
+    )
+    setError('')
+  }
+
+  const finishCropFrameMove = (event: ReactPointerEvent<HTMLElement>) => {
+    if (frameMoveSessionRef.current?.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    frameMoveSessionRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
+
   const handleResizeKeyDown = (
     handle: CropResizeHandle,
     event: KeyboardEvent<HTMLButtonElement>
@@ -278,7 +342,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
       cropSize.width,
       keyboardDelta.x,
       keyboardDelta.y,
-      cropViewportRef.current?.clientWidth ?? cropSize.width
+      viewportSize > 0 ? viewportSize : cropSize.width
     )
   }
 
@@ -288,7 +352,10 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
     setError('')
     try {
       const dataUri = await cropImageViewportDataUri(source, {
-        crop,
+        crop: {
+          x: crop.x - cropFramePosition.x,
+          y: crop.y - cropFramePosition.y,
+        },
         cropSize,
         mediaSize,
         zoom,
@@ -366,7 +433,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
             {translate('裁剪图标')}
           </h2>
           <p id={descriptionId} className="sr-only">
-            {translate('拖动图标调整位置，拖动裁剪框边缘调整大小。')}
+            {translate('拖动图标调整位置，拖动裁剪框边缘移动或调整大小。')}
           </p>
 
           <div
@@ -398,7 +465,14 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
                   objectFit={mediaObjectFit}
                   showGrid
                   zoomWithScroll
+                  onWheelRequest={handleCropWheelRequest}
                   restrictPosition={false}
+                  style={{
+                    cropAreaStyle: {
+                      left: `calc(50% + ${cropFramePosition.x}px)`,
+                      top: `calc(50% + ${cropFramePosition.y}px)`,
+                    },
+                  }}
                   onCropChange={handleCropChange}
                   onZoomChange={handleZoomChange}
                   onMediaLoaded={nextMediaSize => {
@@ -409,8 +483,9 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
                         : getImageBoundedSquareCropSize(nextMediaSize.width, nextMediaSize.height)
                     setMediaSize(nextMediaSize)
                     setViewportSize(nextViewportSize)
-                    setZoom(ICON_CROP_MAX_ZOOM)
+                    setZoom(1)
                     setCrop(INITIAL_CROP)
+                    setCropFramePosition(INITIAL_CROP)
                     initialCropSizeRef.current = nextCropSize
                     setCropSize(nextCropSize ?? undefined)
                   }}
@@ -427,16 +502,22 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
             {cropSize ? (
               <div
                 className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
-                style={{ width: cropSize.width, height: cropSize.height }}
+                style={{
+                  width: cropSize.width,
+                  height: cropSize.height,
+                  left: `calc(50% + ${cropFramePosition.x}px)`,
+                  top: `calc(50% + ${cropFramePosition.y}px)`,
+                }}
               >
-                {CROP_RESIZE_EDGES.map(({ handle, className }) => (
+                {CROP_MOVE_EDGES.map(className => (
                   <span
-                    key={`edge-${handle}`}
-                    className={cn('pointer-events-auto absolute touch-none', className)}
-                    onPointerDown={event => startCropResize(handle, event)}
-                    onPointerMove={continueCropResize}
-                    onPointerUp={finishCropResize}
-                    onPointerCancel={finishCropResize}
+                    key={className}
+                    aria-hidden="true"
+                    className={cn('pointer-events-auto absolute touch-none cursor-move', className)}
+                    onPointerDown={startCropFrameMove}
+                    onPointerMove={continueCropFrameMove}
+                    onPointerUp={finishCropFrameMove}
+                    onPointerCancel={finishCropFrameMove}
                   />
                 ))}
                 {CROP_RESIZE_POINTS.map(({ handle, className }) => (

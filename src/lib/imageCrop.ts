@@ -2,7 +2,9 @@ import type { MediaSize, Point, Size } from 'react-easy-crop'
 
 export const ICON_CROP_OUTPUT_SIZE = 512
 export const ICON_CROP_MIN_ZOOM = 0.1
-export const ICON_CROP_MAX_ZOOM = 1
+export const ICON_CROP_MAX_ZOOM = 3
+export const ICON_CROP_WHEEL_ENLARGE_FACTOR = 1.2
+export const ICON_CROP_WHEEL_SHRINK_FACTOR = 0.85
 
 export type CropFrameSize = {
   width: number
@@ -87,6 +89,43 @@ export const constrainMediaPositionToViewport = (
   return {
     x: availableX === 0 ? 0 : Math.min(availableX, Math.max(-availableX, position.x)),
     y: availableY === 0 ? 0 : Math.min(availableY, Math.max(-availableY, position.y)),
+  }
+}
+
+export const getNextIconCropWheelZoom = (currentZoom: number, direction: -1 | 1): number => {
+  let nextZoom: number
+
+  if (currentZoom > 1) {
+    nextZoom =
+      direction > 0
+        ? currentZoom * ICON_CROP_WHEEL_ENLARGE_FACTOR
+        : currentZoom / ICON_CROP_WHEEL_ENLARGE_FACTOR
+    if (direction < 0 && nextZoom < 1) nextZoom = 1
+  } else if (currentZoom < 1) {
+    nextZoom =
+      direction < 0
+        ? currentZoom * ICON_CROP_WHEEL_SHRINK_FACTOR
+        : currentZoom / ICON_CROP_WHEEL_SHRINK_FACTOR
+    if (direction > 0 && nextZoom > 1) nextZoom = 1
+  } else {
+    nextZoom = direction > 0 ? ICON_CROP_WHEEL_ENLARGE_FACTOR : ICON_CROP_WHEEL_SHRINK_FACTOR
+  }
+
+  return Number(Math.min(ICON_CROP_MAX_ZOOM, Math.max(ICON_CROP_MIN_ZOOM, nextZoom)).toFixed(4))
+}
+
+export const constrainCropFramePosition = (
+  position: Point,
+  cropSize: Size,
+  viewportWidth: number,
+  viewportHeight: number
+): Point => {
+  const availableViewportX = Math.max(0, (viewportWidth - cropSize.width) / 2)
+  const availableViewportY = Math.max(0, (viewportHeight - cropSize.height) / 2)
+
+  return {
+    x: Math.min(availableViewportX, Math.max(-availableViewportX, position.x)),
+    y: Math.min(availableViewportY, Math.max(-availableViewportY, position.y)),
   }
 }
 

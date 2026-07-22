@@ -174,6 +174,8 @@ const EN_MESSAGES: Record<string, string> = {
     'Drag the icon to reposition it, then use the wheel or zoom buttons to zoom.',
   '拖动图标调整位置，拖动裁剪框边缘调整大小。':
     'Drag the icon to reposition it, then drag the crop frame edges to resize it.',
+  '拖动图标调整位置，拖动裁剪框边缘移动或调整大小。':
+    'Drag the icon to reposition it, then drag the crop frame border to move or resize it.',
   调整裁剪框大小: 'Resize crop frame',
   缩小: 'Zoom out',
   放大: 'Zoom in',
