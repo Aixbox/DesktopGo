@@ -17,7 +17,6 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleAlert,
-  Crop as CropIcon,
   FileSearch,
   FolderOpen,
   Globe2,
@@ -73,6 +72,8 @@ const ICON_COLOR_LABELS: Record<IconColorId, string> = {
 const DEFAULT_TEXT_ICON_TEXT = 'D'
 const DEFAULT_TEXT_ICON_COLOR: IconColorId = 'ocean'
 const ICON_EDITOR_SOURCE_SIZE = 256
+const ICON_PICKER_FOCUS_RING_CLASS_NAME =
+  'focus-visible:border-blue-500/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45'
 
 type WebsiteIconResult = {
   url: string
@@ -84,6 +85,7 @@ type WebsiteIconResult = {
 type CropEditorTarget =
   | { kind: 'target'; source: string }
   | { kind: 'custom'; source: string }
+  | { kind: 'text'; source: string }
   | { kind: 'website'; source: string; index: number }
 
 export type AddIconDialogCreatedEntry = {
@@ -143,32 +145,6 @@ function FormRow({
   )
 }
 
-function CropEditButton({
-  label,
-  disabled,
-  onClick,
-}: {
-  label: string
-  disabled?: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={event => {
-        event.stopPropagation()
-        onClick()
-      }}
-      disabled={disabled}
-      className="absolute bottom-1 right-1 z-10 flex h-6 w-6 items-center justify-center rounded-md border border-border/80 bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-[background-color,transform] duration-150 hover:scale-105 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 motion-reduce:transform-none"
-    >
-      <CropIcon className="h-3.5 w-3.5" />
-    </button>
-  )
-}
-
 export function AddIconDialog({
   open,
   onOpenChange,
@@ -201,6 +177,7 @@ export function AddIconDialog({
   const [selectedIconSource, setSelectedIconSource] = useState<IconSource>('text')
   const [iconColor, setIconColor] = useState<IconColorId>(DEFAULT_TEXT_ICON_COLOR)
   const [iconText, setIconText] = useState(DEFAULT_TEXT_ICON_TEXT)
+  const [editedTextIconPreview, setEditedTextIconPreview] = useState('')
   const [targetPreview, setTargetPreview] = useState('')
   const [targetPreviewLoading, setTargetPreviewLoading] = useState(false)
   const [customPreview, setCustomPreview] = useState('')
@@ -219,8 +196,8 @@ export function AddIconDialog({
     Array<{ dataUri: string; cornerRadii: CropCornerRadii }>
   >([])
   const textIconPreview = useMemo(
-    () => createTextIconDataUri(iconText, iconColor),
-    [iconColor, iconText]
+    () => editedTextIconPreview || createTextIconDataUri(iconText, iconColor),
+    [editedTextIconPreview, iconColor, iconText]
   )
 
   const resetForm = () => {
@@ -238,6 +215,7 @@ export function AddIconDialog({
     setSelectedIconSource('text')
     setIconColor(DEFAULT_TEXT_ICON_COLOR)
     setIconText(DEFAULT_TEXT_ICON_TEXT)
+    setEditedTextIconPreview('')
     setTargetPreview('')
     setTargetPreviewLoading(false)
     setCustomPreview('')
@@ -299,6 +277,9 @@ export function AddIconDialog({
     )
     setIconColor(initialDraft.iconColor ?? 'none')
     setIconText(initialDraft.iconText ?? '')
+    setEditedTextIconPreview(
+      initialDraft.iconSource === 'text' ? (initialDraft.generatedIconBase64 ?? '') : ''
+    )
     const initialGeneratedPreview = initialDraft.generatedIconBase64 ?? ''
     const initialTargetPreview =
       nextEntryKind === 'app' && initialDraft.iconSource === 'target' ? initialGeneratedPreview : ''
@@ -486,6 +467,7 @@ export function AddIconDialog({
     setSelectedIconSource('text')
     setIconColor(DEFAULT_TEXT_ICON_COLOR)
     setIconText(DEFAULT_TEXT_ICON_TEXT)
+    setEditedTextIconPreview('')
     setTargetPreview('')
     setTargetPreviewLoading(false)
     setCustomPreview('')
@@ -618,12 +600,6 @@ export function AddIconDialog({
 
   const openCropEditor = (target: CropEditorTarget) => {
     if (!target.source || submitting) return
-    if (target.kind === 'website') {
-      setWebsitePreview(target.source)
-      setSelectedIconSource('target')
-    } else {
-      setSelectedIconSource(target.kind)
-    }
     setCropEditorTarget(target)
   }
 
@@ -639,6 +615,9 @@ export function AddIconDialog({
     } else if (cropEditorTarget.kind === 'custom') {
       setCustomPreview(dataUri)
       setSelectedIconSource('custom')
+    } else if (cropEditorTarget.kind === 'text') {
+      setEditedTextIconPreview(dataUri)
+      setSelectedIconSource('text')
     } else {
       setTargetPreview(dataUri)
       setSelectedIconSource('target')
@@ -683,11 +662,13 @@ export function AddIconDialog({
     setSubmitting(true)
     try {
       const selectedPreview =
-        selectedIconSource === 'custom'
-          ? customPreview
-          : entryKind === 'website'
-            ? websitePreview
-            : targetPreview
+        selectedIconSource === 'text'
+          ? textIconPreview
+          : selectedIconSource === 'custom'
+            ? customPreview
+            : entryKind === 'website'
+              ? websitePreview
+              : targetPreview
       const selectedCornerRadii = editedRasterCornerRadii.find(
         entry => entry.dataUri === selectedPreview
       )?.cornerRadii
@@ -1070,7 +1051,10 @@ export function AddIconDialog({
                         aria-checked={selected}
                         aria-label={colorLabel}
                         title={colorLabel}
-                        onClick={() => setIconColor(preset.id)}
+                        onClick={() => {
+                          setEditedTextIconPreview('')
+                          setIconColor(preset.id)
+                        }}
                         disabled={submitting}
                         className={cn(
                           'relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-[border-color,box-shadow,transform] duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-35 motion-reduce:transform-none motion-reduce:transition-none',
@@ -1101,6 +1085,7 @@ export function AddIconDialog({
                     value={iconText}
                     onChange={event => {
                       if (selectedIconSource !== 'text') handleIconSourceChange('text')
+                      setEditedTextIconPreview('')
                       setIconText(normalizeTextIconText(event.target.value))
                     }}
                     placeholder={translate('输入最多六个字符')}
@@ -1114,7 +1099,7 @@ export function AddIconDialog({
 
               <FormRow label="">
                 <div className="space-y-3">
-                  <div className="flex flex-wrap items-start gap-3">
+                  <div className="flex flex-wrap items-start gap-x-[20px] gap-y-3">
                     {entryKind === 'website' && websitePreviews.length > 0
                       ? websitePreviews.map((preview, index) => {
                           const selected =
@@ -1123,60 +1108,78 @@ export function AddIconDialog({
                           return (
                             <div
                               key={`${index}-${preview.slice(-32)}`}
-                              className="group relative h-16 w-16 shrink-0"
+                              className="flex w-16 shrink-0 flex-col items-center gap-1.5"
                             >
-                              <button
-                                type="button"
-                                aria-pressed={selected}
-                                aria-label={translate('编辑 {name}', { name: candidateLabel })}
-                                title={translate('裁剪图标')}
-                                onClick={() =>
-                                  openCropEditor({ kind: 'website', source: preview, index })
-                                }
-                                disabled={submitting}
-                                className={cn(
-                                  'relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transition-none',
-                                  selected
-                                    ? 'border-primary ring-2 ring-primary/20'
-                                    : 'border-border hover:border-foreground/30'
-                                )}
-                                style={
-                                  iconColor !== 'none'
-                                    ? { backgroundColor: selectedColorPreset?.color }
-                                    : undefined
-                                }
-                              >
-                                <img
-                                  src={preview}
-                                  alt=""
-                                  draggable={false}
-                                  className="h-full w-full object-contain"
-                                />
-                                {selected ? (
-                                  <CheckCircle2 className="absolute right-1 top-1 z-10 h-4 w-4 fill-primary text-primary-foreground" />
-                                ) : null}
-                                <span className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[inherit] bg-black/60 text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-                                  <Pencil className="h-5 w-5" />
-                                </span>
-                              </button>
+                              <div className="group relative h-16 w-16">
+                                <button
+                                  type="button"
+                                  aria-pressed={selected}
+                                  aria-label={translate('编辑 {name}', { name: candidateLabel })}
+                                  title={translate('裁剪图标')}
+                                  onClick={() =>
+                                    openCropEditor({ kind: 'website', source: preview, index })
+                                  }
+                                  disabled={submitting}
+                                  className={cn(
+                                    'relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
+                                    ICON_PICKER_FOCUS_RING_CLASS_NAME,
+                                    selected
+                                      ? 'border-blue-500/45 ring-2 ring-blue-500/45'
+                                      : 'border-border hover:border-foreground/30'
+                                  )}
+                                  style={
+                                    iconColor !== 'none'
+                                      ? { backgroundColor: selectedColorPreset?.color }
+                                      : undefined
+                                  }
+                                >
+                                  <img
+                                    src={preview}
+                                    alt=""
+                                    draggable={false}
+                                    className="h-full w-full object-contain"
+                                  />
+                                  {selected ? (
+                                    <CheckCircle2 className="absolute right-1 top-1 z-10 h-4 w-4 fill-primary text-primary-foreground" />
+                                  ) : null}
+                                  <span className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] bg-black/60 text-white opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+                                    <Pencil className="h-4 w-4" />
+                                  </span>
+                                </button>
+                              </div>
+                              <span className="whitespace-nowrap text-center text-[11px] leading-4 text-muted-foreground">
+                                {candidateLabel}
+                              </span>
                             </div>
                           )
                         })
                       : null}
 
                     {entryKind !== 'website' || websitePreviews.length === 0 ? (
-                      <div className="flex w-20 shrink-0 flex-col items-center gap-1.5">
-                        <div className="relative h-16 w-16">
+                      <div className="flex w-16 shrink-0 flex-col items-center gap-1.5">
+                        <div className="group relative h-16 w-16">
                           <button
                             type="button"
                             aria-pressed={selectedIconSource === 'target'}
-                            aria-label={automaticPreviewLabel}
-                            onClick={() => handleIconSourceChange('target')}
+                            aria-label={
+                              automaticPreview
+                                ? translate('编辑 {name}', { name: automaticPreviewLabel })
+                                : automaticPreviewLabel
+                            }
+                            title={automaticPreview ? translate('裁剪图标') : undefined}
+                            onClick={() => {
+                              if (automaticPreview && !automaticPreviewLoading) {
+                                openCropEditor({ kind: 'target', source: automaticPreview })
+                                return
+                              }
+                              handleIconSourceChange('target')
+                            }}
                             disabled={submitting}
                             className={cn(
                               'relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
+                              ICON_PICKER_FOCUS_RING_CLASS_NAME,
                               selectedIconSource === 'target'
-                                ? 'border-primary ring-2 ring-primary/20'
+                                ? 'border-blue-500/45 ring-2 ring-blue-500/45'
                                 : 'border-border hover:border-foreground/30'
                             )}
                             style={
@@ -1201,16 +1204,12 @@ export function AddIconDialog({
                             {selectedIconSource === 'target' ? (
                               <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
                             ) : null}
+                            {automaticPreview && !automaticPreviewLoading ? (
+                              <span className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] bg-black/60 text-white opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+                                <Pencil className="h-4 w-4" />
+                              </span>
+                            ) : null}
                           </button>
-                          {automaticPreview && !automaticPreviewLoading ? (
-                            <CropEditButton
-                              label={translate('编辑 {name}', { name: automaticPreviewLabel })}
-                              disabled={submitting}
-                              onClick={() =>
-                                openCropEditor({ kind: 'target', source: automaticPreview })
-                              }
-                            />
-                          ) : null}
                         </div>
                         <span className="whitespace-nowrap text-center text-[11px] leading-4 text-muted-foreground">
                           {automaticPreviewLabel}
@@ -1218,62 +1217,74 @@ export function AddIconDialog({
                       </div>
                     ) : null}
 
-                    <div className="flex w-20 shrink-0 flex-col items-center gap-1.5">
-                      <button
-                        type="button"
-                        aria-pressed={selectedIconSource === 'text'}
-                        aria-label={translate('使用文字图标')}
-                        onClick={() => handleIconSourceChange('text')}
-                        disabled={submitting}
-                        className={cn(
-                          'relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
-                          selectedIconSource === 'text'
-                            ? 'border-primary ring-2 ring-primary/20'
-                            : 'border-border hover:border-foreground/30'
-                        )}
-                      >
-                        {textIconPreview ? (
-                          <img
-                            src={textIconPreview}
-                            alt={translate('文字图标')}
-                            className="h-full w-full object-contain"
-                          />
-                        ) : (
-                          <Type className="h-5 w-5 text-muted-foreground" />
-                        )}
-                        {selectedIconSource === 'text' && textIconPreview ? (
-                          <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
-                        ) : null}
-                      </button>
+                    <div className="flex w-16 shrink-0 flex-col items-center gap-1.5">
+                      <div className="group relative h-16 w-16">
+                        <button
+                          type="button"
+                          aria-pressed={selectedIconSource === 'text'}
+                          aria-label={translate('编辑 {name}', { name: translate('文字图标') })}
+                          title={translate('裁剪图标')}
+                          onClick={() => {
+                            if (textIconPreview) {
+                              openCropEditor({ kind: 'text', source: textIconPreview })
+                              return
+                            }
+                            handleIconSourceChange('text')
+                          }}
+                          disabled={submitting}
+                          className={cn(
+                            'relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
+                            ICON_PICKER_FOCUS_RING_CLASS_NAME,
+                            selectedIconSource === 'text'
+                              ? 'border-blue-500/45 ring-2 ring-blue-500/45'
+                              : 'border-border hover:border-foreground/30'
+                          )}
+                        >
+                          {textIconPreview ? (
+                            <img
+                              src={textIconPreview}
+                              alt={translate('文字图标')}
+                              className="h-full w-full object-contain"
+                            />
+                          ) : (
+                            <Type className="h-5 w-5 text-muted-foreground" />
+                          )}
+                          {selectedIconSource === 'text' && textIconPreview ? (
+                            <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
+                          ) : null}
+                          {textIconPreview ? (
+                            <span className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] bg-black/60 text-white opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+                              <Pencil className="h-4 w-4" />
+                            </span>
+                          ) : null}
+                        </button>
+                      </div>
                       <span className="whitespace-nowrap text-center text-[11px] leading-4 text-muted-foreground">
                         {translate('文字图标')}
                       </span>
                     </div>
 
-                    <div className="flex w-20 shrink-0 flex-col items-center gap-1.5">
+                    <div className="flex w-16 shrink-0 flex-col items-center gap-1.5">
                       {customIconPath ? (
-                        <div className="relative h-16 w-16">
+                        <div className="group relative h-16 w-16">
                           <button
                             type="button"
                             aria-pressed={selectedIconSource === 'custom'}
-                            aria-label={translate(
-                              selectedIconSource === 'custom' ? '更换自定义图标' : '使用自定义图标'
-                            )}
-                            title={translate(
-                              selectedIconSource === 'custom' ? '更换自定义图标' : '使用自定义图标'
-                            )}
+                            aria-label={translate('编辑 {name}', {
+                              name: translate('自定义图标'),
+                            })}
+                            title={translate('裁剪图标')}
                             onClick={() => {
-                              if (selectedIconSource === 'custom') {
-                                void handlePickCustomIcon()
-                              } else {
-                                handleIconSourceChange('custom')
+                              if (customPreview) {
+                                openCropEditor({ kind: 'custom', source: customPreview })
                               }
                             }}
                             disabled={submitting || !customPreview}
                             className={cn(
                               'relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
+                              ICON_PICKER_FOCUS_RING_CLASS_NAME,
                               selectedIconSource === 'custom'
-                                ? 'border-primary ring-2 ring-primary/20'
+                                ? 'border-blue-500/45 ring-2 ring-blue-500/45'
                                 : 'border-border hover:border-foreground/30'
                             )}
                             style={
@@ -1296,16 +1307,12 @@ export function AddIconDialog({
                             {selectedIconSource === 'custom' && customPreview ? (
                               <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
                             ) : null}
+                            {customPreview && !customPreviewLoading ? (
+                              <span className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] bg-black/60 text-white opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+                                <Pencil className="h-4 w-4" />
+                              </span>
+                            ) : null}
                           </button>
-                          {customPreview && !customPreviewLoading ? (
-                            <CropEditButton
-                              label={translate('编辑 {name}', { name: translate('自定义图标') })}
-                              disabled={submitting}
-                              onClick={() =>
-                                openCropEditor({ kind: 'custom', source: customPreview })
-                              }
-                            />
-                          ) : null}
                         </div>
                       ) : (
                         <button
@@ -1313,7 +1320,10 @@ export function AddIconDialog({
                           aria-label={translate('添加自定义图标')}
                           onClick={() => void handlePickCustomIcon()}
                           disabled={submitting}
-                          className="flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-border bg-muted/15 text-muted-foreground transition-[border-color,color,background-color,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 hover:border-foreground/35 hover:bg-muted/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none"
+                          className={cn(
+                            'flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-border bg-muted/15 text-muted-foreground transition-[border-color,color,background-color,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 hover:border-foreground/35 hover:bg-muted/35 hover:text-foreground disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
+                            ICON_PICKER_FOCUS_RING_CLASS_NAME
+                          )}
                         >
                           <ImagePlus className="h-5 w-5" />
                         </button>
