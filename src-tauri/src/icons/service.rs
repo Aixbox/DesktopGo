@@ -1,5 +1,8 @@
 use base64::Engine;
 use futures_util::{stream, StreamExt};
+use once_cell::sync::Lazy;
+use percent_encoding::percent_decode_str;
+use regex::Regex;
 use scraper::{Html, Selector};
 use std::cmp::Reverse;
 use std::collections::HashSet;
@@ -255,9 +258,52 @@ pub fn update_icon_entry(
 const MAX_WEBSITE_HTML_BYTES: usize = 2 * 1024 * 1024;
 const MAX_WEBSITE_ICON_BYTES: usize = 5 * 1024 * 1024;
 const MAX_WEBSITE_MANIFEST_BYTES: usize = 1024 * 1024;
-const MAX_WEBSITE_ICON_CANDIDATES: usize = 20;
+const MAX_WEBSITE_FRONTEND_ASSET_BYTES: usize = 2 * 1024 * 1024;
+const MAX_WEBSITE_ICON_CANDIDATES: usize = 40;
 const MAX_CONCURRENT_WEBSITE_ICON_REQUESTS: usize = 6;
 const MAX_WEBSITE_ICON_RESULTS: usize = 8;
+const MAX_CLIENT_REDIRECTS: usize = 3;
+const MAX_MANIFEST_REQUESTS: usize = 4;
+const MAX_BROWSER_CONFIG_REQUESTS: usize = 2;
+const MAX_STYLESHEET_REQUESTS: usize = 4;
+const MAX_SCRIPT_REQUESTS: usize = 3;
+
+static CSS_URL_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(?is)url\(\s*[\"']?([^\)\"']+)[\"']?\s*\)"#).expect("valid CSS URL regex")
+});
+static META_REFRESH_URL_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(?is)(?:^|;)\s*url\s*=\s*[\"']?([^\"';]+)"#).expect("valid meta refresh regex")
+});
+static JS_LOCATION_ASSIGN_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r#"(?is)(?:(?:window|document|top|self)\s*\.\s*)?location(?:\s*\.\s*href)?\s*=\s*[\"']([^\"']+)[\"']"#,
+    )
+    .expect("valid JavaScript location assignment regex")
+});
+static JS_LOCATION_CALL_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r#"(?is)(?:(?:window|document|top|self)\s*\.\s*)?location\s*\.\s*(?:assign|replace)\s*\(\s*[\"']([^\"']+)[\"']"#,
+    )
+    .expect("valid JavaScript location call regex")
+});
+static LINK_HEADER_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(?is)<([^>]+)>\s*;\s*[^,]*?rel\s*=\s*[\"']?([^\"';,]+)"#)
+        .expect("valid Link header regex")
+});
+static XML_IMAGE_SOURCE_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(?is)<(?:square\d+x\d+logo|image)[^>]+src\s*=\s*[\"']([^\"']+)"#)
+        .expect("valid browser config image regex")
+});
+static FRONTEND_ICON_ASSET_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r#"(?is)[\"']([^\"']*(?:favicon|logo|site-icon|site-mark|brand-mark|brand-logo|app-icon)[^\"']*\.(?:svg|png|webp|ico|avif|jpe?g)(?:\?[^\"']*)?)[\"']"#,
+    )
+    .expect("valid frontend icon asset regex")
+});
+static FRONTEND_INLINE_SVG_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(?is)(<svg\b[^>]*(?:logo|brand|site-icon)[^>]*>.*?</svg>)"#)
+        .expect("valid frontend inline SVG regex")
+});
 
 #[derive(Debug, Clone)]
 struct WebsiteIconCandidate {
@@ -265,6 +311,18 @@ struct WebsiteIconCandidate {
     declared_size: u32,
     source_priority: u8,
     discovery_index: usize,
+}
+
+#[derive(Debug, Default)]
+struct WebsitePageCandidates {
+    title: String,
+    candidates: Vec<WebsiteIconCandidate>,
+    manifests: Vec<Url>,
+    browser_configs: Vec<Url>,
+    stylesheets: Vec<Url>,
+    scripts: Vec<Url>,
+    redirect: Option<Url>,
+    has_explicit_sources: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -296,10 +354,16 @@ fn normalize_website_url(value: &str) -> Result<Url, String> {
     Ok(url)
 }
 
+struct WebsiteResponse {
+    final_url: Url,
+    bytes: Vec<u8>,
+    link_headers: Vec<String>,
+}
+
 async fn read_response_limited(
     response: reqwest::Response,
     max_bytes: usize,
-) -> Result<(Url, Vec<u8>), String> {
+) -> Result<WebsiteResponse, String> {
     if !response.status().is_success() {
         return Err(format!("Website returned HTTP {}", response.status()));
     }
@@ -311,6 +375,13 @@ async fn read_response_limited(
     }
 
     let final_url = response.url().clone();
+    let link_headers = response
+        .headers()
+        .get_all(reqwest::header::LINK)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .map(str::to_string)
+        .collect();
     let mut bytes = Vec::new();
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
@@ -320,7 +391,33 @@ async fn read_response_limited(
         }
         bytes.extend_from_slice(&chunk);
     }
-    Ok((final_url, bytes))
+    Ok(WebsiteResponse {
+        final_url,
+        bytes,
+        link_headers,
+    })
+}
+
+async fn read_response_bytes_limited_any_status(
+    response: reqwest::Response,
+    max_bytes: usize,
+) -> Option<Vec<u8>> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > max_bytes as u64)
+    {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.ok()?;
+        if bytes.len().saturating_add(chunk.len()) > max_bytes {
+            return None;
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Some(bytes)
 }
 
 fn declared_website_icon_size(value: Option<&str>) -> u32 {
@@ -347,6 +444,50 @@ fn looks_like_website_icon(value: &str) -> bool {
         || normalized.contains("apple-touch-icon")
         || normalized.contains("logo")
         || normalized.contains("site-icon")
+        || normalized.contains("site-mark")
+        || normalized.contains("brand-mark")
+        || normalized.contains("brand-logo")
+        || normalized.contains("app-icon")
+}
+
+fn resolve_website_asset_url(base_url: &Url, value: &str) -> Option<Url> {
+    let trimmed = value.trim().trim_matches(['\"', '\'', ' ']);
+    if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("blob:") {
+        return None;
+    }
+    let url = if trimmed.starts_with("data:") {
+        Url::parse(trimmed).ok()?
+    } else {
+        base_url.join(trimmed).ok()?
+    };
+    matches!(url.scheme(), "http" | "https" | "data").then_some(url)
+}
+
+fn push_website_icon_candidate(
+    candidates: &mut Vec<WebsiteIconCandidate>,
+    base_url: &Url,
+    value: &str,
+    declared_size: u32,
+    source_priority: u8,
+) {
+    let Some(url) = resolve_website_asset_url(base_url, value) else {
+        return;
+    };
+    candidates.push(WebsiteIconCandidate {
+        url,
+        declared_size,
+        source_priority,
+        discovery_index: candidates.len(),
+    });
+}
+
+fn push_unique_http_url(urls: &mut Vec<Url>, base_url: &Url, value: &str) {
+    let Some(url) = resolve_website_asset_url(base_url, value) else {
+        return;
+    };
+    if matches!(url.scheme(), "http" | "https") && !urls.iter().any(|candidate| candidate == &url) {
+        urls.push(url);
+    }
 }
 
 fn best_srcset_candidate(value: &str) -> Option<(&str, u32)> {
@@ -403,42 +544,305 @@ fn collect_json_logo_values(value: &serde_json::Value, logos: &mut Vec<String>) 
     }
 }
 
-fn website_icon_candidates(
-    html: &str,
-    page_url: &Url,
-) -> (String, Vec<WebsiteIconCandidate>, Vec<Url>) {
+fn document_base_url(document: &Html, page_url: &Url) -> Url {
+    let selector = Selector::parse("base[href]").expect("valid base URL selector");
+    document
+        .select(&selector)
+        .next()
+        .and_then(|element| element.value().attr("href"))
+        .and_then(|value| page_url.join(value).ok())
+        .filter(|url| matches!(url.scheme(), "http" | "https"))
+        .unwrap_or_else(|| page_url.clone())
+}
+
+fn collect_image_candidates(
+    document: &Html,
+    base_url: &Url,
+    candidates: &mut Vec<WebsiteIconCandidate>,
+) {
+    let selector = Selector::parse("img, picture source").expect("valid image selector");
+    for element in document.select(&selector) {
+        let attributes = element.value();
+        let source_values = [
+            attributes.attr("src").unwrap_or_default(),
+            attributes.attr("data-src").unwrap_or_default(),
+            attributes.attr("data-original").unwrap_or_default(),
+            attributes.attr("data-lazy-src").unwrap_or_default(),
+            attributes.attr("data-url").unwrap_or_default(),
+            attributes.attr("data-image").unwrap_or_default(),
+        ];
+        let srcset_values = [
+            attributes.attr("srcset").unwrap_or_default(),
+            attributes.attr("data-srcset").unwrap_or_default(),
+        ];
+        let semantic_text = source_values
+            .iter()
+            .chain(srcset_values.iter())
+            .copied()
+            .chain([
+                attributes.attr("alt").unwrap_or_default(),
+                attributes.attr("class").unwrap_or_default(),
+                attributes.attr("id").unwrap_or_default(),
+                attributes.attr("aria-label").unwrap_or_default(),
+            ])
+            .collect::<Vec<_>>()
+            .join(" ");
+        if !looks_like_website_icon(&semantic_text) {
+            continue;
+        }
+
+        let declared_width = attributes
+            .attr("width")
+            .and_then(|value| value.parse::<u32>().ok())
+            .unwrap_or_default();
+        for source in source_values {
+            push_website_icon_candidate(candidates, base_url, source, declared_width, 2);
+        }
+        for srcset in srcset_values {
+            if let Some((source, declared_size)) = best_srcset_candidate(srcset) {
+                push_website_icon_candidate(candidates, base_url, source, declared_size, 2);
+            }
+        }
+    }
+}
+
+fn collect_css_icon_candidates(
+    css: &str,
+    base_url: &Url,
+    candidates: &mut Vec<WebsiteIconCandidate>,
+    source_priority: u8,
+) {
+    for captures in CSS_URL_RE.captures_iter(css) {
+        let Some(value) = captures.get(1).map(|capture| capture.as_str().trim()) else {
+            continue;
+        };
+        let context_start = captures
+            .get(0)
+            .map(|capture| capture.start().saturating_sub(180))
+            .unwrap_or_default();
+        let context_end = captures
+            .get(0)
+            .map(|capture| capture.end())
+            .unwrap_or(context_start)
+            .min(css.len());
+        let context = css.get(context_start..context_end).unwrap_or_default();
+        if looks_like_website_icon(value) || looks_like_website_icon(context) {
+            push_website_icon_candidate(candidates, base_url, value, 0, source_priority);
+        }
+    }
+}
+
+fn collect_frontend_asset_candidates(
+    source: &str,
+    base_url: &Url,
+    candidates: &mut Vec<WebsiteIconCandidate>,
+) {
+    let normalized = source
+        .replace("\\/", "/")
+        .replace("\\u002F", "/")
+        .replace("\\u002f", "/")
+        .replace("\\u003A", ":")
+        .replace("\\u003a", ":");
+    for captures in FRONTEND_ICON_ASSET_RE.captures_iter(&normalized) {
+        if let Some(value) = captures.get(1).map(|capture| capture.as_str()) {
+            push_website_icon_candidate(candidates, base_url, value, 0, 1);
+        }
+    }
+    for captures in FRONTEND_INLINE_SVG_RE.captures_iter(&normalized) {
+        let Some(svg) = captures.get(1).map(|capture| capture.as_str()) else {
+            continue;
+        };
+        let data_uri = format!(
+            "data:image/svg+xml;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(svg.as_bytes())
+        );
+        push_website_icon_candidate(candidates, base_url, &data_uri, 0, 1);
+    }
+}
+
+fn collect_document_css_candidates(
+    document: &Html,
+    base_url: &Url,
+    candidates: &mut Vec<WebsiteIconCandidate>,
+) {
+    let style_selector = Selector::parse("style").expect("valid style selector");
+    for element in document.select(&style_selector) {
+        collect_css_icon_candidates(&element.inner_html(), base_url, candidates, 2);
+    }
+
+    let inline_style_selector = Selector::parse("[style]").expect("valid inline style selector");
+    for element in document.select(&inline_style_selector) {
+        let style = element.value().attr("style").unwrap_or_default();
+        let semantic_text = [
+            element.value().attr("class").unwrap_or_default(),
+            element.value().attr("id").unwrap_or_default(),
+            element.value().attr("aria-label").unwrap_or_default(),
+            style,
+        ]
+        .join(" ");
+        if looks_like_website_icon(&semantic_text) {
+            collect_css_icon_candidates(style, base_url, candidates, 2);
+        }
+    }
+}
+
+fn svg_declared_size(element: &scraper::ElementRef<'_>) -> u32 {
+    let attributes = element.value();
+    let width = attributes
+        .attr("width")
+        .and_then(|value| value.trim_end_matches("px").parse::<f32>().ok());
+    let height = attributes
+        .attr("height")
+        .and_then(|value| value.trim_end_matches("px").parse::<f32>().ok());
+    if let (Some(width), Some(height)) = (width, height) {
+        return width.min(height).round().max(0.0) as u32;
+    }
+    attributes
+        .attr("viewBox")
+        .or_else(|| attributes.attr("viewbox"))
+        .and_then(|value| {
+            let values = value
+                .split(|character: char| character.is_ascii_whitespace() || character == ',')
+                .filter_map(|value| value.parse::<f32>().ok())
+                .collect::<Vec<_>>();
+            (values.len() == 4).then(|| values[2].abs().min(values[3].abs()).round() as u32)
+        })
+        .unwrap_or_default()
+}
+
+fn collect_inline_svg_candidates(
+    document: &Html,
+    base_url: &Url,
+    candidates: &mut Vec<WebsiteIconCandidate>,
+) {
+    let selector = Selector::parse("svg").expect("valid SVG selector");
+    for element in document.select(&selector).take(24) {
+        let semantic_text = [
+            element.value().attr("class").unwrap_or_default(),
+            element.value().attr("id").unwrap_or_default(),
+            element.value().attr("aria-label").unwrap_or_default(),
+            element
+                .select(&Selector::parse("title").expect("valid SVG title selector"))
+                .next()
+                .map(|title| title.text().collect::<String>())
+                .unwrap_or_default()
+                .as_str(),
+        ]
+        .join(" ");
+        if !looks_like_website_icon(&semantic_text) {
+            continue;
+        }
+        let mut svg = element.html();
+        if !svg.contains("xmlns=") {
+            svg = svg.replacen("<svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"", 1);
+        }
+        let data_uri = format!(
+            "data:image/svg+xml;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(svg.as_bytes())
+        );
+        push_website_icon_candidate(
+            candidates,
+            base_url,
+            &data_uri,
+            svg_declared_size(&element),
+            3,
+        );
+    }
+}
+
+fn client_side_redirect(document: &Html, base_url: &Url) -> Option<Url> {
+    let meta_selector = Selector::parse("meta[http-equiv][content]").expect("valid meta selector");
+    for element in document.select(&meta_selector) {
+        if !element
+            .value()
+            .attr("http-equiv")
+            .is_some_and(|value| value.eq_ignore_ascii_case("refresh"))
+        {
+            continue;
+        }
+        let content = element.value().attr("content").unwrap_or_default();
+        if let Some(value) = META_REFRESH_URL_RE
+            .captures(content)
+            .and_then(|captures| captures.get(1))
+            .map(|capture| capture.as_str())
+        {
+            if let Some(url) = resolve_website_asset_url(base_url, value)
+                .filter(|url| matches!(url.scheme(), "http" | "https"))
+            {
+                return Some(url);
+            }
+        }
+    }
+
+    let script_selector = Selector::parse("script:not([src])").expect("valid script selector");
+    for script in document.select(&script_selector) {
+        let code = script.text().collect::<String>();
+        if code.len() > 4096 {
+            continue;
+        }
+        for regex in [&*JS_LOCATION_CALL_RE, &*JS_LOCATION_ASSIGN_RE] {
+            let Some(captures) = regex.captures(&code) else {
+                continue;
+            };
+            let prefix = captures
+                .get(0)
+                .and_then(|matched| code.get(..matched.start()))
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            if prefix.contains("function")
+                || prefix.contains("addeventlistener")
+                || prefix.contains("=>")
+            {
+                continue;
+            }
+            if let Some(url) = captures
+                .get(1)
+                .and_then(|capture| resolve_website_asset_url(base_url, capture.as_str()))
+                .filter(|url| matches!(url.scheme(), "http" | "https"))
+            {
+                return Some(url);
+            }
+        }
+    }
+    None
+}
+
+fn website_icon_candidates(html: &str, page_url: &Url) -> WebsitePageCandidates {
     let document = Html::parse_document(html);
+    let base_url = document_base_url(&document, page_url);
     let title_selector = Selector::parse("title").expect("valid title selector");
-    let link_selector = Selector::parse("link[href]").expect("valid link selector");
-    let image_selector = Selector::parse("img[src]").expect("valid image selector");
+    let link_selector = Selector::parse("link").expect("valid link selector");
     let meta_selector = Selector::parse("meta[content]").expect("valid meta selector");
     let json_ld_selector =
         Selector::parse("script[type='application/ld+json']").expect("valid JSON-LD selector");
-    let title = document
-        .select(&title_selector)
-        .next()
-        .map(|element| element.text().collect::<String>().trim().to_string())
-        .unwrap_or_default();
-
-    let mut manifests = Vec::new();
-    let mut candidates = Vec::new();
+    let script_selector = Selector::parse("script[src]").expect("valid script selector");
+    let noscript_selector = Selector::parse("noscript").expect("valid noscript selector");
+    let mut result = WebsitePageCandidates {
+        title: document
+            .select(&title_selector)
+            .next()
+            .map(|element| element.text().collect::<String>().trim().to_string())
+            .unwrap_or_default(),
+        redirect: client_side_redirect(&document, &base_url),
+        ..WebsitePageCandidates::default()
+    };
 
     for element in document.select(&link_selector) {
         let rel = element.value().attr("rel").unwrap_or_default();
         let rel_values = rel.split_ascii_whitespace().collect::<Vec<_>>();
         let href = element.value().attr("href").unwrap_or_default();
-        let Ok(url) = page_url.join(href) else {
-            continue;
-        };
-        if !matches!(url.scheme(), "http" | "https") {
-            continue;
-        }
 
         if rel_values
             .iter()
             .any(|value| value.eq_ignore_ascii_case("manifest"))
         {
-            manifests.push(url.clone());
+            push_unique_http_url(&mut result.manifests, &base_url, href);
+        }
+        if rel_values
+            .iter()
+            .any(|value| value.eq_ignore_ascii_case("stylesheet"))
+        {
+            push_unique_http_url(&mut result.stylesheets, &base_url, href);
         }
 
         let is_apple_touch_icon = rel_values.iter().any(|value| {
@@ -451,6 +855,7 @@ fn website_icon_candidates(
                     || value.eq_ignore_ascii_case("mask-icon")
                     || value.eq_ignore_ascii_case("fluid-icon")
                     || value.eq_ignore_ascii_case("logo")
+                    || value.eq_ignore_ascii_case("image_src")
             });
         let is_image_preload = rel_values
             .iter()
@@ -458,63 +863,65 @@ fn website_icon_candidates(
             && element
                 .value()
                 .attr("as")
-                .is_some_and(|value| value.eq_ignore_ascii_case("image"))
-            && looks_like_website_icon(href);
-        if !is_icon && !is_image_preload {
-            continue;
-        }
-
-        candidates.push(WebsiteIconCandidate {
-            url,
-            declared_size: declared_website_icon_size(element.value().attr("sizes")),
-            source_priority: if is_apple_touch_icon {
-                4
-            } else if is_icon {
-                3
-            } else {
-                1
-            },
-            discovery_index: candidates.len(),
-        });
-    }
-
-    for element in document.select(&image_selector) {
-        let src = element.value().attr("src").unwrap_or_default();
-        let srcset = element.value().attr("srcset").unwrap_or_default();
+                .is_some_and(|value| value.eq_ignore_ascii_case("image"));
         let semantic_text = [
-            src,
-            srcset,
-            element.value().attr("alt").unwrap_or_default(),
-            element.value().attr("class").unwrap_or_default(),
-            element.value().attr("id").unwrap_or_default(),
+            href,
+            element.value().attr("imagesrcset").unwrap_or_default(),
+            element.value().attr("title").unwrap_or_default(),
         ]
         .join(" ");
-        if !looks_like_website_icon(&semantic_text) {
-            continue;
-        }
-        let declared_width = element
-            .value()
-            .attr("width")
-            .and_then(|value| value.parse::<u32>().ok())
-            .unwrap_or_default();
-        let mut sources = vec![(src, declared_width)];
-        if let Some(source) = best_srcset_candidate(srcset) {
-            sources.push(source);
-        }
-        for (source, declared_size) in sources {
-            let Ok(url) = page_url.join(source) else {
-                continue;
+        if is_icon || (is_image_preload && looks_like_website_icon(&semantic_text)) {
+            let priority = if is_apple_touch_icon {
+                5
+            } else if is_icon {
+                4
+            } else {
+                2
             };
-            if !matches!(url.scheme(), "http" | "https") {
-                continue;
+            push_website_icon_candidate(
+                &mut result.candidates,
+                &base_url,
+                href,
+                declared_website_icon_size(element.value().attr("sizes")),
+                priority,
+            );
+            if let Some((source, declared_size)) =
+                best_srcset_candidate(element.value().attr("imagesrcset").unwrap_or_default())
+            {
+                push_website_icon_candidate(
+                    &mut result.candidates,
+                    &base_url,
+                    source,
+                    declared_size,
+                    priority,
+                );
             }
-            candidates.push(WebsiteIconCandidate {
-                url,
-                declared_size,
-                source_priority: 1,
-                discovery_index: candidates.len(),
-            });
         }
+    }
+
+    for element in document.select(&script_selector) {
+        push_unique_http_url(
+            &mut result.scripts,
+            &base_url,
+            element.value().attr("src").unwrap_or_default(),
+        );
+    }
+
+    collect_image_candidates(&document, &base_url, &mut result.candidates);
+    collect_document_css_candidates(&document, &base_url, &mut result.candidates);
+    collect_inline_svg_candidates(&document, &base_url, &mut result.candidates);
+
+    for element in document.select(&noscript_selector) {
+        let text_content = element.text().collect::<String>();
+        let fragment_source = if text_content.trim().is_empty() {
+            element.inner_html()
+        } else {
+            text_content
+        };
+        let fragment = Html::parse_fragment(&fragment_source);
+        collect_image_candidates(&fragment, &base_url, &mut result.candidates);
+        collect_document_css_candidates(&fragment, &base_url, &mut result.candidates);
+        collect_inline_svg_candidates(&fragment, &base_url, &mut result.candidates);
     }
 
     for element in document.select(&meta_selector) {
@@ -525,7 +932,14 @@ fn website_icon_candidates(
             .or_else(|| element.value().attr("itemprop"))
             .unwrap_or_default()
             .to_ascii_lowercase();
-        if !matches!(
+        let content = element.value().attr("content").unwrap_or_default();
+        if property == "msapplication-config" {
+            if !content.eq_ignore_ascii_case("none") {
+                push_unique_http_url(&mut result.browser_configs, &base_url, content);
+            }
+            continue;
+        }
+        if matches!(
             property.as_str(),
             "og:image"
                 | "og:image:url"
@@ -534,20 +948,10 @@ fn website_icon_candidates(
                 | "msapplication-tileimage"
                 | "image"
                 | "logo"
+                | "thumbnail"
+                | "thumbnailurl"
         ) {
-            continue;
-        }
-        let content = element.value().attr("content").unwrap_or_default();
-        let Ok(url) = page_url.join(content) else {
-            continue;
-        };
-        if matches!(url.scheme(), "http" | "https") {
-            candidates.push(WebsiteIconCandidate {
-                url,
-                declared_size: 0,
-                source_priority: 2,
-                discovery_index: candidates.len(),
-            });
+            push_website_icon_candidate(&mut result.candidates, &base_url, content, 0, 3);
         }
     }
 
@@ -559,37 +963,107 @@ fn website_icon_candidates(
         let mut logos = Vec::new();
         collect_json_logo_values(&value, &mut logos);
         for logo in logos {
-            let Ok(url) = page_url.join(&logo) else {
+            push_website_icon_candidate(&mut result.candidates, &base_url, &logo, 0, 3);
+        }
+    }
+
+    result.has_explicit_sources = !result.candidates.is_empty() || !result.manifests.is_empty();
+
+    for (path, declared_size, source_priority) in [
+        ("/favicon.svg", 1024, 3),
+        ("/android-chrome-512x512.png", 512, 3),
+        ("/android-chrome-192x192.png", 192, 3),
+        ("/apple-touch-icon.png", 180, 3),
+        ("/mstile-150x150.png", 150, 2),
+        ("/safari-pinned-tab.svg", 1024, 2),
+        ("/favicon-96x96.png", 96, 2),
+        ("/favicon.png", 64, 2),
+        ("/favicon.ico", 32, 2),
+        ("/logo.svg", 1024, 1),
+        ("/logo.png", 256, 1),
+    ] {
+        push_website_icon_candidate(
+            &mut result.candidates,
+            page_url,
+            path,
+            declared_size,
+            source_priority,
+        );
+    }
+    for manifest_path in [
+        "/site.webmanifest",
+        "/manifest.webmanifest",
+        "/manifest.json",
+    ] {
+        push_unique_http_url(&mut result.manifests, page_url, manifest_path);
+    }
+    if result.browser_configs.is_empty() {
+        push_unique_http_url(&mut result.browser_configs, page_url, "/browserconfig.xml");
+    }
+
+    result
+}
+
+fn extend_candidates_from_link_headers(
+    link_headers: &[String],
+    page_url: &Url,
+    candidates: &mut Vec<WebsiteIconCandidate>,
+    manifests: &mut Vec<Url>,
+) {
+    for header in link_headers {
+        for captures in LINK_HEADER_RE.captures_iter(header) {
+            let Some(target) = captures.get(1).map(|capture| capture.as_str()) else {
                 continue;
             };
-            if matches!(url.scheme(), "http" | "https") {
-                candidates.push(WebsiteIconCandidate {
-                    url,
-                    declared_size: 0,
-                    source_priority: 2,
-                    discovery_index: candidates.len(),
-                });
+            let rel = captures
+                .get(2)
+                .map(|capture| capture.as_str())
+                .unwrap_or_default();
+            let rel_values = rel.split_ascii_whitespace().collect::<Vec<_>>();
+            if rel_values
+                .iter()
+                .any(|value| value.eq_ignore_ascii_case("manifest"))
+            {
+                push_unique_http_url(manifests, page_url, target);
+            }
+            if rel_values.iter().any(|value| {
+                value.eq_ignore_ascii_case("icon")
+                    || value.eq_ignore_ascii_case("apple-touch-icon")
+                    || value.eq_ignore_ascii_case("mask-icon")
+            }) {
+                push_website_icon_candidate(candidates, page_url, target, 0, 4);
             }
         }
     }
+}
 
-    for (path, declared_size, source_priority) in [
-        ("/favicon.svg", 1024, 2),
-        ("/apple-touch-icon.png", 180, 2),
-        ("/favicon.png", 64, 1),
-        ("/favicon.ico", 32, 1),
-    ] {
-        if let Ok(url) = page_url.join(path) {
-            candidates.push(WebsiteIconCandidate {
-                url,
-                declared_size,
-                source_priority,
-                discovery_index: candidates.len(),
-            });
-        }
+fn external_favicon_candidates(
+    page_url: &Url,
+    discovery_index: usize,
+) -> Vec<WebsiteIconCandidate> {
+    let Some(host) = page_url.host_str() else {
+        return Vec::new();
+    };
+    let mut urls = Vec::new();
+    if let Ok(mut google) = Url::parse("https://www.google.com/s2/favicons") {
+        google
+            .query_pairs_mut()
+            .append_pair("domain_url", &page_url.origin().ascii_serialization())
+            .append_pair("sz", "256");
+        urls.push(google);
     }
-
-    (title, candidates, manifests)
+    if let Ok(duckduckgo) = Url::parse(&format!("https://icons.duckduckgo.com/ip3/{host}.ico")) {
+        urls.push(duckduckgo);
+    }
+    urls.into_iter()
+        .enumerate()
+        .map(|(index, url)| WebsiteIconCandidate {
+            url,
+            declared_size: 256,
+            source_priority: 0,
+            discovery_index: discovery_index.saturating_add(index),
+        })
+        .collect()
 }
 
 fn website_manifest_icon_candidates(
@@ -600,27 +1074,65 @@ fn website_manifest_icon_candidates(
     let Ok(manifest) = serde_json::from_slice::<serde_json::Value>(bytes) else {
         return Vec::new();
     };
-    let Some(icons) = manifest.get("icons").and_then(|value| value.as_array()) else {
-        return Vec::new();
-    };
+    let mut icons = manifest
+        .get("icons")
+        .and_then(|value| value.as_array())
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    if let Some(shortcuts) = manifest.get("shortcuts").and_then(|value| value.as_array()) {
+        for shortcut in shortcuts {
+            if let Some(shortcut_icons) = shortcut.get("icons").and_then(|value| value.as_array()) {
+                icons.extend(shortcut_icons);
+            }
+        }
+    }
 
     icons
-        .iter()
+        .into_iter()
         .enumerate()
         .filter_map(|(index, icon)| {
             let src = icon.get("src")?.as_str()?;
-            let url = manifest_url.join(src).ok()?;
-            if !matches!(url.scheme(), "http" | "https") {
-                return None;
-            }
+            let url = resolve_website_asset_url(manifest_url, src)?;
+            let purpose = icon
+                .get("purpose")
+                .and_then(|value| value.as_str())
+                .unwrap_or_default();
             Some(WebsiteIconCandidate {
                 url,
                 declared_size: declared_website_icon_size(
                     icon.get("sizes").and_then(|value| value.as_str()),
                 ),
-                source_priority: 5,
+                source_priority: if purpose
+                    .split_ascii_whitespace()
+                    .any(|value| value.eq_ignore_ascii_case("any"))
+                {
+                    6
+                } else {
+                    5
+                },
                 discovery_index: discovery_index.saturating_add(index),
             })
+        })
+        .collect()
+}
+
+fn website_browser_config_icon_candidates(
+    bytes: &[u8],
+    config_url: &Url,
+    discovery_index: usize,
+) -> Vec<WebsiteIconCandidate> {
+    let xml = String::from_utf8_lossy(bytes);
+    XML_IMAGE_SOURCE_RE
+        .captures_iter(&xml)
+        .filter_map(|captures| captures.get(1).map(|capture| capture.as_str()))
+        .filter_map(|source| resolve_website_asset_url(config_url, source))
+        .enumerate()
+        .map(|(index, url)| WebsiteIconCandidate {
+            url,
+            declared_size: 0,
+            source_priority: 4,
+            discovery_index: discovery_index.saturating_add(index),
         })
         .collect()
 }
@@ -669,6 +1181,16 @@ fn website_icon_quality(
     }
 }
 
+fn has_visible_icon_content(image: &image::DynamicImage) -> bool {
+    let rgba = image.to_rgba8();
+    let sample_step = (rgba.width().max(rgba.height()) / 128).max(1) as usize;
+    (0..rgba.height() as usize).step_by(sample_step).any(|y| {
+        (0..rgba.width() as usize)
+            .step_by(sample_step)
+            .any(|x| rgba.get_pixel(x as u32, y as u32)[3] >= 16)
+    })
+}
+
 fn render_svg_website_icon(bytes: &[u8]) -> Option<image::DynamicImage> {
     let options = resvg::usvg::Options::default();
     let tree = resvg::usvg::Tree::from_data(bytes, &options).ok()?;
@@ -697,6 +1219,21 @@ fn render_svg_website_icon(bytes: &[u8]) -> Option<image::DynamicImage> {
     }
     let buffer = image::ImageBuffer::from_raw(output_width, output_height, rgba)?;
     Some(image::DynamicImage::ImageRgba8(buffer))
+}
+
+fn decode_data_url_bytes(url: &Url) -> Option<Vec<u8>> {
+    let value = url.as_str().strip_prefix("data:")?;
+    let (metadata, payload) = value.split_once(',')?;
+    if metadata
+        .split(';')
+        .any(|value| value.eq_ignore_ascii_case("base64"))
+    {
+        base64::engine::general_purpose::STANDARD
+            .decode(payload.as_bytes())
+            .ok()
+    } else {
+        Some(percent_decode_str(payload).collect())
+    }
 }
 
 fn decode_website_icon(bytes: &[u8]) -> Option<image::DynamicImage> {
@@ -853,62 +1390,261 @@ fn website_icon_data_uris(
 
 pub async fn extract_website_icon(value: String) -> Result<WebsiteIconResult, String> {
     let url = normalize_website_url(&value)?;
+    let mut default_headers = reqwest::header::HeaderMap::new();
+    default_headers.insert(
+        reqwest::header::ACCEPT,
+        reqwest::header::HeaderValue::from_static(
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/png,*/*;q=0.8",
+        ),
+    );
+    default_headers.insert(
+        reqwest::header::ACCEPT_LANGUAGE,
+        reqwest::header::HeaderValue::from_static("zh-CN,zh;q=0.9,en;q=0.8"),
+    );
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::limited(5))
         .timeout(Duration::from_secs(12))
-        .user_agent(concat!("DesktopGo/", env!("CARGO_PKG_VERSION")))
+        .cookie_store(true)
+        .user_agent(concat!(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ",
+            "AppleWebKit/537.36 (KHTML, like Gecko) ",
+            "Chrome/138.0.0.0 Safari/537.36 DesktopGo/",
+            env!("CARGO_PKG_VERSION")
+        ))
+        .default_headers(default_headers)
         .build()
         .map_err(|error| format!("Failed to initialize website request: {error}"))?;
-    let response = client
-        .get(url.clone())
-        .send()
-        .await
-        .map_err(|error| format!("Failed to open website: {error}"))?;
-    let (page_url, html_bytes) = read_response_limited(response, MAX_WEBSITE_HTML_BYTES).await?;
-    let html = String::from_utf8_lossy(&html_bytes);
-    let (title, mut candidates, manifests) = website_icon_candidates(&html, &page_url);
 
-    for manifest_url in manifests.into_iter().take(2) {
-        let Ok(response) = client.get(manifest_url.clone()).send().await else {
-            continue;
+    let mut page_url = url.clone();
+    let mut page_candidates = website_icon_candidates("", &url);
+    let mut page_link_headers = Vec::new();
+    let mut current_url = url.clone();
+    let mut seen_pages = HashSet::new();
+    for _ in 0..=MAX_CLIENT_REDIRECTS {
+        if !seen_pages.insert(current_url.as_str().to_string()) {
+            break;
+        }
+        page_url = current_url.clone();
+        let Ok(response) = client.get(current_url.clone()).send().await else {
+            break;
         };
-        let Ok((final_manifest_url, bytes)) =
-            read_response_limited(response, MAX_WEBSITE_MANIFEST_BYTES).await
+        page_url = response.url().clone();
+        let Ok(page_response) = read_response_limited(response, MAX_WEBSITE_HTML_BYTES).await
+        else {
+            page_candidates = website_icon_candidates("", &page_url);
+            break;
+        };
+        page_url = page_response.final_url.clone();
+        let html = String::from_utf8_lossy(&page_response.bytes);
+        let discovered = website_icon_candidates(&html, &page_url);
+        if let Some(redirect) = discovered.redirect.clone() {
+            if !seen_pages.contains(redirect.as_str()) {
+                current_url = redirect;
+                continue;
+            }
+        }
+        page_link_headers = page_response.link_headers;
+        page_candidates = discovered;
+        break;
+    }
+
+    let linked_candidate_count = page_candidates.candidates.len();
+    let linked_manifest_count = page_candidates.manifests.len();
+    extend_candidates_from_link_headers(
+        &page_link_headers,
+        &page_url,
+        &mut page_candidates.candidates,
+        &mut page_candidates.manifests,
+    );
+    if page_candidates.candidates.len() > linked_candidate_count
+        || page_candidates.manifests.len() > linked_manifest_count
+    {
+        page_candidates.has_explicit_sources = true;
+    }
+
+    if !page_candidates.has_explicit_sources {
+        for stylesheet_url in page_candidates
+            .stylesheets
+            .clone()
+            .into_iter()
+            .take(MAX_STYLESHEET_REQUESTS)
+        {
+            let Ok(response) = client
+                .get(stylesheet_url)
+                .header(reqwest::header::REFERER, page_url.as_str())
+                .send()
+                .await
+            else {
+                continue;
+            };
+            let Ok(stylesheet) =
+                read_response_limited(response, MAX_WEBSITE_FRONTEND_ASSET_BYTES).await
+            else {
+                continue;
+            };
+            let css = String::from_utf8_lossy(&stylesheet.bytes);
+            collect_css_icon_candidates(
+                &css,
+                &stylesheet.final_url,
+                &mut page_candidates.candidates,
+                2,
+            );
+        }
+
+        for script_url in page_candidates
+            .scripts
+            .clone()
+            .into_iter()
+            .take(MAX_SCRIPT_REQUESTS)
+        {
+            let Ok(response) = client
+                .get(script_url)
+                .header(reqwest::header::REFERER, page_url.as_str())
+                .send()
+                .await
+            else {
+                continue;
+            };
+            let Ok(script) =
+                read_response_limited(response, MAX_WEBSITE_FRONTEND_ASSET_BYTES).await
+            else {
+                continue;
+            };
+            let source = String::from_utf8_lossy(&script.bytes);
+            collect_frontend_asset_candidates(
+                &source,
+                &script.final_url,
+                &mut page_candidates.candidates,
+            );
+        }
+    }
+
+    for manifest_url in page_candidates
+        .manifests
+        .clone()
+        .into_iter()
+        .take(MAX_MANIFEST_REQUESTS)
+    {
+        let Ok(response) = client
+            .get(manifest_url.clone())
+            .header(reqwest::header::REFERER, page_url.as_str())
+            .send()
+            .await
         else {
             continue;
         };
-        let discovery_index = candidates.len();
-        candidates.extend(website_manifest_icon_candidates(
-            &bytes,
-            &final_manifest_url,
-            discovery_index,
-        ));
+        let Ok(manifest) = read_response_limited(response, MAX_WEBSITE_MANIFEST_BYTES).await else {
+            continue;
+        };
+        let discovery_index = page_candidates.candidates.len();
+        page_candidates
+            .candidates
+            .extend(website_manifest_icon_candidates(
+                &manifest.bytes,
+                &manifest.final_url,
+                discovery_index,
+            ));
     }
 
-    sort_and_deduplicate_website_icon_candidates(&mut candidates);
-    let decoded_candidates = stream::iter(candidates.into_iter().take(MAX_WEBSITE_ICON_CANDIDATES))
-        .map(|candidate| {
-            let client = client.clone();
-            async move {
-                let response = client.get(candidate.url.clone()).send().await.ok()?;
-                let (_, bytes) = read_response_limited(response, MAX_WEBSITE_ICON_BYTES)
+    for config_url in page_candidates
+        .browser_configs
+        .clone()
+        .into_iter()
+        .take(MAX_BROWSER_CONFIG_REQUESTS)
+    {
+        let Ok(response) = client
+            .get(config_url)
+            .header(reqwest::header::REFERER, page_url.as_str())
+            .send()
+            .await
+        else {
+            continue;
+        };
+        let Ok(config) = read_response_limited(response, MAX_WEBSITE_MANIFEST_BYTES).await else {
+            continue;
+        };
+        let discovery_index = page_candidates.candidates.len();
+        page_candidates
+            .candidates
+            .extend(website_browser_config_icon_candidates(
+                &config.bytes,
+                &config.final_url,
+                discovery_index,
+            ));
+    }
+
+    sort_and_deduplicate_website_icon_candidates(&mut page_candidates.candidates);
+    let asset_referer = page_url.clone();
+    let mut decoded_candidates = stream::iter(
+        page_candidates
+            .candidates
+            .into_iter()
+            .take(MAX_WEBSITE_ICON_CANDIDATES),
+    )
+    .map(|candidate| {
+        let client = client.clone();
+        let asset_referer = asset_referer.clone();
+        async move {
+            let bytes = if candidate.url.scheme() == "data" {
+                decode_data_url_bytes(&candidate.url)?
+            } else {
+                let response = client
+                    .get(candidate.url.clone())
+                    .header(reqwest::header::REFERER, asset_referer.as_str())
+                    .send()
                     .await
                     .ok()?;
-                let image = decode_website_icon(&bytes)?;
-                let quality = website_icon_quality(&image, &candidate);
-                Some((quality, image))
+                read_response_limited(response, MAX_WEBSITE_ICON_BYTES)
+                    .await
+                    .ok()?
+                    .bytes
+            };
+            let image = decode_website_icon(&bytes)?;
+            if !has_visible_icon_content(&image) {
+                return None;
             }
-        })
-        .buffer_unordered(MAX_CONCURRENT_WEBSITE_ICON_REQUESTS)
-        .filter_map(|candidate| async move { candidate })
-        .collect::<Vec<_>>()
-        .await;
+            let quality = website_icon_quality(&image, &candidate);
+            Some((quality, image))
+        }
+    })
+    .buffer_unordered(MAX_CONCURRENT_WEBSITE_ICON_REQUESTS)
+    .filter_map(|candidate| async move { candidate })
+    .collect::<Vec<_>>()
+    .await;
+
+    if decoded_candidates.is_empty() {
+        decoded_candidates = stream::iter(external_favicon_candidates(&page_url, 0))
+            .map(|candidate| {
+                let client = client.clone();
+                async move {
+                    let response = client.get(candidate.url.clone()).send().await.ok()?;
+                    let bytes =
+                        read_response_bytes_limited_any_status(response, MAX_WEBSITE_ICON_BYTES)
+                            .await?;
+                    let image = decode_website_icon(&bytes)?;
+                    if !has_visible_icon_content(&image) {
+                        return None;
+                    }
+                    let quality = website_icon_quality(&image, &candidate);
+                    Some((quality, image))
+                }
+            })
+            .buffer_unordered(2)
+            .filter_map(|candidate| async move { candidate })
+            .collect::<Vec<_>>()
+            .await;
+    }
+
     let icons = website_icon_data_uris(decoded_candidates);
     let icon_base64 = icons.first().cloned().unwrap_or_default();
 
     Ok(WebsiteIconResult {
         url: url.to_string(),
-        title,
+        title: if page_candidates.title.is_empty() {
+            page_url.host_str().unwrap_or_default().to_string()
+        } else {
+            page_candidates.title
+        },
         icon_base64,
         icons,
     })
@@ -947,7 +1683,10 @@ mod website_icon_tests {
             </html>
         "#;
 
-        let (title, candidates, manifests) = website_icon_candidates(html, &page_url);
+        let page = website_icon_candidates(html, &page_url);
+        let title = page.title;
+        let candidates = page.candidates;
+        let manifests = page.manifests;
 
         assert_eq!(title, "Example");
         assert!(candidates.iter().any(|candidate| {
@@ -986,6 +1725,135 @@ mod website_icon_tests {
     }
 
     #[test]
+    fn parses_base_lazy_css_inline_svg_noscript_and_client_redirects() {
+        let page_url = Url::parse("https://example.com/app/login").expect("valid page URL");
+        let html = r#"
+            <html>
+              <head>
+                <base href="https://cdn.example.com/ui/">
+                <meta http-equiv="refresh" content="0; url=../dashboard">
+                <style>.brand-logo { background-image: url('./brand/logo-bg.png'); }</style>
+              </head>
+              <body>
+                <img class="site-logo" data-src="images/lazy-logo.webp">
+                <picture class="brand-logo"><source data-srcset="images/logo-256.png 256w, images/logo-512.png 512w"></picture>
+                <svg aria-label="Company logo" viewBox="0 0 128 128"><path d="M0 0h128v128H0z"/></svg>
+                <noscript><img alt="site logo" src="images/noscript.png"></noscript>
+              </body>
+            </html>
+        "#;
+
+        let page = website_icon_candidates(html, &page_url);
+
+        assert_eq!(
+            page.redirect.as_ref().map(Url::as_str),
+            Some("https://cdn.example.com/dashboard")
+        );
+        for expected in [
+            "https://cdn.example.com/ui/images/lazy-logo.webp",
+            "https://cdn.example.com/ui/images/logo-512.png",
+            "https://cdn.example.com/ui/brand/logo-bg.png",
+            "https://cdn.example.com/ui/images/noscript.png",
+        ] {
+            assert!(
+                page.candidates
+                    .iter()
+                    .any(|candidate| candidate.url.as_str() == expected),
+                "missing {expected}; found {:?}",
+                page.candidates
+                    .iter()
+                    .map(|candidate| candidate.url.as_str())
+                    .collect::<Vec<_>>()
+            );
+        }
+        let inline_svg = page
+            .candidates
+            .iter()
+            .find(|candidate| candidate.url.scheme() == "data")
+            .expect("inline SVG candidate");
+        let inline_svg_bytes = decode_data_url_bytes(&inline_svg.url).expect("decode inline SVG");
+        assert!(decode_website_icon(&inline_svg_bytes).is_some());
+    }
+
+    #[test]
+    fn parses_javascript_location_redirects() {
+        let page_url = Url::parse("https://dash.example.com/").expect("valid page URL");
+        let page = website_icon_candidates(
+            r#"<script>location.href = "https://console.example.com/login";</script>"#,
+            &page_url,
+        );
+
+        assert_eq!(
+            page.redirect.as_ref().map(Url::as_str),
+            Some("https://console.example.com/login")
+        );
+    }
+
+    #[test]
+    fn parses_manifest_shortcut_and_browser_config_icons() {
+        let manifest_url = Url::parse("https://example.com/app.webmanifest").unwrap();
+        let manifest = br#"{
+            "icons": [{"src":"app.png","sizes":"512x512","purpose":"any maskable"}],
+            "shortcuts": [{"icons":[{"src":"shortcut.png","sizes":"192x192"}]}]
+        }"#;
+        let manifest_candidates = website_manifest_icon_candidates(manifest, &manifest_url, 0);
+        assert_eq!(manifest_candidates.len(), 2);
+        assert_eq!(
+            manifest_candidates[1].url.as_str(),
+            "https://example.com/shortcut.png"
+        );
+
+        let config = br#"<browserconfig><msapplication><tile><square150x150logo src="/mstile.png"/></tile></msapplication></browserconfig>"#;
+        let config_candidates = website_browser_config_icon_candidates(config, &manifest_url, 0);
+        assert_eq!(config_candidates.len(), 1);
+        assert_eq!(
+            config_candidates[0].url.as_str(),
+            "https://example.com/mstile.png"
+        );
+    }
+
+    #[test]
+    fn parses_http_link_headers_and_data_urls() {
+        let page_url = Url::parse("https://example.com/").unwrap();
+        let mut candidates = Vec::new();
+        let mut manifests = Vec::new();
+        extend_candidates_from_link_headers(
+            &["</header-icon.svg>; rel=\"icon\", </site.webmanifest>; rel=manifest".to_string()],
+            &page_url,
+            &mut candidates,
+            &mut manifests,
+        );
+        assert_eq!(
+            candidates[0].url.as_str(),
+            "https://example.com/header-icon.svg"
+        );
+        assert_eq!(
+            manifests[0].as_str(),
+            "https://example.com/site.webmanifest"
+        );
+
+        let data_url = Url::parse("data:image/svg+xml,%3Csvg%3E%3C%2Fsvg%3E").unwrap();
+        assert_eq!(decode_data_url_bytes(&data_url).unwrap(), b"<svg></svg>");
+    }
+
+    #[test]
+    fn parses_logo_assets_referenced_by_frontend_bundles() {
+        let bundle_url = Url::parse("https://example.com/assets/app.js").unwrap();
+        let mut candidates = Vec::new();
+        collect_frontend_asset_candidates(
+            r#"const brandLogo = "./images/brand-logo.svg"; const ignored = "./icons/menu.svg";"#,
+            &bundle_url,
+            &mut candidates,
+        );
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0].url.as_str(),
+            "https://example.com/assets/images/brand-logo.svg"
+        );
+    }
+
+    #[test]
     fn prefers_large_square_icons_over_small_icons_and_wide_images() {
         let tiny = image::DynamicImage::new_rgba8(16, 16);
         let touch = image::DynamicImage::new_rgba8(180, 180);
@@ -999,6 +1867,19 @@ mod website_icon_tests {
 
         assert!(touch_quality > tiny_quality);
         assert!(touch_quality > wide_quality);
+    }
+
+    #[test]
+    fn rejects_fully_transparent_icon_candidates() {
+        let transparent = image::DynamicImage::new_rgba8(64, 64);
+        let visible = image::DynamicImage::ImageRgba8(image::ImageBuffer::from_pixel(
+            64,
+            64,
+            image::Rgba([20, 40, 80, 255]),
+        ));
+
+        assert!(!has_visible_icon_content(&transparent));
+        assert!(has_visible_icon_content(&visible));
     }
 
     #[test]
