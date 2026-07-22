@@ -524,3 +524,10 @@ pub async fn get_drag_preview_icon(path: String, icon_size: i32) -> Result<Strin
         .await
         .map_err(|e| format!("Failed to extract drag preview icon: {}", e))
 }
+
+#[tauri::command]
+pub async fn optimize_icon_image(data_uri: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || icons::optimize_icon_data_uri(&data_uri))
+        .await
+        .map_err(|error| format!("Failed to join icon optimization: {error}"))?
+}

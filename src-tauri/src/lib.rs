@@ -21,10 +21,11 @@ use commands::{
     get_layout_payload, get_layout_payloads, get_main_window_always_on_top_enabled,
     get_search_preview, get_search_runtime_status, get_updater_configuration_status, hide_icons,
     import_dropped_paths, install_app_update, launch_app, notify_main_window_ready,
-    record_search_result_run, scan_invalid_icons, search_files, set_layout_payload,
-    set_layout_payloads, set_main_window_always_on_top_enabled, set_window_mode,
-    show_shell_context_menu, start_search_runtime, sync_window_persistent_state, toggle_window,
-    unhide_icons, update_icon_entry, update_launch_on_startup_enabled, update_launchpad_shortcut,
+    optimize_icon_image, record_search_result_run, scan_invalid_icons, search_files,
+    set_layout_payload, set_layout_payloads, set_main_window_always_on_top_enabled,
+    set_window_mode, show_shell_context_menu, start_search_runtime, sync_window_persistent_state,
+    toggle_window, unhide_icons, update_icon_entry, update_launch_on_startup_enabled,
+    update_launchpad_shortcut,
 };
 #[cfg(windows)]
 use once_cell::sync::OnceCell;
@@ -365,6 +366,7 @@ pub fn run() {
             check_for_app_update,
             install_app_update,
             get_drag_preview_icon,
+            optimize_icon_image,
             update_launchpad_shortcut,
             close_settings_window,
             sync_window_persistent_state,

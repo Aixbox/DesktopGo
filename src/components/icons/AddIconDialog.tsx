@@ -32,6 +32,7 @@ import {
   X,
 } from 'lucide-react'
 import { deriveIconEntryName } from '@/lib/iconManager'
+import { ICON_CROP_OUTPUT_SIZE } from '@/lib/imageCrop'
 import { deriveWebsiteName, isWebsiteTarget, normalizeWebsiteUrl } from '@/lib/websiteIcon'
 import {
   createColoredIconDataUri,
@@ -71,6 +72,7 @@ const ICON_COLOR_LABELS: Record<IconColorId, string> = {
 
 const DEFAULT_TEXT_ICON_TEXT = 'D'
 const DEFAULT_TEXT_ICON_COLOR: IconColorId = 'ocean'
+const ICON_EDITOR_SOURCE_SIZE = 256
 
 type WebsiteIconResult = {
   url: string
@@ -351,7 +353,7 @@ export function AddIconDialog({
     const timer = window.setTimeout(() => {
       void invoke<string>('get_drag_preview_icon', {
         path: previewPath,
-        iconSize: 48,
+        iconSize: ICON_EDITOR_SOURCE_SIZE,
       })
         .then(nextPreview => {
           if (targetPreviewRequestRef.current === requestId) setTargetPreview(nextPreview)
@@ -392,7 +394,7 @@ export function AddIconDialog({
     const timer = window.setTimeout(() => {
       void invoke<string>('get_drag_preview_icon', {
         path: previewPath,
-        iconSize: 48,
+        iconSize: ICON_EDITOR_SOURCE_SIZE,
       })
         .then(nextPreview => {
           if (customPreviewRequestRef.current === requestId) setCustomPreview(nextPreview)
@@ -698,7 +700,7 @@ export function AddIconDialog({
         : selectedIconSource === 'text'
           ? textIconPreview
           : iconColor !== 'none'
-            ? await createColoredIconDataUri(selectedPreview, iconColor)
+            ? await createColoredIconDataUri(selectedPreview, iconColor, ICON_CROP_OUTPUT_SIZE)
             : editedRasterPreviews.includes(selectedPreview) &&
                 !(entryKind === 'website' && selectedIconSource === 'target')
               ? selectedPreview

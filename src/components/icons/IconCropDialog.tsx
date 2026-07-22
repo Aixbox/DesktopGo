@@ -7,6 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { invoke } from '@tauri-apps/api/core'
 import Cropper, { type MediaSize, type Point, type Size } from 'react-easy-crop'
 import {
   Check,
@@ -15,6 +16,7 @@ import {
   RefreshCw,
   RotateCcw,
   RotateCw,
+  Sparkles,
   X,
   ZoomIn,
   ZoomOut,
@@ -29,6 +31,7 @@ import {
   getUpscaledContainObjectFit,
   ICON_CROP_MAX_ZOOM,
   ICON_CROP_MIN_ZOOM,
+  ICON_CROP_OUTPUT_SIZE,
   resizeSquareCrop,
   type CropResizeHandle,
   type UpscaledContainObjectFit,
@@ -127,6 +130,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
   const frameMoveSessionRef = useRef<CropFrameMoveSession | null>(null)
   const suppressCropChangeRef = useRef(false)
   const cropChangeUnlockFrameRef = useRef<number | null>(null)
+  const preserveViewportOnMediaLoadRef = useRef(false)
   const [crop, setCrop] = useState<Point>(INITIAL_CROP)
   const [cropFramePosition, setCropFramePosition] = useState<Point>(INITIAL_CROP)
   const [zoom, setZoom] = useState(1)
@@ -140,6 +144,9 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
   const [usingCustomColor, setUsingCustomColor] = useState(false)
   const [extractingColor, setExtractingColor] = useState(false)
   const [samplingColor, setSamplingColor] = useState(false)
+  const [editorSource, setEditorSource] = useState(source)
+  const [optimizedSource, setOptimizedSource] = useState('')
+  const [optimizing, setOptimizing] = useState(false)
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState('')
 
@@ -186,12 +193,12 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
     image.onerror = () => {
       if (active) setMediaObjectFit('horizontal-cover')
     }
-    image.src = source
+    image.src = editorSource
 
     return () => {
       active = false
     }
-  }, [source])
+  }, [editorSource])
 
   const resetCrop = () => {
     const nextCropSize = initialCropSizeRef.current ?? undefined
@@ -366,11 +373,11 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
   }
 
   const handleApply = async () => {
-    if (!cropSize || !mediaSize || applying) return
+    if (!cropSize || !mediaSize || applying || optimizing) return
     setApplying(true)
     setError('')
     try {
-      const dataUri = await cropImageViewportDataUri(source, {
+      const dataUri = await cropImageViewportDataUri(editorSource, {
         crop: {
           x: crop.x - cropFramePosition.x,
           y: crop.y - cropFramePosition.y,
@@ -383,12 +390,43 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
       if (!dataUri) throw new Error('The cropped icon is empty')
       const outputDataUri =
         usingCustomColor && customColor
-          ? await createIconWithBackgroundColorDataUri(dataUri, customColor)
+          ? await createIconWithBackgroundColorDataUri(dataUri, customColor, ICON_CROP_OUTPUT_SIZE)
           : dataUri
       onApply({ dataUri: outputDataUri, colorId: usingCustomColor ? 'none' : colorId })
     } catch {
       setError(translate('无法生成裁剪后的图标，请重试。'))
       setApplying(false)
+    }
+  }
+
+  const switchEditorSource = (nextSource: string) => {
+    preserveViewportOnMediaLoadRef.current = Boolean(mediaSize)
+    setEditorSource(nextSource)
+    setError('')
+  }
+
+  const handleOptimizeImage = async () => {
+    if (applying || optimizing || !mediaSize) return
+    if (optimizedSource && editorSource === optimizedSource) {
+      switchEditorSource(source)
+      return
+    }
+    if (optimizedSource) {
+      switchEditorSource(optimizedSource)
+      return
+    }
+
+    setOptimizing(true)
+    setError('')
+    try {
+      const nextSource = await invoke<string>('optimize_icon_image', { dataUri: source })
+      if (!nextSource) throw new Error('The optimized icon is empty')
+      setOptimizedSource(nextSource)
+      switchEditorSource(nextSource)
+    } catch {
+      setError(translate('无法优化图片，请重试。'))
+    } finally {
+      setOptimizing(false)
     }
   }
 
@@ -402,7 +440,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
 
     try {
       const sampledColor = await extractImageColorAtViewportPoint(
-        source,
+        editorSource,
         { crop, cropSize, mediaSize, zoom, rotation },
         {
           x: event.clientX - bounds.left - bounds.width / 2,
@@ -457,6 +495,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
 
   const selectedColor = ICON_COLOR_PRESETS.find(preset => preset.id === colorId)
   const visibleBackgroundColor = usingCustomColor ? customColor : selectedColor?.color
+  const imageOptimized = Boolean(optimizedSource && editorSource === optimizedSource)
 
   return createPortal(
     <div
@@ -515,7 +554,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
             >
               {mediaObjectFit ? (
                 <Cropper
-                  image={source}
+                  image={editorSource}
                   crop={crop}
                   cropSize={cropSize}
                   zoom={zoom}
@@ -538,12 +577,27 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
                   onZoomChange={handleZoomChange}
                   onMediaLoaded={nextMediaSize => {
                     const nextViewportSize = cropViewportRef.current?.clientWidth ?? 0
+                    setMediaSize(nextMediaSize)
+                    setViewportSize(nextViewportSize)
+                    if (preserveViewportOnMediaLoadRef.current) {
+                      preserveViewportOnMediaLoadRef.current = false
+                      setCrop(current =>
+                        constrainMediaPositionToViewport(
+                          current,
+                          nextMediaSize.width,
+                          nextMediaSize.height,
+                          rotation,
+                          zoom,
+                          nextViewportSize,
+                          nextViewportSize
+                        )
+                      )
+                      return
+                    }
                     const nextCropSize =
                       nextViewportSize > 0
                         ? { width: nextViewportSize, height: nextViewportSize }
                         : getImageBoundedSquareCropSize(nextMediaSize.width, nextMediaSize.height)
-                    setMediaSize(nextMediaSize)
-                    setViewportSize(nextViewportSize)
                     setZoom(1)
                     setCrop(INITIAL_CROP)
                     setCropFramePosition(INITIAL_CROP)
@@ -690,6 +744,30 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
             </div>
           </div>
 
+          <div className="mt-3 flex justify-center">
+            <Button
+              type="button"
+              variant={imageOptimized ? 'secondary' : 'outline'}
+              size="sm"
+              aria-pressed={imageOptimized}
+              title={imageOptimized ? translate('取消清晰优化') : translate('清晰优化')}
+              onClick={() => void handleOptimizeImage()}
+              disabled={applying || optimizing || !mediaSize}
+              className="h-8 gap-1.5 px-3 text-xs"
+            >
+              {optimizing ? (
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              {optimizing
+                ? translate('正在优化...')
+                : imageOptimized
+                  ? translate('已优化')
+                  : translate('清晰优化')}
+            </Button>
+          </div>
+
           <div className="mt-6 flex items-center justify-between gap-3">
             <span className="text-sm font-medium text-foreground">{translate('图标背景')}</span>
             <Button
@@ -797,7 +875,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
           <Button
             type="button"
             onClick={() => void handleApply()}
-            disabled={applying || !cropSize || !mediaSize}
+            disabled={applying || optimizing || !cropSize || !mediaSize}
             className="mt-6 w-full"
           >
             {applying ? (

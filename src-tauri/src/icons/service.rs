@@ -8,6 +8,15 @@ use std::path::PathBuf;
 use std::time::Duration;
 use url::Url;
 
+const ICON_PREVIEW_SIZE: u32 = 256;
+const ICON_OPTIMIZED_OUTPUT_SIZE: u32 = 512;
+
+#[derive(Debug, Clone, Copy)]
+struct IconSharpenSettings {
+    sigma: f32,
+    threshold: i32,
+}
+
 use super::models::{
     CreateIconEntryInput, DesktopIcon, IconBucket, IconManagerItem, IconMutationTarget,
     IconSnapshot, ImportDroppedPathsResult, InvalidIconEntry, ScannedDesktopItem, SnapshotIconItem,
@@ -340,6 +349,60 @@ fn looks_like_website_icon(value: &str) -> bool {
         || normalized.contains("site-icon")
 }
 
+fn best_srcset_candidate(value: &str) -> Option<(&str, u32)> {
+    value
+        .split(',')
+        .filter_map(|candidate| {
+            let mut parts = candidate.split_ascii_whitespace();
+            let url = parts.next()?;
+            let descriptor = parts.next().unwrap_or_default().to_ascii_lowercase();
+            let declared_size = descriptor
+                .strip_suffix('w')
+                .and_then(|value| value.parse::<u32>().ok())
+                .or_else(|| {
+                    descriptor
+                        .strip_suffix('x')
+                        .and_then(|value| value.parse::<f32>().ok())
+                        .map(|scale| (scale * 256.0).round() as u32)
+                })
+                .unwrap_or_default();
+            Some((url, declared_size))
+        })
+        .max_by_key(|(_, declared_size)| *declared_size)
+}
+
+fn collect_json_logo_values(value: &serde_json::Value, logos: &mut Vec<String>) {
+    match value {
+        serde_json::Value::Array(values) => {
+            for value in values {
+                collect_json_logo_values(value, logos);
+            }
+        }
+        serde_json::Value::Object(object) => {
+            for (key, value) in object {
+                if key.eq_ignore_ascii_case("logo") {
+                    match value {
+                        serde_json::Value::String(url) => logos.push(url.clone()),
+                        serde_json::Value::Object(logo) => {
+                            for property in ["url", "contentUrl"] {
+                                if let Some(url) =
+                                    logo.get(property).and_then(|value| value.as_str())
+                                {
+                                    logos.push(url.to_string());
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                } else {
+                    collect_json_logo_values(value, logos);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
 fn website_icon_candidates(
     html: &str,
     page_url: &Url,
@@ -348,6 +411,9 @@ fn website_icon_candidates(
     let title_selector = Selector::parse("title").expect("valid title selector");
     let link_selector = Selector::parse("link[href]").expect("valid link selector");
     let image_selector = Selector::parse("img[src]").expect("valid image selector");
+    let meta_selector = Selector::parse("meta[content]").expect("valid meta selector");
+    let json_ld_selector =
+        Selector::parse("script[type='application/ld+json']").expect("valid JSON-LD selector");
     let title = document
         .select(&title_selector)
         .next()
@@ -381,7 +447,10 @@ fn website_icon_candidates(
         });
         let is_icon = is_apple_touch_icon
             || rel_values.iter().any(|value| {
-                value.eq_ignore_ascii_case("icon") || value.eq_ignore_ascii_case("mask-icon")
+                value.eq_ignore_ascii_case("icon")
+                    || value.eq_ignore_ascii_case("mask-icon")
+                    || value.eq_ignore_ascii_case("fluid-icon")
+                    || value.eq_ignore_ascii_case("logo")
             });
         let is_image_preload = rel_values
             .iter()
@@ -411,8 +480,10 @@ fn website_icon_candidates(
 
     for element in document.select(&image_selector) {
         let src = element.value().attr("src").unwrap_or_default();
+        let srcset = element.value().attr("srcset").unwrap_or_default();
         let semantic_text = [
             src,
+            srcset,
             element.value().attr("alt").unwrap_or_default(),
             element.value().attr("class").unwrap_or_default(),
             element.value().attr("id").unwrap_or_default(),
@@ -421,25 +492,89 @@ fn website_icon_candidates(
         if !looks_like_website_icon(&semantic_text) {
             continue;
         }
-        let Ok(url) = page_url.join(src) else {
-            continue;
-        };
-        if !matches!(url.scheme(), "http" | "https") {
+        let declared_width = element
+            .value()
+            .attr("width")
+            .and_then(|value| value.parse::<u32>().ok())
+            .unwrap_or_default();
+        let mut sources = vec![(src, declared_width)];
+        if let Some(source) = best_srcset_candidate(srcset) {
+            sources.push(source);
+        }
+        for (source, declared_size) in sources {
+            let Ok(url) = page_url.join(source) else {
+                continue;
+            };
+            if !matches!(url.scheme(), "http" | "https") {
+                continue;
+            }
+            candidates.push(WebsiteIconCandidate {
+                url,
+                declared_size,
+                source_priority: 1,
+                discovery_index: candidates.len(),
+            });
+        }
+    }
+
+    for element in document.select(&meta_selector) {
+        let property = element
+            .value()
+            .attr("property")
+            .or_else(|| element.value().attr("name"))
+            .or_else(|| element.value().attr("itemprop"))
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if !matches!(
+            property.as_str(),
+            "og:image"
+                | "og:image:url"
+                | "twitter:image"
+                | "twitter:image:src"
+                | "msapplication-tileimage"
+                | "image"
+                | "logo"
+        ) {
             continue;
         }
-        candidates.push(WebsiteIconCandidate {
-            url,
-            declared_size: element
-                .value()
-                .attr("width")
-                .and_then(|value| value.parse::<u32>().ok())
-                .unwrap_or_default(),
-            source_priority: 1,
-            discovery_index: candidates.len(),
-        });
+        let content = element.value().attr("content").unwrap_or_default();
+        let Ok(url) = page_url.join(content) else {
+            continue;
+        };
+        if matches!(url.scheme(), "http" | "https") {
+            candidates.push(WebsiteIconCandidate {
+                url,
+                declared_size: 0,
+                source_priority: 2,
+                discovery_index: candidates.len(),
+            });
+        }
+    }
+
+    for element in document.select(&json_ld_selector) {
+        let json = element.text().collect::<String>();
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&json) else {
+            continue;
+        };
+        let mut logos = Vec::new();
+        collect_json_logo_values(&value, &mut logos);
+        for logo in logos {
+            let Ok(url) = page_url.join(&logo) else {
+                continue;
+            };
+            if matches!(url.scheme(), "http" | "https") {
+                candidates.push(WebsiteIconCandidate {
+                    url,
+                    declared_size: 0,
+                    source_priority: 2,
+                    discovery_index: candidates.len(),
+                });
+            }
+        }
     }
 
     for (path, declared_size, source_priority) in [
+        ("/favicon.svg", 1024, 2),
         ("/apple-touch-icon.png", 180, 2),
         ("/favicon.png", 64, 1),
         ("/favicon.ico", 32, 1),
@@ -534,8 +669,165 @@ fn website_icon_quality(
     }
 }
 
+fn render_svg_website_icon(bytes: &[u8]) -> Option<image::DynamicImage> {
+    let options = resvg::usvg::Options::default();
+    let tree = resvg::usvg::Tree::from_data(bytes, &options).ok()?;
+    let svg_size = tree.size();
+    let width = svg_size.width();
+    let height = svg_size.height();
+    if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
+        return None;
+    }
+
+    let scale = ICON_OPTIMIZED_OUTPUT_SIZE as f32 / width.max(height);
+    let output_width = (width * scale)
+        .ceil()
+        .clamp(1.0, ICON_OPTIMIZED_OUTPUT_SIZE as f32) as u32;
+    let output_height = (height * scale)
+        .ceil()
+        .clamp(1.0, ICON_OPTIMIZED_OUTPUT_SIZE as f32) as u32;
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(output_width, output_height)?;
+    let transform = resvg::tiny_skia::Transform::from_scale(scale, scale);
+    resvg::render(&tree, transform, &mut pixmap.as_mut());
+
+    let mut rgba = Vec::with_capacity((output_width * output_height * 4) as usize);
+    for pixel in pixmap.pixels() {
+        let color = pixel.demultiply();
+        rgba.extend_from_slice(&[color.red(), color.green(), color.blue(), color.alpha()]);
+    }
+    let buffer = image::ImageBuffer::from_raw(output_width, output_height, rgba)?;
+    Some(image::DynamicImage::ImageRgba8(buffer))
+}
+
+fn decode_website_icon(bytes: &[u8]) -> Option<image::DynamicImage> {
+    image::load_from_memory(bytes)
+        .ok()
+        .or_else(|| render_svg_website_icon(bytes))
+}
+
+fn icon_edge_contrast_score(image: &image::DynamicImage) -> f32 {
+    let rgba = image.to_rgba8();
+    let width = rgba.width();
+    let height = rgba.height();
+    if width < 2 || height < 2 {
+        return 0.0;
+    }
+
+    let sample_step = (width.max(height) / 128).max(1) as usize;
+    let mut contrast_sum = 0u64;
+    let mut sample_count = 0u64;
+    let luma = |pixel: &image::Rgba<u8>| -> i32 {
+        (pixel[0] as i32 * 77 + pixel[1] as i32 * 150 + pixel[2] as i32 * 29) >> 8
+    };
+
+    for y in (sample_step..height as usize).step_by(sample_step) {
+        for x in (sample_step..width as usize).step_by(sample_step) {
+            let center = rgba.get_pixel(x as u32, y as u32);
+            if center[3] < 16 {
+                continue;
+            }
+            let left = rgba.get_pixel((x - sample_step) as u32, y as u32);
+            let top = rgba.get_pixel(x as u32, (y - sample_step) as u32);
+            let center_luma = luma(center);
+            contrast_sum += center_luma.abs_diff(luma(left)) as u64;
+            contrast_sum += center_luma.abs_diff(luma(top)) as u64;
+            sample_count += 2;
+        }
+    }
+
+    if sample_count == 0 {
+        0.0
+    } else {
+        contrast_sum as f32 / sample_count as f32
+    }
+}
+
+fn icon_sharpen_settings(image: &image::DynamicImage) -> IconSharpenSettings {
+    let min_dimension = image.width().min(image.height());
+    let edge_contrast = icon_edge_contrast_score(image);
+
+    if min_dimension <= 64 || edge_contrast < 6.0 {
+        IconSharpenSettings {
+            sigma: 1.2,
+            threshold: 1,
+        }
+    } else if min_dimension <= 128 || edge_contrast < 14.0 {
+        IconSharpenSettings {
+            sigma: 1.05,
+            threshold: 1,
+        }
+    } else {
+        IconSharpenSettings {
+            sigma: 0.9,
+            threshold: 2,
+        }
+    }
+}
+
+fn sharpen_icon_preserving_alpha(
+    resized: image::DynamicImage,
+    settings: IconSharpenSettings,
+) -> image::DynamicImage {
+    let original = resized.to_rgba8();
+    let mut premultiplied = original.clone();
+    for pixel in premultiplied.pixels_mut() {
+        let alpha = pixel[3] as u16;
+        pixel[0] = ((pixel[0] as u16 * alpha + 127) / 255) as u8;
+        pixel[1] = ((pixel[1] as u16 * alpha + 127) / 255) as u8;
+        pixel[2] = ((pixel[2] as u16 * alpha + 127) / 255) as u8;
+    }
+
+    let sharpened = image::DynamicImage::ImageRgba8(premultiplied)
+        .unsharpen(settings.sigma, settings.threshold)
+        .to_rgba8();
+    let mut output = sharpened;
+    for (output_pixel, original_pixel) in output.pixels_mut().zip(original.pixels()) {
+        let alpha = original_pixel[3] as u16;
+        output_pixel[3] = original_pixel[3];
+        if alpha == 0 {
+            output_pixel[0] = 0;
+            output_pixel[1] = 0;
+            output_pixel[2] = 0;
+            continue;
+        }
+        output_pixel[0] =
+            ((output_pixel[0] as u32 * 255 + alpha as u32 / 2) / alpha as u32).min(255) as u8;
+        output_pixel[1] =
+            ((output_pixel[1] as u32 * 255 + alpha as u32 / 2) / alpha as u32).min(255) as u8;
+        output_pixel[2] =
+            ((output_pixel[2] as u32 * 255 + alpha as u32 / 2) / alpha as u32).min(255) as u8;
+    }
+
+    image::DynamicImage::ImageRgba8(output)
+}
+
+fn optimize_icon_pixels(image: &image::DynamicImage, size: u32) -> image::DynamicImage {
+    let settings = icon_sharpen_settings(image);
+    let resized = image.resize(size, size, image::imageops::FilterType::Lanczos3);
+    sharpen_icon_preserving_alpha(resized, settings)
+}
+
+pub fn optimize_icon_data_uri(data_uri: &str) -> Result<String, String> {
+    let icon_data = decode_data_uri_png(data_uri)?;
+    let source_image = image::load_from_memory(&icon_data)
+        .map_err(|error| format!("Failed to decode icon for optimization: {error}"))?;
+    let optimized = optimize_icon_pixels(&source_image, ICON_OPTIMIZED_OUTPUT_SIZE);
+    let mut output = Cursor::new(Vec::new());
+    optimized
+        .write_to(&mut output, image::ImageFormat::Png)
+        .map_err(|error| format!("Failed to encode optimized icon: {error}"))?;
+    Ok(format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(output.into_inner())
+    ))
+}
+
 fn website_icon_to_data_uri(image: &image::DynamicImage) -> Result<String, String> {
-    let image = image.resize(256, 256, image::imageops::FilterType::Lanczos3);
+    let image = image.resize(
+        ICON_PREVIEW_SIZE,
+        ICON_PREVIEW_SIZE,
+        image::imageops::FilterType::Lanczos3,
+    );
     let mut output = Cursor::new(Vec::new());
     image
         .write_to(&mut output, image::ImageFormat::Png)
@@ -602,7 +894,7 @@ pub async fn extract_website_icon(value: String) -> Result<WebsiteIconResult, St
                 let (_, bytes) = read_response_limited(response, MAX_WEBSITE_ICON_BYTES)
                     .await
                     .ok()?;
-                let image = image::load_from_memory(&bytes).ok()?;
+                let image = decode_website_icon(&bytes)?;
                 let quality = website_icon_quality(&image, &candidate);
                 Some((quality, image))
             }
@@ -642,11 +934,16 @@ mod website_icon_tests {
             <html>
               <head>
                 <title>Example</title>
+                <link rel="icon" href="/__aisys__/brand-icon.svg" type="image/svg+xml">
                 <link rel="icon" sizes="16x16 32x32" href="/favicon-32.png">
                 <link rel="apple-touch-icon" sizes="180x180" href="touch.png">
                 <link rel="manifest" href="/app.webmanifest">
+                <meta property="og:image" content="/social-card.png">
+                <script type="application/ld+json">
+                  {"@type":"Organization","logo":"/structured-logo.png"}
+                </script>
               </head>
-              <body><img class="site-logo" src="/brand/logo-512.png" width="512"></body>
+              <body><img class="site-logo" src="/brand/logo-256.png" srcset="/brand/logo-512.png 512w" width="256"></body>
             </html>
         "#;
 
@@ -660,6 +957,15 @@ mod website_icon_tests {
         assert!(candidates.iter().any(|candidate| {
             candidate.url.as_str() == "https://example.com/brand/logo-512.png"
                 && candidate.declared_size == 512
+        }));
+        assert!(candidates.iter().any(|candidate| {
+            candidate.url.as_str() == "https://example.com/__aisys__/brand-icon.svg"
+        }));
+        assert!(candidates
+            .iter()
+            .any(|candidate| candidate.url.as_str() == "https://example.com/social-card.png"));
+        assert!(candidates.iter().any(|candidate| {
+            candidate.url.as_str() == "https://example.com/structured-logo.png"
         }));
         assert_eq!(manifests[0].as_str(), "https://example.com/app.webmanifest");
 
@@ -693,6 +999,17 @@ mod website_icon_tests {
 
         assert!(touch_quality > tiny_quality);
         assert!(touch_quality > wide_quality);
+    }
+
+    #[test]
+    fn renders_relative_size_svg_icons_as_high_resolution_images() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 256 256"><path fill="#1677ff" d="M32 32h192v192H32z"/></svg>"##;
+        let image = decode_website_icon(svg).expect("render SVG icon");
+
+        assert_eq!(image.width(), ICON_OPTIMIZED_OUTPUT_SIZE);
+        assert_eq!(image.height(), ICON_OPTIMIZED_OUTPUT_SIZE);
+        let center = image.to_rgba8().get_pixel(256, 256).0;
+        assert_eq!(center, [0x16, 0x77, 0xff, 0xff]);
     }
 
     #[test]
@@ -750,6 +1067,57 @@ mod website_icon_tests {
 
         assert_eq!(icons.len(), 3);
         assert_eq!(icons[0], website_icon_to_data_uri(&manifest).unwrap());
+    }
+
+    #[test]
+    fn optimizes_an_icon_only_when_explicitly_requested() {
+        let source = image::DynamicImage::ImageRgba8(image::ImageBuffer::from_pixel(
+            32,
+            32,
+            image::Rgba([48, 96, 144, 255]),
+        ));
+        let mut encoded = Cursor::new(Vec::new());
+        source
+            .write_to(&mut encoded, image::ImageFormat::Png)
+            .expect("encode source icon");
+        let data_uri = format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(encoded.into_inner())
+        );
+
+        let optimized = optimize_icon_data_uri(&data_uri).expect("optimize icon");
+        let optimized_bytes = decode_data_uri_png(&optimized).expect("decode optimized icon");
+        let optimized_image =
+            image::load_from_memory(&optimized_bytes).expect("load optimized icon");
+
+        assert_eq!(optimized_image.width(), ICON_OPTIMIZED_OUTPUT_SIZE);
+        assert_eq!(optimized_image.height(), ICON_OPTIMIZED_OUTPUT_SIZE);
+    }
+
+    #[test]
+    fn adapts_sharpening_strength_and_preserves_resized_alpha() {
+        let tiny = image::DynamicImage::new_rgba8(32, 32);
+        let tiny_settings = icon_sharpen_settings(&tiny);
+        assert_eq!(tiny_settings.sigma, 1.2);
+        assert_eq!(tiny_settings.threshold, 1);
+
+        let source = image::DynamicImage::ImageRgba8(image::ImageBuffer::from_fn(8, 8, |x, _| {
+            if x < 4 {
+                image::Rgba([255, 255, 255, 0])
+            } else {
+                image::Rgba([40, 120, 220, 255])
+            }
+        }));
+        let resized = source
+            .resize(64, 64, image::imageops::FilterType::Lanczos3)
+            .to_rgba8();
+        let optimized = optimize_icon_pixels(&source, 64).to_rgba8();
+
+        assert_eq!(optimized.dimensions(), resized.dimensions());
+        assert!(optimized
+            .pixels()
+            .zip(resized.pixels())
+            .all(|(optimized_pixel, resized_pixel)| optimized_pixel[3] == resized_pixel[3]));
     }
 }
 
