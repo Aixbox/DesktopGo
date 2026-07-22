@@ -177,6 +177,10 @@ const EN_MESSAGES: Record<string, string> = {
   '拖动图标调整位置，拖动裁剪框边缘移动或调整大小。':
     'Drag the icon to reposition it, then drag the crop frame border to move or resize it.',
   调整裁剪框大小: 'Resize crop frame',
+  调整裁剪框圆角: 'Adjust crop frame corner radius',
+  图像工具: 'Image tools',
+  四角圆角同步调整: 'Corner radii linked',
+  四角圆角独立调整: 'Corner radii independent',
   缩小: 'Zoom out',
   放大: 'Zoom in',
   图标缩放: 'Icon zoom',

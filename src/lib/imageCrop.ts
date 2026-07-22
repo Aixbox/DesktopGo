@@ -12,6 +12,8 @@ export type CropFrameSize = {
 }
 
 export type CropResizeHandle = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw'
+export type CropCorner = 'nw' | 'ne' | 'se' | 'sw'
+export type CropCornerRadii = Record<CropCorner, number>
 export type UpscaledContainObjectFit = 'horizontal-cover' | 'vertical-cover'
 
 export type CropViewport = {
@@ -20,6 +22,7 @@ export type CropViewport = {
   mediaSize: MediaSize
   zoom: number
   rotation: number
+  cornerRadii?: CropCornerRadii
 }
 
 export type NaturalImageSize = {
@@ -58,6 +61,33 @@ export const resizeSquareCrop = (
 
   return { width: size, height: size }
 }
+
+export const resizeCropCornerRadius = (
+  startRadius: number,
+  deltaX: number,
+  deltaY: number,
+  corner: CropCorner,
+  maxRadius: number
+): number => {
+  const inwardDelta = {
+    nw: (deltaX + deltaY) / 2,
+    ne: (-deltaX + deltaY) / 2,
+    se: (-deltaX - deltaY) / 2,
+    sw: (deltaX - deltaY) / 2,
+  }[corner]
+
+  return Math.min(maxRadius, Math.max(0, startRadius + inwardDelta))
+}
+
+export const clampCropCornerRadii = (
+  cornerRadii: CropCornerRadii,
+  maxRadius: number
+): CropCornerRadii => ({
+  nw: Math.min(maxRadius, Math.max(0, cornerRadii.nw)),
+  ne: Math.min(maxRadius, Math.max(0, cornerRadii.ne)),
+  se: Math.min(maxRadius, Math.max(0, cornerRadii.se)),
+  sw: Math.min(maxRadius, Math.max(0, cornerRadii.sw)),
+})
 
 export const normalizeRotation = (rotation: number): number => {
   const normalized = rotation % 360
@@ -233,7 +263,7 @@ export const cropImageViewportDataUri = async (
   if (!source || typeof document === 'undefined') return ''
 
   const image = await loadImage(source)
-  const { crop, cropSize, mediaSize, zoom, rotation } = viewport
+  const { crop, cropSize, mediaSize, zoom, rotation, cornerRadii } = viewport
   const outputCanvas = document.createElement('canvas')
   outputCanvas.width = outputSize
   outputCanvas.height = outputSize
@@ -243,10 +273,31 @@ export const cropImageViewportDataUri = async (
   const viewportScale = outputSize / Math.max(1, cropSize.width)
   const displayedScaleX = mediaSize.width / Math.max(1, image.naturalWidth)
   const displayedScaleY = mediaSize.height / Math.max(1, image.naturalHeight)
+  const radiusScale = outputSize / Math.max(1, cropSize.width)
+  const outputCornerRadii = clampCropCornerRadii(
+    cornerRadii ?? { nw: 0, ne: 0, se: 0, sw: 0 },
+    Math.min(cropSize.width, cropSize.height) / 2
+  )
+  const nwRadius = outputCornerRadii.nw * radiusScale
+  const neRadius = outputCornerRadii.ne * radiusScale
+  const seRadius = outputCornerRadii.se * radiusScale
+  const swRadius = outputCornerRadii.sw * radiusScale
 
   outputContext.clearRect(0, 0, outputSize, outputSize)
   outputContext.imageSmoothingEnabled = true
   outputContext.imageSmoothingQuality = 'high'
+  outputContext.beginPath()
+  outputContext.moveTo(nwRadius, 0)
+  outputContext.lineTo(outputSize - neRadius, 0)
+  outputContext.quadraticCurveTo(outputSize, 0, outputSize, neRadius)
+  outputContext.lineTo(outputSize, outputSize - seRadius)
+  outputContext.quadraticCurveTo(outputSize, outputSize, outputSize - seRadius, outputSize)
+  outputContext.lineTo(swRadius, outputSize)
+  outputContext.quadraticCurveTo(0, outputSize, 0, outputSize - swRadius)
+  outputContext.lineTo(0, nwRadius)
+  outputContext.quadraticCurveTo(0, 0, nwRadius, 0)
+  outputContext.closePath()
+  outputContext.clip()
   outputContext.translate(outputSize / 2, outputSize / 2)
   outputContext.scale(viewportScale, viewportScale)
   outputContext.translate(crop.x, crop.y)

@@ -32,7 +32,7 @@ import {
   X,
 } from 'lucide-react'
 import { deriveIconEntryName } from '@/lib/iconManager'
-import { ICON_CROP_OUTPUT_SIZE } from '@/lib/imageCrop'
+import { ICON_CROP_OUTPUT_SIZE, type CropCornerRadii } from '@/lib/imageCrop'
 import { deriveWebsiteName, isWebsiteTarget, normalizeWebsiteUrl } from '@/lib/websiteIcon'
 import {
   createColoredIconDataUri,
@@ -215,6 +215,9 @@ export function AddIconDialog({
   const [websitePreviewResolved, setWebsitePreviewResolved] = useState(false)
   const [cropEditorTarget, setCropEditorTarget] = useState<CropEditorTarget | null>(null)
   const [editedRasterPreviews, setEditedRasterPreviews] = useState<string[]>([])
+  const [editedRasterCornerRadii, setEditedRasterCornerRadii] = useState<
+    Array<{ dataUri: string; cornerRadii: CropCornerRadii }>
+  >([])
   const textIconPreview = useMemo(
     () => createTextIconDataUri(iconText, iconColor),
     [iconColor, iconText]
@@ -246,6 +249,7 @@ export function AddIconDialog({
     setWebsitePreviewResolved(false)
     setCropEditorTarget(null)
     setEditedRasterPreviews([])
+    setEditedRasterCornerRadii([])
   }
 
   const closeDialog = () => {
@@ -313,6 +317,7 @@ export function AddIconDialog({
     setWebsitePreviewResolved(Boolean(initialDraft.websiteIconBase64))
     setCropEditorTarget(null)
     setEditedRasterPreviews([])
+    setEditedRasterCornerRadii([])
   }, [initialDraft, open])
 
   useEffect(() => {
@@ -622,7 +627,7 @@ export function AddIconDialog({
     setCropEditorTarget(target)
   }
 
-  const handleCropApply = ({ dataUri, colorId }: IconCropResult) => {
+  const handleCropApply = ({ dataUri, colorId, cornerRadii }: IconCropResult) => {
     if (!cropEditorTarget) return
 
     if (cropEditorTarget.kind === 'website') {
@@ -643,6 +648,10 @@ export function AddIconDialog({
     setEditedRasterPreviews(current =>
       current.includes(dataUri) ? current : [...current, dataUri]
     )
+    setEditedRasterCornerRadii(current => [
+      ...current.filter(entry => entry.dataUri !== dataUri),
+      { dataUri, cornerRadii },
+    ])
     setCropEditorTarget(null)
   }
 
@@ -679,6 +688,9 @@ export function AddIconDialog({
           : entryKind === 'website'
             ? websitePreview
             : targetPreview
+      const selectedCornerRadii = editedRasterCornerRadii.find(
+        entry => entry.dataUri === selectedPreview
+      )?.cornerRadii
       const initialTargetPath = initialDraft
         ? initialDraft.entryKind === 'website'
           ? normalizeWebsiteUrl(initialDraft.targetPath)
@@ -700,7 +712,12 @@ export function AddIconDialog({
         : selectedIconSource === 'text'
           ? textIconPreview
           : iconColor !== 'none'
-            ? await createColoredIconDataUri(selectedPreview, iconColor, ICON_CROP_OUTPUT_SIZE)
+            ? await createColoredIconDataUri(
+                selectedPreview,
+                iconColor,
+                ICON_CROP_OUTPUT_SIZE,
+                selectedCornerRadii
+              )
             : editedRasterPreviews.includes(selectedPreview) &&
                 !(entryKind === 'website' && selectedIconSource === 'target')
               ? selectedPreview

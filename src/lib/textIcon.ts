@@ -1,3 +1,5 @@
+import type { CropCornerRadii } from './imageCrop'
+
 export const ICON_COLOR_PRESETS = [
   { id: 'none', color: 'transparent', foreground: '#334155' },
   { id: 'ocean', color: '#2563EB', foreground: '#F8FAFC' },
@@ -30,17 +32,29 @@ export const pickRandomIconColor = (random = Math.random): IconColorId => {
   return COLORED_ICON_PRESETS[index].id
 }
 
-const drawRoundedSquare = (context: CanvasRenderingContext2D, size: number, radius: number) => {
+const drawRoundedSquare = (
+  context: CanvasRenderingContext2D,
+  size: number,
+  radius: number | CropCornerRadii
+) => {
+  const maxRadius = size / 2
+  const cornerRadii =
+    typeof radius === 'number' ? { nw: radius, ne: radius, se: radius, sw: radius } : radius
+  const nwRadius = Math.min(maxRadius, Math.max(0, cornerRadii.nw))
+  const neRadius = Math.min(maxRadius, Math.max(0, cornerRadii.ne))
+  const seRadius = Math.min(maxRadius, Math.max(0, cornerRadii.se))
+  const swRadius = Math.min(maxRadius, Math.max(0, cornerRadii.sw))
+
   context.beginPath()
-  context.moveTo(radius, 0)
-  context.lineTo(size - radius, 0)
-  context.quadraticCurveTo(size, 0, size, radius)
-  context.lineTo(size, size - radius)
-  context.quadraticCurveTo(size, size, size - radius, size)
-  context.lineTo(radius, size)
-  context.quadraticCurveTo(0, size, 0, size - radius)
-  context.lineTo(0, radius)
-  context.quadraticCurveTo(0, 0, radius, 0)
+  context.moveTo(nwRadius, 0)
+  context.lineTo(size - neRadius, 0)
+  context.quadraticCurveTo(size, 0, size, neRadius)
+  context.lineTo(size, size - seRadius)
+  context.quadraticCurveTo(size, size, size - seRadius, size)
+  context.lineTo(swRadius, size)
+  context.quadraticCurveTo(0, size, 0, size - swRadius)
+  context.lineTo(0, nwRadius)
+  context.quadraticCurveTo(0, 0, nwRadius, 0)
   context.closePath()
 }
 
@@ -94,20 +108,22 @@ export const createTextIconDataUri = (value: string, colorId: IconColorId, size 
 export const createColoredIconDataUri = async (
   source: string,
   colorId: IconColorId,
-  size = 256
+  size = 256,
+  cornerRadii?: CropCornerRadii
 ): Promise<string> => {
   if (!source || colorId === 'none' || typeof document === 'undefined') return source
 
   const preset = ICON_COLOR_PRESETS.find(candidate => candidate.id === colorId)
   if (!preset) return source
 
-  return createIconWithBackgroundColorDataUri(source, preset.color, size)
+  return createIconWithBackgroundColorDataUri(source, preset.color, size, cornerRadii)
 }
 
 export const createIconWithBackgroundColorDataUri = async (
   source: string,
   color: string,
-  size = 256
+  size = 256,
+  cornerRadii?: CropCornerRadii
 ): Promise<string> => {
   if (!source || !color || typeof document === 'undefined') return source
 
@@ -124,7 +140,7 @@ export const createIconWithBackgroundColorDataUri = async (
   const context = canvas.getContext('2d')
   if (!context) return ''
 
-  drawRoundedSquare(context, size, Math.round(size * 0.22))
+  drawRoundedSquare(context, size, cornerRadii ?? Math.round(size * 0.22))
   context.fillStyle = color
   context.fill()
 

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  clampCropCornerRadii,
   constrainCropFramePosition,
   constrainMediaPositionToViewport,
   extractImageColorAtViewportPoint,
@@ -10,6 +11,7 @@ import {
   getSourceImagePointAtViewportPoint,
   getUpscaledContainObjectFit,
   normalizeRotation,
+  resizeCropCornerRadius,
   resizeSquareCrop,
   ICON_CROP_MAX_ZOOM,
   ICON_CROP_MIN_ZOOM,
@@ -65,6 +67,22 @@ test('resizeSquareCrop follows Wetab fixed-square edge and corner resizing', () 
   assert.deepEqual(resizeSquareCrop(120, 0, 30, 's', 10, 150), {
     width: 150,
     height: 150,
+  })
+})
+
+test('crop corner radius handles grow inward and shrink outward independently', () => {
+  assert.equal(resizeCropCornerRadius(0, 20, 20, 'nw', 60), 20)
+  assert.equal(resizeCropCornerRadius(10, -20, 20, 'ne', 60), 30)
+  assert.equal(resizeCropCornerRadius(30, 20, 20, 'se', 60), 10)
+  assert.equal(resizeCropCornerRadius(10, 100, -100, 'sw', 60), 60)
+})
+
+test('crop corner radii stay inside half of the crop frame', () => {
+  assert.deepEqual(clampCropCornerRadii({ nw: -5, ne: 30, se: 80, sw: 10 }, 40), {
+    nw: 0,
+    ne: 30,
+    se: 40,
+    sw: 10,
   })
 })
 

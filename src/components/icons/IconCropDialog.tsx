@@ -24,6 +24,7 @@ import {
 import {
   constrainCropFramePosition,
   constrainMediaPositionToViewport,
+  clampCropCornerRadii,
   cropImageViewportDataUri,
   extractImageColorAtViewportPoint,
   getImageBoundedSquareCropSize,
@@ -32,7 +33,10 @@ import {
   ICON_CROP_MAX_ZOOM,
   ICON_CROP_MIN_ZOOM,
   ICON_CROP_OUTPUT_SIZE,
+  resizeCropCornerRadius,
   resizeSquareCrop,
+  type CropCorner,
+  type CropCornerRadii,
   type CropResizeHandle,
   type UpscaledContainObjectFit,
 } from '@/lib/imageCrop'
@@ -48,6 +52,7 @@ import { Button } from '@/components/ui/button'
 export type IconCropResult = {
   dataUri: string
   colorId: IconColorId
+  cornerRadii: CropCornerRadii
 }
 
 type IconCropDialogProps = {
@@ -59,7 +64,9 @@ type IconCropDialogProps = {
 }
 
 const INITIAL_CROP: Point = { x: 0, y: 0 }
+const INITIAL_CORNER_RADII: CropCornerRadii = { nw: 0, ne: 0, se: 0, sw: 0 }
 const MIN_CROP_SIZE = 10
+const CORNER_RADIUS_HANDLE_MIN_INSET = 18
 const TRANSPARENT_CHECKERBOARD =
   'conic-gradient(#94a3b8 25%, #cbd5e1 0 50%, #94a3b8 0 75%, #cbd5e1 0)'
 
@@ -79,6 +86,16 @@ type CropFrameMoveSession = {
   startPosition: Point
 }
 
+type CropCornerRadiusSession = {
+  pointerId: number
+  corner: CropCorner
+  startX: number
+  startY: number
+  startRadius: number
+  maxRadius: number
+  linked: boolean
+}
+
 const CROP_MOVE_EDGES = [
   '-top-1 left-3 right-3 h-2',
   '-right-1 bottom-3 top-3 w-2',
@@ -96,6 +113,33 @@ const CROP_RESIZE_POINTS: Array<{ handle: CropResizeHandle; className: string }>
   { handle: 's', className: '-bottom-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize' },
   { handle: 'se', className: '-bottom-1.5 -right-1.5 cursor-nwse-resize' },
 ]
+
+const CROP_CORNER_RADIUS_POINTS: Array<{ corner: CropCorner; className: string }> = [
+  { corner: 'nw', className: 'cursor-nwse-resize' },
+  { corner: 'ne', className: 'cursor-nesw-resize' },
+  { corner: 'se', className: 'cursor-nwse-resize' },
+  { corner: 'sw', className: 'cursor-nesw-resize' },
+]
+
+function CornerRadiusIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M8 3H6a3 3 0 0 0-3 3v2" />
+      <path d="M16 3h2a3 3 0 0 1 3 3v2" />
+      <path d="M21 16v2a3 3 0 0 1-3 3h-2" />
+      <path d="M8 21H6a3 3 0 0 1-3-3v-2" />
+    </svg>
+  )
+}
 
 export function IconCropDialog({
   open,
@@ -128,6 +172,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
   const initialCropSizeRef = useRef<Size | null>(null)
   const resizeSessionRef = useRef<CropResizeSession | null>(null)
   const frameMoveSessionRef = useRef<CropFrameMoveSession | null>(null)
+  const cornerRadiusSessionRef = useRef<CropCornerRadiusSession | null>(null)
   const suppressCropChangeRef = useRef(false)
   const cropChangeUnlockFrameRef = useRef<number | null>(null)
   const preserveViewportOnMediaLoadRef = useRef(false)
@@ -136,6 +181,8 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
   const [cropSize, setCropSize] = useState<Size | undefined>()
+  const [cornerRadii, setCornerRadii] = useState<CropCornerRadii>(INITIAL_CORNER_RADII)
+  const [cornerRadiiLinked, setCornerRadiiLinked] = useState(true)
   const [mediaSize, setMediaSize] = useState<MediaSize | null>(null)
   const [mediaObjectFit, setMediaObjectFit] = useState<UpscaledContainObjectFit | null>(null)
   const [viewportSize, setViewportSize] = useState(0)
@@ -204,6 +251,8 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
     const nextCropSize = initialCropSizeRef.current ?? undefined
     setCrop(INITIAL_CROP)
     setCropFramePosition(INITIAL_CROP)
+    setCornerRadii(INITIAL_CORNER_RADII)
+    setCornerRadiiLinked(true)
     setZoom(1)
     setRotation(0)
     setCropSize(nextCropSize)
@@ -257,6 +306,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
     })
     const nextCropSize = resizeSquareCrop(startSize, deltaX, deltaY, handle, MIN_CROP_SIZE, maxSize)
     setCropSize(nextCropSize)
+    setCornerRadii(current => clampCropCornerRadii(current, nextCropSize.width / 2))
     setCropFramePosition(current =>
       constrainCropFramePosition(current, nextCropSize, viewportSize, viewportSize)
     )
@@ -347,6 +397,92 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
     }
   }
 
+  const updateCornerRadius = (
+    corner: CropCorner,
+    startRadius: number,
+    deltaX: number,
+    deltaY: number,
+    maxRadius: number,
+    linked: boolean
+  ) => {
+    const nextRadius = resizeCropCornerRadius(startRadius, deltaX, deltaY, corner, maxRadius)
+    setCornerRadii(current =>
+      linked
+        ? { nw: nextRadius, ne: nextRadius, se: nextRadius, sw: nextRadius }
+        : { ...current, [corner]: nextRadius }
+    )
+    setError('')
+  }
+
+  const startCornerRadiusResize = (
+    corner: CropCorner,
+    event: ReactPointerEvent<HTMLButtonElement>
+  ) => {
+    if (!cropSize || applying) return
+    event.preventDefault()
+    event.stopPropagation()
+    cornerRadiusSessionRef.current = {
+      pointerId: event.pointerId,
+      corner,
+      startX: event.clientX,
+      startY: event.clientY,
+      startRadius: cornerRadii[corner],
+      maxRadius: cropSize.width / 2,
+      linked: cornerRadiiLinked,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const continueCornerRadiusResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const session = cornerRadiusSessionRef.current
+    if (!session || session.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    updateCornerRadius(
+      session.corner,
+      session.startRadius,
+      event.clientX - session.startX,
+      event.clientY - session.startY,
+      session.maxRadius,
+      session.linked
+    )
+  }
+
+  const finishCornerRadiusResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (cornerRadiusSessionRef.current?.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    cornerRadiusSessionRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
+
+  const handleCornerRadiusKeyDown = (
+    corner: CropCorner,
+    event: KeyboardEvent<HTMLButtonElement>
+  ) => {
+    if (!cropSize || applying) return
+    const step = event.shiftKey ? 10 : 2
+    const amount =
+      event.key === 'ArrowUp' || event.key === 'ArrowRight'
+        ? step
+        : event.key === 'ArrowDown' || event.key === 'ArrowLeft'
+          ? -step
+          : 0
+    if (amount === 0) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    setCornerRadii(current => {
+      const nextRadius = Math.min(cropSize.width / 2, Math.max(0, current[corner] + amount))
+      return cornerRadiiLinked
+        ? { nw: nextRadius, ne: nextRadius, se: nextRadius, sw: nextRadius }
+        : { ...current, [corner]: nextRadius }
+    })
+    setError('')
+  }
+
   const handleResizeKeyDown = (
     handle: CropResizeHandle,
     event: KeyboardEvent<HTMLButtonElement>
@@ -386,13 +522,30 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
         mediaSize,
         zoom,
         rotation,
+        cornerRadii,
       })
       if (!dataUri) throw new Error('The cropped icon is empty')
+      const outputRadiusScale = ICON_CROP_OUTPUT_SIZE / Math.max(1, cropSize.width)
+      const outputCornerRadii: CropCornerRadii = {
+        nw: cornerRadii.nw * outputRadiusScale,
+        ne: cornerRadii.ne * outputRadiusScale,
+        se: cornerRadii.se * outputRadiusScale,
+        sw: cornerRadii.sw * outputRadiusScale,
+      }
       const outputDataUri =
         usingCustomColor && customColor
-          ? await createIconWithBackgroundColorDataUri(dataUri, customColor, ICON_CROP_OUTPUT_SIZE)
+          ? await createIconWithBackgroundColorDataUri(
+              dataUri,
+              customColor,
+              ICON_CROP_OUTPUT_SIZE,
+              outputCornerRadii
+            )
           : dataUri
-      onApply({ dataUri: outputDataUri, colorId: usingCustomColor ? 'none' : colorId })
+      onApply({
+        dataUri: outputDataUri,
+        colorId: usingCustomColor ? 'none' : colorId,
+        cornerRadii: outputCornerRadii,
+      })
     } catch {
       setError(translate('无法生成裁剪后的图标，请重试。'))
       setApplying(false)
@@ -571,6 +724,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
                     cropAreaStyle: {
                       left: `calc(50% + ${cropFramePosition.x}px)`,
                       top: `calc(50% + ${cropFramePosition.y}px)`,
+                      borderRadius: `${cornerRadii.nw}px ${cornerRadii.ne}px ${cornerRadii.se}px ${cornerRadii.sw}px`,
                     },
                   }}
                   onCropChange={handleCropChange}
@@ -601,6 +755,8 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
                     setZoom(1)
                     setCrop(INITIAL_CROP)
                     setCropFramePosition(INITIAL_CROP)
+                    setCornerRadii(INITIAL_CORNER_RADII)
+                    setCornerRadiiLinked(true)
                     initialCropSizeRef.current = nextCropSize
                     setCropSize(nextCropSize ?? undefined)
                   }}
@@ -622,6 +778,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
                   height: cropSize.height,
                   left: `calc(50% + ${cropFramePosition.x}px)`,
                   top: `calc(50% + ${cropFramePosition.y}px)`,
+                  borderRadius: `${cornerRadii.nw}px ${cornerRadii.ne}px ${cornerRadii.se}px ${cornerRadii.sw}px`,
                 }}
               >
                 {CROP_MOVE_EDGES.map(className => (
@@ -653,6 +810,44 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
                     )}
                   />
                 ))}
+                {CROP_CORNER_RADIUS_POINTS.map(({ corner, className }) => {
+                  const maxInset = Math.max(5, cropSize.width / 2 - 6)
+                  const inset = Math.min(
+                    maxInset,
+                    Math.max(
+                      CORNER_RADIUS_HANDLE_MIN_INSET,
+                      cornerRadii[corner] + CORNER_RADIUS_HANDLE_MIN_INSET
+                    )
+                  )
+                  const verticalSide = corner.startsWith('n') ? 'top' : 'bottom'
+                  const horizontalSide = corner.endsWith('w') ? 'left' : 'right'
+                  const translateX = corner.endsWith('w') ? -50 : 50
+                  const translateY = corner.startsWith('n') ? -50 : 50
+
+                  return (
+                    <button
+                      key={corner}
+                      type="button"
+                      aria-label={translate('调整裁剪框圆角')}
+                      title={translate('调整裁剪框圆角')}
+                      onKeyDown={event => handleCornerRadiusKeyDown(corner, event)}
+                      onPointerDown={event => startCornerRadiusResize(corner, event)}
+                      onPointerMove={continueCornerRadiusResize}
+                      onPointerUp={finishCornerRadiusResize}
+                      onPointerCancel={finishCornerRadiusResize}
+                      disabled={applying}
+                      className={cn(
+                        'pointer-events-auto absolute z-20 h-2.5 w-2.5 touch-none rounded-full border-2 border-foreground bg-background shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none',
+                        className
+                      )}
+                      style={{
+                        [verticalSide]: inset,
+                        [horizontalSide]: inset,
+                        transform: `translate(${translateX}%, ${translateY}%)`,
+                      }}
+                    />
+                  )
+                })}
               </div>
             ) : null}
 
@@ -673,6 +868,48 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
                 </span>
               </div>
             ) : null}
+
+            <div
+              role="group"
+              aria-label={translate('图像工具')}
+              className="absolute right-2 top-2 z-40 flex flex-col gap-2 sm:left-full sm:right-auto sm:top-0 sm:ml-3"
+            >
+              <Button
+                type="button"
+                variant={cornerRadiiLinked ? 'secondary' : 'outline'}
+                size="icon"
+                aria-label={
+                  cornerRadiiLinked ? translate('四角圆角同步调整') : translate('四角圆角独立调整')
+                }
+                aria-pressed={cornerRadiiLinked}
+                title={
+                  cornerRadiiLinked ? translate('四角圆角同步调整') : translate('四角圆角独立调整')
+                }
+                onClick={() => setCornerRadiiLinked(current => !current)}
+                disabled={applying}
+                className="h-9 w-9"
+              >
+                <CornerRadiusIcon className="h-4 w-4" />
+              </Button>
+
+              <Button
+                type="button"
+                variant={imageOptimized ? 'secondary' : 'outline'}
+                size="icon"
+                aria-label={imageOptimized ? translate('取消清晰优化') : translate('清晰优化')}
+                aria-pressed={imageOptimized}
+                title={imageOptimized ? translate('取消清晰优化') : translate('清晰优化')}
+                onClick={() => void handleOptimizeImage()}
+                disabled={applying || optimizing || !mediaSize}
+                className="h-9 w-9"
+              >
+                {optimizing ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
 
           <div className="mt-[18px] flex items-center justify-between text-muted-foreground">
@@ -742,30 +979,6 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
                 <ZoomIn className="h-5 w-5" />
               </Button>
             </div>
-          </div>
-
-          <div className="mt-3 flex justify-center">
-            <Button
-              type="button"
-              variant={imageOptimized ? 'secondary' : 'outline'}
-              size="sm"
-              aria-pressed={imageOptimized}
-              title={imageOptimized ? translate('取消清晰优化') : translate('清晰优化')}
-              onClick={() => void handleOptimizeImage()}
-              disabled={applying || optimizing || !mediaSize}
-              className="h-8 gap-1.5 px-3 text-xs"
-            >
-              {optimizing ? (
-                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Sparkles className="h-3.5 w-3.5" />
-              )}
-              {optimizing
-                ? translate('正在优化...')
-                : imageOptimized
-                  ? translate('已优化')
-                  : translate('清晰优化')}
-            </Button>
           </div>
 
           <div className="mt-6 flex items-center justify-between gap-3">
