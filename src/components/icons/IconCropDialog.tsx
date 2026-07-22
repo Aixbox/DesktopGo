@@ -40,6 +40,8 @@ type IconCropDialogProps = {
 
 const INITIAL_CROP: Point = { x: 0, y: 0 }
 const MIN_CROP_SIZE = 10
+const TRANSPARENT_CHECKERBOARD =
+  'conic-gradient(#94a3b8 25%, #cbd5e1 0 50%, #94a3b8 0 75%, #cbd5e1 0)'
 
 type CropResizeSession = {
   pointerId: number
@@ -101,6 +103,8 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
   const previousFocusRef = useRef<HTMLElement | null>(null)
   const initialCropSizeRef = useRef<Size | null>(null)
   const resizeSessionRef = useRef<CropResizeSession | null>(null)
+  const suppressCropChangeRef = useRef(false)
+  const cropChangeUnlockFrameRef = useRef<number | null>(null)
   const [crop, setCrop] = useState<Point>(INITIAL_CROP)
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
@@ -173,6 +177,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
   }
 
   const handleCropChange = (nextCrop: Point) => {
+    if (suppressCropChangeRef.current) return
     setCrop(constrainCropPosition(nextCrop))
   }
 
@@ -193,6 +198,14 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
     deltaY: number,
     maxSize: number
   ) => {
+    suppressCropChangeRef.current = true
+    if (cropChangeUnlockFrameRef.current !== null) {
+      window.cancelAnimationFrame(cropChangeUnlockFrameRef.current)
+    }
+    cropChangeUnlockFrameRef.current = window.requestAnimationFrame(() => {
+      cropChangeUnlockFrameRef.current = null
+      if (!resizeSessionRef.current) suppressCropChangeRef.current = false
+    })
     setCropSize(resizeSquareCrop(startSize, deltaX, deltaY, handle, MIN_CROP_SIZE, maxSize))
     setError('')
   }
@@ -235,6 +248,13 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
+    if (cropChangeUnlockFrameRef.current !== null) {
+      window.cancelAnimationFrame(cropChangeUnlockFrameRef.current)
+    }
+    cropChangeUnlockFrameRef.current = window.requestAnimationFrame(() => {
+      cropChangeUnlockFrameRef.current = null
+      suppressCropChangeRef.current = false
+    })
   }
 
   const handleResizeKeyDown = (
@@ -350,8 +370,16 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
           </p>
 
           <div
-            className="relative mx-auto aspect-square w-full overflow-hidden bg-muted/60 p-1.5"
-            style={colorId === 'none' ? undefined : { backgroundColor: selectedColor?.color }}
+            className="relative mx-auto aspect-square w-full bg-muted/60"
+            style={
+              colorId === 'none'
+                ? {
+                    backgroundColor: '#cbd5e1',
+                    backgroundImage: TRANSPARENT_CHECKERBOARD,
+                    backgroundSize: '16px 16px',
+                  }
+                : { backgroundColor: selectedColor?.color }
+            }
           >
             <div
               ref={cropViewportRef}
@@ -374,11 +402,11 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
                   onCropChange={handleCropChange}
                   onZoomChange={handleZoomChange}
                   onMediaLoaded={nextMediaSize => {
-                    const nextCropSize = getImageBoundedSquareCropSize(
-                      nextMediaSize.width,
-                      nextMediaSize.height
-                    )
                     const nextViewportSize = cropViewportRef.current?.clientWidth ?? 0
+                    const nextCropSize =
+                      nextViewportSize > 0
+                        ? { width: nextViewportSize, height: nextViewportSize }
+                        : getImageBoundedSquareCropSize(nextMediaSize.width, nextMediaSize.height)
                     setMediaSize(nextMediaSize)
                     setViewportSize(nextViewportSize)
                     setZoom(ICON_CROP_MAX_ZOOM)
@@ -523,13 +551,20 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
                     'relative flex h-7 w-7 items-center justify-center rounded-full border transition-[border-color,box-shadow,transform] duration-150 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transform-none',
                     selected
                       ? 'border-foreground ring-2 ring-foreground/15'
-                      : 'border-border hover:border-foreground/40',
-                    preset.id === 'none' && 'bg-background'
+                      : 'border-border hover:border-foreground/40'
                   )}
-                  style={preset.id === 'none' ? undefined : { backgroundColor: preset.color }}
+                  style={
+                    preset.id === 'none'
+                      ? {
+                          backgroundColor: '#cbd5e1',
+                          backgroundImage: TRANSPARENT_CHECKERBOARD,
+                          backgroundSize: '8px 8px',
+                        }
+                      : { backgroundColor: preset.color }
+                  }
                 >
                   {preset.id === 'none' ? (
-                    <X className="h-3.5 w-3.5 text-muted-foreground" />
+                    <X className="h-3.5 w-3.5 text-slate-600 drop-shadow-[0_1px_1px_rgba(255,255,255,0.9)]" />
                   ) : selected ? (
                     <Check className="h-3.5 w-3.5 text-white" />
                   ) : null}
