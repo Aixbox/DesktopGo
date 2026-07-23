@@ -119,6 +119,34 @@ export const normalizeScrollGroups = ({
   return normalized
 }
 
+export const placeItemsInScrollGroup = (
+  groups: ScrollGroupMeta[],
+  targetGroupId: string | null | undefined,
+  itemIds: string[]
+): ScrollGroupMeta[] => {
+  if (!targetGroupId || itemIds.length === 0) return groups
+  const targetIndex = groups.findIndex(group => group.id === targetGroupId)
+  if (targetIndex < 0) return groups
+
+  const movedIds = Array.from(new Set(itemIds))
+  const movedIdSet = new Set(movedIds)
+  const nextGroups = groups.map(group => ({
+    ...group,
+    itemIds: group.itemIds.filter(itemId => !movedIdSet.has(itemId)),
+  }))
+  nextGroups[targetIndex] = {
+    ...nextGroups[targetIndex],
+    itemIds: [...nextGroups[targetIndex].itemIds, ...movedIds],
+  }
+
+  const changed = nextGroups.some(
+    (group, index) =>
+      group.itemIds.length !== groups[index].itemIds.length ||
+      group.itemIds.some((itemId, itemIndex) => itemId !== groups[index].itemIds[itemIndex])
+  )
+  return changed ? nextGroups : groups
+}
+
 export const commitScrollGroupItemOrder = (
   groups: ScrollGroupMeta[],
   groupId: string,

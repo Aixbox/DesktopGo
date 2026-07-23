@@ -360,6 +360,7 @@ export function Launchpad() {
   const [importPlacementRequest, setImportPlacementRequest] = useState<{
     token: number
     iconKeys: string[]
+    targetGroupId?: string
   } | null>(null)
   const [searchPreview, setSearchPreview] = useState<Awaited<
     ReturnType<typeof getSearchPreview>
@@ -403,6 +404,7 @@ export function Launchpad() {
   const importPlacementTokenRef = useRef(0)
   const dropPreviewRequestRef = useRef(0)
   const pendingAddIconKeySetRef = useRef<Set<string>>(new Set())
+  const pendingAddTargetGroupIdRef = useRef<string | undefined>(undefined)
   const iconEditSourceRequestRef = useRef(0)
   const searchFilterOptions = useMemo(() => {
     void language
@@ -510,13 +512,17 @@ export function Launchpad() {
     syncWindowPersistentState,
   ])
 
-  const handleAddIcons = useCallback(() => {
-    pendingAddIconKeySetRef.current = new Set(icons.map(buildIconSelectionKey))
-    setAddIconInitialDraft(null)
-    setEditingDropIndex(null)
-    setEditingIcon(null)
-    setAddIconDialogOpen(true)
-  }, [icons])
+  const handleAddIcons = useCallback(
+    (targetGroupId?: string) => {
+      pendingAddIconKeySetRef.current = new Set(icons.map(buildIconSelectionKey))
+      pendingAddTargetGroupIdRef.current = targetGroupId
+      setAddIconInitialDraft(null)
+      setEditingDropIndex(null)
+      setEditingIcon(null)
+      setAddIconDialogOpen(true)
+    },
+    [icons]
+  )
 
   useEffect(() => {
     if (!editRequestedIcon) return
@@ -577,9 +583,11 @@ export function Launchpad() {
         setImportPlacementRequest({
           token: importPlacementTokenRef.current,
           iconKeys: importedIconKeys,
+          targetGroupId: pendingAddTargetGroupIdRef.current,
         })
       }
     } finally {
+      pendingAddTargetGroupIdRef.current = undefined
       setIsImportingDrop(false)
     }
   }, [fetchIcons])
@@ -710,6 +718,7 @@ export function Launchpad() {
   const handleAddIconDialogOpenChange = useCallback((nextOpen: boolean) => {
     setAddIconDialogOpen(nextOpen)
     if (nextOpen) return
+    pendingAddTargetGroupIdRef.current = undefined
     setAddIconInitialDraft(null)
     setEditingDropIndex(null)
     setEditingIcon(null)
@@ -2147,7 +2156,7 @@ export function Launchpad() {
                   {translate('添加应用、快捷方式或网页，开始创建你的启动台。')}
                 </p>
               </div>
-              <Button type="button" size="sm" onClick={handleAddIcons}>
+              <Button type="button" size="sm" onClick={() => handleAddIcons()}>
                 <Plus className="h-4 w-4" />
                 {translate('添加图标')}
               </Button>

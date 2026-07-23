@@ -227,7 +227,7 @@ interface ScrollableOuterGridViewProps {
   onMoveItemToDock: (itemId: string, targetIndex: number) => void
   onMergeItems: (sourceId: string, targetId: string) => void
   addIconDisabled: boolean
-  onAddIcon?: () => void
+  onAddIcon?: (targetGroupId: string) => void
   onDeleteGroup: (page: number) => void
   onToggleSelectIcon: (key: string) => void
   onTilePointerDown: (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => void
@@ -1975,7 +1975,9 @@ export function ScrollableOuterGridView({
                     pointerEvents: addIconVisible ? undefined : 'none',
                   }}
                   onPointerDown={event => event.stopPropagation()}
-                  onClick={onAddIcon}
+                  onClick={() => {
+                    if (activeSection) onAddIcon?.(activeSection.groupId)
+                  }}
                 >
                   <span
                     className="icon-image flex flex-1 items-center justify-center overflow-hidden"

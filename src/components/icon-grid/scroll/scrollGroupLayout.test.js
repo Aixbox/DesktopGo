@@ -14,6 +14,7 @@ import {
   moveScrollItemRelative,
   moveScrollGroupItem,
   normalizeScrollGroups,
+  placeItemsInScrollGroup,
   replaceScrollPreviewItemsWithFolder,
   resolveScrollSidebarGhostSize,
   resolveScrollDropPosition,
@@ -411,6 +412,15 @@ assert(
     })
   ) === JSON.stringify(['target-a', 'target-b', 'dragged']),
   'Retargeting a sidebar drag must replace the source collision order with the destination group order'
+)
+
+assert(
+  JSON.stringify(
+    placeItemsInScrollGroup([meta('current', ['a']), meta('last', ['b', 'new-icon'])], 'current', [
+      'new-icon',
+    ])
+  ) === JSON.stringify([meta('current', ['a', 'new-icon']), meta('last', ['b'])]),
+  'A newly added icon must be moved from the hydration fallback group into the requested group'
 )
 
 console.log('scrollGroupLayout tests passed')

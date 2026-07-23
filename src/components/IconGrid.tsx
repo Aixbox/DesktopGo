@@ -64,6 +64,7 @@ interface IconGridProps {
   importPlacementRequest?: {
     token: number
     iconKeys: string[]
+    targetGroupId?: string
   } | null
 }
 

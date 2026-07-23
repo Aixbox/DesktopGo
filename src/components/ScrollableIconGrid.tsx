@@ -58,6 +58,7 @@ import {
   deleteScrollGroup,
   moveScrollGroupItem,
   normalizeScrollGroups,
+  placeItemsInScrollGroup,
   resolveScrollSidebarGhostSize,
 } from './icon-grid/scroll/scrollGroupLayout'
 import {
@@ -89,10 +90,11 @@ interface IconGridProps {
   sidebarCompact?: boolean
   onToggleSidebarCompact?: () => void
   addIconDisabled?: boolean
-  onAddIcon?: () => void
+  onAddIcon?: (targetGroupId: string) => void
   importPlacementRequest?: {
     token: number
     iconKeys: string[]
+    targetGroupId?: string
   } | null
 }
 
@@ -1355,14 +1357,20 @@ export function ScrollableIconGrid({
 
     const importedIdSet = new Set(importedIds)
     if (launchpadGridViewMode === 'scroll') {
-      const preferredGroupId = scrollGroupsRef.current[currentPageRef.current]?.id ?? null
-      const nextGroups = normalizeScrollGroups({
+      const requestedGroupExists = request.targetGroupId
+        ? scrollGroupsRef.current.some(group => group.id === request.targetGroupId)
+        : false
+      const preferredGroupId = requestedGroupExists
+        ? request.targetGroupId
+        : (scrollGroupsRef.current[currentPageRef.current]?.id ?? null)
+      const normalizedGroups = normalizeScrollGroups({
         groups: scrollGroupsRef.current,
         outerItemIds,
         hasExplicitItems: true,
         defaultName: index => translate('网格 {index}', { index: index + 1 }),
         preferredGroupId,
       })
+      const nextGroups = placeItemsInScrollGroup(normalizedGroups, preferredGroupId, importedIds)
       scrollGroupsRef.current = nextGroups
       setScrollGroups(nextGroups)
       appliedImportPlacementTokenRef.current = request.token
