@@ -7,6 +7,7 @@ import {
   extractImageColorAtViewportPoint,
   getImageBoundedSquareCropSize,
   getNextIconCropWheelZoom,
+  getNativeCropOutputSize,
   getRotatedImageSize,
   getSourceImagePointAtViewportPoint,
   getUpscaledContainObjectFit,
@@ -43,6 +44,29 @@ test('getImageBoundedSquareCropSize uses the displayed image short edge', () => 
 test('getImageBoundedSquareCropSize rejects unloaded image dimensions', () => {
   assert.equal(getImageBoundedSquareCropSize(0, 128), null)
   assert.equal(getImageBoundedSquareCropSize(Number.NaN, 128), null)
+})
+
+test('getNativeCropOutputSize preserves source pixels represented by the crop', () => {
+  const mediaSize = {
+    width: 300,
+    height: 150,
+    naturalWidth: 2400,
+    naturalHeight: 1200,
+  }
+
+  assert.equal(getNativeCropOutputSize({ width: 150, height: 150 }, mediaSize, 1), 1200)
+  assert.equal(getNativeCropOutputSize({ width: 150, height: 150 }, mediaSize, 2), 600)
+})
+
+test('getNativeCropOutputSize caps unsafe canvas sizes', () => {
+  const mediaSize = {
+    width: 100,
+    height: 100,
+    naturalWidth: 10000,
+    naturalHeight: 10000,
+  }
+
+  assert.equal(getNativeCropOutputSize({ width: 100, height: 100 }, mediaSize, 1), 4096)
 })
 
 test('getUpscaledContainObjectFit enlarges toward the limiting canvas edge', () => {

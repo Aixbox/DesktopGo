@@ -1,6 +1,7 @@
 import type { MediaSize, Point, Size } from 'react-easy-crop'
 
 export const ICON_CROP_OUTPUT_SIZE = 512
+export const ICON_CROP_MAX_OUTPUT_SIZE = 4096
 export const ICON_CROP_MIN_ZOOM = 0.1
 export const ICON_CROP_MAX_ZOOM = 3
 export const ICON_CROP_WHEEL_ENLARGE_FACTOR = 1.2
@@ -306,4 +307,19 @@ export const cropImageViewportDataUri = async (
   outputContext.drawImage(image, -image.naturalWidth / 2, -image.naturalHeight / 2)
 
   return outputCanvas.toDataURL('image/png')
+}
+
+export const getNativeCropOutputSize = (
+  cropSize: Size,
+  mediaSize: MediaSize,
+  zoom: number,
+  maxOutputSize = ICON_CROP_MAX_OUTPUT_SIZE
+): number => {
+  const naturalWidth = Math.max(1, mediaSize.naturalWidth)
+  const naturalHeight = Math.max(1, mediaSize.naturalHeight)
+  const displayedScaleX = mediaSize.width / naturalWidth
+  const displayedScaleY = mediaSize.height / naturalHeight
+  const sourceScale = Math.max(0.000001, Math.min(displayedScaleX, displayedScaleY) * zoom)
+  const nativeCropSize = Math.round(Math.max(cropSize.width, cropSize.height) / sourceScale)
+  return Math.max(1, Math.min(maxOutputSize, nativeCropSize))
 }

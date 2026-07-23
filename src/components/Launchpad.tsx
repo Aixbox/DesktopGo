@@ -528,12 +528,14 @@ export function Launchpad() {
 
     void invoke<string>('get_icon_edit_source', { id: editRequestedIcon.id })
       .catch(() => '')
-      .then(masterSource => {
+      .then(canonicalSource => {
         if (iconEditSourceRequestRef.current !== requestId) return
 
         const isWebsiteTarget = editRequestedIcon.item_type === 'website' && iconSource === 'target'
-        const websiteSource = isWebsiteTarget ? masterSource || editRequestedIcon.icon_base64 : ''
-        const generatedSource = isWebsiteTarget ? '' : masterSource
+        const websiteSource = isWebsiteTarget
+          ? canonicalSource || editRequestedIcon.icon_base64
+          : ''
+        const generatedSource = isWebsiteTarget ? '' : canonicalSource
 
         setAddIconInitialDraft({
           entryKind: editRequestedIcon.item_type === 'website' ? 'website' : 'app',

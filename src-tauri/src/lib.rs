@@ -17,8 +17,8 @@ use ai::{ai_chat, ai_classify_icons};
 use commands::{
     activate_main_window, activate_settings_window, apply_window_style, check_for_app_update,
     close_settings_window, create_icon_entry, delete_icons, extract_website_icon,
-    get_drag_preview_icon, get_icon_edit_source, get_icon_manager_items, get_icons,
-    get_launch_on_startup_enabled, get_layout_payload, get_layout_payloads,
+    get_custom_icon_source, get_drag_preview_icon, get_icon_edit_source, get_icon_manager_items,
+    get_icons, get_launch_on_startup_enabled, get_layout_payload, get_layout_payloads,
     get_main_window_always_on_top_enabled, get_search_preview, get_search_runtime_status,
     get_updater_configuration_status, hide_icons, import_dropped_paths, install_app_update,
     launch_app, notify_main_window_ready, optimize_icon_image, record_search_result_run,
@@ -367,6 +367,7 @@ pub fn run() {
             check_for_app_update,
             install_app_update,
             get_drag_preview_icon,
+            get_custom_icon_source,
             optimize_icon_image,
             update_launchpad_shortcut,
             close_settings_window,

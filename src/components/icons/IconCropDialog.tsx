@@ -28,11 +28,11 @@ import {
   cropImageViewportDataUri,
   extractImageColorAtViewportPoint,
   getImageBoundedSquareCropSize,
+  getNativeCropOutputSize,
   getNextIconCropWheelZoom,
   getUpscaledContainObjectFit,
   ICON_CROP_MAX_ZOOM,
   ICON_CROP_MIN_ZOOM,
-  ICON_CROP_OUTPUT_SIZE,
   resizeCropCornerRadius,
   resizeSquareCrop,
   type CropCorner,
@@ -513,19 +513,24 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
     setApplying(true)
     setError('')
     try {
-      const dataUri = await cropImageViewportDataUri(editorSource, {
-        crop: {
-          x: crop.x - cropFramePosition.x,
-          y: crop.y - cropFramePosition.y,
+      const outputSize = getNativeCropOutputSize(cropSize, mediaSize, zoom)
+      const dataUri = await cropImageViewportDataUri(
+        editorSource,
+        {
+          crop: {
+            x: crop.x - cropFramePosition.x,
+            y: crop.y - cropFramePosition.y,
+          },
+          cropSize,
+          mediaSize,
+          zoom,
+          rotation,
+          cornerRadii,
         },
-        cropSize,
-        mediaSize,
-        zoom,
-        rotation,
-        cornerRadii,
-      })
+        outputSize
+      )
       if (!dataUri) throw new Error('The cropped icon is empty')
-      const outputRadiusScale = ICON_CROP_OUTPUT_SIZE / Math.max(1, cropSize.width)
+      const outputRadiusScale = outputSize / Math.max(1, cropSize.width)
       const outputCornerRadii: CropCornerRadii = {
         nw: cornerRadii.nw * outputRadiusScale,
         ne: cornerRadii.ne * outputRadiusScale,
@@ -537,7 +542,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
           ? await createIconWithBackgroundColorDataUri(
               dataUri,
               customColor,
-              ICON_CROP_OUTPUT_SIZE,
+              outputSize,
               outputCornerRadii
             )
           : dataUri

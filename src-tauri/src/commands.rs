@@ -531,6 +531,17 @@ pub async fn get_drag_preview_icon(path: String, icon_size: i32) -> Result<Strin
 }
 
 #[tauri::command]
+pub async fn get_custom_icon_source(path: String) -> Result<String, String> {
+    let trimmed = path.trim().to_string();
+    if trimmed.is_empty() {
+        return Ok(String::new());
+    }
+    tauri::async_runtime::spawn_blocking(move || icons::get_custom_icon_source(&trimmed))
+        .await
+        .map_err(|error| format!("Failed to load custom icon source: {error}"))?
+}
+
+#[tauri::command]
 pub async fn optimize_icon_image(data_uri: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || icons::optimize_icon_data_uri(&data_uri))
         .await

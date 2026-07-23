@@ -11,8 +11,9 @@ use std::path::PathBuf;
 use std::time::Duration;
 use url::Url;
 
-const ICON_MASTER_MAX_SIZE: u32 = 512;
+const NATIVE_ICON_EXTRACT_SIZE: i32 = 512;
 const ICON_OPTIMIZED_OUTPUT_SIZE: u32 = 512;
+const ICON_SNAPSHOT_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Copy)]
 struct IconSharpenSettings {
@@ -21,9 +22,9 @@ struct IconSharpenSettings {
 }
 
 use super::models::{
-    CreateIconEntryInput, DesktopIcon, IconBucket, IconManagerItem, IconMutationTarget,
-    IconSnapshot, ImportDroppedPathsResult, InvalidIconEntry, ScannedDesktopItem, SnapshotIconItem,
-    SnapshotIconPaths, UpdateIconEntryInput, WebsiteIconResult, ICON_SOURCE_CUSTOMAPP,
+    CreateIconEntryInput, DesktopIcon, IconManagerItem, IconMutationTarget, IconSnapshot,
+    ImportDroppedPathsResult, InvalidIconEntry, LegacySnapshotIconPaths, ScannedDesktopItem,
+    SnapshotIconItem, UpdateIconEntryInput, WebsiteIconResult, ICON_SOURCE_CUSTOMAPP,
     ICON_SOURCE_DESKTOP,
 };
 #[cfg(windows)]
@@ -89,9 +90,16 @@ pub fn get_icon_edit_source(app_handle: tauri::AppHandle, id: &str) -> Result<St
             .iter()
             .find(|item| item.id == id)
             .ok_or_else(|| "Icon entry was not found".to_string())?;
-        let rel_path = item.icons.master.as_str();
+        let rel_path = item.icon.as_str();
         if rel_path.is_empty() {
             return Ok(String::new());
+        }
+
+        if is_legacy_bucket_icon_path(rel_path) && !item.custom_icon_path.is_empty() {
+            let original_path = PathBuf::from(&item.custom_icon_path);
+            if let Some(source) = image_file_to_original_data_uri(&original_path) {
+                return Ok(source);
+            }
         }
 
         let source = read_icon_file_as_data_uri(&snapshot_base_dir(&app_handle)?.join(rel_path));
@@ -195,7 +203,10 @@ fn load_icon_library_snapshot(app_handle: &tauri::AppHandle) -> Result<IconSnaps
     for (index, item) in icons.iter_mut().enumerate() {
         item.display_order = (index as u64).saturating_add(1);
     }
-    let snapshot = IconSnapshot { version: 1, icons };
+    let snapshot = IconSnapshot {
+        version: ICON_SNAPSHOT_VERSION,
+        icons,
+    };
     write_icon_snapshot(app_handle, IconSource::Library, &snapshot)?;
     Ok(snapshot)
 }
@@ -233,6 +244,31 @@ pub fn get_path_icon_base64(path: &str, icon_size: i32) -> String {
         let _ = path;
         let _ = icon_size;
         String::new()
+    }
+}
+
+pub fn get_custom_icon_source(path: &str) -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        let item_path = PathBuf::from(path);
+        if !item_path.is_file() {
+            return Err("Custom icon path does not point to a file".to_string());
+        }
+        if let Some(source) = image_file_to_original_data_uri(&item_path) {
+            return Ok(source);
+        }
+
+        let source = get_path_icon_base64_windows(path, NATIVE_ICON_EXTRACT_SIZE);
+        if source.is_empty() {
+            return Err("Custom icon could not be extracted".to_string());
+        }
+        Ok(source)
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        Err("Not supported on this platform".to_string())
     }
 }
 
@@ -1388,20 +1424,7 @@ pub fn optimize_icon_data_uri(data_uri: &str) -> Result<String, String> {
     ))
 }
 
-fn resize_icon_master(image: &image::DynamicImage) -> image::DynamicImage {
-    if image.width() > ICON_MASTER_MAX_SIZE || image.height() > ICON_MASTER_MAX_SIZE {
-        image.resize(
-            ICON_MASTER_MAX_SIZE,
-            ICON_MASTER_MAX_SIZE,
-            image::imageops::FilterType::Lanczos3,
-        )
-    } else {
-        image.clone()
-    }
-}
-
 fn website_icon_to_data_uri(image: &image::DynamicImage) -> Result<String, String> {
-    let image = resize_icon_master(image);
     let mut output = Cursor::new(Vec::new());
     image
         .write_to(&mut output, image::ImageFormat::Png)
@@ -1700,6 +1723,78 @@ mod website_icon_tests {
         }
     }
 
+    fn snapshot_item_with_legacy_icons(paths: LegacySnapshotIconPaths) -> SnapshotIconItem {
+        SnapshotIconItem {
+            id: "legacy-id".to_string(),
+            key: "legacy-key".to_string(),
+            display_order: 1,
+            name: "Legacy".to_string(),
+            path: "legacy.lnk".to_string(),
+            target_path: "legacy.exe".to_string(),
+            launch_arguments: String::new(),
+            working_directory: String::new(),
+            custom_icon_path: String::new(),
+            icon_source: "target".to_string(),
+            icon_color: "none".to_string(),
+            icon_text: String::new(),
+            item_type: "shortcut".to_string(),
+            hidden: false,
+            icon: String::new(),
+            legacy_icons: Some(paths),
+        }
+    }
+
+    #[test]
+    fn migrates_legacy_buckets_to_one_canonical_icon() {
+        let mut snapshot = IconSnapshot {
+            version: 1,
+            icons: vec![snapshot_item_with_legacy_icons(LegacySnapshotIconPaths {
+                master: "master.png".to_string(),
+                small: "small.png".to_string(),
+                medium: "medium.png".to_string(),
+                large: "large.png".to_string(),
+            })],
+        };
+
+        assert!(migrate_snapshot_to_single_icon(&mut snapshot));
+        assert_eq!(snapshot.version, ICON_SNAPSHOT_VERSION);
+        assert_eq!(snapshot.icons[0].icon, "master.png");
+        assert!(snapshot.icons[0].legacy_icons.is_none());
+
+        let json = serde_json::to_string(&snapshot).expect("serialize migrated snapshot");
+        assert!(!json.contains("\"icons\":{"));
+    }
+
+    #[test]
+    fn migration_uses_the_largest_legacy_bucket_when_no_master_exists() {
+        let mut snapshot = IconSnapshot {
+            version: 1,
+            icons: vec![snapshot_item_with_legacy_icons(LegacySnapshotIconPaths {
+                master: String::new(),
+                small: "small.png".to_string(),
+                medium: "medium.png".to_string(),
+                large: "large.png".to_string(),
+            })],
+        };
+
+        assert!(migrate_snapshot_to_single_icon(&mut snapshot));
+        assert_eq!(snapshot.icons[0].icon, "large.png");
+    }
+
+    #[test]
+    fn recognizes_only_legacy_display_bucket_paths() {
+        assert!(is_legacy_bucket_icon_path(
+            "icons/library/large/legacy-id.png"
+        ));
+        assert!(is_legacy_bucket_icon_path(
+            "icons\\library\\small\\legacy-id.png"
+        ));
+        assert!(!is_legacy_bucket_icon_path(
+            "icons/library/master/legacy-id.png"
+        ));
+        assert!(!is_legacy_bucket_icon_path("icons/library/legacy-id.img"));
+    }
+
     #[test]
     fn parses_high_resolution_page_and_manifest_candidates() {
         let page_url = Url::parse("https://example.com/path/").expect("valid page URL");
@@ -1988,17 +2083,40 @@ mod website_icon_tests {
     }
 
     #[test]
-    fn master_images_keep_native_detail_without_exceeding_the_storage_limit() {
-        let small = image::DynamicImage::new_rgba8(180, 120);
-        let large = image::DynamicImage::new_rgba8(1024, 768);
-        let resized_small = resize_icon_master(&small);
-        let resized_large = resize_icon_master(&large);
+    fn website_icon_encoding_preserves_the_selected_source_dimensions() {
+        let source = image::DynamicImage::new_rgba8(1024, 768);
+        let data_uri = website_icon_to_data_uri(&source).expect("encode website icon");
+        let data = decode_data_uri_png(&data_uri).expect("decode website icon data URI");
+        let decoded = image::load_from_memory(&data).expect("decode website icon image");
 
-        assert_eq!((resized_small.width(), resized_small.height()), (180, 120));
-        assert_eq!(
-            (resized_large.width(), resized_large.height()),
-            (ICON_MASTER_MAX_SIZE, 384),
-        );
+        assert_eq!((decoded.width(), decoded.height()), (1024, 768));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn custom_image_decoder_uses_file_contents_when_extension_is_misleading() {
+        let source = image::DynamicImage::ImageRgb8(image::ImageBuffer::from_pixel(
+            32,
+            20,
+            image::Rgb([40, 80, 120]),
+        ));
+        let mut encoded = Cursor::new(Vec::new());
+        source
+            .write_to(&mut encoded, image::ImageFormat::Jpeg)
+            .expect("encode JPEG image");
+        let original_bytes = encoded.into_inner();
+        let path = std::env::temp_dir().join(format!("desktopgo-{}.png", uuid::Uuid::new_v4()));
+        std::fs::write(&path, &original_bytes).expect("write misleading image file");
+
+        let data_uri = get_custom_icon_source(path.to_string_lossy().as_ref())
+            .expect("load custom image source");
+        let _ = std::fs::remove_file(path);
+        assert!(data_uri.starts_with("data:image/jpeg;base64,"));
+        let decoded_bytes = decode_data_uri_png(&data_uri).expect("decode custom image data URI");
+        let decoded = image::load_from_memory(&decoded_bytes).expect("decode custom image PNG");
+
+        assert_eq!(decoded_bytes, original_bytes);
+        assert_eq!((decoded.width(), decoded.height()), (32, 20));
     }
 
     #[test]
@@ -2056,9 +2174,39 @@ mod website_icon_tests {
 // ===== Windows implementations =====
 
 #[cfg(windows)]
+fn image_mime_type(data: &[u8]) -> Option<&'static str> {
+    match image::guess_format(data).ok()? {
+        image::ImageFormat::Png => Some("image/png"),
+        image::ImageFormat::Jpeg => Some("image/jpeg"),
+        image::ImageFormat::Gif => Some("image/gif"),
+        image::ImageFormat::WebP => Some("image/webp"),
+        image::ImageFormat::Bmp => Some("image/bmp"),
+        image::ImageFormat::Ico => Some("image/x-icon"),
+        image::ImageFormat::Tiff => Some("image/tiff"),
+        _ => None,
+    }
+}
+
+#[cfg(windows)]
+fn image_bytes_to_data_uri(data: &[u8]) -> Option<String> {
+    let mime = image_mime_type(data)?;
+    Some(format!(
+        "data:{mime};base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(data)
+    ))
+}
+
+#[cfg(windows)]
+fn image_file_to_original_data_uri(path: &PathBuf) -> Option<String> {
+    let data = std::fs::read(path).ok()?;
+    image::load_from_memory(&data).ok()?;
+    image_bytes_to_data_uri(&data)
+}
+
+#[cfg(windows)]
 fn image_file_to_data_uri(path: &PathBuf, icon_size: i32) -> Option<String> {
     let size = icon_size.max(1) as u32;
-    let image = image::open(path)
+    let image = image::load_from_memory(&std::fs::read(path).ok()?)
         .ok()?
         .resize(size, size, image::imageops::FilterType::Lanczos3);
     let mut output = Cursor::new(Vec::new());
@@ -2155,6 +2303,63 @@ fn normalize_snapshot_display_order(snapshot: &mut IconSnapshot) -> bool {
     changed
 }
 
+fn best_legacy_icon_path(paths: &LegacySnapshotIconPaths) -> &str {
+    [
+        paths.master.as_str(),
+        paths.large.as_str(),
+        paths.medium.as_str(),
+        paths.small.as_str(),
+    ]
+    .into_iter()
+    .find(|path| !path.is_empty())
+    .unwrap_or_default()
+}
+
+fn is_legacy_bucket_icon_path(path: &str) -> bool {
+    let normalized = path.replace('\\', "/");
+    ["/small/", "/medium/", "/large/"]
+        .iter()
+        .any(|segment| normalized.contains(segment))
+}
+
+fn migrate_snapshot_to_single_icon(snapshot: &mut IconSnapshot) -> bool {
+    let mut changed = snapshot.version != ICON_SNAPSHOT_VERSION;
+    snapshot.version = ICON_SNAPSHOT_VERSION;
+
+    for item in &mut snapshot.icons {
+        if item.icon.is_empty() {
+            if let Some(paths) = item.legacy_icons.as_ref() {
+                item.icon = best_legacy_icon_path(paths).to_string();
+            }
+        }
+        if item.legacy_icons.take().is_some() {
+            changed = true;
+        }
+    }
+
+    changed
+}
+
+fn obsolete_legacy_icon_paths(snapshot: &IconSnapshot) -> HashSet<String> {
+    let mut obsolete = HashSet::new();
+    for item in &snapshot.icons {
+        let Some(paths) = item.legacy_icons.as_ref() else {
+            continue;
+        };
+        let retained = if item.icon.is_empty() {
+            best_legacy_icon_path(paths)
+        } else {
+            item.icon.as_str()
+        };
+        for path in [&paths.master, &paths.large, &paths.medium, &paths.small] {
+            if !path.is_empty() && path != retained {
+                obsolete.insert(path.clone());
+            }
+        }
+    }
+    obsolete
+}
+
 #[cfg(windows)]
 fn read_icon_snapshot(
     app_handle: &tauri::AppHandle,
@@ -2170,10 +2375,15 @@ fn read_icon_snapshot(
     let mut snapshot: IconSnapshot = serde_json::from_str(&content)
         .map_err(|e| format!("Failed to parse icon snapshot JSON: {}", e))?;
 
-    let changed = normalize_snapshot_display_order(&mut snapshot);
+    let obsolete_icon_paths = obsolete_legacy_icon_paths(&snapshot);
+    let changed = normalize_snapshot_display_order(&mut snapshot)
+        | migrate_snapshot_to_single_icon(&mut snapshot);
 
     if changed {
         write_icon_snapshot(app_handle, source, &snapshot)?;
+        for rel_path in obsolete_icon_paths {
+            let _ = remove_cached_icon_file(app_handle, &rel_path);
+        }
     }
 
     Ok(Some(snapshot))
@@ -2214,18 +2424,8 @@ fn remove_cached_icon_file(app_handle: &tauri::AppHandle, rel_path: &str) -> Res
 }
 
 #[cfg(windows)]
-fn icon_file_rel_path(id: &str, bucket: IconBucket, source: IconSource) -> String {
-    format!(
-        "icons/{}/{}/{}.png",
-        source.cache_folder_name(),
-        bucket.folder_name(),
-        id
-    )
-}
-
-#[cfg(windows)]
-fn icon_master_rel_path(id: &str, source: IconSource) -> String {
-    format!("icons/{}/master/{}.png", source.cache_folder_name(), id)
+fn icon_file_rel_path(id: &str, source: IconSource) -> String {
+    format!("icons/{}/{}.img", source.cache_folder_name(), id)
 }
 
 #[cfg(windows)]
@@ -2245,10 +2445,7 @@ fn decode_data_uri_png(data_uri: &str) -> Result<Vec<u8>, String> {
 #[cfg(windows)]
 fn read_icon_file_as_data_uri(path: &PathBuf) -> String {
     match std::fs::read(path) {
-        Ok(data) => format!(
-            "data:image/png;base64,{}",
-            base64::engine::general_purpose::STANDARD.encode(data)
-        ),
+        Ok(data) => image_bytes_to_data_uri(&data).unwrap_or_default(),
         Err(_) => String::new(),
     }
 }
@@ -2367,192 +2564,79 @@ fn extract_icon_for_scanned_item(item: &ScannedDesktopItem, icon_size: i32) -> S
 }
 
 #[cfg(windows)]
-fn bucket_actual_size(bucket: IconBucket) -> i32 {
-    let scaled = (bucket.logical_size() as f64 * get_dpi_scale()).round() as i32;
-    scaled.max(bucket.logical_size())
-}
-
-#[cfg(windows)]
-fn save_scanned_icon_for_bucket(
+fn save_icon_bytes(
     app_handle: &tauri::AppHandle,
-    item: &ScannedDesktopItem,
+    data: &[u8],
     id: &str,
-    bucket: IconBucket,
     source: IconSource,
 ) -> Result<String, String> {
-    let icon_data_uri = extract_icon_for_scanned_item(item, bucket_actual_size(bucket));
-    if icon_data_uri.is_empty() {
-        return Ok(String::new());
-    }
+    image_mime_type(data).ok_or_else(|| "Icon image data is not supported".to_string())?;
+    image::load_from_memory(data)
+        .map_err(|error| format!("Icon image data could not be decoded: {error}"))?;
 
-    let icon_data = match decode_data_uri_png(&icon_data_uri) {
-        Ok(data) => data,
-        Err(_) => return Ok(String::new()),
-    };
-
-    let rel_path = icon_file_rel_path(id, bucket, source);
+    let rel_path = icon_file_rel_path(id, source);
     let abs_path = snapshot_base_dir(app_handle)?.join(&rel_path);
     if let Some(parent) = abs_path.parent() {
         std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create icon cache directory {:?}: {}", parent, e))?;
+            .map_err(|error| format!("Failed to create icon directory {:?}: {error}", parent))?;
     }
-    std::fs::write(&abs_path, icon_data)
-        .map_err(|e| format!("Failed to write icon file {:?}: {}", abs_path, e))?;
-    Ok(rel_path)
-}
-
-#[cfg(windows)]
-fn build_custom_icon_paths(
-    app_handle: &tauri::AppHandle,
-    custom_icon_path: &str,
-    id: &str,
-    source: IconSource,
-) -> Result<SnapshotIconPaths, String> {
-    let icon_path = PathBuf::from(custom_icon_path);
-    if !icon_path.is_file() {
-        return Err("Custom icon path does not point to a file".to_string());
-    }
-    if let Ok(source_image) = image::open(&icon_path) {
-        return Ok(SnapshotIconPaths {
-            master: save_data_icon_master(app_handle, &source_image, id, source)?,
-            small: save_data_icon_for_bucket(
-                app_handle,
-                &source_image,
-                id,
-                IconBucket::Small,
-                source,
-            )?,
-            medium: save_data_icon_for_bucket(
-                app_handle,
-                &source_image,
-                id,
-                IconBucket::Medium,
-                source,
-            )?,
-            large: save_data_icon_for_bucket(
-                app_handle,
-                &source_image,
-                id,
-                IconBucket::Large,
-                source,
-            )?,
-        });
-    }
-    let icon_item = build_scanned_item_from_path(&icon_path)
-        .ok_or_else(|| "Custom icon file does not exist or is not supported".to_string())?;
-    let icons = SnapshotIconPaths {
-        master: String::new(),
-        small: save_scanned_icon_for_bucket(app_handle, &icon_item, id, IconBucket::Small, source)?,
-        medium: save_scanned_icon_for_bucket(
-            app_handle,
-            &icon_item,
-            id,
-            IconBucket::Medium,
-            source,
-        )?,
-        large: save_scanned_icon_for_bucket(app_handle, &icon_item, id, IconBucket::Large, source)?,
-    };
-    if icons.small.is_empty() && icons.medium.is_empty() && icons.large.is_empty() {
-        return Err("Failed to extract an icon from the custom icon file".to_string());
-    }
-    Ok(icons)
-}
-
-#[cfg(windows)]
-fn save_data_icon_master(
-    app_handle: &tauri::AppHandle,
-    source_image: &image::DynamicImage,
-    id: &str,
-    source: IconSource,
-) -> Result<String, String> {
-    let master = resize_icon_master(source_image);
-    let mut output = Cursor::new(Vec::new());
-    master
-        .write_to(&mut output, image::ImageFormat::Png)
-        .map_err(|error| format!("Failed to encode icon master: {error}"))?;
-
-    let rel_path = icon_master_rel_path(id, source);
-    let abs_path = snapshot_base_dir(app_handle)?.join(&rel_path);
-    if let Some(parent) = abs_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| {
-            format!(
-                "Failed to create icon master directory {:?}: {error}",
-                parent
-            )
-        })?;
-    }
-    std::fs::write(&abs_path, output.into_inner())
-        .map_err(|error| format!("Failed to write icon master {:?}: {error}", abs_path))?;
-    Ok(rel_path)
-}
-
-#[cfg(windows)]
-fn save_data_icon_for_bucket(
-    app_handle: &tauri::AppHandle,
-    source_image: &image::DynamicImage,
-    id: &str,
-    bucket: IconBucket,
-    source: IconSource,
-) -> Result<String, String> {
-    let size = bucket_actual_size(bucket).max(1) as u32;
-    let resized = source_image.resize(size, size, image::imageops::FilterType::Lanczos3);
-    let mut output = Cursor::new(Vec::new());
-    resized
-        .write_to(&mut output, image::ImageFormat::Png)
-        .map_err(|error| format!("Failed to encode cached icon: {error}"))?;
-
-    let rel_path = icon_file_rel_path(id, bucket, source);
-    let abs_path = snapshot_base_dir(app_handle)?.join(&rel_path);
-    if let Some(parent) = abs_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| {
-            format!(
-                "Failed to create icon cache directory {:?}: {error}",
-                parent
-            )
-        })?;
-    }
-    std::fs::write(&abs_path, output.into_inner())
+    std::fs::write(&abs_path, data)
         .map_err(|error| format!("Failed to write icon file {:?}: {error}", abs_path))?;
     Ok(rel_path)
 }
 
 #[cfg(windows)]
-fn build_data_icon_paths(
+fn build_data_icon_path(
     app_handle: &tauri::AppHandle,
     data_uri: &str,
     id: &str,
     source: IconSource,
-) -> Result<SnapshotIconPaths, String> {
-    let icon_data = decode_data_uri_png(data_uri)?;
-    let source_image = image::load_from_memory(&icon_data)
-        .map_err(|error| format!("Failed to decode generated icon: {error}"))?;
-    Ok(SnapshotIconPaths {
-        master: save_data_icon_master(app_handle, &source_image, id, source)?,
-        small: save_data_icon_for_bucket(app_handle, &source_image, id, IconBucket::Small, source)?,
-        medium: save_data_icon_for_bucket(
-            app_handle,
-            &source_image,
-            id,
-            IconBucket::Medium,
-            source,
-        )?,
-        large: save_data_icon_for_bucket(app_handle, &source_image, id, IconBucket::Large, source)?,
-    })
+) -> Result<String, String> {
+    let data = decode_data_uri_png(data_uri)?;
+    save_icon_bytes(app_handle, &data, id, source)
 }
 
 #[cfg(windows)]
-fn build_scanned_icon_paths(
+fn build_scanned_icon_path(
     app_handle: &tauri::AppHandle,
     item: &ScannedDesktopItem,
     id: &str,
     source: IconSource,
-) -> Result<SnapshotIconPaths, String> {
-    Ok(SnapshotIconPaths {
-        master: String::new(),
-        small: save_scanned_icon_for_bucket(app_handle, item, id, IconBucket::Small, source)?,
-        medium: save_scanned_icon_for_bucket(app_handle, item, id, IconBucket::Medium, source)?,
-        large: save_scanned_icon_for_bucket(app_handle, item, id, IconBucket::Large, source)?,
-    })
+) -> Result<String, String> {
+    let requested_size = ((NATIVE_ICON_EXTRACT_SIZE as f64) * get_dpi_scale()).round() as i32;
+    let data_uri =
+        extract_icon_for_scanned_item(item, requested_size.max(NATIVE_ICON_EXTRACT_SIZE));
+    if data_uri.is_empty() {
+        return Ok(String::new());
+    }
+    build_data_icon_path(app_handle, &data_uri, id, source)
+}
+
+#[cfg(windows)]
+fn build_custom_icon_path(
+    app_handle: &tauri::AppHandle,
+    custom_icon_path: &str,
+    id: &str,
+    source: IconSource,
+) -> Result<String, String> {
+    let path = PathBuf::from(custom_icon_path);
+    if !path.is_file() {
+        return Err("Custom icon path does not point to a file".to_string());
+    }
+
+    let data = std::fs::read(&path)
+        .map_err(|error| format!("Failed to read custom icon {:?}: {error}", path))?;
+    if image::load_from_memory(&data).is_ok() && image_mime_type(&data).is_some() {
+        return save_icon_bytes(app_handle, &data, id, source);
+    }
+
+    let item = build_scanned_item_from_path(&path)
+        .ok_or_else(|| "Custom icon file does not exist or is not supported".to_string())?;
+    let icon = build_scanned_icon_path(app_handle, &item, id, source)?;
+    if icon.is_empty() {
+        return Err("Failed to extract an icon from the custom icon file".to_string());
+    }
+    Ok(icon)
 }
 
 #[cfg(windows)]
@@ -2564,7 +2648,7 @@ fn build_snapshot_item(
 ) -> Result<SnapshotIconItem, String> {
     let id = uuid::Uuid::new_v4().to_string();
     let key = stable_item_key(item);
-    let icons = build_scanned_icon_paths(app_handle, item, &id, source)?;
+    let icon = build_scanned_icon_path(app_handle, item, &id, source)?;
 
     Ok(SnapshotIconItem {
         id,
@@ -2581,7 +2665,8 @@ fn build_snapshot_item(
         icon_text: String::new(),
         item_type: item.item_type.clone(),
         hidden: false,
-        icons,
+        icon,
+        legacy_icons: None,
     })
 }
 
@@ -2624,9 +2709,8 @@ fn normalize_icon_color(value: &str) -> String {
 fn snapshot_to_ordered_desktop_icons(
     app_handle: &tauri::AppHandle,
     snapshot: &IconSnapshot,
-    icon_size: i32,
+    _icon_size: i32,
 ) -> Vec<(u64, DesktopIcon)> {
-    let bucket = IconBucket::from_logical_size(icon_size);
     let base_dir = match snapshot_base_dir(app_handle) {
         Ok(dir) => dir,
         Err(e) => {
@@ -2645,11 +2729,7 @@ fn snapshot_to_ordered_desktop_icons(
     ordered_items
         .into_iter()
         .map(|item| {
-            let rel_path = match bucket {
-                IconBucket::Small => &item.icons.small,
-                IconBucket::Medium => &item.icons.medium,
-                IconBucket::Large => &item.icons.large,
-            };
+            let rel_path = &item.icon;
             let icon_base64 = if rel_path.is_empty() {
                 String::new()
             } else {
@@ -2681,9 +2761,8 @@ fn snapshot_to_ordered_desktop_icons(
 fn snapshot_to_ordered_icon_manager_items(
     app_handle: &tauri::AppHandle,
     snapshot: &IconSnapshot,
-    icon_size: i32,
+    _icon_size: i32,
 ) -> Vec<(u64, IconManagerItem)> {
-    let bucket = IconBucket::from_logical_size(icon_size);
     let base_dir = match snapshot_base_dir(app_handle) {
         Ok(dir) => dir,
         Err(e) => {
@@ -2698,11 +2777,7 @@ fn snapshot_to_ordered_icon_manager_items(
     ordered_items
         .into_iter()
         .map(|item| {
-            let rel_path = match bucket {
-                IconBucket::Small => &item.icons.small,
-                IconBucket::Medium => &item.icons.medium,
-                IconBucket::Large => &item.icons.large,
-            };
+            let rel_path = &item.icon;
             let icon_base64 = if rel_path.is_empty() {
                 String::new()
             } else {
@@ -2868,10 +2943,7 @@ fn delete_icons_in_snapshot_windows(
                 )
             })?;
         }
-        remove_cached_icon_file(app_handle, &item.icons.small)?;
-        remove_cached_icon_file(app_handle, &item.icons.medium)?;
-        remove_cached_icon_file(app_handle, &item.icons.large)?;
-        remove_cached_icon_file(app_handle, &item.icons.master)?;
+        remove_cached_icon_file(app_handle, &item.icon)?;
     }
 
     write_icon_snapshot(app_handle, source, &snapshot)?;
@@ -3161,22 +3233,22 @@ fn create_icon_entry_windows(
             if generated_icon_base64.is_empty() {
                 return Err("Generated text icon is required".to_string());
             }
-            created_item.icons = build_data_icon_paths(
+            created_item.icon = build_data_icon_path(
                 app_handle,
                 &generated_icon_base64,
                 &created_item.id,
                 IconSource::Library,
             )?;
         } else if icon_source == "custom" {
-            created_item.icons = if generated_icon_base64.is_empty() {
-                build_custom_icon_paths(
+            created_item.icon = if generated_icon_base64.is_empty() {
+                build_custom_icon_path(
                     app_handle,
                     &custom_icon_path,
                     &created_item.id,
                     IconSource::Library,
                 )?
             } else {
-                build_data_icon_paths(
+                build_data_icon_path(
                     app_handle,
                     &generated_icon_base64,
                     &created_item.id,
@@ -3184,14 +3256,14 @@ fn create_icon_entry_windows(
                 )?
             };
         } else if !generated_icon_base64.is_empty() {
-            created_item.icons = build_data_icon_paths(
+            created_item.icon = build_data_icon_path(
                 app_handle,
                 &generated_icon_base64,
                 &created_item.id,
                 IconSource::Library,
             )?;
         } else if is_web && !website_icon_base64.is_empty() {
-            created_item.icons = build_data_icon_paths(
+            created_item.icon = build_data_icon_path(
                 app_handle,
                 &website_icon_base64,
                 &created_item.id,
@@ -3262,7 +3334,10 @@ fn update_icon_entry_windows(
     if !working_directory.is_empty() && !PathBuf::from(&working_directory).is_dir() {
         return Err("Working directory does not exist or is not a folder".to_string());
     }
-    if !custom_icon_path.is_empty() && !PathBuf::from(&custom_icon_path).is_file() {
+    if !custom_icon_path.is_empty()
+        && !PathBuf::from(&custom_icon_path).is_file()
+        && !(icon_source == "custom" && !generated_icon_base64.is_empty())
+    {
         return Err("Custom icon path does not exist or is not a file".to_string());
     }
 
@@ -3345,11 +3420,11 @@ fn update_icon_entry_windows(
                 .ok_or_else(|| "Updated icon entry could not be read".to_string())?,
             None => source_item.clone(),
         };
-        let next_icons = if icon_source == "text" {
+        let next_icon = if icon_source == "text" {
             if generated_icon_base64.is_empty() {
                 return Err("Generated text icon is required".to_string());
             }
-            build_data_icon_paths(
+            build_data_icon_path(
                 app_handle,
                 &generated_icon_base64,
                 &replacement_cache_id,
@@ -3357,14 +3432,14 @@ fn update_icon_entry_windows(
             )?
         } else if icon_source == "custom" {
             if generated_icon_base64.is_empty() {
-                build_custom_icon_paths(
+                build_custom_icon_path(
                     app_handle,
                     &custom_icon_path,
                     &replacement_cache_id,
                     IconSource::Library,
                 )?
             } else {
-                build_data_icon_paths(
+                build_data_icon_path(
                     app_handle,
                     &generated_icon_base64,
                     &replacement_cache_id,
@@ -3372,21 +3447,21 @@ fn update_icon_entry_windows(
                 )?
             }
         } else if !generated_icon_base64.is_empty() {
-            build_data_icon_paths(
+            build_data_icon_path(
                 app_handle,
                 &generated_icon_base64,
                 &replacement_cache_id,
                 IconSource::Library,
             )?
         } else if is_web && !website_icon_base64.is_empty() {
-            build_data_icon_paths(
+            build_data_icon_path(
                 app_handle,
                 &website_icon_base64,
                 &replacement_cache_id,
                 IconSource::Library,
             )?
         } else {
-            build_scanned_icon_paths(
+            build_scanned_icon_path(
                 app_handle,
                 &updated_scan,
                 &replacement_cache_id,
@@ -3406,7 +3481,8 @@ fn update_icon_entry_windows(
         updated_item.icon_color = icon_color;
         updated_item.icon_text = icon_text;
         updated_item.item_type = updated_scan.item_type;
-        updated_item.icons = next_icons;
+        updated_item.icon = next_icon;
+        updated_item.legacy_icons = None;
 
         write_icon_snapshot(app_handle, IconSource::Library, &snapshot)
     })();
@@ -3415,23 +3491,14 @@ fn update_icon_entry_windows(
         if let Some(path) = destination_path.as_ref() {
             let _ = std::fs::remove_file(path);
         }
-        for bucket in [IconBucket::Small, IconBucket::Medium, IconBucket::Large] {
-            let _ = remove_cached_icon_file(
-                app_handle,
-                &icon_file_rel_path(&replacement_cache_id, bucket, IconSource::Library),
-            );
-        }
         let _ = remove_cached_icon_file(
             app_handle,
-            &icon_master_rel_path(&replacement_cache_id, IconSource::Library),
+            &icon_file_rel_path(&replacement_cache_id, IconSource::Library),
         );
         return Err(error);
     }
 
-    let _ = remove_cached_icon_file(app_handle, &original_item.icons.small);
-    let _ = remove_cached_icon_file(app_handle, &original_item.icons.medium);
-    let _ = remove_cached_icon_file(app_handle, &original_item.icons.large);
-    let _ = remove_cached_icon_file(app_handle, &original_item.icons.master);
+    let _ = remove_cached_icon_file(app_handle, &original_item.icon);
 
     let original_entry_path = PathBuf::from(&original_item.path);
     if original_entry_path.parent() == Some(managed_entry_dir.as_path())

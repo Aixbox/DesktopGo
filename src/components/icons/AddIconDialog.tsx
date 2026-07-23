@@ -316,6 +316,10 @@ export function AddIconDialog({
     const requestId = targetPreviewRequestRef.current
     const previewPath = targetPath.trim()
 
+    if (open && !previewPath && initialDraft?.targetPath.trim()) {
+      return
+    }
+
     const initialGeneratedPreview =
       initialDraft?.entryKind !== 'website' && initialDraft?.iconSource === 'target'
         ? (initialDraft.generatedIconBase64 ?? '')
@@ -360,6 +364,10 @@ export function AddIconDialog({
     const requestId = customPreviewRequestRef.current
     const previewPath = customIconPath.trim()
 
+    if (open && !previewPath && initialDraft?.customIconPath.trim()) {
+      return
+    }
+
     const initialGeneratedPreview =
       initialDraft?.iconSource === 'custom' ? (initialDraft.generatedIconBase64 ?? '') : ''
     if (
@@ -378,9 +386,8 @@ export function AddIconDialog({
     }
 
     const timer = window.setTimeout(() => {
-      void invoke<string>('get_drag_preview_icon', {
+      void invoke<string>('get_custom_icon_source', {
         path: previewPath,
-        iconSize: ICON_EDITOR_SOURCE_SIZE,
       })
         .then(nextPreview => {
           if (customPreviewRequestRef.current === requestId) setCustomPreview(nextPreview)

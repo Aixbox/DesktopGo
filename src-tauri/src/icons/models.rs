@@ -50,12 +50,15 @@ pub struct IconMutationTarget {
     pub id: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct SnapshotIconPaths {
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub(crate) struct LegacySnapshotIconPaths {
     #[serde(default)]
     pub(crate) master: String,
+    #[serde(default)]
     pub(crate) small: String,
+    #[serde(default)]
     pub(crate) medium: String,
+    #[serde(default)]
     pub(crate) large: String,
 }
 
@@ -83,7 +86,10 @@ pub(crate) struct SnapshotIconItem {
     pub(crate) item_type: String,
     #[serde(default)]
     pub(crate) hidden: bool,
-    pub(crate) icons: SnapshotIconPaths,
+    #[serde(default)]
+    pub(crate) icon: String,
+    #[serde(default, rename = "icons", skip_serializing_if = "Option::is_none")]
+    pub(crate) legacy_icons: Option<LegacySnapshotIconPaths>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -162,48 +168,13 @@ pub(crate) struct ScannedDesktopItem {
     pub(crate) item_type: String,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum IconBucket {
-    Small,
-    Medium,
-    Large,
-}
-
-impl IconBucket {
-    pub(crate) fn from_logical_size(icon_size: i32) -> Self {
-        if icon_size <= 36 {
-            Self::Small
-        } else if icon_size <= 56 {
-            Self::Medium
-        } else {
-            Self::Large
-        }
-    }
-
-    pub(crate) fn folder_name(self) -> &'static str {
-        match self {
-            Self::Small => "small",
-            Self::Medium => "medium",
-            Self::Large => "large",
-        }
-    }
-
-    pub(crate) fn logical_size(self) -> i32 {
-        match self {
-            Self::Small => 32,
-            Self::Medium => 48,
-            Self::Large => 72,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::SnapshotIconPaths;
+    use super::LegacySnapshotIconPaths;
 
     #[test]
     fn legacy_icon_paths_default_to_no_master() {
-        let paths: SnapshotIconPaths = serde_json::from_str(
+        let paths: LegacySnapshotIconPaths = serde_json::from_str(
             r#"{"small":"small.png","medium":"medium.png","large":"large.png"}"#,
         )
         .expect("legacy icon paths should deserialize");
