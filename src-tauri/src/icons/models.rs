@@ -52,6 +52,8 @@ pub struct IconMutationTarget {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SnapshotIconPaths {
+    #[serde(default)]
+    pub(crate) master: String,
     pub(crate) small: String,
     pub(crate) medium: String,
     pub(crate) large: String,
@@ -192,5 +194,20 @@ impl IconBucket {
             Self::Medium => 48,
             Self::Large => 72,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SnapshotIconPaths;
+
+    #[test]
+    fn legacy_icon_paths_default_to_no_master() {
+        let paths: SnapshotIconPaths = serde_json::from_str(
+            r#"{"small":"small.png","medium":"medium.png","large":"large.png"}"#,
+        )
+        .expect("legacy icon paths should deserialize");
+
+        assert!(paths.master.is_empty());
     }
 }

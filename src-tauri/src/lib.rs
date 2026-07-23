@@ -17,15 +17,15 @@ use ai::{ai_chat, ai_classify_icons};
 use commands::{
     activate_main_window, activate_settings_window, apply_window_style, check_for_app_update,
     close_settings_window, create_icon_entry, delete_icons, extract_website_icon,
-    get_drag_preview_icon, get_icon_manager_items, get_icons, get_launch_on_startup_enabled,
-    get_layout_payload, get_layout_payloads, get_main_window_always_on_top_enabled,
-    get_search_preview, get_search_runtime_status, get_updater_configuration_status, hide_icons,
-    import_dropped_paths, install_app_update, launch_app, notify_main_window_ready,
-    optimize_icon_image, record_search_result_run, scan_invalid_icons, search_files,
-    set_layout_payload, set_layout_payloads, set_main_window_always_on_top_enabled,
-    set_window_mode, show_shell_context_menu, start_search_runtime, sync_window_persistent_state,
-    toggle_window, unhide_icons, update_icon_entry, update_launch_on_startup_enabled,
-    update_launchpad_shortcut,
+    get_drag_preview_icon, get_icon_edit_source, get_icon_manager_items, get_icons,
+    get_launch_on_startup_enabled, get_layout_payload, get_layout_payloads,
+    get_main_window_always_on_top_enabled, get_search_preview, get_search_runtime_status,
+    get_updater_configuration_status, hide_icons, import_dropped_paths, install_app_update,
+    launch_app, notify_main_window_ready, optimize_icon_image, record_search_result_run,
+    scan_invalid_icons, search_files, set_layout_payload, set_layout_payloads,
+    set_main_window_always_on_top_enabled, set_window_mode, show_shell_context_menu,
+    start_search_runtime, sync_window_persistent_state, toggle_window, unhide_icons,
+    update_icon_entry, update_launch_on_startup_enabled, update_launchpad_shortcut,
 };
 #[cfg(windows)]
 use once_cell::sync::OnceCell;
@@ -338,6 +338,7 @@ pub fn run() {
             activate_settings_window,
             get_icons,
             get_icon_manager_items,
+            get_icon_edit_source,
             launch_app,
             show_shell_context_menu,
             set_window_mode,

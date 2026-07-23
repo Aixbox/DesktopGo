@@ -403,6 +403,7 @@ export function Launchpad() {
   const importPlacementTokenRef = useRef(0)
   const dropPreviewRequestRef = useRef(0)
   const pendingAddIconKeySetRef = useRef<Set<string>>(new Set())
+  const iconEditSourceRequestRef = useRef(0)
   const searchFilterOptions = useMemo(() => {
     void language
     return getSearchFilterOptions()
@@ -520,34 +521,44 @@ export function Launchpad() {
   useEffect(() => {
     if (!editRequestedIcon) return
 
+    iconEditSourceRequestRef.current += 1
+    const requestId = iconEditSourceRequestRef.current
     const iconSource =
       editRequestedIcon.icon_source ?? (editRequestedIcon.custom_icon_path ? 'custom' : 'target')
 
-    setAddIconInitialDraft({
-      entryKind: editRequestedIcon.item_type === 'website' ? 'website' : 'app',
-      displayName: customNames[editRequestedIcon.path] ?? editRequestedIcon.name,
-      targetPath: editRequestedIcon.target_path || editRequestedIcon.path,
-      launchArguments: editRequestedIcon.launch_arguments ?? '',
-      workingDirectory: editRequestedIcon.working_directory ?? '',
-      customIconPath: editRequestedIcon.custom_icon_path ?? '',
-      websiteIconBase64:
-        editRequestedIcon.item_type === 'website' && iconSource === 'target'
-          ? editRequestedIcon.icon_base64
-          : '',
-      generatedIconBase64:
-        iconSource === 'text' ||
-        (Boolean(editRequestedIcon.icon_color) && editRequestedIcon.icon_color !== 'none') ||
-        (editRequestedIcon.item_type !== 'website' && Boolean(editRequestedIcon.icon_base64))
-          ? editRequestedIcon.icon_base64
-          : '',
-      iconSource,
-      iconColor: editRequestedIcon.icon_color ?? 'none',
-      iconText: editRequestedIcon.icon_text ?? '',
-    })
-    setEditingDropIndex(null)
-    setEditingIcon(editRequestedIcon)
-    setAddIconDialogOpen(true)
-    clearIconEditRequest()
+    void invoke<string>('get_icon_edit_source', { id: editRequestedIcon.id })
+      .catch(() => '')
+      .then(masterSource => {
+        if (iconEditSourceRequestRef.current !== requestId) return
+
+        const isWebsiteTarget = editRequestedIcon.item_type === 'website' && iconSource === 'target'
+        const websiteSource = isWebsiteTarget ? masterSource || editRequestedIcon.icon_base64 : ''
+        const generatedSource = isWebsiteTarget ? '' : masterSource
+
+        setAddIconInitialDraft({
+          entryKind: editRequestedIcon.item_type === 'website' ? 'website' : 'app',
+          displayName: customNames[editRequestedIcon.path] ?? editRequestedIcon.name,
+          targetPath: editRequestedIcon.target_path || editRequestedIcon.path,
+          launchArguments: editRequestedIcon.launch_arguments ?? '',
+          workingDirectory: editRequestedIcon.working_directory ?? '',
+          customIconPath: editRequestedIcon.custom_icon_path ?? '',
+          websiteIconBase64: websiteSource,
+          generatedIconBase64: generatedSource,
+          iconSource,
+          iconColor: editRequestedIcon.icon_color ?? 'none',
+          iconText: editRequestedIcon.icon_text ?? '',
+        })
+        setEditingDropIndex(null)
+        setEditingIcon(editRequestedIcon)
+        setAddIconDialogOpen(true)
+        clearIconEditRequest()
+      })
+
+    return () => {
+      if (iconEditSourceRequestRef.current === requestId) {
+        iconEditSourceRequestRef.current += 1
+      }
+    }
   }, [clearIconEditRequest, customNames, editRequestedIcon])
 
   const handleIconCreated = useCallback(async () => {
@@ -777,14 +788,11 @@ export function Launchpad() {
       }
       if (failedKeys.size > 0) {
         setPendingDropDrafts(current => current.filter(draft => failedKeys.has(draft.key)))
-        toast.error(
-          translate('部分项目未能导入，未完成的项目已保留，请检查后重试。'),
-          {
-            key: 'launchpad-import-drop-error',
-            title: translate('启动台'),
-            duration: 8000,
-          }
-        )
+        toast.error(translate('部分项目未能导入，未完成的项目已保留，请检查后重试。'), {
+          key: 'launchpad-import-drop-error',
+          title: translate('启动台'),
+          duration: 8000,
+        })
       } else {
         setPendingDropDrafts([])
       }

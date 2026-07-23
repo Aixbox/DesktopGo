@@ -8,7 +8,7 @@ pub use models::{
     DesktopIcon, IconManagerItem, ImportDroppedPathsResult, InvalidIconEntry, WebsiteIconResult,
 };
 pub use service::{
-    create_icon_entry, delete_icons, extract_website_icon, get_icon_manager_items, get_icons,
-    get_path_icon_base64, hide_icons, import_dropped_paths, launch_app, optimize_icon_data_uri,
-    scan_invalid_icons, unhide_icons, update_icon_entry,
+    create_icon_entry, delete_icons, extract_website_icon, get_icon_edit_source,
+    get_icon_manager_items, get_icons, get_path_icon_base64, hide_icons, import_dropped_paths,
+    launch_app, optimize_icon_data_uri, scan_invalid_icons, unhide_icons, update_icon_entry,
 };

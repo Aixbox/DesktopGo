@@ -291,6 +291,11 @@ pub fn get_icon_manager_items(
 }
 
 #[tauri::command]
+pub fn get_icon_edit_source(app_handle: tauri::AppHandle, id: String) -> Result<String, String> {
+    icons::get_icon_edit_source(app_handle, &id)
+}
+
+#[tauri::command]
 pub fn hide_icons(
     app_handle: tauri::AppHandle,
     targets: Vec<IconMutationTarget>,
