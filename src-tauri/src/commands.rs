@@ -3,10 +3,11 @@ use crate::icons::{
     self, CreateIconEntryInput, DesktopIcon, IconManagerItem, IconMutationTarget,
     ImportDroppedPathsResult, WebsiteIconResult,
 };
+use crate::launchpad_shortcut::{self, LaunchpadShortcutState};
 use crate::layout_db;
 use crate::search_preview::{self, SearchPreview};
 use crate::updater::{self, PendingUpdate, UpdateCheckResult, UpdaterConfigurationStatus};
-use crate::{LaunchpadShortcutState, MainWindowState};
+use crate::MainWindowState;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
@@ -124,7 +125,7 @@ pub fn update_launchpad_shortcut(
     shortcut_state: tauri::State<'_, LaunchpadShortcutState>,
     shortcut: String,
 ) -> Result<String, String> {
-    crate::update_launchpad_shortcut_registration(&app_handle, shortcut_state.inner(), &shortcut)
+    launchpad_shortcut::update_registration(&app_handle, shortcut_state.inner(), &shortcut)
 }
 
 #[tauri::command]

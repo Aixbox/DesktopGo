@@ -4,6 +4,7 @@ mod autostart;
 mod commands;
 mod everything;
 mod icons;
+mod launchpad_shortcut;
 mod layout_db;
 mod search_preview;
 mod shell_context_menu;
@@ -38,7 +39,6 @@ use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Listener, Manager, RunEvent};
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tauri_plugin_store::StoreExt;
 #[cfg(target_os = "windows")]
 use window_vibrancy::{apply_acrylic, apply_mica, clear_acrylic, clear_mica};
@@ -60,7 +60,6 @@ static WINDOWS_CONSOLE_EXIT_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 const MAIN_WINDOW_FOCUS_RETRY_DELAY_MS: u64 = 40;
 const MAIN_WINDOW_BLUR_GUARD_MS: u64 = 1200;
-pub(crate) const DEFAULT_LAUNCHPAD_SHORTCUT: &str = "Ctrl+Space";
 #[cfg(any(not(windows), not(debug_assertions)))]
 const DEFAULT_LAUNCH_ON_STARTUP: bool = true;
 const LAUNCH_ON_STARTUP_SETTING_KEY: &str = "launchOnStartup";
@@ -99,10 +98,6 @@ struct MainWindowState {
     manual_always_on_top_enabled: AtomicBool,
     suppress_blur_until: Mutex<Option<Instant>>,
     last_show_request: Mutex<Option<Instant>>,
-}
-
-pub(crate) struct LaunchpadShortcutState {
-    current: Mutex<Option<String>>,
 }
 
 #[derive(Clone)]
@@ -144,14 +139,6 @@ struct LanguageChangedPayload {
 #[derive(Clone, Copy, Serialize)]
 pub(crate) struct WindowPersistentChangedPayload {
     enabled: bool,
-}
-
-impl Default for LaunchpadShortcutState {
-    fn default() -> Self {
-        Self {
-            current: Mutex::new(None),
-        }
-    }
 }
 
 impl Default for MainWindowState {
@@ -252,7 +239,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .manage(updater::PendingUpdate::default())
         .manage(MainWindowState::default())
-        .manage(LaunchpadShortcutState::default())
+        .manage(launchpad_shortcut::LaunchpadShortcutState::default())
         .manage(TrayState::default());
 
     #[cfg(desktop)]
@@ -322,7 +309,7 @@ pub fn run() {
             create_main_window(app.handle());
             install_windows_console_exit_handler(app.handle());
             initialize_launch_on_startup(app.handle());
-            initialize_launchpad_shortcut(app.handle());
+            launchpad_shortcut::initialize(app.handle());
 
             // 安装/更新后首次启动时，自动显示启动台窗口。
             // 判断依据：安装器在安装目录写入的 .show_on_launch 标记文件。
@@ -1194,126 +1181,6 @@ pub(crate) fn set_launch_on_startup_enabled(
     }
 
     Ok(enabled)
-}
-
-fn normalize_launchpad_shortcut(shortcut: &str) -> Result<String, String> {
-    let trimmed = shortcut.trim();
-    if trimmed.is_empty() {
-        return Err("快捷键不能为空。".to_string());
-    }
-
-    let parsed: Shortcut = trimmed
-        .parse()
-        .map_err(|error| format!("无效快捷键：{}", error))?;
-
-    if parsed.mods.is_empty() {
-        return Err("快捷键至少需要一个修饰键，例如 Ctrl、Alt、Shift。".to_string());
-    }
-
-    Ok(parsed.into_string())
-}
-
-fn register_launchpad_shortcut_handler(
-    app: &tauri::AppHandle,
-    shortcut: &str,
-) -> Result<String, String> {
-    let normalized = normalize_launchpad_shortcut(shortcut)?;
-    let handle = app.clone();
-
-    app.global_shortcut()
-        .on_shortcut(normalized.as_str(), move |_app, _shortcut, event| {
-            if event.state != ShortcutState::Released {
-                return;
-            }
-            request_main_window_show(&handle);
-        })
-        .map_err(|error| format!("无法注册启动台快捷键 `{}`：{}", normalized, error))?;
-
-    Ok(normalized)
-}
-
-fn read_saved_launchpad_shortcut(app: &tauri::AppHandle) -> String {
-    app.store(storage_profile::settings_store_path())
-        .ok()
-        .and_then(|store| {
-            store
-                .get("launchpadShortcut")
-                .and_then(|value| value.as_str().map(str::to_owned))
-        })
-        .unwrap_or_else(|| DEFAULT_LAUNCHPAD_SHORTCUT.to_string())
-}
-
-fn persist_launchpad_shortcut(app: &tauri::AppHandle, shortcut: &str) {
-    if let Ok(store) = app.store(storage_profile::settings_store_path()) {
-        store.set("launchpadShortcut", shortcut.to_string());
-        let _ = store.save();
-    }
-}
-
-fn initialize_launchpad_shortcut(app: &tauri::AppHandle) {
-    let saved_shortcut = read_saved_launchpad_shortcut(app);
-    let shortcut_state = app.state::<LaunchpadShortcutState>();
-
-    match update_launchpad_shortcut_registration(app, shortcut_state.inner(), &saved_shortcut) {
-        Ok(normalized) => {
-            if normalized != saved_shortcut {
-                persist_launchpad_shortcut(app, &normalized);
-            }
-        }
-        Err(error) => {
-            eprintln!(
-                "Warning: Failed to register saved launchpad shortcut `{}`: {}",
-                saved_shortcut, error
-            );
-
-            if saved_shortcut == DEFAULT_LAUNCHPAD_SHORTCUT {
-                return;
-            }
-
-            match update_launchpad_shortcut_registration(
-                app,
-                shortcut_state.inner(),
-                DEFAULT_LAUNCHPAD_SHORTCUT,
-            ) {
-                Ok(normalized) => persist_launchpad_shortcut(app, &normalized),
-                Err(fallback_error) => eprintln!(
-                    "Warning: Failed to register default launchpad shortcut `{}`: {}",
-                    DEFAULT_LAUNCHPAD_SHORTCUT, fallback_error
-                ),
-            }
-        }
-    }
-}
-
-pub(crate) fn update_launchpad_shortcut_registration(
-    app: &tauri::AppHandle,
-    shortcut_state: &LaunchpadShortcutState,
-    shortcut: &str,
-) -> Result<String, String> {
-    let normalized = normalize_launchpad_shortcut(shortcut)?;
-    let mut current = shortcut_state
-        .current
-        .lock()
-        .map_err(|_| "无法锁定当前启动台快捷键状态。".to_string())?;
-
-    if current.as_deref() == Some(normalized.as_str()) {
-        return Ok(normalized);
-    }
-
-    register_launchpad_shortcut_handler(app, &normalized)?;
-
-    if let Some(previous) = current.as_deref() {
-        if let Err(error) = app.global_shortcut().unregister(previous) {
-            let _ = app.global_shortcut().unregister(normalized.as_str());
-            return Err(format!(
-                "无法卸载旧的启动台快捷键 `{}`：{}",
-                previous, error
-            ));
-        }
-    }
-
-    *current = Some(normalized.clone());
-    Ok(normalized)
 }
 
 fn request_main_window_show(app: &tauri::AppHandle) {
