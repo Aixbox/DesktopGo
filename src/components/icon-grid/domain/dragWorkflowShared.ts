@@ -41,6 +41,13 @@ export const getFolderIconMapById = (folderId: string | null, items: GridItem[])
   return map
 }
 
+export const buildDragItemMap = (state: DragState, items: GridItem[]): Map<string, GridItem> => {
+  if (state.context === 'folder') {
+    return new Map(getFolderIconMapById(state.sourceFolderId, items))
+  }
+  return new Map(items.map(item => [item.kind === 'folder' ? `folder:${item.id}` : item.key, item]))
+}
+
 export const resolveSelectedIconDragIds = (
   sourceOrder: Array<string | null>,
   leadId: string,

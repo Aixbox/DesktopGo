@@ -6,6 +6,26 @@ interface DockOverlapCandidateLike {
   targetIndex: number
 }
 
+export const buildDockLinearPreviewOrder = (
+  order: Array<string | null>,
+  targetId: string,
+  placeAfter: boolean
+): Array<string | null> => {
+  if (!order.includes(null)) return order
+
+  const compact = order.filter((slot): slot is string => typeof slot === 'string')
+  const targetIndex = compact.indexOf(targetId)
+  if (targetIndex < 0) return order
+
+  const insertIndex = Math.max(
+    0,
+    Math.min(compact.length, placeAfter ? targetIndex + 1 : targetIndex)
+  )
+  const next: Array<string | null> = [...compact]
+  next.splice(insertIndex, 0, null)
+  return next
+}
+
 export interface DockOccupiedSlotEntry {
   displayIndex: number
   targetId: string

@@ -1,4 +1,5 @@
 import {
+  buildDockLinearPreviewOrder,
   buildDockOccupiedSlotEntries,
   resolveDockInsertIndexByDisplayIndex,
   resolveDockInsertIndexFromCenters,
@@ -10,6 +11,22 @@ function assert(condition, message) {
     throw new Error(message)
   }
 }
+
+assert(
+  JSON.stringify(buildDockLinearPreviewOrder(['a', null, 'b'], 'a', false)) ===
+    JSON.stringify([null, 'a', 'b']),
+  'Dock 线性预览应能把空槽插入目标之前'
+)
+assert(
+  JSON.stringify(buildDockLinearPreviewOrder(['a', null, 'b'], 'b', true)) ===
+    JSON.stringify(['a', 'b', null]),
+  'Dock 线性预览应能把空槽插入目标之后'
+)
+const dockOrderWithoutHole = ['a', 'b']
+assert(
+  buildDockLinearPreviewOrder(dockOrderWithoutHole, 'b', false) === dockOrderWithoutHole,
+  '没有空槽时 Dock 线性预览不得创建新顺序'
+)
 
 assert(
   resolveDockInsertIndexFromCenters(70, [100, 200, 300]) === 0,

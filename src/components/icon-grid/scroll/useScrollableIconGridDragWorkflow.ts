@@ -24,7 +24,6 @@ import {
 import {
   canPlaceItemAtAnchorIndex,
   findNearestValidAnchorIndex,
-  getFootprintIndices,
   normalizeOuterSlots,
 } from '../domain/topLevelLayout'
 import {
@@ -35,12 +34,8 @@ import {
   resolveCompactStableTargetId,
 } from './scrollTopLevelLayout'
 import { getDockItemKeys, resolveOuterItemIds } from '../domain/dock'
-import {
-  buildDockOccupiedSlotEntries,
-  resolveDockInsertIndexByDisplayIndex,
-  resolveDockInsertIndexFromCenters,
-  selectDockOverlapCandidate,
-} from '../domain/dockDragPolicy'
+import { buildDockLinearPreviewOrder } from '../domain/dockDragPolicy'
+import { resolveMixedSelectionDragIds } from '../domain/multiSelectionPolicy'
 import { OUTER_DRAG_RULES } from '../constants'
 import { usePointerDragController } from '../hooks/usePointerDragController'
 import { useEdgeAutoPaging } from '../hooks/useEdgeAutoPaging'
@@ -61,14 +56,24 @@ import {
   SCROLL_PREVIEW_REORDER_LOCK_MS,
 } from './scrollGroupLayout'
 import { activateDragPointerCapture, releaseDragPointerCapture } from '../hooks/dragPointerCapture'
+import {
+  findDockMaxOverlapHit,
+  resolveDockNearestSlotIndex,
+  resolveDockTopLevelContextAtPoint,
+} from '../hooks/dockDragHitTesting'
 import { resetOuterInteraction } from '../state/dragMachine'
 import {
   collectElementCenters as collectCenters,
+  buildDragItemMap,
   getFolderIconMapById as getFolderMapById,
   hasRenderableDragStateChanged,
-  resolveSelectedIconDragIds,
   seedMissingInitialCenters,
 } from '../domain/dragWorkflowShared'
+import {
+  buildCompactOuterBaseOrder,
+  buildCompactOuterPreviewItems as createCompactOuterPreviewItems,
+  resolveCompactOuterPreview,
+} from './scrollCompactPreviewPolicy'
 import type {
   DragHit,
   DragState,
@@ -424,9 +429,6 @@ export function useScrollableIconGridDragWorkflow({
   const isDraggingFromDock = (draggingId: string): boolean =>
     dockKeysRef.current.includes(draggingId)
 
-  const resolveSelectedDragIds = (sourceOrder: Array<string | null>, leadId: string) =>
-    resolveSelectedIconDragIds(sourceOrder, leadId, itemById, selectedIconKeySet)
-
   const seedMissingOuterDragCenters = ({
     initialCenters,
     draggingIds,
@@ -496,109 +498,6 @@ export function useScrollableIconGridDragWorkflow({
     })
   }
 
-  const resolveOuterDragIds = (sourceOrder: Array<string | null>, leadId: string): string[] => {
-    const leadItem = itemById.get(leadId)
-    if (!selectionMode || !leadItem || leadItem.kind !== 'icon') {
-      return [leadId]
-    }
-    const orderedSelectedIds = resolveSelectedDragIds(sourceOrder, leadId)
-
-    return [leadId, ...orderedSelectedIds]
-  }
-
-  const resolveSelectedFolderDragIds = ({
-    preferredFolderId,
-    leadId,
-  }: {
-    preferredFolderId: string | null
-    leadId: string
-  }): string[] => {
-    const folderIds: string[] = []
-    if (preferredFolderId) {
-      folderIds.push(preferredFolderId)
-    }
-    itemsRef.current.forEach(item => {
-      if (item.kind !== 'folder') return
-      if (item.id === preferredFolderId) return
-      folderIds.push(item.id)
-    })
-
-    const ordered: string[] = []
-    const seen = new Set<string>()
-    folderIds.forEach(folderId => {
-      getFolderChildrenById(itemsRef.current, folderId)
-        .map(child => child.key)
-        .filter(key => key !== leadId && selectedIconKeySet.has(key))
-        .forEach(id => {
-          if (seen.has(id)) return
-          seen.add(id)
-          ordered.push(id)
-        })
-    })
-
-    return ordered
-  }
-
-  const resolveMixedSelectionDragIds = ({
-    context,
-    leadId,
-    leadItem,
-    sourceOrder,
-    sourceFolderId,
-  }: {
-    context: 'outer' | 'folder' | 'dock'
-    leadId: string
-    leadItem: GridItem
-    sourceOrder: Array<string | null>
-    sourceFolderId: string | null
-  }) => {
-    if (!selectionMode || leadItem.kind !== 'icon') {
-      return [leadId]
-    }
-
-    const ordered: string[] = [leadId]
-    const seen = new Set<string>(ordered)
-    const pushIds = (ids: string[]) => {
-      ids.forEach(id => {
-        if (seen.has(id)) return
-        seen.add(id)
-        ordered.push(id)
-      })
-    }
-
-    const dockSelectedIds =
-      context === 'dock'
-        ? resolveSelectedDragIds(sourceOrder, leadId)
-        : resolveSelectedDragIds(resolveTopLevelOrder('dock'), leadId)
-    const outerSelectedIds =
-      context === 'outer'
-        ? resolveOuterDragIds(sourceOrder, leadId).slice(1)
-        : resolveSelectedDragIds(resolveTopLevelOrder('outer'), leadId)
-    const folderSelectedIds = resolveSelectedFolderDragIds({
-      preferredFolderId: sourceFolderId ?? openFolderId,
-      leadId,
-    })
-
-    if (context === 'folder') {
-      pushIds(folderSelectedIds)
-      pushIds(dockSelectedIds)
-      pushIds(outerSelectedIds)
-      return ordered
-    }
-
-    if (context === 'dock') {
-      pushIds(dockSelectedIds)
-      pushIds(folderSelectedIds)
-      pushIds(outerSelectedIds)
-      return ordered
-    }
-
-    pushIds(outerSelectedIds)
-    pushIds(dockSelectedIds)
-    pushIds(folderSelectedIds)
-    return ordered
-  }
-
   const resolvePagedOuterTopLevelOrder = (): Array<string | null> => {
     const outerItems = resolveOuterItemsForLayout()
     return normalizeOuterSlots(
@@ -632,6 +531,9 @@ export function useScrollableIconGridDragWorkflow({
   const resolveTopLevelOrder = (context: 'outer' | 'dock'): Array<string | null> =>
     context === 'dock' ? resolveDockItemOrder() : resolveOuterTopLevelOrder()
 
+  const resolveTopLevelContextAtPoint = (x: number, y: number): 'outer' | 'dock' =>
+    resolveDockTopLevelContextAtPoint({ x, y, dockContainer: dockContainerRef.current })
+
   const resolveActiveScrollGroupOrder = (state: DragState): string[] | null => {
     if (!isCompactOuterDrop || !getActiveScrollGroupItemIds) return null
     const availableIds = new Set(resolveCompactOuterPreviewItems(state).map(getId))
@@ -662,50 +564,14 @@ export function useScrollableIconGridDragWorkflow({
     })
   }
 
-  const buildDockLinearPreviewOrder = (
-    order: Array<string | null>,
-    targetId: string,
-    placeAfter: boolean
-  ): Array<string | null> => {
-    const holeIndex = order.indexOf(null)
-    if (holeIndex < 0) return order
-
-    const compact = order.filter((slot): slot is string => typeof slot === 'string')
-    const targetCompactIndex = compact.indexOf(targetId)
-    if (targetCompactIndex < 0) return order
-
-    const insertIndex = clampNumber(
-      placeAfter ? targetCompactIndex + 1 : targetCompactIndex,
-      0,
-      compact.length
-    )
-    const next: Array<string | null> = [...compact]
-    next.splice(insertIndex, 0, null)
-    return next
-  }
-
   const resolveCompactOuterPreviewItems = (state: DragState): GridItem[] => {
     if (compactOuterPreviewItemsRef.current) return compactOuterPreviewItemsRef.current
-
-    const next = new Map(resolveOuterItemsForLayout().map(item => [getId(item), item] as const))
-    next.set(state.draggingId, state.draggingItem)
-
-    const draggedFolderChildren = getFolderChildSelectionsByIds(itemsRef.current, state.draggingIds)
-    draggedFolderChildren.forEach(children => {
-      children.forEach(child => {
-        next.set(child.key, child)
-      })
+    const previewItems = createCompactOuterPreviewItems({
+      state,
+      outerItems: resolveOuterItemsForLayout(),
+      allItems: itemsRef.current,
+      itemById,
     })
-
-    state.draggingIds.forEach(id => {
-      if (next.has(id)) return
-      const item = itemById.get(id)
-      if (item) {
-        next.set(id, item)
-      }
-    })
-
-    const previewItems = Array.from(next.values())
     compactOuterPreviewItemsRef.current = previewItems
     return previewItems
   }
@@ -715,17 +581,11 @@ export function useScrollableIconGridDragWorkflow({
       return compactOuterDragBaseWithoutDraggingRef.current
     }
 
-    const draggingIdSet = new Set(state.draggingIds)
     const sourceOrder = compactOuterDragBaseOrderRef.current ?? resolveCompactOuterTopLevelOrder()
-    const itemByPreviewId = new Map(
-      resolveCompactOuterPreviewItems(state)
-        .filter(item => !draggingIdSet.has(getId(item)))
-        .map(item => [getId(item), item] as const)
-    )
-    const compacted = compactPreviewOrderByPage({
+    const compacted = buildCompactOuterBaseOrder({
+      state,
       sourceOrder,
-      itemById: itemByPreviewId,
-      omittedIds: draggingIdSet,
+      previewItems: resolveCompactOuterPreviewItems(state),
       pageSize: pageSizeRef.current,
       columns,
       minPageCount: getOuterMinPageCount?.(),
@@ -734,329 +594,29 @@ export function useScrollableIconGridDragWorkflow({
     return compacted
   }
 
-  const placePreviewIdsOnPage = (
-    ids: string[],
-    itemByPreviewId: Map<string, GridItem>,
-    pageStart: number,
-    pageSize: number,
-    columnCount: number
-  ): { pageSlots: Array<string | null>; overflowIds: string[] } => {
-    const safePageSize = Math.max(1, pageSize)
-    const safeColumns = Math.max(1, columnCount)
-    const pageSlots: Array<string | null> = Array.from({ length: safePageSize }, () => null)
-    const occupied = Array.from({ length: safePageSize }, () => false)
-    const overflowIds: string[] = []
-
-    ids.forEach(id => {
-      const item = itemByPreviewId.get(id)
-      if (!item) return
-      const span = getGridItemSpan(item)
-      let placed = false
-
-      for (let localAnchor = 0; localAnchor < safePageSize; localAnchor += 1) {
-        if (pageSlots[localAnchor]) continue
-        const footprint = getFootprintIndices(
-          pageStart + localAnchor,
-          span,
-          safeColumns,
-          safePageSize
-        )
-        if (!footprint) continue
-        const localFootprint = footprint.map(index => index - pageStart)
-        if (localFootprint.some(index => index < 0 || index >= safePageSize || occupied[index])) {
-          continue
-        }
-
-        pageSlots[localAnchor] = id
-        localFootprint.forEach(index => {
-          occupied[index] = true
-        })
-        placed = true
-        break
-      }
-
-      if (!placed) {
-        overflowIds.push(id)
-      }
-    })
-
-    return { pageSlots, overflowIds }
-  }
-
-  const compactPreviewOrderByPage = ({
-    sourceOrder,
-    itemById: itemByPreviewId,
-    omittedIds,
-    pageSize,
-    columns: columnCount,
-    minPageCount = 1,
-  }: {
-    sourceOrder: Array<string | null>
-    itemById: Map<string, GridItem>
-    omittedIds: Set<string>
-    pageSize: number
-    columns: number
-    minPageCount?: number
-  }): Array<string | null> => {
-    const safePageSize = Math.max(1, pageSize)
-    const safeColumns = Math.max(1, columnCount)
-    const pageCount = Math.max(
-      1,
-      minPageCount,
-      Math.ceil(Math.max(sourceOrder.length, safePageSize) / safePageSize)
-    )
-    const result: Array<string | null> = []
-    let carryIds: string[] = []
-
-    for (let page = 0; page < pageCount; page += 1) {
-      const pageStart = page * safePageSize
-      const pageIds = sourceOrder
-        .slice(pageStart, pageStart + safePageSize)
-        .filter(
-          (slot): slot is string =>
-            typeof slot === 'string' &&
-            slot !== DRAG_HOLE_ID &&
-            !omittedIds.has(slot) &&
-            itemByPreviewId.has(slot)
-        )
-      const placed = placePreviewIdsOnPage(
-        [...carryIds, ...pageIds],
-        itemByPreviewId,
-        pageStart,
-        safePageSize,
-        safeColumns
-      )
-      result.push(...placed.pageSlots)
-      carryIds = placed.overflowIds
-    }
-
-    while (carryIds.length > 0) {
-      const pageStart = result.length
-      const placed = placePreviewIdsOnPage(
-        carryIds,
-        itemByPreviewId,
-        pageStart,
-        safePageSize,
-        safeColumns
-      )
-      result.push(...placed.pageSlots)
-      if (placed.overflowIds.length === carryIds.length) break
-      carryIds = placed.overflowIds
-    }
-
-    return result.length > 0 ? result : Array.from({ length: safePageSize }, () => null)
-  }
-
   const buildCompactOuterPreviewOrder = (
     state: DragState,
     hit: OuterOverlapHit
   ): { order: Array<string | null>; previewSlotIndex: number | null } => {
-    const baseOrder = compactOuterPreviewOrderWithoutDragging(state)
-    const targetIndex = baseOrder.indexOf(hit.targetId)
-    if (targetIndex < 0) {
-      return { order: state.workingOrder, previewSlotIndex: state.previewSlotIndex }
-    }
-
     const currentPreviewContainsDrag = state.draggingIds.some(id => state.workingOrder.includes(id))
     const sourceOrder = currentPreviewContainsDrag
       ? state.workingOrder
       : (compactOuterDragBaseOrderRef.current ?? resolveCompactOuterTopLevelOrder())
-    const currentSourceIndex = sourceOrder.indexOf(state.draggingId)
-    const safePageSize = Math.max(1, pageSizeRef.current)
-    const signature = [
-      hit.targetId,
-      targetIndex,
-      hit.zone,
-      currentSourceIndex >= 0 ? currentSourceIndex : (state.sourceSlotIndex ?? 'external'),
-      state.draggingIds.join(','),
-      safePageSize,
-      columns,
-      getOuterMinPageCount?.() ?? 1,
-    ].join(':')
-    const cached = compactOuterPreviewResultRef.current
-    if (cached?.signature === signature) {
-      return {
-        order: cached.order,
-        previewSlotIndex: cached.previewSlotIndex,
-      }
-    }
-
-    const nextPreview = buildCompactOuterDropPreview({
-      slots: sourceOrder,
-      items: resolveCompactOuterPreviewItems(state),
-      draggingIds: state.draggingIds,
-      sourceIndex: currentSourceIndex >= 0 ? currentSourceIndex : state.sourceSlotIndex,
-      targetIndex,
+    const resolved = resolveCompactOuterPreview({
+      state,
       targetId: hit.targetId,
       zone: hit.zone,
-      pageSize: safePageSize,
+      baseOrder: compactOuterPreviewOrderWithoutDragging(state),
+      sourceOrder,
+      previewItems: resolveCompactOuterPreviewItems(state),
+      pageSize: pageSizeRef.current,
       columns,
       minPageCount: getOuterMinPageCount?.(),
-      respectDropZone: true,
+      cached: compactOuterPreviewResultRef.current,
     })
-    compactOuterPreviewResultRef.current = {
-      signature,
-      ...nextPreview,
-    }
-    return nextPreview
+    compactOuterPreviewResultRef.current = resolved.cache
+    return resolved.preview
   }
-
-  const resolveDockSlotEntries = () =>
-    Array.from(dockSlotRefs.current.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([index, node]) => ({
-        index,
-        node,
-        rect: node.getBoundingClientRect(),
-        targetId: node.querySelector<HTMLElement>('[data-dock-key]')?.dataset.dockKey ?? null,
-      }))
-
-  const isPointerWithinDockBounds = (x: number, y: number) => {
-    const container = dockContainerRef.current
-    if (!container) return false
-    const rect = container.getBoundingClientRect()
-    const dockBuffer = 16
-    const withinHorizontal = x >= rect.left - dockBuffer && x <= rect.right + dockBuffer
-    const withinVertical = y >= rect.top - dockBuffer && y <= rect.bottom + dockBuffer
-    return withinHorizontal && withinVertical
-  }
-
-  const resolveDockStableTargetRect = (slotRect: DOMRect, node: HTMLDivElement | undefined) => {
-    // Dock 命中框以稳定槽位为锚点，再叠加图标在按钮内的相对偏移，避免把动画中的 transform 位置带回命中计算。
-    if (!node) return slotRect
-
-    const nodeRect = node.getBoundingClientRect()
-    const iconImage = node.querySelector<HTMLElement>('.icon-image')
-    const folderHitbox = node.querySelector<HTMLElement>('[data-folder-icon-hitbox]')
-    const folderVisual = node.querySelector<HTMLElement>('[data-folder-icon-visual]')
-    const visualRect =
-      iconImage?.getBoundingClientRect() ??
-      folderHitbox?.getBoundingClientRect() ??
-      folderVisual?.getBoundingClientRect() ??
-      nodeRect
-
-    return new DOMRect(
-      slotRect.left + (visualRect.left - nodeRect.left),
-      slotRect.top + (visualRect.top - nodeRect.top),
-      visualRect.width,
-      visualRect.height
-    )
-  }
-
-  const resolveDockOccupiedSlots = () => {
-    const slotEntries = resolveDockSlotEntries()
-    const entryByDisplayIndex = new Map(slotEntries.map(entry => [entry.index, entry] as const))
-
-    return buildDockOccupiedSlotEntries(slotEntries.map(entry => entry.targetId)).flatMap(entry => {
-      const slotEntry = entryByDisplayIndex.get(entry.displayIndex)
-      if (!slotEntry) return []
-
-      return [
-        {
-          ...slotEntry,
-          targetId: entry.targetId,
-          targetIndex: entry.targetIndex,
-        },
-      ]
-    })
-  }
-
-  const resolveDockNearestSlotIndex = (
-    state: DragState,
-    options?: { allowOutside?: boolean }
-  ): number | null => {
-    if (!options?.allowOutside && !isPointerWithinDockBounds(state.pointerX, state.pointerY)) {
-      return null
-    }
-
-    const slotEntries = resolveDockSlotEntries()
-    if (slotEntries.length === 0) return 0
-    const displaySlots = slotEntries.map(entry => entry.targetId)
-    const hoveredEntry = slotEntries.find(
-      entry =>
-        state.pointerX >= entry.rect.left &&
-        state.pointerX <= entry.rect.right &&
-        state.pointerY >= entry.rect.top &&
-        state.pointerY <= entry.rect.bottom
-    )
-    if (hoveredEntry && hoveredEntry.targetId === null) {
-      return resolveDockInsertIndexByDisplayIndex(displaySlots, hoveredEntry.index)
-    }
-
-    const occupiedSlots = resolveDockOccupiedSlots()
-    if (occupiedSlots.length === 0) return 0
-
-    // Dock 插位只认槽位中心，不再读取被避让图标的实时 DOMRect，从根上消除左右抖动。
-    return resolveDockInsertIndexFromCenters(
-      state.pointerX,
-      occupiedSlots.map(entry => entry.rect.left + entry.rect.width / 2)
-    )
-  }
-
-  const findDockMaxOverlapHit = (state: DragState): OuterOverlapHit | null => {
-    const dragRect = new DOMRect(
-      state.pointerX - iconConfig.imgSize / 2,
-      state.pointerY - iconConfig.imgSize / 2,
-      iconConfig.imgSize,
-      iconConfig.imgSize
-    )
-    const dragArea = getRectArea(dragRect)
-    if (dragArea <= 0) return null
-
-    const candidates: OuterOverlapHit[] = []
-    resolveDockOccupiedSlots().forEach(entry => {
-      const targetRect = resolveDockStableTargetRect(
-        entry.rect,
-        dockItemRefs.current.get(entry.targetId)
-      )
-      const overlapRect = getRectIntersection(dragRect, targetRect)
-      if (!overlapRect) return
-
-      const intersectionArea = getRectArea(overlapRect)
-      const targetArea = getRectArea(targetRect)
-      if (intersectionArea <= 0 || targetArea <= 0) return
-
-      candidates.push({
-        targetId: entry.targetId,
-        targetIndex: entry.index,
-        targetRect,
-        overlapRect,
-        iou: intersectionArea / dragArea,
-        intersectionArea,
-        centerManhattanDistance:
-          Math.abs(state.pointerX - (targetRect.left + targetRect.width / 2)) +
-          Math.abs(state.pointerY - (targetRect.top + targetRect.height / 2)),
-        zone: classifyZone(targetRect, state.pointerX, state.pointerY),
-      })
-    })
-
-    return selectDockOverlapCandidate(candidates, state.hoverTargetId, iconConfig.imgSize)
-  }
-
-  const resolveTopLevelContextAtPoint = (x: number, y: number): 'outer' | 'dock' => {
-    const dockElement = dockContainerRef.current
-    if (!dockElement) return 'outer'
-    const rect = dockElement.getBoundingClientRect()
-    const dockBuffer = 16
-    const withinHorizontal = x >= rect.left - dockBuffer && x <= rect.right + dockBuffer
-    const withinVertical = y >= rect.top - dockBuffer && y <= rect.bottom + dockBuffer
-    return withinHorizontal && withinVertical ? 'dock' : 'outer'
-  }
-
-  const resolveDragItemMap = (state: DragState): Map<string, GridItem> => {
-    if (state.context === 'folder') {
-      const folderMap = getFolderMapById(state.sourceFolderId, itemsRef.current)
-      const gridMap = new Map<string, GridItem>()
-      folderMap.forEach((item, id) => gridMap.set(id, item))
-      return gridMap
-    }
-    const outerMap = new Map<string, GridItem>()
-    itemsRef.current.forEach(item => {
-      outerMap.set(getId(item), item)
-    })
-    return outerMap
-  }
-
   const resolveGridMetrics = (context: 'outer' | 'folder' | 'dock') => {
     if (context === 'folder') {
       return {
@@ -1236,7 +796,12 @@ export function useScrollableIconGridDragWorkflow({
     }
 
     if (state.context === 'dock') {
-      return resolveDockNearestSlotIndex(state, options)
+      return resolveDockNearestSlotIndex({
+        state,
+        dockContainer: dockContainerRef.current,
+        slotNodes: dockSlotRefs.current,
+        allowOutside: options?.allowOutside,
+      })
     }
 
     return resolveNearestSlotIndexByMetrics(
@@ -1354,7 +919,12 @@ export function useScrollableIconGridDragWorkflow({
     if (state.context === 'folder') return null
 
     if (state.context === 'dock') {
-      return findDockMaxOverlapHit(state)
+      return findDockMaxOverlapHit({
+        state,
+        iconSize: iconConfig.imgSize,
+        slotNodes: dockSlotRefs.current,
+        itemNodes: dockItemRefs.current,
+      })
     }
 
     if (!isCompactOuterDrop) {
@@ -1582,7 +1152,7 @@ export function useScrollableIconGridDragWorkflow({
 
     const overlapHit = findCompactScrollGroupOverlapHit(latest)
     if (!overlapHit || overlapHit.targetId !== expectedTargetId) return
-    const target = resolveDragItemMap(latest).get(expectedTargetId)
+    const target = buildDragItemMap(latest, itemsRef.current).get(expectedTargetId)
     if (!target) return
     const zone = resolveCompactScrollHoverZone(latest, target, overlapHit)
     if (zone !== 'center') return
@@ -1621,7 +1191,7 @@ export function useScrollableIconGridDragWorkflow({
     let overlapHit = findTopLevelMaxOverlapHit(latest)
     if (!overlapHit || overlapHit.targetId !== expectedTargetId) return
 
-    const itemMap = resolveDragItemMap(latest)
+    const itemMap = buildDragItemMap(latest, itemsRef.current)
     const source = latest.draggingItem
     const target = itemMap.get(overlapHit.targetId)
     if (!target) return
@@ -2079,6 +1649,12 @@ export function useScrollableIconGridDragWorkflow({
       leadItem: draggingItem,
       sourceOrder,
       sourceFolderId: pending.sourceFolderId,
+      openFolderId,
+      selectionMode,
+      selectedIconKeys: selectedIconKeySet,
+      items: itemsRef.current,
+      itemById,
+      getTopLevelOrder: resolveTopLevelOrder,
     })
     const selectedFolderChildrenByFolderId = getFolderChildSelectionsByIds(
       itemsRef.current,
@@ -2373,7 +1949,7 @@ export function useScrollableIconGridDragWorkflow({
         return
       }
 
-      const itemMap = resolveDragItemMap(baseState)
+      const itemMap = buildDragItemMap(baseState, itemsRef.current)
       const source = baseState.draggingItem
       const target = itemMap.get(overlapHit.targetId)
       if (!target) {
@@ -2694,7 +2270,7 @@ export function useScrollableIconGridDragWorkflow({
       return
     }
 
-    const itemMap = resolveDragItemMap(baseState)
+    const itemMap = buildDragItemMap(baseState, itemsRef.current)
     const source = baseState.draggingItem
     const target = itemMap.get(hit.targetId)
     if (!target) {
