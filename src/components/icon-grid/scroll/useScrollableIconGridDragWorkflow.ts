@@ -8,7 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type SetStateAction,
 } from 'react'
-import type { EvasionDirection, GridItem, HoverZone, IconItem } from '../model'
+import type { EvasionDirection, GridItem, HoverZone } from '../model'
 import { getGridItemSpan, getId } from '../model'
 import { DRAG_HOLE_ID, areSlotsEqual } from '../domain/slots'
 import { moveDragHoleToIndex } from '../domain/evasionPolicy'
@@ -62,6 +62,13 @@ import {
 } from './scrollGroupLayout'
 import { activateDragPointerCapture, releaseDragPointerCapture } from '../hooks/dragPointerCapture'
 import { resetOuterInteraction } from '../state/dragMachine'
+import {
+  collectElementCenters as collectCenters,
+  getFolderIconMapById as getFolderMapById,
+  hasRenderableDragStateChanged,
+  resolveSelectedIconDragIds,
+  seedMissingInitialCenters,
+} from '../domain/dragWorkflowShared'
 import type {
   DragHit,
   DragState,
@@ -369,30 +376,6 @@ export function useScrollableIconGridDragWorkflow({
     dragPointerRef.current = { pointerX: next.pointerX, pointerY: next.pointerY }
   }
 
-  const areDraggingIdsEqual = (left: string[], right: string[]) =>
-    left.length === right.length && left.every((id, index) => id === right[index])
-
-  const hasRenderableDragStateChanged = (previous: DragState | null, next: DragState | null) => {
-    if (previous === next) return false
-    if (!previous || !next) return previous !== next
-    if (previous.context !== next.context) return true
-    if (previous.sourceFolderId !== next.sourceFolderId) return true
-    if (previous.pointerId !== next.pointerId) return true
-    if (previous.dragStartedAt !== next.dragStartedAt) return true
-    if (previous.draggingId !== next.draggingId) return true
-    if (previous.draggingItem !== next.draggingItem) return true
-    if (!areDraggingIdsEqual(previous.draggingIds, next.draggingIds)) return true
-    if (!areSlotsEqual(previous.workingOrder, next.workingOrder)) return true
-    if (!areSlotsEqual(previous.scrollGroupOrder ?? [], next.scrollGroupOrder ?? [])) return true
-    if (previous.sourceSlotIndex !== next.sourceSlotIndex) return true
-    if (previous.previewSlotIndex !== next.previewSlotIndex) return true
-    if (previous.dockPreviewIndex !== next.dockPreviewIndex) return true
-    if (previous.hoverTargetId !== next.hoverTargetId) return true
-    if (previous.hoverZone !== next.hoverZone) return true
-    if (previous.folderPreviewTargetId !== next.folderPreviewTargetId) return true
-    return previous.initialCenters !== next.initialCenters
-  }
-
   const captureOuterPreviewBeforeChange = (previous: DragState | null, next: DragState | null) => {
     if (!isCompactOuterDrop || !onBeforeOuterPreviewChange) return
     const previousIsOuter = previous?.context === 'outer'
@@ -422,43 +405,10 @@ export function useScrollableIconGridDragWorkflow({
 
   const publishMoveDragState = (next: DragState | null) => {
     syncDragRuntime(next)
-    if (!hasRenderableDragStateChanged(renderedDragStateRef.current, next)) return
+    if (!hasRenderableDragStateChanged(renderedDragStateRef.current, next, 'scroll')) return
     captureOuterPreviewBeforeChange(renderedDragStateRef.current, next)
     renderedDragStateRef.current = next
     setDragState(next)
-  }
-
-  const collectCenters = (refs: Map<string, HTMLDivElement>) => {
-    const centers: Record<string, { x: number; y: number }> = {}
-    refs.forEach((node, id) => {
-      const rect = node.getBoundingClientRect()
-      centers[id] = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
-    })
-    return centers
-  }
-
-  const seedMissingInitialCentersFromTopLevelRefs = (
-    initialCenters: Record<string, { x: number; y: number }>,
-    draggingIds: string[]
-  ) => {
-    const topLevelCenters = {
-      ...collectCenters(tileRefs.current),
-      ...collectCenters(dockItemRefs.current),
-    }
-    draggingIds.forEach(id => {
-      if (!initialCenters[id] && topLevelCenters[id]) {
-        initialCenters[id] = topLevelCenters[id]
-      }
-    })
-  }
-
-  const getFolderMapById = (folderId: string | null, baseItems: GridItem[]) => {
-    const map = new Map<string, IconItem>()
-    if (!folderId) return map
-    getFolderChildrenById(baseItems, folderId).forEach(child => {
-      map.set(child.key, child)
-    })
-    return map
   }
 
   const resolveAllItemIds = () => itemsRef.current.map(getId)
@@ -474,23 +424,8 @@ export function useScrollableIconGridDragWorkflow({
   const isDraggingFromDock = (draggingId: string): boolean =>
     dockKeysRef.current.includes(draggingId)
 
-  const resolveSelectedOuterDragIds = (sourceOrder: Array<string | null>, leadId: string) =>
-    sourceOrder.filter((slot): slot is string => {
-      if (!slot || slot === DRAG_HOLE_ID || slot === leadId) return false
-      const candidate = itemById.get(slot)
-      return Boolean(
-        candidate && candidate.kind === 'icon' && selectedIconKeySet.has(candidate.key)
-      )
-    })
-
-  const resolveSelectedDockDragIds = (sourceOrder: Array<string | null>, leadId: string) =>
-    sourceOrder.filter((slot): slot is string => {
-      if (!slot || slot === DRAG_HOLE_ID || slot === leadId) return false
-      const candidate = itemById.get(slot)
-      return Boolean(
-        candidate && candidate.kind === 'icon' && selectedIconKeySet.has(candidate.key)
-      )
-    })
+  const resolveSelectedDragIds = (sourceOrder: Array<string | null>, leadId: string) =>
+    resolveSelectedIconDragIds(sourceOrder, leadId, itemById, selectedIconKeySet)
 
   const seedMissingOuterDragCenters = ({
     initialCenters,
@@ -566,7 +501,7 @@ export function useScrollableIconGridDragWorkflow({
     if (!selectionMode || !leadItem || leadItem.kind !== 'icon') {
       return [leadId]
     }
-    const orderedSelectedIds = resolveSelectedOuterDragIds(sourceOrder, leadId)
+    const orderedSelectedIds = resolveSelectedDragIds(sourceOrder, leadId)
 
     return [leadId, ...orderedSelectedIds]
   }
@@ -633,12 +568,12 @@ export function useScrollableIconGridDragWorkflow({
 
     const dockSelectedIds =
       context === 'dock'
-        ? resolveSelectedDockDragIds(sourceOrder, leadId)
-        : resolveSelectedDockDragIds(resolveTopLevelOrder('dock'), leadId)
+        ? resolveSelectedDragIds(sourceOrder, leadId)
+        : resolveSelectedDragIds(resolveTopLevelOrder('dock'), leadId)
     const outerSelectedIds =
       context === 'outer'
         ? resolveOuterDragIds(sourceOrder, leadId).slice(1)
-        : resolveSelectedOuterDragIds(resolveTopLevelOrder('outer'), leadId)
+        : resolveSelectedDragIds(resolveTopLevelOrder('outer'), leadId)
     const folderSelectedIds = resolveSelectedFolderDragIds({
       preferredFolderId: sourceFolderId ?? openFolderId,
       leadId,
@@ -2198,7 +2133,12 @@ export function useScrollableIconGridDragWorkflow({
       nextState.previewSlotIndex = null
       nextState.dockPreviewIndex = null
     }
-    seedMissingInitialCentersFromTopLevelRefs(nextState.initialCenters, draggingIds)
+    seedMissingInitialCenters(
+      nextState.initialCenters,
+      draggingIds,
+      tileRefs.current,
+      dockItemRefs.current
+    )
     if (pending.context !== 'folder' && selectedFolderDragIds.length > 0) {
       const folderCenters = collectCenters(folderTileRefs.current)
       selectedFolderChildrenByFolderId.forEach((children, folderId) => {

@@ -74,15 +74,40 @@ import {
 import { EdgeGlow } from './icon-grid/views/EdgeGlow'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
 import { DockBar } from './icon-grid/views/DockBar'
-import {
-  getFolderChildSelectionsByIds,
-  getFolderChildrenById,
-  replaceFolderChildren,
-} from './icon-grid/domain/folderPolicy'
+import { getFolderChildSelectionsByIds } from './icon-grid/domain/folderPolicy'
 import {
   resolveLayoutHydrationSource,
   shouldResetPersistedLayoutCache,
 } from './icon-grid/domain/layoutHydrationPolicy'
+import {
+  buildGridGeometryKey as buildGeometryKey,
+  fitGridItemCount as fitCount,
+  getDefaultFolderColumnCount,
+  getLayoutNormalizationMetrics,
+  isSuspiciousSingleCellPageGeometry,
+} from './icon-grid/domain/gridGeometry'
+import {
+  extractDraggedIconsFromSourceFolders,
+  filterItemsByIds,
+} from './icon-grid/domain/gridItems'
+import {
+  DRAG_EDGE_SWITCH_MS,
+  DRAG_EDGE_SWITCH_ZONE,
+  DRAG_LONG_PRESS_MS,
+  DRAG_PENDING_MOVE_TOLERANCE,
+  EVASION_REARM_DISTANCE,
+  FOLDER_SHARED_LAYOUT_WINDOW_MS,
+  GRID_GAP,
+  IMPORT_HIGHLIGHT_MS,
+  PAGINATION_ACTIVE_WIDTH,
+  PAGINATION_DOT_GAP,
+  PAGINATION_DOT_SIZE,
+  PAGINATION_OFFSET,
+  REORDER_ANIMATION_MS,
+  SIDE_ARROW_OFFSET,
+  WHEEL_PAGE_COOLDOWN_MS,
+  WHEEL_PAGE_DELTA_THRESHOLD,
+} from './icon-grid/constants'
 
 interface IconGridProps {
   icons: DesktopIcon[]
@@ -98,23 +123,7 @@ interface IconGridProps {
   } | null
 }
 
-const GRID_GAP = 8
-const PAGINATION_OFFSET = 14
-const PAGINATION_DOT_SIZE = 8
-const PAGINATION_DOT_GAP = 10
-const PAGINATION_ACTIVE_WIDTH = 18
-const SIDE_ARROW_OFFSET = 66
-const DRAG_EDGE_SWITCH_ZONE = 72
-const DRAG_EDGE_SWITCH_MS = 600
-const WHEEL_PAGE_DELTA_THRESHOLD = 54
-const WHEEL_PAGE_COOLDOWN_MS = 180
-const DRAG_LONG_PRESS_MS = 300
-const DRAG_PENDING_MOVE_TOLERANCE = 7
-const EVASION_REARM_DISTANCE = 14
 const EVASION_COOLDOWN_MS = 120
-const REORDER_ANIMATION_MS = 300
-const FOLDER_SHARED_LAYOUT_WINDOW_MS = 320
-const IMPORT_HIGHLIGHT_MS = 4200
 const REORDER_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
 const readCurrentTranslate = (node: HTMLElement): { x: number; y: number } => {
   const transform = window.getComputedStyle(node).transform
@@ -130,24 +139,6 @@ const readCurrentTranslate = (node: HTMLElement): { x: number; y: number } => {
     return { x: 0, y: 0 }
   }
 }
-const fitCount = (container: number, item: number) => {
-  if (item <= 0 || container <= item) return 1
-  return Math.floor((container - item) / (item + GRID_GAP)) + 1
-}
-// 网格几何锁定标识：窗口模式 + 图标大小 + Dock 开关。
-// 这三者不变时，列数/行数保持锁定，DPI/分辨率切换不会触发重排。
-const buildGeometryKey = (windowMode: string, iconSize: string, dockEnabled: boolean) =>
-  `${windowMode}:${iconSize}:${dockEnabled}`
-const getFolderModalMaxAvailableWidth = () => {
-  const maxWidth =
-    typeof window === 'undefined'
-      ? FOLDER_MODAL_MAX_WIDTH
-      : Math.min(FOLDER_MODAL_MAX_WIDTH, window.innerWidth * 0.92)
-  return Math.max(0, maxWidth - 40)
-}
-const getDefaultFolderColumnCount = (tileWidth: number) =>
-  fitCount(getFolderModalMaxAvailableWidth(), tileWidth)
-
 const EMPTY_SCROLL_RENDER_ORDER: Array<string | null> = []
 const EMPTY_SCROLL_GRID_SECTIONS: ScrollGridSection[] = []
 
@@ -162,68 +153,6 @@ const getOccupiedPageCountForSlots = (slots: Array<string | null>, pageSize: num
   }
   return Math.max(1, Math.ceil((lastOccupiedIndex + 1) / safePageSize))
 }
-
-const filterItemsByIds = (items: GridItem[], ids: string[]): GridItem[] => {
-  const idSet = new Set(ids)
-  return items.filter(item => idSet.has(getId(item)))
-}
-
-const extractDraggedIconsFromSourceFolders = (
-  base: GridItem[],
-  draggingIds: string[]
-): GridItem[] => {
-  const selectedChildrenByFolderId = getFolderChildSelectionsByIds(base, draggingIds)
-  if (selectedChildrenByFolderId.size === 0) return base
-
-  let nextBase = base
-  const extractedById = new Map<string, IconItem>()
-  selectedChildrenByFolderId.forEach((children, folderId) => {
-    children.forEach(child => {
-      extractedById.set(child.key, child)
-    })
-    const draggedIdSet = new Set(children.map(child => child.key))
-    const nextChildren = getFolderChildrenById(nextBase, folderId).filter(
-      child => !draggedIdSet.has(child.key)
-    )
-    nextBase = replaceFolderChildren(nextBase, folderId, nextChildren, {
-      collapseSingleChild: false,
-    })
-  })
-
-  const existingIds = new Set(nextBase.map(getId))
-  const extractedItems = Array.from(extractedById.values()).filter(
-    child => !existingIds.has(child.key)
-  )
-  if (extractedItems.length === 0) {
-    return nextBase
-  }
-
-  return [...nextBase, ...extractedItems]
-}
-
-const getLayoutNormalizationMetrics = (
-  items: GridItem[],
-  columns: number,
-  pageSize: number
-): { columns: number; pageSize: number } => {
-  const minColumns = items.some(item => getGridItemSpan(item).cols > 1) ? 2 : 1
-  const minRows = items.some(item => getGridItemSpan(item).rows > 1) ? 2 : 1
-  const safeColumns = Math.max(minColumns, columns)
-  return {
-    columns: safeColumns,
-    pageSize: Math.max(pageSize, safeColumns * minRows),
-  }
-}
-
-const isSuspiciousSingleCellPageGeometry = ({
-  columns,
-  rows,
-  pageSize,
-}: {
-  columns: number
-  rows: number
-  pageSize: number
-}) => columns === 1 && rows === 1 && pageSize === 1
 
 export function ScrollableIconGrid({
   icons,
@@ -338,7 +267,7 @@ export function ScrollableIconGrid({
   const [folderItemWidth, setFolderItemWidth] = useState<number>(columnWidth)
   const [folderItemHeight, setFolderItemHeight] = useState<number>(rowHeight)
   const [folderColumns, setFolderColumns] = useState<number>(() =>
-    getDefaultFolderColumnCount(columnWidth)
+    getDefaultFolderColumnCount(columnWidth, FOLDER_MODAL_MAX_WIDTH)
   )
 
   useEffect(() => {
@@ -380,7 +309,7 @@ export function ScrollableIconGrid({
   const primeFolderLayoutDefaults = () => {
     setFolderItemWidth(columnWidth)
     setFolderItemHeight(rowHeight)
-    setFolderColumns(getDefaultFolderColumnCount(columnWidth))
+    setFolderColumns(getDefaultFolderColumnCount(columnWidth, FOLDER_MODAL_MAX_WIDTH))
   }
 
   const openFolderWithAnimation = (folderId: string) => {
@@ -1188,7 +1117,7 @@ export function ScrollableIconGrid({
       setFolderItemHeight(tileHeight)
       // Use max available width (panel max minus padding) to calculate columns,
       // so panel can then shrink to fit the actual column count.
-      setFolderColumns(getDefaultFolderColumnCount(tileWidth))
+      setFolderColumns(getDefaultFolderColumnCount(tileWidth, FOLDER_MODAL_MAX_WIDTH))
     }
     const schedule = () => {
       cancelAnimationFrame(raf)
