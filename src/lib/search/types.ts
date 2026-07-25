@@ -1,4 +1,5 @@
 export type SearchSort =
+  | 'relevance'
   | 'name_asc'
   | 'name_desc'
   | 'path_asc'

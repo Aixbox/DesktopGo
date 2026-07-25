@@ -8,6 +8,7 @@ export interface SearchSortOption {
 }
 
 export const SEARCH_SORT_OPTIONS: SearchSortOption[] = [
+  { value: 'relevance', label: '相关性', group: 'common' },
   { value: 'name_asc', label: '名称 升序', group: 'common' },
   { value: 'name_desc', label: '名称 降序', group: 'common' },
   { value: 'path_asc', label: '路径 升序', group: 'common' },

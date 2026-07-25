@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { searchFiles } from './api'
 import { buildSearchKeyword } from './filters'
+import { rankSearchPageItems } from './relevance'
 import {
   addSearchHistoryEntry,
   clearSearchHistory,
@@ -275,8 +276,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
       void executeSearchWithRetry(context, 0)
         .then(page => {
           if (!isContextActive(context)) return
-
-          setPagesAndRef({ 0: page.items })
+          setPagesAndRef({ 0: rankSearchPageItems(page.items, context) })
           totalResultsRef.current = page.totalResults
           setTotalResults(page.totalResults)
           setProvider(page.provider)
@@ -398,7 +398,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
 
         setPagesAndRef({
           ...pagesRef.current,
-          [nextOffset]: page.items,
+          [nextOffset]: rankSearchPageItems(page.items, context),
         })
         totalResultsRef.current = page.totalResults
         setTotalResults(page.totalResults)

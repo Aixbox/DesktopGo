@@ -7,6 +7,7 @@ fn default_limit() -> u32 {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchSort {
+    Relevance,
     NameAsc,
     NameDesc,
     PathAsc,
@@ -37,7 +38,7 @@ pub enum SearchSort {
 
 impl Default for SearchSort {
     fn default() -> Self {
-        Self::NameAsc
+        Self::Relevance
     }
 }
 

@@ -285,7 +285,7 @@ mod windows_impl {
 
     fn sort_to_sdk_value(sort: SearchSort) -> u32 {
         match sort {
-            SearchSort::NameAsc => EVERYTHING_SORT_NAME_ASCENDING,
+            SearchSort::NameAsc | SearchSort::Relevance => EVERYTHING_SORT_NAME_ASCENDING,
             SearchSort::NameDesc => EVERYTHING_SORT_NAME_DESCENDING,
             SearchSort::PathAsc => EVERYTHING_SORT_PATH_ASCENDING,
             SearchSort::PathDesc => EVERYTHING_SORT_PATH_DESCENDING,

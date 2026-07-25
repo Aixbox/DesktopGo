@@ -45,7 +45,7 @@ export const DEFAULT_SEARCH_SETTINGS: SearchSettings = {
   matchCase: false,
   regex: false,
   matchWholeWord: false,
-  sortBy: 'path_asc',
+  sortBy: 'relevance',
   rememberLastFilter: true,
   autoStartRuntime: true,
 }
@@ -128,6 +128,7 @@ const normalizeFilter = (value: unknown, fallback: SearchDefaultFilter): SearchD
 
 const normalizeSort = (value: unknown, fallback: SearchSort): SearchSort => {
   if (
+    value === 'relevance' ||
     value === 'name_asc' ||
     value === 'name_desc' ||
     value === 'path_asc' ||
@@ -278,7 +279,6 @@ export const loadSearchSettings = async (): Promise<SearchSettings> => {
         [SEARCH_SETTING_KEYS.sortBy, settings.sortBy]
       )
     }
-
 
     if (profileVersion < 5 && settings.maxResultsPerPage !== 50) {
       settings.maxResultsPerPage = 50
