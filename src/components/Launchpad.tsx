@@ -43,30 +43,13 @@ import { applyWindowStyle, getSavedWindowStyle } from '@/lib/windowStyle'
 import { getSearchPreview, recordSearchResultRun } from '@/lib/search/api'
 import { getSearchFilterLabel, getSearchFilterOptions } from '@/lib/search/filters'
 import { SearchFloatingMenu } from '@/components/search/SearchFloatingMenu'
+import { LaunchpadContextMenuContent } from '@/components/launchpad/LaunchpadContextMenuContent'
 import { useSearch } from '@/lib/search/useSearch'
 import { LAUNCHPAD_LAYOUT_RESET_EVENT } from '@/components/icon-grid/services/layoutStore'
-import {
-  ContextMenu,
-  ContextMenuCheckboxItem,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuRadioGroup,
-  ContextMenuRadioItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuTrigger,
-} from '@/components/ui/context-menu'
+import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { useToast } from '@/components/ui/toast'
 import { buildIconSelectionKey, useIconStore } from '@/stores/iconStore'
-import type {
-  DesktopIcon,
-  IconSize,
-  LaunchpadGridViewMode,
-  TitleLineCount,
-  WindowMode,
-} from '@/types'
+import type { DesktopIcon } from '@/types'
 import type { AiOrganizePanelRunState } from './ai/AiOrganizePanel'
 import type { AddIconDialogDraft } from './icons/AddIconDialog'
 import { Button } from './ui/button'
@@ -78,29 +61,6 @@ type NativeFileDragPayload = {
   eventType: 'enter' | 'leave' | 'drop'
   paths: string[]
 }
-const ICON_SIZE_OPTIONS: { label: string; value: IconSize }[] = [
-  { label: '大图标', value: 'large' },
-  { label: '中图标', value: 'medium' },
-  { label: '小图标', value: 'small' },
-]
-
-const WINDOW_MODE_OPTIONS: { label: string; value: WindowMode }[] = [
-  { label: '全屏', value: 'fullscreen' },
-  { label: '大窗口', value: 'large' },
-  { label: '中窗口', value: 'medium' },
-  { label: '小窗口', value: 'small' },
-]
-
-const TITLE_LINE_OPTIONS: { label: string; value: TitleLineCount }[] = [
-  { label: '单行标题', value: 'one' },
-  { label: '双行标题', value: 'two' },
-]
-
-const GRID_VIEW_MODE_OPTIONS: { label: string; value: LaunchpadGridViewMode }[] = [
-  { label: '分页网格', value: 'paged' },
-  { label: '侧栏滚动', value: 'scroll' },
-]
-
 const loadScrollableIconGrid = () => import('./ScrollableIconGrid')
 const ScrollableIconGrid = lazy(() =>
   loadScrollableIconGrid().then(module => ({ default: module.ScrollableIconGrid }))
@@ -227,18 +187,10 @@ export function Launchpad() {
     error: iconLoadError,
     fetchIcons,
     hydrateSettings,
-    iconSize,
     iconCornerRadius,
     iconOpacity,
-    setIconSize,
     windowMode,
-    setWindowMode,
-    titleLineCount,
-    setTitleLineCount,
     launchpadGridViewMode,
-    setLaunchpadGridViewMode,
-    iconContextMenuMode,
-    setIconContextMenuMode,
     selectionMode,
     selectedIconKeys,
     launchApp,
@@ -2196,88 +2148,13 @@ export function Launchpad() {
         </div>
       </ContextMenuTrigger>
 
-      <ContextMenuContent className="w-44">
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>{translate('图标大小')}</ContextMenuSubTrigger>
-          <ContextMenuSubContent className="w-44">
-            <ContextMenuRadioGroup
-              value={iconSize}
-              onValueChange={value => setIconSize(value as IconSize)}
-            >
-              {ICON_SIZE_OPTIONS.map(option => (
-                <ContextMenuRadioItem key={option.value} value={option.value}>
-                  {translate(option.label)}
-                </ContextMenuRadioItem>
-              ))}
-            </ContextMenuRadioGroup>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>{translate('窗口大小')}</ContextMenuSubTrigger>
-          <ContextMenuSubContent className="w-44">
-            <ContextMenuRadioGroup
-              value={windowMode}
-              onValueChange={value => setWindowMode(value as WindowMode)}
-            >
-              {WINDOW_MODE_OPTIONS.map(option => (
-                <ContextMenuRadioItem key={option.value} value={option.value}>
-                  {translate(option.label)}
-                </ContextMenuRadioItem>
-              ))}
-            </ContextMenuRadioGroup>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>{translate('标题行数')}</ContextMenuSubTrigger>
-          <ContextMenuSubContent className="w-44">
-            <ContextMenuRadioGroup
-              value={titleLineCount}
-              onValueChange={value => setTitleLineCount(value as TitleLineCount)}
-            >
-              {TITLE_LINE_OPTIONS.map(option => (
-                <ContextMenuRadioItem key={option.value} value={option.value}>
-                  {translate(option.label)}
-                </ContextMenuRadioItem>
-              ))}
-            </ContextMenuRadioGroup>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>{translate('网格模式')}</ContextMenuSubTrigger>
-          <ContextMenuSubContent className="w-44">
-            <ContextMenuRadioGroup
-              value={launchpadGridViewMode}
-              onValueChange={value => setLaunchpadGridViewMode(value as LaunchpadGridViewMode)}
-            >
-              {GRID_VIEW_MODE_OPTIONS.map(option => (
-                <ContextMenuRadioItem key={option.value} value={option.value}>
-                  {translate(option.label)}
-                </ContextMenuRadioItem>
-              ))}
-            </ContextMenuRadioGroup>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => enterSelectionMode()}>
-          {translate('编辑图标')}
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={enterAiOrganizeMode}>{translate('AI 智能整理')}</ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuCheckboxItem
-          checked={iconContextMenuMode === 'system'}
-          onCheckedChange={checked => {
-            setIconContextMenuMode(checked ? 'system' : 'custom')
-          }}
-        >
-          {translate('图标使用 Windows 原生菜单')}
-        </ContextMenuCheckboxItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={openSettings}>{translate('设置')}</ContextMenuItem>
-      </ContextMenuContent>
+      <LaunchpadContextMenuContent
+        addIconDisabled={isImportingDrop || addIconDialogOpen}
+        onAddIcon={() => handleAddIcons()}
+        onSelectIcons={enterSelectionMode}
+        onAiOrganize={enterAiOrganizeMode}
+        onOpenSettings={openSettings}
+      />
 
       <Suspense fallback={null}>
         {addIconDialogOpen ? (

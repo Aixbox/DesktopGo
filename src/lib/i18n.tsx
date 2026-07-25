@@ -529,7 +529,7 @@ const EN_MESSAGES: Record<string, string> = {
   '已选择：{count}': 'Selected: {count}',
   隐藏: 'Hide',
   取消: 'Cancel',
-  编辑图标: 'Edit icons',
+  添加快捷入口: 'Add shortcut',
   '确定要删除已选中的 {count} 个图标吗？此操作无法撤销。':
     'Delete the {count} selected icons? This action cannot be undone.',
   打开: 'Open',
@@ -598,7 +598,7 @@ const EN_MESSAGES: Record<string, string> = {
   '选择工作目录失败：{error}': 'Failed to choose the working directory: {error}',
   自定义图标: 'Custom icon',
   '选择 ICO、PNG 或程序文件': 'Choose an ICO, PNG, or program file',
-  选择图标: 'Choose icon',
+  批量选择图标: 'Select icons',
   选择自定义图标: 'Choose a custom icon',
   图标文件: 'Icon files',
   '选择自定义图标失败：{error}': 'Failed to choose a custom icon: {error}',
