@@ -10,16 +10,16 @@ import {
 } from 'react'
 import type { SearchHistoryEntry } from '@/lib/search/history'
 import { parseEverythingHighlightedText } from '@/lib/search/highlight'
+import type { SearchSource } from '@/lib/search/scope'
 import type { SearchHit, SearchPreview, SearchRuntimeState, SearchSort } from '@/lib/search/types'
-import { useIconStore } from '@/stores/iconStore'
-import { IconContextMenu } from '@/components/icons/IconContextMenu'
-import { ICON_SIZE_CONFIG, type DesktopIcon } from '@/types'
-import { AppWindow, File, Folder, RefreshCw } from 'lucide-react'
+import type { DesktopIcon } from '@/types'
+import { File, Folder, RefreshCw } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
 import { SearchHistoryPanel } from './SearchHistoryPanel'
 import { SearchPreviewPane } from './SearchPreviewPane'
 import { SearchSourceTabs } from './SearchSourceTabs'
 import { SearchToolbar } from './SearchToolbar'
+import { ShortcutSearchResults } from './ShortcutSearchResults'
 import { Button } from '@/components/ui/button'
 
 const ROW_HEIGHT = 68
@@ -38,9 +38,9 @@ const PANEL_TRANSITION = {
 }
 
 interface SearchPanelProps {
-  source: 'icons' | 'everything'
+  source: SearchSource
   keyword: string
-  onSourceChange: (source: 'icons' | 'everything') => void
+  onSourceChange: (source: SearchSource) => void
   visible: boolean
   loading: boolean
   searchPending: boolean
@@ -111,78 +111,6 @@ function HighlightedText({
   )
 }
 
-function IconResultTile({
-  icon,
-  selected,
-  onSelect,
-  onActivate,
-  singleLineTitle,
-}: {
-  icon: DesktopIcon
-  selected: boolean
-  onSelect: () => void
-  onActivate: () => void
-  singleLineTitle: boolean
-}) {
-  const { iconSize } = useIconStore()
-  const config = ICON_SIZE_CONFIG[iconSize]
-
-  return (
-    <IconContextMenu icon={icon} onOpen={onActivate}>
-      <button
-        type="button"
-        className={`group relative flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-none p-3 shadow-none transition-all duration-200 ${
-          selected
-            ? 'bg-blue-500/12 ring-1 ring-blue-500/40 dark:bg-blue-400/18 dark:ring-blue-400/45'
-            : 'bg-transparent hover:bg-accent/60 active:bg-accent'
-        }`}
-        style={{ width: config.containerWidth }}
-        title={icon.name}
-        onMouseEnter={onSelect}
-        onClick={onSelect}
-        onDoubleClick={onActivate}
-      >
-        <div
-          className="flex items-center justify-center overflow-hidden transition-all duration-200 group-hover:scale-105 group-active:scale-95"
-          style={{ width: config.imgSize, height: config.imgSize }}
-        >
-          {icon.icon_base64 ? (
-            <img
-              src={icon.icon_base64}
-              alt={icon.name}
-              style={{ width: config.imgSize, height: config.imgSize }}
-              className="object-contain"
-              draggable={false}
-            />
-          ) : icon.item_type === 'folder' ? (
-            <Folder className="h-8 w-8 text-muted-foreground" />
-          ) : (
-            <AppWindow className="h-8 w-8 text-muted-foreground" />
-          )}
-        </div>
-
-        <span
-          className={`text-[11px] text-center leading-tight ${
-            selected ? 'text-blue-700 dark:text-blue-200' : 'text-foreground'
-          }`}
-          style={{
-            maxWidth: config.containerWidth - 10,
-            display: singleLineTitle ? 'block' : '-webkit-box',
-            WebkitLineClamp: singleLineTitle ? 1 : 2,
-            WebkitBoxOrient: singleLineTitle ? undefined : 'vertical',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: singleLineTitle ? 'nowrap' : 'normal',
-            overflowWrap: 'anywhere',
-          }}
-        >
-          {icon.name}
-        </span>
-      </button>
-    </IconContextMenu>
-  )
-}
-
 export function SearchPanel({
   source,
   keyword,
@@ -231,7 +159,6 @@ export function SearchPanel({
 }: SearchPanelProps) {
   useI18n()
 
-  const { iconSize, titleLineCount } = useIconStore()
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const bodyContentRef = useRef<HTMLDivElement | null>(null)
   const splitContainerRef = useRef<HTMLDivElement | null>(null)
@@ -246,10 +173,11 @@ export function SearchPanel({
   )
   const [isResizingSplit, setIsResizingSplit] = useState(false)
   const prefersReducedMotion = useReducedMotion()
-  const isEverything = source === 'everything'
+  const isEverything = source !== 'icons'
+  const includesEverything = isEverything
+  const isFileOnly = source === 'everything'
+  const isUnified = source === 'all'
   const trimmedKeyword = keyword.trim()
-  const iconConfig = ICON_SIZE_CONFIG[iconSize]
-  const singleLineTitle = titleLineCount === 'one'
 
   const clampListPaneWidth = useCallback((nextWidth: number, containerWidth: number) => {
     const availableWidth = Math.max(containerWidth - SPLIT_DIVIDER_WIDTH, 0)
@@ -281,7 +209,7 @@ export function SearchPanel({
 
   const notifyVisibleRange = useCallback(
     (nextScrollTop: number, nextViewportHeight: number) => {
-      if (!isEverything || virtualCount === 0 || nextViewportHeight <= 0) {
+      if (!includesEverything || virtualCount === 0 || nextViewportHeight <= 0) {
         onVisibleRangeChange(0, -1)
         return
       }
@@ -295,7 +223,7 @@ export function SearchPanel({
       )
       onVisibleRangeChange(nextRangeStartIndex, nextEndIndex)
     },
-    [isEverything, loadAheadRows, onVisibleRangeChange, virtualCount]
+    [includesEverything, loadAheadRows, onVisibleRangeChange, virtualCount]
   )
 
   const clearPendingRangeNotify = useCallback(() => {
@@ -546,25 +474,29 @@ export function SearchPanel({
       })
     }
     return rows
-  }, [endIndex, getItemAt, isEverything, loadedCount, startIndex])
+  }, [endIndex, getItemAt, isEverything, startIndex])
 
-  const showHistoryState = isEverything && !hasCommittedQuery && !error && virtualCount === 0
+  const showHistoryState = includesEverything && !hasCommittedQuery && !error && virtualCount === 0
   const panelTransition = prefersReducedMotion ? { duration: 0 } : PANEL_TRANSITION
   const isEverythingInitializing = isEverything && runtimeState === 'initializing'
   const everythingInitializingText = translate(
     'Everything 正在启动或建立索引，搜索结果可能暂不完整。'
   )
   const iconEmptyText = trimmedKeyword
-    ? translate('没有匹配的图标。')
-    : translate('输入关键词以搜索图标库。')
+    ? translate('没有匹配的快捷入口。')
+    : translate('输入关键词以搜索快捷入口。')
   const everythingEmptyText =
-    searchPending && virtualCount === 0 ? translate('搜索中...') : translate('没有结果')
+    searchPending && virtualCount === 0
+      ? translate('搜索中...')
+      : isUnified
+        ? translate('文件中没有匹配结果')
+        : translate('没有结果')
   const effectiveEverythingEmptyText = isEverythingInitializing
     ? searchPending && virtualCount === 0
       ? translate('搜索中...')
       : everythingInitializingText
     : everythingEmptyText
-  const bodyStateKey = isEverything
+  const bodyStateKey = includesEverything
     ? error
       ? `everything-error-${error}`
       : showHistoryState
@@ -786,7 +718,7 @@ export function SearchPanel({
         </div>
       ) : null}
 
-      {isEverything && !error && showHistoryState ? (
+      {includesEverything && !error && showHistoryState ? (
         <SearchHistoryPanel
           entries={history}
           onSelect={onHistorySelect}
@@ -795,44 +727,45 @@ export function SearchPanel({
         />
       ) : null}
 
-      {!isEverything ? (
-        trimmedKeyword ? (
-          iconResults.length > 0 ? (
-            <div className="max-h-[56vh] overflow-auto px-4 py-4">
-              <div
-                className="grid justify-center gap-x-4 gap-y-5"
-                style={{
-                  gridTemplateColumns: `repeat(auto-fit, minmax(${iconConfig.containerWidth}px, ${iconConfig.containerWidth}px))`,
-                }}
-              >
-                {iconResults.map((icon, index) => (
-                  <IconResultTile
-                    key={icon.id}
-                    icon={icon}
-                    selected={selectedIconIndex === index}
-                    onSelect={() => onSelectIcon(index)}
-                    onActivate={() => onActivateIcon(icon)}
-                    singleLineTitle={singleLineTitle}
-                  />
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="px-4 py-3 text-sm text-muted-foreground">{iconEmptyText}</div>
-          )
+      {source === 'icons' ? (
+        trimmedKeyword && iconResults.length > 0 ? (
+          <ShortcutSearchResults
+            icons={iconResults}
+            selectedIndex={selectedIconIndex}
+            onSelect={onSelectIcon}
+            onActivate={onActivateIcon}
+            mode="grid"
+          />
         ) : (
           <div className="px-4 py-3 text-sm text-muted-foreground">{iconEmptyText}</div>
         )
       ) : null}
 
-      {isEverything && !error && !showHistoryState && virtualCount === 0 ? (
+      {isUnified && trimmedKeyword && iconResults.length > 0 ? (
+        <ShortcutSearchResults
+          icons={iconResults}
+          selectedIndex={selectedIconIndex}
+          onSelect={onSelectIcon}
+          onActivate={onActivateIcon}
+          mode="compact"
+          heading="最佳快捷入口"
+        />
+      ) : null}
+
+      {includesEverything && !error && !showHistoryState && virtualCount === 0 ? (
         <div className="px-4 py-3 text-sm text-muted-foreground">
           {effectiveEverythingEmptyText}
         </div>
       ) : null}
 
-      {isEverything && !error && virtualCount > 0 ? (
+      {includesEverything && !error && virtualCount > 0 ? (
         <>
+          {isUnified ? (
+            <div className="flex items-center justify-between border-b border-border/70 px-4 py-2 text-xs text-muted-foreground">
+              <span className="font-medium">{translate('文件与文件夹')}</span>
+              <span>{totalResults > 0 ? totalResults : loadedCount}</span>
+            </div>
+          ) : null}
           {isEverythingInitializing ? (
             <div className="border-b border-amber-500/20 bg-amber-500/8 px-4 py-2 text-sm text-amber-700 dark:text-amber-300">
               {everythingInitializingText}
@@ -847,7 +780,7 @@ export function SearchPanel({
   return (
     <div
       data-search-placeholder
-      className="absolute inset-x-0 top-[4.6rem] z-30 mx-auto w-full max-w-2xl px-6"
+      className="launchpad-search-shell absolute top-[4.6rem] z-30 mx-auto w-full max-w-2xl px-6"
     >
       <AnimatePresence initial={false}>
         {visible ? (
@@ -865,7 +798,7 @@ export function SearchPanel({
                   <SearchSourceTabs source={source} onChange={onSourceChange} />
                 </div>
 
-                {isEverything ? (
+                {isFileOnly ? (
                   <div className="shrink-0">
                     <SearchToolbar
                       matchPath={matchPath}

@@ -3,6 +3,7 @@ import {
   lazy,
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -42,7 +43,11 @@ import {
 import { applyWindowStyle, getSavedWindowStyle } from '@/lib/windowStyle'
 import { getSearchPreview, recordSearchResultRun } from '@/lib/search/api'
 import { getSearchFilterLabel, getSearchFilterOptions } from '@/lib/search/filters'
+import { searchDesktopIcons } from '@/lib/search/iconSearch'
+import type { SearchSource } from '@/lib/search/scope'
+import { searchSourceIncludesFiles } from '@/lib/search/scope'
 import { SearchFloatingMenu } from '@/components/search/SearchFloatingMenu'
+import { handleSearchNavigation } from '@/components/search/searchNavigation'
 import { LaunchpadContextMenuContent } from '@/components/launchpad/LaunchpadContextMenuContent'
 import { useSearch } from '@/lib/search/useSearch'
 import { LAUNCHPAD_LAYOUT_RESET_EVENT } from '@/components/icon-grid/services/layoutStore'
@@ -163,8 +168,6 @@ function WindowControlButton({
   )
 }
 
-type SearchSource = 'icons' | 'everything'
-
 type ImportDroppedPathsResult = {
   imported_count: number
   duplicate_count: number
@@ -221,7 +224,7 @@ export function Launchpad() {
     hasPreview: false,
   })
 
-  const [searchSource, setSearchSource] = useState<SearchSource>('everything')
+  const [searchSource, setSearchSource] = useState<SearchSource>('all')
 
   const {
     keyword,
@@ -262,7 +265,7 @@ export function Launchpad() {
     settings: searchSettings,
     reloadSettings: reloadSearchSettings,
     clear: clearSearch,
-  } = useSearch({ enabled: searchSource === 'everything' })
+  } = useSearch({ enabled: searchSourceIncludesFiles(searchSource) })
 
   const longPressTimerRef = useRef<number | null>(null)
   const longPressTriggeredRef = useRef(false)
@@ -278,6 +281,7 @@ export function Launchpad() {
   const [isSearchPreviewVisible, setIsSearchPreviewVisible] = useState(true)
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false)
   const [selectedIconResultIndex, setSelectedIconResultIndex] = useState(-1)
+  const [combinedSelectedIndex, setCombinedSelectedIndex] = useState(-1)
   const [searchPreviewLoading, setSearchPreviewLoading] = useState(false)
   const [searchPreviewError, setSearchPreviewError] = useState<string | null>(null)
   const [layoutResetToken, setLayoutResetToken] = useState(0)
@@ -365,18 +369,14 @@ export function Launchpad() {
   const hasSearchKeyword = keyword.trim().length > 0
   const normalizedKeyword = keyword.trim().toLocaleLowerCase()
   const iconSearchResults = useMemo(() => {
-    if (searchSource !== 'icons' || !normalizedKeyword) {
+    if (searchSource === 'everything' || !normalizedKeyword) {
       return [] as DesktopIcon[]
     }
 
-    return icons
-      .filter(icon => {
-        const haystacks = [icon.name, icon.path, icon.target_path]
-        return haystacks.some(value => value.toLocaleLowerCase().includes(normalizedKeyword))
-      })
-      .slice(0, ICON_SEARCH_LIMIT)
+    const limit = searchSource === 'all' ? 6 : ICON_SEARCH_LIMIT
+    return searchDesktopIcons(icons, normalizedKeyword, limit)
   }, [icons, normalizedKeyword, searchSource])
-  const isSearchPanelVisible = searchSource === 'everything' && isSearchPanelOpen
+  const isSearchPanelVisible = isSearchPanelOpen
 
   const syncWindowPersistentState = useCallback(async () => {
     try {
@@ -1093,67 +1093,84 @@ export function Launchpad() {
     }
   }, [isFilterMenuOpen])
 
-  useEffect(() => {
-    if (searchSource === 'icons') {
-      setIsFilterMenuOpen(false)
-      return
-    }
+  const effectiveSelectedIconResultIndex =
+    searchSource !== 'everything' && isSearchPanelOpen && iconSearchResults.length > 0
+      ? selectedIconResultIndex >= 0 && selectedIconResultIndex < iconSearchResults.length
+        ? selectedIconResultIndex
+        : 0
+      : -1
 
-    if (hasSearchKeyword) {
-      openSearchPanel()
-    }
-  }, [hasSearchKeyword, openSearchPanel, searchSource])
+  const effectiveCombinedSelectedIndex =
+    combinedSelectedIndex >= 0
+      ? combinedSelectedIndex
+      : iconSearchResults.length > 0
+        ? 0
+        : selectedIndex >= 0
+          ? iconSearchResults.length + selectedIndex
+          : -1
 
-  useEffect(() => {
-    if (searchSource !== 'icons' || !isSearchPanelOpen || iconSearchResults.length === 0) {
-      setSelectedIconResultIndex(-1)
-      return
-    }
-
-    setSelectedIconResultIndex(current => {
-      if (current >= 0 && current < iconSearchResults.length) {
-        return current
-      }
-      return 0
-    })
-  }, [iconSearchResults.length, isSearchPanelOpen, searchSource])
-
-  const selectedSearchItem = selectedIndex >= 0 ? getSearchItemAt(selectedIndex) : null
+  const selectedSearchItem =
+    searchSource === 'all' &&
+    effectiveCombinedSelectedIndex >= 0 &&
+    effectiveCombinedSelectedIndex < iconSearchResults.length
+      ? null
+      : searchSource !== 'icons' && selectedIndex >= 0
+        ? getSearchItemAt(selectedIndex)
+        : null
   const selectedSearchPath = selectedSearchItem?.path ?? ''
   const selectedFilterLabel = getSearchFilterLabel(searchFilter)
 
   useEffect(() => {
     if (!isSearchPanelVisible || !isSearchPreviewVisible || !selectedSearchPath) {
-      setSearchPreview(null)
-      setSearchPreviewError(null)
-      setSearchPreviewLoading(false)
       return
     }
 
     let cancelled = false
-    setSearchPreviewLoading(true)
-    setSearchPreviewError(null)
+    void Promise.resolve().then(async () => {
+      if (cancelled) return
+      setSearchPreviewLoading(true)
+      setSearchPreviewError(null)
 
-    void getSearchPreview(selectedSearchPath)
-      .then(preview => {
-        if (cancelled) return
-        setSearchPreview(preview)
-      })
-      .catch(previewError => {
+      try {
+        const preview = await getSearchPreview(selectedSearchPath)
+        if (!cancelled) setSearchPreview(preview)
+      } catch (previewError) {
         if (cancelled) return
         setSearchPreview(null)
         setSearchPreviewError(String(previewError))
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setSearchPreviewLoading(false)
-        }
-      })
+      } finally {
+        if (!cancelled) setSearchPreviewLoading(false)
+      }
+    })
 
     return () => {
       cancelled = true
     }
   }, [isSearchPanelVisible, isSearchPreviewVisible, selectedSearchPath])
+
+  const selectUnifiedSearchIndex = useCallback(
+    (index: number) => {
+      setCombinedSelectedIndex(index)
+      if (index < iconSearchResults.length) {
+        setSelectedIconResultIndex(index)
+        return
+      }
+
+      const fileIndex = index - iconSearchResults.length
+      setSelectedIconResultIndex(-1)
+      setSelectedIndex(fileIndex)
+    },
+    [iconSearchResults.length, setSelectedIndex]
+  )
+
+  const selectUnifiedFileIndex = useCallback(
+    (index: number) => {
+      setSelectedIndex(index)
+      setSelectedIconResultIndex(-1)
+      setCombinedSelectedIndex(iconSearchResults.length + index)
+    },
+    [iconSearchResults.length, setSelectedIndex]
+  )
 
   const launchIconItem = useCallback(
     async (icon: DesktopIcon) => {
@@ -1320,137 +1337,40 @@ export function Launchpad() {
     [clearSearch, recordCurrentSearch, toast]
   )
 
-  const handleSearchNavigationKey = useCallback(
-    (key: string, preventDefault: () => void) => {
-      if (searchSource === 'icons') {
-        if (key === 'ArrowDown') {
-          preventDefault()
-          if (iconSearchResults.length === 0) return
-          setSelectedIconResultIndex(current => {
-            const safeCurrent = current < 0 ? 0 : current
-            return (safeCurrent + 1) % iconSearchResults.length
-          })
-          return
-        }
-
-        if (key === 'ArrowUp') {
-          preventDefault()
-          if (iconSearchResults.length === 0) return
-          setSelectedIconResultIndex(current => {
-            const safeCurrent = current < 0 ? 0 : current
-            return (safeCurrent - 1 + iconSearchResults.length) % iconSearchResults.length
-          })
-          return
-        }
-
-        if (key === 'Enter') {
-          preventDefault()
-          const selectedIcon = iconSearchResults[selectedIconResultIndex] ?? iconSearchResults[0]
-          if (selectedIcon) {
-            void launchIconItem(selectedIcon)
-          }
-          return
-        }
-
-        if (key === 'Escape') {
-          preventDefault()
-          if (hasSearchKeyword) {
-            clearSearch()
-            return
-          }
-          if (isSearchPanelVisible) {
-            setIsSearchPanelOpen(false)
-            return
-          }
-          requestCloseLaunchpad()
-        }
-        return
-      }
-
-      if (key === 'ArrowDown') {
-        preventDefault()
-        if (!isSearchPanelVisible && hasSearchKeyword) {
-          openSearchPanel()
-        }
-        moveSelection(1)
-        return
-      }
-
-      if (key === 'ArrowUp') {
-        preventDefault()
-        if (!isSearchPanelVisible && hasSearchKeyword) {
-          openSearchPanel()
-        }
-        moveSelection(-1)
-        return
-      }
-
-      if (key === 'Enter') {
-        preventDefault()
-        if (!isSearchPanelVisible && hasSearchKeyword) {
-          openSearchPanel()
-        }
-        if (!searchSettings.liveOnType) {
-          if (!isKeywordCommitted) {
-            submitSearch()
-            return
-          }
-          submitSearch()
-        }
-        if (!searchSettings.openOnEnter) {
-          return
-        }
-        const selectedItem = getSearchItemAt(selectedIndex)
-        if (selectedItem) {
-          void launchSearchItem(selectedItem.path)
-        } else if (selectedIndex >= 0) {
-          requestSearchRange(selectedIndex, selectedIndex)
-        }
-        return
-      }
-
-      if (key === 'Escape') {
-        preventDefault()
-        if (isSearchPanelVisible && !hasSearchKeyword) {
-          requestCloseLaunchpad()
-          return
-        }
-        if (isSearchPanelVisible) {
-          setIsSearchPanelOpen(false)
-          return
-        }
-        if (hasSearchKeyword) {
-          clearSearch()
-          return
-        }
-        requestCloseLaunchpad()
-      }
-    },
-    [
+  const handleSearchNavigationKey = (key: string, preventDefault: () => void) => {
+    handleSearchNavigation({
+      key,
+      preventDefault,
+      source: searchSource,
+      hasKeyword: hasSearchKeyword,
+      panelVisible: isSearchPanelVisible,
+      openPanel: openSearchPanel,
+      closePanel: () => setIsSearchPanelOpen(false),
+      closeLaunchpad: requestCloseLaunchpad,
       clearSearch,
-      getSearchItemAt,
-      hasSearchKeyword,
-      iconSearchResults,
-      isKeywordCommitted,
-      isSearchPanelVisible,
-      openSearchPanel,
-      moveSelection,
-      requestSearchRange,
-      searchSettings.liveOnType,
-      searchSettings.openOnEnter,
-      searchSource,
-      selectedIconResultIndex,
-      selectedIndex,
+      iconResults: iconSearchResults,
+      selectedIconIndex: effectiveSelectedIconResultIndex,
+      setSelectedIconIndex: setSelectedIconResultIndex,
+      activateIcon: icon => void launchIconItem(icon),
+      combinedSelectedIndex: effectiveCombinedSelectedIndex,
+      fileCount: searchTotalResults > 0 ? searchTotalResults : searchLoadedCount,
+      selectCombinedIndex: selectUnifiedSearchIndex,
+      selectedFileIndex: selectedIndex,
+      moveFileSelection: moveSelection,
+      getFileAt: getSearchItemAt,
+      requestFileRange: requestSearchRange,
+      activateFile: path => void launchSearchItem(path),
+      liveOnType: searchSettings.liveOnType,
+      keywordCommitted: isKeywordCommitted,
       submitSearch,
-      launchIconItem,
-      launchSearchItem,
-      requestCloseLaunchpad,
-    ]
-  )
+      openOnEnter: searchSettings.openOnEnter,
+    })
+  }
 
   const handleSearchInputKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     handleSearchNavigationKey(e.key, () => e.preventDefault())
   }
+  const handleDocumentSearchNavigation = useEffectEvent(handleSearchNavigationKey)
 
   useEffect(() => {
     if (!isSearchPanelOpen) {
@@ -1475,14 +1395,14 @@ export function Launchpad() {
         return
       }
 
-      handleSearchNavigationKey(event.key, () => event.preventDefault())
+      handleDocumentSearchNavigation(event.key, () => event.preventDefault())
     }
 
     document.addEventListener('keydown', handleDocumentKeyDown)
     return () => {
       document.removeEventListener('keydown', handleDocumentKeyDown)
     }
-  }, [handleSearchNavigationKey, isSearchPanelOpen])
+  }, [isSearchPanelOpen])
 
   useEffect(() => {
     const handlePageEscape = (event: KeyboardEvent) => {
@@ -1697,6 +1617,7 @@ export function Launchpad() {
                 value={keyword}
                 onChange={e => {
                   setKeyword(e.target.value)
+                  setCombinedSelectedIndex(-1)
                   if (!isSearchPanelOpen) {
                     openSearchPanel()
                   }
@@ -1706,19 +1627,25 @@ export function Launchpad() {
                 }}
                 onKeyDown={handleSearchInputKeyDown}
                 placeholder={
-                  searchSource === 'everything'
-                    ? translate('搜索文件、文件夹和应用...')
-                    : translate('搜索图标库...')
+                  searchSource === 'all'
+                    ? translate('搜索应用、快捷入口、文件和文件夹...')
+                    : searchSource === 'everything'
+                      ? translate('搜索文件和文件夹...')
+                      : translate('搜索快捷入口...')
                 }
                 aria-label={
-                  searchSource === 'everything' ? translate('搜索文件') : translate('搜索图标库')
+                  searchSource === 'all'
+                    ? translate('搜索全部内容')
+                    : searchSource === 'everything'
+                      ? translate('搜索文件')
+                      : translate('搜索快捷入口')
                 }
                 className={`launchpad-glass-panel h-11 w-full rounded-full px-4 text-sm text-foreground/90 outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 ${
-                  searchSource === 'everything' ? 'pr-32' : ''
+                  searchSource !== 'icons' ? 'pr-36' : ''
                 }`}
               />
 
-              {searchSource === 'everything' ? (
+              {searchSource !== 'icons' ? (
                 <div className="absolute right-2 top-1/2 -translate-y-1/2">
                   <button
                     ref={filterButtonRef}
@@ -1727,7 +1654,11 @@ export function Launchpad() {
                     className="launchpad-glass-button inline-flex h-8 items-center gap-1 rounded-full px-3 text-xs transition-colors"
                     onClick={() => setIsFilterMenuOpen(open => !open)}
                   >
-                    <span className="truncate">{selectedFilterLabel}</span>
+                    <span className="truncate">
+                      {searchSource === 'all'
+                        ? `${translate('文件')} · ${selectedFilterLabel}`
+                        : selectedFilterLabel}
+                    </span>
                     <ChevronDown className="h-3.5 w-3.5" />
                   </button>
 
@@ -1750,6 +1681,7 @@ export function Launchpad() {
                             : 'text-foreground/70 hover:bg-accent hover:text-foreground'
                         }`}
                         onClick={() => {
+                          setCombinedSelectedIndex(-1)
                           setSearchFilter(entry.value)
                           setIsFilterMenuOpen(false)
                         }}
@@ -1771,7 +1703,11 @@ export function Launchpad() {
               <SearchPanel
                 source={searchSource}
                 keyword={keyword}
-                onSourceChange={setSearchSource}
+                onSourceChange={source => {
+                  setSearchSource(source)
+                  setCombinedSelectedIndex(-1)
+                  setIsFilterMenuOpen(false)
+                }}
                 visible={isSearchPanelOpen}
                 loading={searchLoading}
                 searchPending={searchPending}
@@ -1785,10 +1721,26 @@ export function Launchpad() {
                 hasCommittedQuery={hasCommittedQuery}
                 getItemAt={getSearchItemAt}
                 selectedItem={selectedSearchItem}
-                selectedIndex={selectedIndex}
+                selectedIndex={
+                  searchSource === 'all' &&
+                  effectiveCombinedSelectedIndex < iconSearchResults.length
+                    ? -1
+                    : selectedIndex
+                }
                 iconResults={iconSearchResults}
-                selectedIconIndex={selectedIconResultIndex}
-                onSelectIcon={setSelectedIconResultIndex}
+                selectedIconIndex={
+                  searchSource === 'all' &&
+                  effectiveCombinedSelectedIndex < iconSearchResults.length
+                    ? effectiveCombinedSelectedIndex
+                    : effectiveSelectedIconResultIndex
+                }
+                onSelectIcon={index => {
+                  if (searchSource === 'all') {
+                    selectUnifiedSearchIndex(index)
+                  } else {
+                    setSelectedIconResultIndex(index)
+                  }
+                }}
                 onActivateIcon={icon => {
                   void launchIconItem(icon)
                 }}
@@ -1803,7 +1755,10 @@ export function Launchpad() {
                 sort={searchSort}
                 onSortChange={setSearchSort}
                 history={searchHistory}
-                onHistorySelect={applyHistoryEntry}
+                onHistorySelect={entry => {
+                  setCombinedSelectedIndex(-1)
+                  applyHistoryEntry(entry)
+                }}
                 onHistoryRemove={id => {
                   void removeHistoryEntry(id)
                 }}
@@ -1818,7 +1773,13 @@ export function Launchpad() {
                   setIsSearchPreviewVisible(visible => !visible)
                 }}
                 onVisibleRangeChange={setSearchVisibleRange}
-                onSelect={setSelectedIndex}
+                onSelect={index => {
+                  if (searchSource === 'all') {
+                    selectUnifiedFileIndex(index)
+                  } else {
+                    setSelectedIndex(index)
+                  }
+                }}
                 allowDoubleClickOpen={searchSettings.openOnDoubleClick}
                 onActivate={item => {
                   void launchSearchItem(item.path)

@@ -1,8 +1,7 @@
 import { motion } from 'framer-motion'
-import { HardDrive, LayoutGrid } from 'lucide-react'
+import { Files, LayoutGrid, Search } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
-
-type SearchSource = 'icons' | 'everything'
+import type { SearchSource } from '@/lib/search/scope'
 
 interface SearchSourceTabsProps {
   source: SearchSource
@@ -10,8 +9,9 @@ interface SearchSourceTabsProps {
 }
 
 const TABS = [
-  { id: 'icons', label: '图标', icon: LayoutGrid },
-  { id: 'everything', label: '系统文件', icon: HardDrive },
+  { id: 'all', label: '全部', icon: Search },
+  { id: 'icons', label: '快捷入口', icon: LayoutGrid },
+  { id: 'everything', label: '文件', icon: Files },
 ] as const
 
 export function SearchSourceTabs({ source, onChange }: SearchSourceTabsProps) {
