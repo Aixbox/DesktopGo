@@ -1,5 +1,6 @@
 import Fuse from 'fuse.js'
 import type { DesktopIcon } from '@/types'
+import { compareShortcutUsage, type ShortcutUsageState } from './shortcutUsage'
 
 const normalize = (value: string): string => value.trim().toLocaleLowerCase()
 
@@ -38,7 +39,8 @@ const getDeterministicRank = (icon: DesktopIcon, keyword: string): number => {
 export function searchDesktopIcons(
   icons: DesktopIcon[],
   keyword: string,
-  limit: number
+  limit: number,
+  usage?: ShortcutUsageState
 ): DesktopIcon[] {
   const normalizedKeyword = normalize(keyword)
   if (!normalizedKeyword || limit <= 0) return []
@@ -69,6 +71,7 @@ export function searchDesktopIcons(
     .sort(
       (left, right) =>
         left.rank - right.rank ||
+        compareShortcutUsage(usage, left.icon.id, right.icon.id) ||
         left.fuseScore - right.fuseScore ||
         left.originalIndex - right.originalIndex
     )

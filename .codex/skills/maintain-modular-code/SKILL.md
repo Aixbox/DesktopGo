@@ -7,6 +7,15 @@ description: Keep DesktopGo changes modular, reusable, and maintainable. Use whe
 
 Apply this workflow to every code change. Optimize for clear ownership and stable boundaries, not merely fewer lines or more files.
 
+## Project Launch Ownership
+
+- Never start the DesktopGo application, a Tauri development process, a Vite development or preview server, a browser session, or a native application window for testing.
+- Do not run `pnpm dev`, `pnpm tauri dev`, `vite`, `vite preview`, `tauri dev`, `cargo run`, or any equivalent command that launches the project or keeps a project process running.
+- The user exclusively owns starting and stopping DesktopGo project processes, including processes used for runtime and visual verification.
+- Verify changes with unit tests, linting, builds, static inspection, and runtime evidence supplied by the user.
+- If verification requires launching DesktopGo or one of its servers, report that limitation and ask the user to run it.
+- Inspect an already-running DesktopGo instance only when the user explicitly requests it; never restart, replace, or stop the user's process as part of ordinary verification.
+
 ## 1. Inspect Before Designing
 
 - Read repository instructions and the relevant neighboring modules.

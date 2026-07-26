@@ -16,6 +16,7 @@ import { Select } from '@/components/ui/select'
 import { SettingCard, SettingGroup, ToggleRow } from '@/components/ui/setting-components'
 import { useToast } from '@/components/ui/toast'
 import { translate, useI18n } from '@/lib/i18n'
+import { ShortcutUsageSettings } from './ShortcutUsageSettings'
 
 export function SearchSettingsPanel() {
   const { language } = useI18n()
@@ -124,7 +125,7 @@ export function SearchSettingsPanel() {
         <div>
           <h2 className="text-lg font-semibold">{translate('搜索设置')}</h2>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            {translate('设置会保存到 SQLite，并在下次搜索时生效。')}
+            {translate('搜索设置会持久保存，并在后续搜索中生效。')}
           </p>
         </div>
         <Button
@@ -222,6 +223,8 @@ export function SearchSettingsPanel() {
               onChange={next => void updateSetting('rememberLastFilter', next)}
             />
           </SettingGroup>
+
+          <ShortcutUsageSettings />
         </div>
 
         <div className="space-y-6">

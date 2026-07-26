@@ -43,9 +43,9 @@ import {
 import { applyWindowStyle, getSavedWindowStyle } from '@/lib/windowStyle'
 import { getSearchPreview, recordSearchResultRun } from '@/lib/search/api'
 import { getSearchFilterLabel, getSearchFilterOptions } from '@/lib/search/filters'
-import { searchDesktopIcons } from '@/lib/search/iconSearch'
 import type { SearchSource } from '@/lib/search/scope'
 import { searchSourceIncludesFiles } from '@/lib/search/scope'
+import { useShortcutSearchResults } from '@/lib/search/useShortcutSearchResults'
 import { SearchFloatingMenu } from '@/components/search/SearchFloatingMenu'
 import { handleSearchNavigation } from '@/components/search/searchNavigation'
 import { LaunchpadContextMenuContent } from '@/components/launchpad/LaunchpadContextMenuContent'
@@ -87,7 +87,6 @@ const SearchPanel = lazy(() =>
 )
 
 const LONG_PRESS_MS = 420
-const ICON_SEARCH_LIMIT = 48
 const SETTINGS_WINDOW_WIDTH = 800
 const SETTINGS_WINDOW_HEIGHT = 600
 const SEARCH_FLOATING_MENU_SELECTOR = '[data-search-floating-menu="true"]'
@@ -367,15 +366,8 @@ export function Launchpad() {
     return getSearchFilterOptions()
   }, [language])
   const hasSearchKeyword = keyword.trim().length > 0
-  const normalizedKeyword = keyword.trim().toLocaleLowerCase()
-  const iconSearchResults = useMemo(() => {
-    if (searchSource === 'everything' || !normalizedKeyword) {
-      return [] as DesktopIcon[]
-    }
-
-    const limit = searchSource === 'all' ? 6 : ICON_SEARCH_LIMIT
-    return searchDesktopIcons(icons, normalizedKeyword, limit)
-  }, [icons, normalizedKeyword, searchSource])
+  const { results: iconSearchResults, recordLaunch: recordShortcutLaunch } =
+    useShortcutSearchResults(icons, keyword, searchSource)
   const isSearchPanelVisible = isSearchPanelOpen
 
   const syncWindowPersistentState = useCallback(async () => {
@@ -1176,6 +1168,7 @@ export function Launchpad() {
     async (icon: DesktopIcon) => {
       try {
         await launchApp(icon.path)
+        void recordShortcutLaunch(icon.id)
         clearSearch()
       } catch (e) {
         console.error('Failed to launch selected desktop icon:', e)
@@ -1185,7 +1178,7 @@ export function Launchpad() {
         })
       }
     },
-    [clearSearch, launchApp, toast]
+    [clearSearch, launchApp, recordShortcutLaunch, toast]
   )
 
   const requestCloseLaunchpad = useCallback(() => {

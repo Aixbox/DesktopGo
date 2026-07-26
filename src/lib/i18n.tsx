@@ -10,6 +10,7 @@ import {
 import { emit, listen } from '@tauri-apps/api/event'
 import type { AppLanguage } from '@/types'
 import { getSetting, setSetting } from './settingsStore'
+import { EN_SEARCH_MESSAGES } from './i18n/searchMessages'
 
 type TranslationParams = Record<string, string | number | null | undefined>
 
@@ -727,62 +728,7 @@ const EN_MESSAGES: Record<string, string> = {
   '访问时间 降序': 'Accessed descending',
   '运行时间 升序': 'Run time ascending',
   '运行时间 降序': 'Run time descending',
-  '未找到已安装的 Everything。请通过 DesktopGo 安装程序完成安装。':
-    'Installed Everything was not found. Please install it through the DesktopGo installer.',
-  'DesktopGo 的 Everything 组件不可用。请重新安装 DesktopGo。':
-    'DesktopGo Everything components are unavailable. Please reinstall DesktopGo.',
-  'DesktopGo 无法连接正在运行的 Everything。请确认 Everything 已启动，并且两个应用使用相同的权限级别。':
-    'DesktopGo cannot connect to the running Everything instance. Make sure Everything is running and both apps use the same privilege level.',
-  'DesktopGo 正在等待上一个 Everything IPC 请求完成。':
-    'DesktopGo is waiting for the previous Everything IPC request to finish.',
-  'DesktopGo 在准备 Everything 时超时，请重试搜索。':
-    'DesktopGo timed out while preparing Everything. Please try the search again.',
-  '加载搜索设置失败：{error}': 'Failed to load search settings: {error}',
-  搜索设置: 'Search settings',
-  '搜索设置已保存。': 'Search settings saved.',
-  '保存设置失败：{error}': 'Failed to save settings: {error}',
-  '默认设置已恢复。': 'Default settings restored.',
-  '恢复默认设置失败：{error}': 'Failed to restore default settings: {error}',
-  '正在加载搜索设置...': 'Loading search settings...',
-  '设置会保存到 SQLite，并在下次搜索时生效。':
-    'Settings are saved to SQLite and will take effect in the next search.',
-  '恢复中...': 'Restoring...',
-  基础交互: 'Basic interaction',
-  实时搜索: 'Live search',
-  '输入时立即搜索。关闭后仅在按下 Enter 时触发搜索。':
-    'Search while typing. If disabled, search only runs when you press Enter.',
-  自动选中首个结果: 'Auto-select first result',
-  '返回新结果页时，自动聚焦到第一个结果。':
-    'Automatically focus the first result when a new result page arrives.',
-  回车打开结果: 'Press Enter to open',
-  '允许按 Enter 打开当前选中的结果。': 'Allow Enter to open the currently selected result.',
-  双击打开结果: 'Double-click to open',
-  '允许通过鼠标双击打开结果项。': 'Allow mouse double-click to open a result item.',
-  防抖时间: 'Debounce',
-  '允许范围：50 - 500 毫秒。': 'Allowed range: 50 - 500 ms.',
-  搜索策略: 'Search strategy',
-  默认筛选器: 'Default filter',
-  默认排序: 'Default sort',
-  每页最大结果数: 'Max results per page',
-  '允许范围：10 - 200。': 'Allowed range: 10 - 200.',
-  记住上次筛选器: 'Remember last filter',
-  '保存最近一次使用的筛选器，并在下次启动时恢复。':
-    'Save the last used filter and restore it on the next launch.',
-  匹配与筛选: 'Matching and filtering',
-  '让关键字匹配包含完整路径片段。': 'Allow keywords to match parts of the full path.',
-  '使用区分大小写的匹配方式。': 'Use case-sensitive matching.',
-  '将关键字按正则表达式语法处理。': 'Treat the keyword as a regular expression.',
-  '只匹配完整单词。': 'Match whole words only.',
-  运行时: 'Runtime',
-  自动连接运行时: 'Auto-connect runtime',
-  '自动检测并连接已安装的 Everything 运行时。':
-    'Automatically detect and connect to an installed Everything runtime.',
-  '仅支持已安装的 Everything': 'Installed Everything only',
-  'DesktopGo 的文件搜索目前仅支持已安装的 Everything 应用。':
-    'DesktopGo file search currently supports installed Everything only.',
-  '如果搜索不可用，请重新安装 DesktopGo，并勾选 Everything 安装选项。':
-    'If search is unavailable, reinstall DesktopGo and enable the Everything install option.',
-  未知大小: 'Unknown size',
+  ...EN_SEARCH_MESSAGES,
   '更新配置已刷新。': 'Updater configuration refreshed.',
   '读取更新配置失败：{error}': 'Failed to read updater configuration: {error}',
   '安装程序即将接管，应用会自动退出。':

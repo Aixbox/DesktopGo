@@ -52,6 +52,45 @@ assert(
   'weak fuzzy matches should not be shown as best shortcuts'
 )
 
+const usageRanked = searchDesktopIcons(
+  [
+    { id: 'code-editor', name: 'Code Editor', path: '', target_path: '' },
+    { id: 'code-browser', name: 'Code Browser', path: '', target_path: '' },
+  ],
+  'code',
+  2,
+  {
+    version: 1,
+    enabled: true,
+    entries: {
+      'code-browser': { launchCount: 4, lastLaunchedAt: 200 },
+      'code-editor': { launchCount: 1, lastLaunchedAt: 100 },
+    },
+  }
+)
+assert(
+  usageRanked[0]?.id === 'code-browser',
+  'frequently launched shortcuts should rank first within the same relevance level'
+)
+
+const relevanceRanked = searchDesktopIcons(
+  [
+    { id: 'code-exact', name: 'Code', path: '', target_path: '' },
+    { id: 'code-frequent', name: 'Code Editor', path: '', target_path: '' },
+  ],
+  'code',
+  2,
+  {
+    version: 1,
+    enabled: true,
+    entries: { 'code-frequent': { launchCount: 100, lastLaunchedAt: 300 } },
+  }
+)
+assert(
+  relevanceRanked[0]?.id === 'code-exact',
+  'usage should not outrank a more relevant shortcut'
+)
+
 assert(searchDesktopIcons(icons, '', 3).length === 0, 'empty keywords should return no results')
 assert(searchDesktopIcons(icons, 'settings', 1).length === 1, 'limit should cap shortcut results')
 
