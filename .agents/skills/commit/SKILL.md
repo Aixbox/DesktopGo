@@ -1,55 +1,77 @@
 ---
 name: commit
-description: Review the current Git working tree, create a focused commit with a clear message, and optionally push it when explicitly requested. Use when the user asks to commit, submit, or push current code, or invokes $commit.
+description: Review the Git working tree, split changes into atomic commits, create validated Conventional Commit messages using repository scopes and Chinese subjects, commit safely, and optionally push when explicitly requested. Use when the user asks to commit, submit, or push code, or invokes $commit.
 ---
 
 # Commit Changes
 
-## Overview
+Create safe, reviewable Git commits that follow the repository's Conventional Commits profile. Preserve unrelated work and make each commit independently understandable and revertible.
 
-Safely turn the changes relevant to the current task into one focused Git commit. Preserve unrelated user work, validate the staged diff before committing, and treat pushing as a separate opt-in action.
+## Required standard
+
+Read [references/commit-standard.md](references/commit-standard.md) before planning commits or composing messages. Apply it to every commit created by this skill.
 
 ## Workflow
 
-### 1. Inspect the repository
+### 1. Inspect
 
-- Run `git status --short`, `git branch --show-current`, and inspect `git diff` plus `git diff --stat`.
-- Inspect relevant untracked files before deciding whether they belong in the commit. Check `git diff --cached` too.
-- Read applicable `AGENTS.md` guidance and the project's documented lint, typecheck, and test commands.
-- If there are no changes, stop and report that there is nothing to commit.
+- Run `git status --short`, `git branch --show-current`, `git diff --stat`, `git diff`, and `git diff --cached`.
+- Inspect relevant untracked files before including them. Read applicable `AGENTS.md` files and project validation commands.
+- Check recent subjects with `git log -20 --pretty=format:"%s"` to reuse established scopes without copying legacy formatting mistakes.
+- Stop if there are no changes, unresolved conflicts, an in-progress merge/rebase that the user did not ask to finish, or a detached HEAD.
 
-### 2. Define the commit scope
+### 2. Plan atomic commits
 
-- Include only files related to the user's current request. Preserve unrelated modifications and do not reset, clean, stash, or discard them.
-- Never use broad staging such as `git add -A` or `git add .`; stage explicit paths after reviewing them.
-- Do not stage likely secrets, credentials, local environment files, build output, or generated artifacts unless the user explicitly asks for them.
-- If the working tree contains multiple unrelated changes and the scope is ambiguous, ask the user which files or changes to commit instead of guessing.
+- Group changes by one user-visible behavior, defect, refactor, or maintenance purpose. A commit must be independently understandable, verifiable, and safely revertible.
+- Keep implementation with its directly related tests, types, documentation, migrations, and lockfile changes.
+- Separate unrelated features, fixes, refactors, formatting, dependency upgrades, and generated artifacts.
+- If multiple clean groups exist and the user did not require one commit, create multiple commits in dependency order.
+- Ask only when ownership is ambiguous or splitting would require editing user changes. Never reset, clean, stash, discard, or rewrite unrelated work.
 
-### 3. Validate
+### 3. Validate changes
 
-- Run the smallest relevant checks required by repository guidance. At minimum, run `git diff --check` before staging.
-- If checks fail, stop before committing and report the failing command and useful error context.
-- Do not hide failures by weakening tests, bypassing hooks, or changing unrelated files.
+- Run the smallest relevant lint, typecheck, test, or build commands required by repository guidance.
+- Run `git diff --check` before staging.
+- Stop before committing when validation fails. Report the command and useful error context; do not bypass hooks or weaken tests.
 
-### 4. Prepare and create the commit
+### 4. Stage one group
 
-- Derive a concise imperative commit subject from the actual diff. Follow the repository's existing commit convention when one is evident; otherwise keep the subject specific and at most 72 characters.
-- Stage only the selected paths, then inspect `git diff --cached --stat` and `git diff --cached`.
-- Create the commit with `git commit -m "<subject>"` only after the staged diff matches the requested scope.
-- Never amend an existing commit, rewrite history, or force-push unless the user explicitly requests that exact operation.
-- After committing, report the commit hash, subject, files included, and checks run.
+- Stage explicit paths only. Never use `git add .`, `git add -A`, or another broad staging command.
+- Inspect `git diff --cached --stat` and `git diff --cached` after staging.
+- Confirm the staged diff contains exactly one planned group and contains no secrets, credentials, environment files, unrelated edits, or accidental generated output.
 
-### 5. Push only when explicitly requested
+### 5. Compose and validate the message
 
-- Treat words such as "push", "推送", or "提代码" as an explicit request to push. A plain commit request must not push.
-- Before pushing, verify the current branch, configured remote, and upstream. Do not push from a detached HEAD.
-- Use the normal upstream push command; never use `--force` or `--force-with-lease` unless explicitly requested.
-- If no upstream is configured, show the intended remote and branch and ask before setting one with `git push -u`.
-- If the push is rejected or requires authentication, stop and report the exact failure without retrying destructively.
+- Derive `type`, `scope`, subject, body, and footers from the staged diff, not only from the user's wording.
+- For a subject-only message, run:
 
-## Safety rules
+  ```text
+  node <skill-dir>/scripts/validate-commit-message.mjs "<message>"
+  ```
 
-- Do not run `git reset --hard`, `git clean`, checkout-based discard commands, or equivalent destructive operations.
-- Do not commit when merge or rebase conflicts are present; report the conflicted paths and stop.
-- Respect hooks and approval prompts. If a hook modifies files, re-inspect the status and staged diff before proceeding.
-- Keep the final response short and include whether a push occurred.
+- For a multiline message, save it as a temporary UTF-8 text file and run:
+
+  ```text
+  node <skill-dir>/scripts/validate-commit-message.mjs --file <message-file>
+  ```
+
+- Fix every reported violation and rerun the validator. Do not call `git commit` until it passes.
+
+### 6. Commit and verify
+
+- Use `git commit -m "<subject>"` for a subject-only commit or `git commit -F <message-file>` for a validated multiline message.
+- Respect Git hooks. If a hook changes files, re-inspect the working tree and staged diff before continuing.
+- Verify the result with `git show --stat --oneline --summary HEAD` and record the commit hash.
+- Repeat staging, message validation, and committing for each planned atomic group.
+- Never amend, rebase, rewrite history, or force-push unless the user explicitly requests that exact operation.
+
+### 7. Push only when explicitly requested
+
+- Treat `push`, `推送`, or `提代码` as an explicit push request. A plain commit request must not push.
+- Verify the current branch, remote, and upstream before pushing. Never force-push by default.
+- If no upstream exists, show the intended remote and branch and ask before running `git push -u`.
+- Stop and report authentication errors or rejected pushes without destructive retries.
+
+## Final report
+
+Report each commit hash and subject, the files or logical group included, validation commands and results, and whether a push occurred.
