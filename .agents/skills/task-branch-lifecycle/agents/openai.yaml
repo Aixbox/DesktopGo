@@ -1,0 +1,7 @@
+interface:
+  display_name: "Task Branch Lifecycle"
+  short_description: "Create, verify, and retire one task branch safely"
+  default_prompt: "Use $task-branch-lifecycle to implement this task on an isolated branch."
+
+policy:
+  allow_implicit_invocation: false
