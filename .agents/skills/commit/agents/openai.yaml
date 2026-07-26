@@ -1,0 +1,4 @@
+interface:
+  display_name: "Commit Changes"
+  short_description: "Review, commit, and optionally push changes"
+  default_prompt: "Use $commit to review the current changes and create a focused Git commit."
