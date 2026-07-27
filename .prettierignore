@@ -1,4 +1,3 @@
 # Formatting these legacy oversized files increases their line counts.
-src/components/ai/AiOrganizePanel.tsx
 src/components/icon-grid/domain/dropPolicy.ts
 src/components/icon-grid/views/DockBar.tsx

@@ -11,10 +11,10 @@
 
 ## 当前事项
 
-| 编号  | 优先级 | 状态   | 事项                            | 目标                                                                                                 |
-| ----- | ------ | ------ | ------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| D-001 | P0     | 待开发 | 安装包启动时先选择语言          | 使用一个安装包承载简体中文和英文；启动安装包后首先选择语言，再进入对应语言的完整安装流程。           |
-| D-002 | P0     | 进行中 | ESLint 告警清零与超大文件模块化 | 将当前 1 条 ESLint 告警降至 0；继续把最后 1 个超预算手写文件拆回清晰的视图、控制器、领域和服务边界。 |
+| 编号  | 优先级 | 状态   | 事项                            | 目标                                                                                       |
+| ----- | ------ | ------ | ------------------------------- | ------------------------------------------------------------------------------------------ |
+| D-001 | P0     | 待开发 | 安装包启动时先选择语言          | 使用一个安装包承载简体中文和英文；启动安装包后首先选择语言，再进入对应语言的完整安装流程。 |
+| D-002 | P0     | 已完成 | ESLint 告警清零与超大文件模块化 | 普通与严格 ESLint 均恢复零告警；所有手写 TypeScript 模块已进入统一的 1000 行预算。         |
 
 ## D-001：安装包启动时先选择语言
 
@@ -70,15 +70,15 @@
 
 ### 当前基线
 
-截至 2026-07-27，第一阶段 ESLint 配置治理已经完成：
+截至 2026-07-28，ESLint 告警清零与超大文件模块化治理已经完成：
 
-- `pnpm lint` 限定检查 `src`、`vite.config.ts` 和 `eslint.config.js`，当前为 `0 errors / 1 warning`。
-- `pnpm lint:strict` 保留 `--max-warnings 0`，用于衡量技术债是否真正清零。
+- `pnpm lint` 限定检查 `src`、`vite.config.ts` 和 `eslint.config.js`，当前为 `0 errors / 0 warnings`。
+- `pnpm lint:strict` 保留 `--max-warnings 0`，并与普通 lint 一同作为零告警门禁。
 - ESLint 与 Prettier 已解耦，并提供独立的 `format` 和 `format:check` 命令。
-- React Compiler 相关规则只在 8 个明确列出的旧文件中临时降级为 warning，不允许扩大例外范围。
-- 当前 1 条告警为 `max-lines`；`exhaustive-deps`、`set-state-in-effect`、`refs`、`only-export-components` 与 `immutability` 已清零。
-- E-03 与 E-04 已将功能代码告警从 52 降到 0；E-05 已消除 10 条 1000 行 `max-lines` 门禁告警。
-- 当前仅有 1 个手写 `.ts/.tsx` 文件超过统一的 1000 行模块预算；ESLint 与变更文件预算脚本使用相同阈值。
+- React Compiler legacy 文件降级已删除，`immutability`、`refs` 与 `set-state-in-effect` 全部恢复推荐错误级别。
+- `max-lines`、`exhaustive-deps`、`set-state-in-effect`、`refs`、`only-export-components` 与 `immutability` 均已清零。
+- E-03 与 E-04 已将功能代码告警从 52 降到 0；E-05 已消除全部 11 条 1000 行 `max-lines` 门禁告警。
+- 所有手写 `.ts/.tsx` 文件均已进入统一的 1000 行模块预算；ESLint 与变更文件预算脚本使用相同阈值。
 
 ### 治理原则
 
@@ -99,7 +99,7 @@
 | E-02 | 已完成 | 搜索、设置、AI 和图标编辑流程 |       16 | 搜索重试与分页改为迭代调度，关键词和选择状态改为纯策略；设置加载、图标会话重置、AI 提示队列和应用请求已移动到异步结果或显式事件边界。                                                                                                                                                                                              |         63 |
 | E-03 | 已完成 | 分页图标网格                  |       29 | 布局尺寸快照进入独立状态控制器，自动翻页回调保持稳定；拖拽处理器在指针会话开始时显式装配，覆盖层、Dock 和文件夹弹窗改用真实依赖与 effect 同步边界。                                                                                                                                                                                |         34 |
 | E-04 | 已完成 | 滚动图标网格                  |       23 | 已复用布局尺寸控制器与稳定自动翻页接口；滚动分组数量、文件夹可见状态和页码改为派生或渲染期校正，拖拽处理器改为在指针会话开始时显式装配。                                                                                                                                                                                           |         11 |
-| E-05 | 进行中 | 恢复零告警门禁                |       11 | `topLevelLayout.ts`、`IconCropDialog.tsx`、`AddIconDialog.tsx`、`dragMovePolicy.ts`、`IconGrid.tsx`、`useIconGridDragWorkflow.ts`、`useScrollableIconGridDragWorkflow.ts`、`ScrollableOuterGridView.tsx`、`ScrollableIconGrid.tsx` 与 `Launchpad.tsx` 已进入预算；继续治理最后一个超大文件，删除 legacy 规则降级并恢复零告警门禁。 |          0 |
+| E-05 | 已完成 | 恢复零告警门禁                |       11 | 11 个超预算模块已按领域、控制器和视图边界拆分并进入预算；React Compiler legacy 规则降级已删除，普通与严格 lint 均恢复零告警。                                                                                                                                                                                                   |          0 |
 
 每个批次必须严格达到表中的告警目标；如果发现新增告警，必须在同一批次处理，不能把基线数字向上调整。
 
@@ -161,6 +161,14 @@
 - 新增 384 行的 `useLaunchpadWindowController.ts`，负责启动初始化、窗口外观与常驻状态同步、焦点保护、设置窗口及布局重置事件。
 - 新增 103 行的 `LaunchpadWindowControls.tsx`，承载 AI 入口、置顶、最小化和关闭窗口控件。
 - 新增 240 行的 `useLaunchpadSurfaceInteractions.ts`，管理背景长按选择、框选命中、搜索面板退出与全屏背景关闭行为。
+- `AiOrganizePanel.tsx` 已从 2207 行降至 990 行，并消除最后一条 `max-lines` 告警，使普通与严格 ESLint 均恢复零告警。
+- 新增 628 行的 `useAiOrganizeExecution.ts`，集中管理 AI 对话与分类请求、流式事件缓冲、运行计时和状态派生。
+- 新增 239 行的 `aiOrganizePanelModel.ts`，集中保存分组转换、会话上下文构建、状态标签及内部契约。
+- 新增 198 行的 `AiOrganizeSnapshotPreview.tsx`，承载布局版本预览、分组编辑与图标移出交互。
+- 新增 195 行的 `AiOrganizeComposer.tsx`，承载排队提示、整理指令、快捷提示和消息输入区。
+- 新增 149 行的 `AiOrganizeRunInline.tsx` 与 113 行的 `AiOrganizeHistoryMenu.tsx`，分别展示运行遥测和会话历史。
+- 新增 18 行的 `aiOrganizePanelTypes.ts`，保存面板 Props 与 imperative handle 契约，组合面板继续提供兼容导出。
+- 删除 8 个 legacy 文件的 React Compiler 规则降级，`immutability`、`refs` 与 `set-state-in-effect` 恢复推荐错误级别。
 
 #### E-05 分页网格布局控制器手工回归
 
@@ -209,6 +217,15 @@
 - 进入选择模式后长按背景并框选图标，覆盖追加选择、取消框选和背景清空，确认选择状态与点击抑制正确。
 - 在搜索、AI 整理、选择模式和全屏背景之间切换，确认面板关闭、Escape、背景隐藏及工具栏互斥行为保持不变。
 
+#### E-05 AI 整理面板手工回归
+
+- 首次打开、关闭后重开和新建对话时，确认会话加载、默认会话、历史选择、删除确认及保存错误提示正常。
+- 分别发送普通对话和整理指令，覆盖快捷提示、编辑旧版布局、加载期间继续排队及清空队列，确认执行顺序和输入状态一致。
+- 在模型流式返回时确认事件状态、原始输出片段、耗时和 Token 用量持续更新，关闭面板后不残留监听器或计时器。
+- 生成多个布局版本并切换预览，编辑分组名称、移出图标和解散分组，确认临时布局与会话快照同步更新。
+- 覆盖 AI 配置缺失、空图标库、请求失败、无可用分组和应用失败，确认错误状态可恢复且关闭前的临时预览会回滚。
+- 成功应用有效分组后确认布局持久化、运行记录、成功提示、主窗口刷新与面板关闭行为保持不变。
+
 #### E-05 footprint 避让手工回归
 
 - 在包含 1x1 与多格图标的页面内拖动图标，确认重叠项避让方向、相对顺序和最终落点与拆分前一致。
@@ -239,7 +256,7 @@
 | M-02 分页图标网格     | P0     | `IconGrid.tsx` 957、`useFolderGridMeasurement.ts` 69、`usePagedIconGridLayout.ts` 596、`usePagedGridReorderAnimations.ts` 240、`useIconGridDragWorkflow.ts` 988、`usePagedDragGeometryController.ts` 469、`usePagedDragMoveProcessor.ts` 442、`useTopLevelDwellEvasion.ts` 110、`usePagedDragStarter.ts` 228、`useDragDropCommit.ts` 764、`DragOverlays.tsx` 668、`DockBar.tsx` 904、`OuterFolderTile.tsx` 537                                                                                                                                                                                                    | 水合、持久化、几何测量、导入落位、文件夹尺寸测量、重排动画与分页拖拽会话职责已从组合视图拆出；后续继续收敛文件夹、选择和提交边界。                                                                                      |
 | M-03 滚动图标网格     | P0     | `ScrollableIconGrid.tsx` 1000、`useScrollableIconGridLayout.ts` 751、`useScrollableGridReorderAnimations.ts` 203、`useScrollGroupController.ts` 260、`useScrollableIconGridViewModel.ts` 251、`useScrollableFolderController.ts` 318、`ScrollableOuterGridView.tsx` 486、`ScrollableGroupNavigation.tsx` 781、`useScrollableOuterGridDragWorkflow.ts` 916、`useScrollableIconGridDragWorkflow.ts` 946、`useScrollableDragGeometryController.ts` 868、`useScrollableDragMoveProcessor.ts` 706、`useScrollableFolderDragController.ts` 588、`useScrollableDragStarter.ts` 263、`useScrollableDragDropCommit.ts` 810 | 水合、持久化、几何测量、导入落位、文件夹生命周期、分组 CRUD、渲染模型、重排动画和滚动拖拽工作流均已进入独立控制器或视图；组合根已进入 1000 行预算，后续继续收敛预览提交和分页兼容交互边界。                             |
 | M-04 图标网格领域规则 | P1     | `dragMovePolicy.ts` 918、`footprintPlacementPolicy.ts` 798、`topLevelLayout.ts` 929、`gridCoordinates.ts` 111、`dropPolicy.ts` 667、`scrollDropPolicy.ts` 800、`scrollGroupLayout.ts` 522                                                                                                                                                                                                                                                                                                                                                                                                                         | 持久化网格坐标与 footprint 放置求解已拆为独立纯策略并配有边界测试；后续继续按候选目标、移动决策、提交变换和滚动分组策略拆分，保持 domain 无 React、store、DOM、Tauri 和持久化依赖。                                     |
-| M-05 AI 与图标编辑    | P1     | `AiOrganizePanel.tsx` 2207、`AddIconDialog.tsx` 982、`AddIconFormSections.tsx` 608、`IconCropDialog.tsx` 927、`IconCropControls.tsx` 309                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | 图标表单初始态、展示 sections 和裁剪控件已分离；后续继续拆分 AI 步骤视图，并逐步将图标异步预览和保存流程移入 controller/service。每个视图或复杂 Hook 不超过 1000 行。                                                   |
+| M-05 AI 与图标编辑    | P1     | `AiOrganizePanel.tsx` 990、`useAiOrganizeExecution.ts` 628、`aiOrganizePanelModel.ts` 239、`AiOrganizeSnapshotPreview.tsx` 198、`AiOrganizeComposer.tsx` 195、`AiOrganizeRunInline.tsx` 149、`AiOrganizeHistoryMenu.tsx` 113、`aiOrganizePanelTypes.ts` 18、`AddIconDialog.tsx` 982、`AddIconFormSections.tsx` 608、`IconCropDialog.tsx` 927、`IconCropControls.tsx` 309                                                                                                                                                                                                                                      | AI 执行控制、纯模型、运行遥测、会话历史、布局预览、输入区和外部契约已从组合面板分离；图标表单 sections 与裁剪控件也已独立，所有相关手写模块均进入 1000 行预算。                                                         |
 | M-06 设置界面         | P1     | `GeneralSettingsPanel.tsx` 879、`IconManagerPanel.tsx` 793                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | 按设置分区拆成 feature-local sections；持久化由现有 settings service/store 统一处理；列表操作与导入/删除流程进入控制器，避免分区组件直接组合平台调用。                                                                  |
 | M-07 基础设施         | P2     | `i18n.tsx` 977、`iconStore.ts` 456                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | i18n 已拆出 React Provider、Context/Hook 和语言运行态，后续继续按领域拆分翻译目录；store 保留稳定公共 facade，将选择、启动、布局偏好等 action 按职责拆到独立 slice 或 domain policy，避免消费者迁移期间出现多个状态源。 |
 
@@ -249,9 +266,9 @@
 2. `E-02` 已完成，并推进了 `M-01` 中的 `useSearch` 拆分；关键词提交、选择钳制和图标表单初始态已有纯逻辑回归测试。
 3. `E-03` 已完成，并推进了 `M-02`；布局尺寸控制器有独立状态转换测试，拖拽回调按指针会话固定，分页网格功能告警已清零。
 4. `E-04` 已完成并推进了 `M-03`；滚动网格已复用分页网格验证过的布局尺寸、自动翻页和会话装配边界，功能代码告警已清零。
-5. `E-05` 已推进 M-01 的启动台组合根、M-02 的分页拖拽工作流、M-03 的滚动拖拽工作流、外层分组视图与组合根状态编排、M-04 的持久化网格坐标与 footprint 放置策略，以及 M-05 的图标裁剪展示边界；继续处理最后一个超过 1000 行的模块。
-6. 超大文件全部进入预算后完成 `E-05`，让普通 lint 和 CI 都回到零告警门禁。
-7. 当剩余 1 个文件降到预算内，或仅剩经过例外协议记录的文件后，将 `D-002` 标记为已完成。
+5. `E-05` 已完成 M-01 至 M-05 的超预算模块治理；启动台、分页与滚动网格、领域策略、图标编辑和 AI 整理职责均已进入独立边界。
+6. 所有手写 TypeScript 模块已进入 1000 行预算，React Compiler legacy 降级已删除，普通 lint、严格 lint 与 CI 均恢复零告警门禁。
+7. `D-002` 已完成；后续模块化工作按 M-01 至 M-07 的目标边界持续演进，不再作为 ESLint 基线债务处理。
 
 ### 每批验收门禁
 

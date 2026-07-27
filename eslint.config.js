@@ -6,17 +6,6 @@ import tseslint from '@typescript-eslint/eslint-plugin'
 import tsparser from '@typescript-eslint/parser'
 import prettierConfig from 'eslint-config-prettier'
 
-const legacyReactCompilerFiles = [
-  'src/components/IconGrid.tsx',
-  'src/components/ScrollableIconGrid.tsx',
-  'src/components/ai/AiOrganizePanel.tsx',
-  'src/components/icon-grid/views/FolderModalView.tsx',
-  'src/components/icons/AddIconDialog.tsx',
-  'src/components/search/SearchSettingsPanel.tsx',
-  'src/components/settings/UpdatePanel.tsx',
-  'src/lib/search/useSearch.ts',
-]
-
 export default [
   {
     ignores: ['dist/**', 'src-tauri/**', '.claude/**', '.agents/**', '.codex/**', 'helloagents/**'],
@@ -45,14 +34,6 @@ export default [
       'max-lines': ['warn', { max: 1000 }],
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-    },
-  },
-  {
-    files: legacyReactCompilerFiles,
-    rules: {
-      'react-hooks/immutability': 'warn',
-      'react-hooks/refs': 'warn',
-      'react-hooks/set-state-in-effect': 'warn',
     },
   },
   {
