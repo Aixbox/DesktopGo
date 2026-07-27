@@ -7,40 +7,11 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
   type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
-import {
-  Bot,
-  Check,
-  ChevronDown,
-  Download,
-  FileIcon,
-  Minus,
-  Pencil,
-  Pin,
-  Plus,
-  RefreshCw,
-  X,
-} from 'lucide-react'
+import { Bot, Check, ChevronDown, Plus, RefreshCw } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
-import { deriveIconEntryName } from '@/lib/iconManager'
-import { getSetting } from '@/lib/settingsStore'
-import { applyTheme, getSavedTheme } from '@/lib/theme'
-import {
-  MAIN_WINDOW_APPEARANCE_SYNC_EVENT,
-  SETTINGS_RETURNED_TO_MAIN_EVENT,
-  WINDOW_PERSISTENT_SYNC_EVENT,
-  type MainWindowAppearanceSyncPayload,
-  type WindowPersistentSyncPayload,
-} from '@/lib/windowPersistent'
-import { applyWindowStyle, getSavedWindowStyle } from '@/lib/windowStyle'
 import { recordSearchResultRun } from '@/lib/search/api'
 import { getSearchFilterLabel, getSearchFilterOptions } from '@/lib/search/filters'
 import { searchSourceIncludesFiles, type SearchSource } from '@/lib/search/scope'
@@ -50,23 +21,19 @@ import { useSearchScopeChange } from '@/lib/search/useSearchScopeChange'
 import { SearchFloatingMenu } from '@/components/search/SearchFloatingMenu'
 import { handleSearchNavigation } from '@/components/search/searchNavigation'
 import { LaunchpadContextMenuContent } from '@/components/launchpad/LaunchpadContextMenuContent'
+import { LaunchpadIconImportLayer } from '@/components/launchpad/LaunchpadIconImportLayer'
+import { LaunchpadWindowControls } from '@/components/launchpad/LaunchpadWindowControls'
+import { useLaunchpadIconImportController } from '@/components/launchpad/useLaunchpadIconImportController'
+import { useLaunchpadSurfaceInteractions } from '@/components/launchpad/useLaunchpadSurfaceInteractions'
+import { useLaunchpadWindowController } from '@/components/launchpad/useLaunchpadWindowController'
 import { useSearch } from '@/lib/search/useSearch'
-import { LAUNCHPAD_LAYOUT_RESET_EVENT } from '@/components/icon-grid/services/layoutStore'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { useToast } from '@/components/ui/toast'
-import { buildIconSelectionKey, useIconStore } from '@/stores/iconStore'
+import { useIconStore } from '@/stores/iconStore'
 import type { DesktopIcon } from '@/types'
 import type { AiOrganizePanelHandle, AiOrganizePanelRunState } from './ai/AiOrganizePanel'
-import type { AddIconDialogDraft } from './icons/AddIconDialog'
 import { Button } from './ui/button'
 
-const LAUNCHPAD_SHOWN_EVENT = 'launchpad:shown'
-const NATIVE_FILE_DRAG_EVENT = 'desktopgo://native-file-drag'
-
-type NativeFileDragPayload = {
-  eventType: 'enter' | 'leave' | 'drop'
-  paths: string[]
-}
 const loadScrollableIconGrid = () => import('./ScrollableIconGrid')
 const ScrollableIconGrid = lazy(() =>
   loadScrollableIconGrid().then(module => ({ default: module.ScrollableIconGrid }))
@@ -74,10 +41,6 @@ const ScrollableIconGrid = lazy(() =>
 
 const loadIconGrid = () => import('./IconGrid')
 const IconGrid = lazy(() => loadIconGrid().then(module => ({ default: module.IconGrid })))
-
-const AddIconDialog = lazy(() =>
-  import('./icons/AddIconDialog').then(module => ({ default: module.AddIconDialog }))
-)
 
 const AiOrganizePanel = lazy(() =>
   import('./ai/AiOrganizePanel').then(module => ({ default: module.AiOrganizePanel }))
@@ -87,99 +50,7 @@ const SearchPanel = lazy(() =>
   import('./search/SearchPanel').then(module => ({ default: module.SearchPanel }))
 )
 
-const LONG_PRESS_MS = 420
-const SETTINGS_WINDOW_WIDTH = 800
-const SETTINGS_WINDOW_HEIGHT = 600
 const SEARCH_FLOATING_MENU_SELECTOR = '[data-search-floating-menu="true"]'
-const EXTERNAL_SHOW_CLICK_GUARD_MS = 350
-
-const waitForWindowGeometrySync = async () => {
-  await new Promise<void>(resolve => {
-    let settled = false
-    const finish = () => {
-      if (settled) return
-      settled = true
-      window.clearTimeout(timeoutId)
-      resolve()
-    }
-    const timeoutId = window.setTimeout(finish, 50)
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(finish)
-    })
-  })
-}
-
-async function ensureSettingsWindowMinSize(settingsWindow: WebviewWindow) {
-  const minSize = new LogicalSize(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
-  await settingsWindow.setMinSize(minSize)
-
-  const currentSize = await settingsWindow.innerSize()
-  if (currentSize.width < SETTINGS_WINDOW_WIDTH || currentSize.height < SETTINGS_WINDOW_HEIGHT) {
-    await settingsWindow.setSize(minSize)
-  }
-}
-
-async function waitForSettingsWindowDisposed() {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const existing = await WebviewWindow.getByLabel('settings')
-    if (!existing) {
-      return
-    }
-
-    await new Promise(resolve => window.setTimeout(resolve, 25))
-  }
-}
-
-function WindowControlButton({
-  label,
-  onClick,
-  tone = 'default',
-  active = false,
-  children,
-}: {
-  label: string
-  onClick: () => void
-  tone?: 'default' | 'danger'
-  active?: boolean
-  children: ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      data-no-window-drag="true"
-      onPointerDown={event => event.stopPropagation()}
-      onDoubleClick={event => event.stopPropagation()}
-      onClick={event => {
-        event.stopPropagation()
-        onClick()
-      }}
-      className={`flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-sm transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 ${
-        active
-          ? 'border-blue-500/25 bg-blue-500/12 text-blue-600 dark:text-blue-300'
-          : tone === 'danger'
-            ? 'text-muted-foreground hover:bg-red-500/12 hover:text-red-500 dark:hover:text-red-300'
-            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-      }`}
-    >
-      <span className="flex h-4 w-4 items-center justify-center">{children}</span>
-    </button>
-  )
-}
-
-type ImportDroppedPathsResult = {
-  imported_count: number
-  duplicate_count: number
-  invalid_count: number
-}
-
-type DroppedIconDraft = AddIconDialogDraft & {
-  key: string
-  selected: boolean
-  preview: string
-  previewLoading: boolean
-}
 
 export function Launchpad() {
   const { language } = useI18n()
@@ -268,12 +139,6 @@ export function Launchpad() {
     clear: clearSearch,
   } = useSearch({ enabled: searchSourceIncludesFiles(searchSource) })
 
-  const longPressTimerRef = useRef<number | null>(null)
-  const longPressTriggeredRef = useRef(false)
-  const backgroundPointerStartedRef = useRef(false)
-  const suppressBackgroundClickUntilRef = useRef(0)
-  const bypassNextFocusGuardRef = useRef(false)
-  const launchpadSurfaceRef = useRef<HTMLDivElement | null>(null)
   const filterMenuRef = useRef<HTMLDivElement | null>(null)
   const filterButtonRef = useRef<HTMLButtonElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -284,39 +149,41 @@ export function Launchpad() {
   const [selectedIconResultIndex, setSelectedIconResultIndex] = useState(-1)
   const [combinedSelectedIndex, setCombinedSelectedIndex] = useState(-1)
   const [layoutResetToken, setLayoutResetToken] = useState(0)
-  const [windowPersistentEnabled, setWindowPersistentEnabled] = useState(false)
-  const [mainWindowAlwaysOnTopEnabled, setMainWindowAlwaysOnTopEnabled] = useState(false)
-  const [isExternalDragActive, setIsExternalDragActive] = useState(false)
-  const [isImportingDrop, setIsImportingDrop] = useState(false)
-  const [pendingDropDrafts, setPendingDropDrafts] = useState<DroppedIconDraft[]>([])
-  const [editingDropIndex, setEditingDropIndex] = useState<number | null>(null)
-  const [editingIcon, setEditingIcon] = useState<DesktopIcon | null>(null)
-  const [addIconInitialDraft, setAddIconInitialDraft] = useState<AddIconDialogDraft | null>(null)
-  const [addIconDialogOpen, setAddIconDialogOpen] = useState(false)
   const openSearchPanel = useCallback(() => {
     setSearchPanelLoaded(true)
     setIsSearchPanelOpen(true)
   }, [])
-  const [marquee, setMarquee] = useState<{
-    startX: number
-    startY: number
-    currentX: number
-    currentY: number
-  } | null>(null)
-  const marqueeStateRef = useRef<{
-    initialKeys: Set<string>
-    additive: boolean
-    active: boolean
-    pointerId: number
-    startX: number
-    startY: number
-  } | null>(null)
-  const marqueeJustEndedRef = useRef(false)
-  const [importPlacementRequest, setImportPlacementRequest] = useState<{
-    token: number
-    iconKeys: string[]
-    targetGroupId?: string
-  } | null>(null)
+  const iconImport = useLaunchpadIconImportController({
+    icons,
+    fetchIcons,
+    customNames,
+    clearCustomName,
+    editRequestedIcon,
+    clearIconEditRequest,
+  })
+  const { addIconDialogOpen, handleAddIcons, importPlacementRequest, isImportingDrop } = iconImport
+  const preloadGridView = useCallback((mode: 'paged' | 'scroll') => {
+    void (mode === 'scroll' ? loadScrollableIconGrid() : loadIconGrid())
+  }, [])
+  const windowController = useLaunchpadWindowController({
+    fetchIcons,
+    hydrateSettings,
+    reloadSearchSettings,
+    searchInputRef,
+    setLayoutResetToken,
+    preloadGridView,
+  })
+  const {
+    handleMinimizeWindow,
+    handleToggleAlwaysOnTop,
+    handleWindowTopDragStart,
+    isBackgroundCloseSuppressed,
+    launchpadSurfaceRef,
+    mainWindowAlwaysOnTopEnabled,
+    openSettings,
+    requestCloseLaunchpad,
+    windowPersistentEnabled,
+  } = windowController
   const resetAiOrganizeRunState = useCallback(() => {
     setAiOrganizeRunState({
       canApply: false,
@@ -348,11 +215,6 @@ export function Launchpad() {
     resetAiOrganizeRunState()
   }, [resetAiOrganizeRunState])
 
-  const importPlacementTokenRef = useRef(0)
-  const dropPreviewRequestRef = useRef(0)
-  const pendingAddIconKeySetRef = useRef<Set<string>>(new Set())
-  const pendingAddTargetGroupIdRef = useRef<string | undefined>(undefined)
-  const iconEditSourceRequestRef = useRef(0)
   const searchFilterOptions = useMemo(() => {
     void language
     return getSearchFilterOptions()
@@ -361,703 +223,30 @@ export function Launchpad() {
   const { results: iconSearchResults, recordLaunch: recordShortcutLaunch } =
     useShortcutSearchResults(icons, keyword, searchSource)
   const isSearchPanelVisible = isSearchPanelOpen
-
-  const syncWindowPersistentState = useCallback(async () => {
-    try {
-      const enabled = await getSetting('windowPersistent')
-      setWindowPersistentEnabled(enabled)
-    } catch (error) {
-      console.error('Failed to sync window persistent state:', error)
-    }
-  }, [])
-
-  const syncMainWindowAlwaysOnTopState = useCallback(async () => {
-    try {
-      const enabled = await invoke<boolean>('get_main_window_always_on_top_enabled')
-      setMainWindowAlwaysOnTopEnabled(enabled)
-    } catch (error) {
-      console.error('Failed to sync launchpad always-on-top state:', error)
-    }
-  }, [])
-
-  const syncWindowAppearance = useCallback(async () => {
-    try {
-      const [savedWindowStyle, persistentEnabled, savedTheme] = await Promise.all([
-        getSavedWindowStyle(),
-        getSetting('windowPersistent'),
-        getSavedTheme(),
-      ])
-
-      setWindowPersistentEnabled(persistentEnabled)
-      applyTheme(savedTheme, savedWindowStyle)
-      applyWindowStyle(savedWindowStyle, persistentEnabled)
-    } catch (error) {
-      console.error('Failed to sync launchpad appearance:', error)
-    }
-  }, [])
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        await hydrateSettings()
-        const {
-          windowMode: currentWindowMode,
-          launchpadGridViewMode: currentGridViewMode,
-          applyWindowMode,
-        } = useIconStore.getState()
-        void (currentGridViewMode === 'scroll' ? loadScrollableIconGrid() : loadIconGrid())
-        await applyWindowMode(currentWindowMode)
-        await waitForWindowGeometrySync()
-        await fetchIcons()
-        await syncWindowPersistentState()
-        await syncMainWindowAlwaysOnTopState()
-        await syncWindowAppearance()
-      } catch (e) {
-        console.error('Failed to initialize launchpad settings:', e)
-      } finally {
-        void invoke('notify_main_window_ready').catch(error => {
-          console.error('Failed to notify launchpad readiness:', error)
-        })
-      }
-    })()
-  }, [
-    fetchIcons,
-    hydrateSettings,
-    syncMainWindowAlwaysOnTopState,
-    syncWindowAppearance,
-    syncWindowPersistentState,
-  ])
-
-  const syncExternalState = useCallback(async () => {
-    try {
-      const state = useIconStore.getState()
-      state.clearSelection()
-      await state.hydrateSettings()
-      await state.fetchIcons()
-      await syncWindowPersistentState()
-      await syncMainWindowAlwaysOnTopState()
-      await reloadSearchSettings()
-      await syncWindowAppearance()
-    } catch (e) {
-      console.error('Failed to sync launchpad state:', e)
-    }
-  }, [
-    reloadSearchSettings,
-    syncMainWindowAlwaysOnTopState,
-    syncWindowAppearance,
-    syncWindowPersistentState,
-  ])
-
-  const handleAddIcons = useCallback(
-    (targetGroupId?: string) => {
-      pendingAddIconKeySetRef.current = new Set(icons.map(buildIconSelectionKey))
-      pendingAddTargetGroupIdRef.current = targetGroupId
-      setAddIconInitialDraft(null)
-      setEditingDropIndex(null)
-      setEditingIcon(null)
-      setAddIconDialogOpen(true)
-    },
-    [icons]
-  )
-
-  useEffect(() => {
-    if (!editRequestedIcon) return
-
-    iconEditSourceRequestRef.current += 1
-    const requestId = iconEditSourceRequestRef.current
-    const iconSource =
-      editRequestedIcon.icon_source ?? (editRequestedIcon.custom_icon_path ? 'custom' : 'target')
-
-    void invoke<string>('get_icon_edit_source', { id: editRequestedIcon.id })
-      .catch(() => '')
-      .then(canonicalSource => {
-        if (iconEditSourceRequestRef.current !== requestId) return
-
-        const isWebsiteTarget = editRequestedIcon.item_type === 'website' && iconSource === 'target'
-        const websiteSource = isWebsiteTarget
-          ? canonicalSource || editRequestedIcon.icon_base64
-          : ''
-        const generatedSource = isWebsiteTarget ? '' : canonicalSource
-
-        setAddIconInitialDraft({
-          entryKind: editRequestedIcon.item_type === 'website' ? 'website' : 'app',
-          displayName: customNames[editRequestedIcon.path] ?? editRequestedIcon.name,
-          targetPath: editRequestedIcon.target_path || editRequestedIcon.path,
-          launchArguments: editRequestedIcon.launch_arguments ?? '',
-          workingDirectory: editRequestedIcon.working_directory ?? '',
-          customIconPath: editRequestedIcon.custom_icon_path ?? '',
-          websiteIconBase64: websiteSource,
-          generatedIconBase64: generatedSource,
-          iconSource,
-          iconColor: editRequestedIcon.icon_color ?? 'none',
-          iconText: editRequestedIcon.icon_text ?? '',
-        })
-        setEditingDropIndex(null)
-        setEditingIcon(editRequestedIcon)
-        setAddIconDialogOpen(true)
-        clearIconEditRequest()
-      })
-
-    return () => {
-      if (iconEditSourceRequestRef.current === requestId) {
-        iconEditSourceRequestRef.current += 1
-      }
-    }
-  }, [clearIconEditRequest, customNames, editRequestedIcon])
-
-  const handleIconCreated = useCallback(async () => {
-    setIsImportingDrop(true)
-    try {
-      await fetchIcons()
-      const nextIcons = useIconStore.getState().icons
-      const importedIconKeys = nextIcons
-        .map(icon => buildIconSelectionKey(icon))
-        .filter(key => !pendingAddIconKeySetRef.current.has(key))
-
-      if (importedIconKeys.length > 0) {
-        importPlacementTokenRef.current += 1
-        setImportPlacementRequest({
-          token: importPlacementTokenRef.current,
-          iconKeys: importedIconKeys,
-          targetGroupId: pendingAddTargetGroupIdRef.current,
-        })
-      }
-    } finally {
-      pendingAddTargetGroupIdRef.current = undefined
-      setIsImportingDrop(false)
-    }
-  }, [fetchIcons])
-
-  const prepareDroppedPaths = useCallback(
-    (paths: string[]) => {
-      const uniquePaths = Array.from(new Set(paths.filter(path => path.trim())))
-      if (uniquePaths.length === 0) return
-      const requestId = ++dropPreviewRequestRef.current
-      setPendingDropDrafts([])
-
-      const drafts = uniquePaths.map<DroppedIconDraft>(path => ({
-        key: path,
-        selected: true,
-        entryKind: 'app',
-        displayName: deriveIconEntryName(path),
-        targetPath: path,
-        launchArguments: '',
-        workingDirectory: '',
-        customIconPath: '',
-        preview: '',
-        previewLoading: true,
-      }))
-
-      if (drafts.length === 1) {
-        pendingAddIconKeySetRef.current = new Set(icons.map(buildIconSelectionKey))
-        setAddIconInitialDraft(drafts[0])
-        setEditingDropIndex(null)
-        setAddIconDialogOpen(true)
-        return
-      }
-
-      setPendingDropDrafts(drafts)
-      void Promise.all(
-        drafts.map(async draft => {
-          try {
-            const preview = await invoke<string>('get_drag_preview_icon', {
-              path: draft.targetPath,
-              iconSize: 48,
-            })
-            return { key: draft.key, preview }
-          } catch {
-            return { key: draft.key, preview: '' }
-          }
-        })
-      ).then(results => {
-        if (dropPreviewRequestRef.current !== requestId) return
-        const previewByKey = new Map(results.map(result => [result.key, result.preview]))
-        setPendingDropDrafts(current =>
-          current.map(draft => ({
-            ...draft,
-            preview: previewByKey.get(draft.key) ?? '',
-            previewLoading: false,
-          }))
-        )
-      })
-    },
-    [icons]
-  )
-
-  const handleEditDroppedDraft = useCallback(
-    (index: number) => {
-      const draft = pendingDropDrafts[index]
-      if (!draft) return
-      setAddIconInitialDraft(draft)
-      setEditingDropIndex(index)
-      setAddIconDialogOpen(true)
-    },
-    [pendingDropDrafts]
-  )
-
-  const handleSaveDroppedDraft = useCallback(
-    async (draft: AddIconDialogDraft) => {
-      if (editingDropIndex === null) return
-      const previewPath = draft.customIconPath || draft.targetPath
-      const preview =
-        draft.generatedIconBase64 ||
-        (await invoke<string>('get_drag_preview_icon', {
-          path: previewPath,
-          iconSize: 48,
-        }).catch(() => ''))
-      setPendingDropDrafts(current =>
-        current.map((item, index) =>
-          index === editingDropIndex
-            ? {
-                ...item,
-                ...draft,
-                selected: true,
-                preview,
-                previewLoading: false,
-              }
-            : item
-        )
-      )
-    },
-    [editingDropIndex]
-  )
-
-  const handleSaveIconEdit = useCallback(
-    async (draft: AddIconDialogDraft) => {
-      if (!editingIcon) return
-
-      await invoke('update_icon_entry', {
-        input: {
-          id: editingIcon.id,
-          displayName: draft.displayName,
-          targetPath: draft.targetPath,
-          launchArguments: draft.launchArguments,
-          workingDirectory: draft.workingDirectory,
-          customIconPath: draft.customIconPath,
-          websiteIconBase64: draft.websiteIconBase64 ?? '',
-          generatedIconBase64: draft.generatedIconBase64 ?? '',
-          iconSource: draft.iconSource ?? 'target',
-          iconColor: draft.iconColor ?? 'none',
-          iconText: draft.iconText ?? '',
-        },
-      })
-      clearCustomName(editingIcon.path)
-      await fetchIcons()
-      toast.success(translate('“{name}”已更新。', { name: draft.displayName }), {
-        key: 'edit-icon-dialog-submit',
-        title: translate('编辑图标信息'),
-      })
-    },
-    [clearCustomName, editingIcon, fetchIcons, toast]
-  )
-
-  const handleAddIconDialogOpenChange = useCallback((nextOpen: boolean) => {
-    setAddIconDialogOpen(nextOpen)
-    if (nextOpen) return
-    pendingAddTargetGroupIdRef.current = undefined
-    setAddIconInitialDraft(null)
-    setEditingDropIndex(null)
-    setEditingIcon(null)
-  }, [])
-
-  const handleConfirmDroppedImport = useCallback(async () => {
-    const selectedDrafts = pendingDropDrafts.filter(draft => draft.selected)
-    if (selectedDrafts.length === 0 || isImportingDrop) return
-
-    setIsImportingDrop(true)
-    try {
-      const previousIconKeySet = new Set(icons.map(buildIconSelectionKey))
-      const result = { imported_count: 0, duplicate_count: 0, invalid_count: 0 }
-      const failedKeys = new Set<string>()
-      for (const draft of selectedDrafts) {
-        try {
-          const itemResult = await invoke<ImportDroppedPathsResult>('create_icon_entry', {
-            input: {
-              displayName: draft.displayName,
-              targetPath: draft.targetPath,
-              launchArguments: draft.launchArguments,
-              workingDirectory: draft.workingDirectory,
-              customIconPath: draft.customIconPath,
-              websiteIconBase64: draft.websiteIconBase64,
-              generatedIconBase64: draft.generatedIconBase64,
-              iconSource: draft.iconSource ?? 'target',
-              iconColor: draft.iconColor ?? 'none',
-              iconText: draft.iconText ?? '',
-            },
-          })
-          result.imported_count += itemResult.imported_count
-          result.duplicate_count += itemResult.duplicate_count
-          result.invalid_count += itemResult.invalid_count
-        } catch (error) {
-          console.error('Failed to import dropped item:', error)
-          failedKeys.add(draft.key)
-          result.invalid_count += 1
-        }
-      }
-      await fetchIcons()
-
-      if (result.imported_count > 0) {
-        const nextIcons = useIconStore.getState().icons
-        const importedIconKeys = nextIcons
-          .map(icon => buildIconSelectionKey(icon))
-          .filter(key => !previousIconKeySet.has(key))
-
-        if (importedIconKeys.length > 0) {
-          importPlacementTokenRef.current += 1
-          setImportPlacementRequest({
-            token: importPlacementTokenRef.current,
-            iconKeys: importedIconKeys,
-          })
-        }
-      }
-
-      const message = translate(
-        '导入完成：新增 {imported} 项，重复 {duplicate} 项，无效 {invalid} 项。',
-        {
-          imported: result.imported_count,
-          duplicate: result.duplicate_count,
-          invalid: result.invalid_count,
-        }
-      )
-
-      if (result.imported_count > 0) {
-        toast.success(message, {
-          key: 'launchpad-import-drop',
-          title: translate('启动台'),
-          duration: 3600,
-        })
-      } else {
-        toast.info(message, {
-          key: 'launchpad-import-drop',
-          title: translate('启动台'),
-          duration: 3200,
-        })
-      }
-      if (failedKeys.size > 0) {
-        setPendingDropDrafts(current => current.filter(draft => failedKeys.has(draft.key)))
-        toast.error(translate('部分项目未能导入，未完成的项目已保留，请检查后重试。'), {
-          key: 'launchpad-import-drop-error',
-          title: translate('启动台'),
-          duration: 8000,
-        })
-      } else {
-        setPendingDropDrafts([])
-      }
-    } catch (error) {
-      console.error('Failed to import dropped paths:', error)
-      toast.error(translate('导入失败，项目已保留。请检查文件是否可访问后重试。'), {
-        key: 'launchpad-import-drop',
-        title: translate('启动台'),
-        duration: 8000,
-      })
-    } finally {
-      setIsImportingDrop(false)
-    }
-  }, [fetchIcons, icons, isImportingDrop, pendingDropDrafts, toast])
-
-  useEffect(() => {
-    let disposed = false
-    let unlisten: (() => void) | null = null
-    let unlistenNative: (() => void) | null = null
-
-    const handleFileDrag = (type: 'enter' | 'over' | 'leave' | 'drop', paths: string[] = []) => {
-      if (type === 'enter' || type === 'over') {
-        setIsExternalDragActive(true)
-        return
-      }
-
-      if (type === 'leave') {
-        if (!isImportingDrop) {
-          setIsExternalDragActive(false)
-        }
-        return
-      }
-
-      setIsExternalDragActive(false)
-      prepareDroppedPaths(paths)
-    }
-
-    void getCurrentWindow()
-      .onDragDropEvent(event => {
-        const payload = event.payload
-        handleFileDrag(payload.type, payload.type === 'drop' ? payload.paths : [])
-      })
-      .then(fn => {
-        if (disposed) {
-          fn()
-          return
-        }
-        unlisten = fn
-      })
-
-    void listen<NativeFileDragPayload>(NATIVE_FILE_DRAG_EVENT, event => {
-      handleFileDrag(event.payload.eventType, event.payload.paths)
-    }).then(fn => {
-      if (disposed) {
-        fn()
-        return
-      }
-      unlistenNative = fn
-    })
-
-    return () => {
-      disposed = true
-      unlisten?.()
-      unlistenNative?.()
-    }
-  }, [isImportingDrop, prepareDroppedPaths])
-
-  const applyLaunchpadOpenFocus = useCallback(async () => {
-    try {
-      const target = await getSetting('launchpadOpenFocusTarget')
-      window.requestAnimationFrame(() => {
-        if (target === 'search') {
-          searchInputRef.current?.focus({ preventScroll: true })
-          return
-        }
-
-        // 这里只在启动台真正显示时切换焦点，避免普通回焦场景
-        // 抢走重命名输入框或系统对话框返回后的原始焦点。
-        if (document.activeElement instanceof HTMLElement) {
-          document.activeElement.blur()
-        }
-        launchpadSurfaceRef.current?.focus({ preventScroll: true })
-      })
-    } catch (error) {
-      console.error('Failed to apply launchpad open focus target:', error)
-    }
-  }, [])
-
-  useEffect(() => {
-    const handlePointerMove = (event: PointerEvent) => {
-      const state = marqueeStateRef.current
-      if (!state?.active || state.pointerId !== event.pointerId) return
-      setMarquee(prev => {
-        if (!prev) return prev
-        if (prev.currentX === event.clientX && prev.currentY === event.clientY) return prev
-        return { ...prev, currentX: event.clientX, currentY: event.clientY }
-      })
-    }
-
-    const handlePointerUp = (event: PointerEvent) => {
-      const state = marqueeStateRef.current
-      if (!state?.active || state.pointerId !== event.pointerId) return
-      state.active = false
-      const dx = Math.abs(event.clientX - state.startX)
-      const dy = Math.abs(event.clientY - state.startY)
-      const moved = dx > 2 || dy > 2
-      marqueeStateRef.current = null
-      if (moved) {
-        marqueeJustEndedRef.current = true
-        window.setTimeout(() => {
-          marqueeJustEndedRef.current = false
-        }, 60)
-      }
-      setMarquee(null)
-    }
-
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', handlePointerUp)
-    window.addEventListener('pointercancel', handlePointerUp)
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove)
-      window.removeEventListener('pointerup', handlePointerUp)
-      window.removeEventListener('pointercancel', handlePointerUp)
-    }
-  }, [])
-
-  useEffect(() => {
-    const state = marqueeStateRef.current
-    if (!state || !marquee) return
-    const left = Math.min(marquee.startX, marquee.currentX)
-    const right = Math.max(marquee.startX, marquee.currentX)
-    const top = Math.min(marquee.startY, marquee.currentY)
-    const bottom = Math.max(marquee.startY, marquee.currentY)
-    const nodes = document.querySelectorAll<HTMLElement>('[data-selection-key]')
-    const hits: string[] = []
-    nodes.forEach(node => {
-      const key = node.getAttribute('data-selection-key')
-      if (!key) return
-      const rect = node.getBoundingClientRect()
-      if (rect.right < left || rect.left > right || rect.bottom < top || rect.top > bottom) return
-      hits.push(key)
-    })
-    const hitSet = new Set(hits)
-    let nextKeys: string[]
-    if (state.additive) {
-      const merged = new Set(state.initialKeys)
-      hits.forEach(key => merged.add(key))
-      nextKeys = Array.from(merged)
-    } else {
-      nextKeys = Array.from(hitSet)
-    }
-    setSelectedIconKeys(nextKeys)
-  }, [marquee, setSelectedIconKeys])
-
-  useEffect(() => {
-    const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-      if (focused) {
-        if (bypassNextFocusGuardRef.current) {
-          bypassNextFocusGuardRef.current = false
-          suppressBackgroundClickUntilRef.current = 0
-        } else {
-          suppressBackgroundClickUntilRef.current = performance.now() + EXTERNAL_SHOW_CLICK_GUARD_MS
-        }
-        void syncExternalState()
-      }
-    })
-    return () => {
-      unlisten.then(fn => fn())
-    }
-  }, [syncExternalState])
-
-  useEffect(() => {
-    let disposed = false
-    let unlisten: (() => void) | null = null
-
-    void getCurrentWindow()
-      .listen<MainWindowAppearanceSyncPayload>(MAIN_WINDOW_APPEARANCE_SYNC_EVENT, event => {
-        const nextAppearance: Partial<{
-          iconCornerRadius: number
-          iconOpacity: number
-        }> = {}
-        if (typeof event.payload?.iconCornerRadius === 'number') {
-          nextAppearance.iconCornerRadius = event.payload.iconCornerRadius
-        }
-        if (typeof event.payload?.iconOpacity === 'number') {
-          nextAppearance.iconOpacity = event.payload.iconOpacity
-        }
-        if (Object.keys(nextAppearance).length > 0) {
-          useIconStore.setState(nextAppearance)
-        }
-        void syncWindowAppearance()
-      })
-      .then(fn => {
-        if (disposed) {
-          fn()
-          return
-        }
-        unlisten = fn
-      })
-
-    return () => {
-      disposed = true
-      unlisten?.()
-    }
-  }, [syncWindowAppearance])
-
-  useEffect(() => {
-    let disposed = false
-    let unlisten: (() => void) | null = null
-
-    void getCurrentWindow()
-      .listen(LAUNCHPAD_SHOWN_EVENT, () => {
-        void applyLaunchpadOpenFocus()
-      })
-      .then(fn => {
-        if (disposed) {
-          fn()
-          return
-        }
-        unlisten = fn
-      })
-
-    return () => {
-      disposed = true
-      unlisten?.()
-    }
-  }, [applyLaunchpadOpenFocus])
-
-  useEffect(() => {
-    let disposed = false
-    let unlisten: (() => void) | null = null
-
-    void getCurrentWindow()
-      .listen<WindowPersistentSyncPayload>(WINDOW_PERSISTENT_SYNC_EVENT, event => {
-        const enabled = Boolean(event.payload?.enabled)
-        setWindowPersistentEnabled(enabled)
-        void getSavedWindowStyle()
-          .then(style => {
-            applyWindowStyle(style, enabled)
-          })
-          .catch(error => {
-            console.error('Failed to sync launchpad window style after persistent change:', error)
-          })
-        if (!enabled) {
-          // 从设置关闭“窗口常驻”返回主窗口时，下一次焦点恢复不应再吞掉
-          // 用户对全屏空白区域的首次点击，否则会表现成“必须先点一下窗口”。
-          bypassNextFocusGuardRef.current = true
-        }
-      })
-      .then(fn => {
-        if (disposed) {
-          fn()
-          return
-        }
-        unlisten = fn
-      })
-
-    return () => {
-      disposed = true
-      unlisten?.()
-    }
-  }, [])
-
-  useEffect(() => {
-    let disposed = false
-    let unlisten: (() => void) | null = null
-
-    void getCurrentWindow()
-      .listen(SETTINGS_RETURNED_TO_MAIN_EVENT, () => {
-        bypassNextFocusGuardRef.current = true
-        suppressBackgroundClickUntilRef.current = 0
-      })
-      .then(fn => {
-        if (disposed) {
-          fn()
-          return
-        }
-        unlisten = fn
-      })
-
-    return () => {
-      disposed = true
-      unlisten?.()
-    }
-  }, [])
-
-  useEffect(() => {
-    let disposed = false
-    let unlisten: (() => void) | null = null
-
-    void getCurrentWindow()
-      .listen(LAUNCHPAD_LAYOUT_RESET_EVENT, () => {
-        // 布局重置不会直接改变 icons 数据，需要额外递增令牌，强制 IconGrid 丢弃旧内存布局。
-        setLayoutResetToken(current => current + 1)
-        void syncExternalState()
-      })
-      .then(fn => {
-        if (disposed) {
-          fn()
-          return
-        }
-        unlisten = fn
-      })
-
-    return () => {
-      disposed = true
-      unlisten?.()
-    }
-  }, [syncExternalState])
-
-  useEffect(() => {
-    return () => {
-      if (longPressTimerRef.current !== null) {
-        window.clearTimeout(longPressTimerRef.current)
-        longPressTimerRef.current = null
-      }
-    }
-  }, [])
+  const surfaceInteractions = useLaunchpadSurfaceInteractions({
+    selectionMode,
+    selectedIconKeys,
+    setSelectedIconKeys,
+    clearSelection,
+    enterSelectionMode,
+    isAiOrganizeMode,
+    hasSearchKeyword,
+    isSearchPanelOpen,
+    closeSearchPanel: () => setIsSearchPanelOpen(false),
+    windowMode,
+    windowPersistentEnabled,
+    isBackgroundCloseSuppressed,
+    requestCloseLaunchpad,
+  })
+  const {
+    handleBackgroundClick,
+    handleBackgroundPointerCancel,
+    handleBackgroundPointerDown,
+    handleBackgroundPointerLeave,
+    handleBackgroundPointerUp,
+    handleSurfacePointerDownCapture,
+    marquee,
+  } = surfaceInteractions
 
   useEffect(() => {
     if (!isFilterMenuOpen) return
@@ -1164,132 +353,6 @@ export function Launchpad() {
     },
     [clearSearch, launchApp, recordShortcutLaunch, toast]
   )
-
-  const requestCloseLaunchpad = useCallback(() => {
-    void invoke('toggle_window').catch(error => {
-      console.error('Failed to hide launchpad window:', error)
-    })
-  }, [])
-
-  const handleMinimizeWindow = useCallback(() => {
-    void getCurrentWindow()
-      .minimize()
-      .catch(error => {
-        console.error('Failed to minimize launchpad window:', error)
-      })
-  }, [])
-
-  const handleToggleAlwaysOnTop = useCallback(() => {
-    const nextEnabled = !mainWindowAlwaysOnTopEnabled
-    void invoke<boolean>('set_main_window_always_on_top_enabled', {
-      enabled: nextEnabled,
-    })
-      .then(setMainWindowAlwaysOnTopEnabled)
-      .catch(error => {
-        console.error('Failed to update launchpad always-on-top state:', error)
-      })
-  }, [mainWindowAlwaysOnTopEnabled])
-
-  const clearBackgroundLongPressTimer = () => {
-    if (longPressTimerRef.current !== null) {
-      window.clearTimeout(longPressTimerRef.current)
-      longPressTimerRef.current = null
-    }
-  }
-
-  const isBackgroundInteraction = (target: HTMLElement) =>
-    !target.closest('[data-icon]') &&
-    !target.closest('[data-dock]') &&
-    !target.closest('[data-dock-menu="true"]') &&
-    !target.closest('[data-search-placeholder]') &&
-    !target.closest(SEARCH_FLOATING_MENU_SELECTOR) &&
-    !target.closest('[data-pagination]') &&
-    !target.closest('[data-grid-mode-nav]') &&
-    !target.closest('[data-selection-toolbar]') &&
-    !target.closest('[data-ai-organize-toolbar]') &&
-    !target.closest('[data-ai-organize-sidebar]')
-
-  const handleBackgroundPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    const target = e.target as HTMLElement
-    const startedOnBackground = isBackgroundInteraction(target)
-    backgroundPointerStartedRef.current = e.button === 0 && startedOnBackground
-    if (selectionMode && e.button === 0 && startedOnBackground) {
-      marqueeStateRef.current = {
-        initialKeys: new Set(selectedIconKeys),
-        additive: e.ctrlKey || e.shiftKey,
-        active: true,
-        pointerId: e.pointerId,
-        startX: e.clientX,
-        startY: e.clientY,
-      }
-      setMarquee({
-        startX: e.clientX,
-        startY: e.clientY,
-        currentX: e.clientX,
-        currentY: e.clientY,
-      })
-      return
-    }
-    if (isAiOrganizeMode || selectionMode || e.button !== 0 || hasSearchKeyword) return
-    if (!startedOnBackground) return
-
-    longPressTriggeredRef.current = false
-    clearBackgroundLongPressTimer()
-    longPressTimerRef.current = window.setTimeout(() => {
-      longPressTriggeredRef.current = true
-      enterSelectionMode()
-    }, LONG_PRESS_MS)
-  }
-
-  const handleBackgroundPointerUp = () => {
-    clearBackgroundLongPressTimer()
-  }
-
-  const handleBackgroundPointerCancel = () => {
-    clearBackgroundLongPressTimer()
-    backgroundPointerStartedRef.current = false
-  }
-
-  const handleBackgroundPointerLeave = () => {
-    clearBackgroundLongPressTimer()
-  }
-
-  const isWindowDragInteractiveTarget = (target: EventTarget | null) => {
-    const element =
-      target instanceof Element ? target : target instanceof Node ? target.parentElement : null
-
-    return Boolean(
-      element?.closest(
-        'button, a, input, textarea, select, [role="button"], [data-no-window-drag="true"]'
-      )
-    )
-  }
-
-  const handleWindowTopDragStart = (event: ReactPointerEvent<HTMLElement>) => {
-    if (event.button !== 0) return
-    if (isWindowDragInteractiveTarget(event.target)) return
-
-    event.stopPropagation()
-    void getCurrentWindow()
-      .startDragging()
-      .catch(error => {
-        console.error('Failed to start dragging launchpad window:', error)
-      })
-  }
-
-  const handleSurfacePointerDownCapture = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!isSearchPanelOpen) return
-
-    const target = event.target as HTMLElement | null
-    const isSearchInteraction =
-      !!target?.closest('[data-search-placeholder]') ||
-      !!target?.closest(SEARCH_FLOATING_MENU_SELECTOR) ||
-      !!target?.closest('[data-dock-menu="true"]')
-
-    if (!isSearchInteraction) {
-      setIsSearchPanelOpen(false)
-    }
-  }
 
   const launchSearchItem = useCallback(
     async (path: string) => {
@@ -1407,53 +470,6 @@ export function Launchpad() {
     }
   }, [hasSearchKeyword, isSearchPanelVisible, requestCloseLaunchpad])
 
-  const handleBackgroundClick = (e: ReactMouseEvent) => {
-    if (marqueeJustEndedRef.current) {
-      marqueeJustEndedRef.current = false
-      backgroundPointerStartedRef.current = false
-      return
-    }
-    if (longPressTriggeredRef.current) {
-      longPressTriggeredRef.current = false
-      backgroundPointerStartedRef.current = false
-      return
-    }
-
-    const target = e.target as HTMLElement
-    const isTrueBackgroundClick =
-      backgroundPointerStartedRef.current && isBackgroundInteraction(target)
-    backgroundPointerStartedRef.current = false
-    const clickedOutsideSearch =
-      !target.closest('[data-search-placeholder]') &&
-      !target.closest(SEARCH_FLOATING_MENU_SELECTOR) &&
-      !target.closest('[data-dock-menu="true"]')
-
-    if (isSearchPanelOpen && clickedOutsideSearch && isTrueBackgroundClick) {
-      setIsSearchPanelOpen(false)
-      return
-    }
-
-    if (selectionMode) {
-      if (isTrueBackgroundClick) {
-        clearSelection()
-      }
-      return
-    }
-
-    if (isAiOrganizeMode) {
-      return
-    }
-
-    if (windowMode === 'fullscreen' && !hasSearchKeyword && !windowPersistentEnabled) {
-      if (isTrueBackgroundClick) {
-        if (performance.now() < suppressBackgroundClickUntilRef.current) {
-          return
-        }
-        void invoke('toggle_window')
-      }
-    }
-  }
-
   const handleHideSelected = () => {
     if (selectedIconKeys.length === 0) return
     void hideSelectedIcons()
@@ -1468,42 +484,6 @@ export function Launchpad() {
     )
     if (!confirmed) return
     void deleteSelectedIcons()
-  }
-
-  const openSettings = async () => {
-    const existing = await WebviewWindow.getByLabel('settings')
-    if (existing) {
-      await existing.destroy().catch(closeError => {
-        console.error('Failed to dispose existing settings window:', closeError)
-      })
-      await waitForSettingsWindowDisposed()
-    }
-
-    const settingsWindow = new WebviewWindow('settings', {
-      url: 'index.html?page=settings&returnToMain=1',
-      title: translate('设置'),
-      // 设置窗口允许放大，但默认尺寸同时作为最小尺寸，避免布局继续被压缩。
-      width: SETTINGS_WINDOW_WIDTH,
-      height: SETTINGS_WINDOW_HEIGHT,
-      minWidth: SETTINGS_WINDOW_WIDTH,
-      minHeight: SETTINGS_WINDOW_HEIGHT,
-      center: true,
-      resizable: true,
-      decorations: false,
-      shadow: true,
-      visible: false,
-    })
-    settingsWindow.once('tauri://created', async () => {
-      await ensureSettingsWindowMinSize(settingsWindow)
-      await invoke('activate_settings_window')
-    })
-    settingsWindow.once('tauri://error', e => {
-      console.error('Failed to create settings window:', e)
-      toast.error(translate('无法打开设置窗口，请重试。'), {
-        key: 'settings-window',
-        title: translate('设置'),
-      })
-    })
   }
 
   return (
@@ -1526,54 +506,16 @@ export function Launchpad() {
           onPointerLeave={handleBackgroundPointerLeave}
           onClick={handleBackgroundClick}
         >
-          <div
-            data-no-window-drag="true"
-            className="absolute right-5 top-5 z-40 flex items-center gap-2"
-          >
-            <div className="launchpad-glass-panel-strong flex items-center rounded-lg border border-border/80 px-1.5 py-1">
-              <WindowControlButton
-                label={
-                  isAiOrganizeMode && isAiOrganizeSidebarOpen
-                    ? translate('收起 AI 整理')
-                    : translate('打开 AI 整理')
-                }
-                active={isAiOrganizeMode}
-                onClick={toggleAiOrganizeSidebar}
-              >
-                <Bot className="h-4 w-4" />
-              </WindowControlButton>
-            </div>
-            {windowPersistentEnabled ? (
-              <>
-                <div className="launchpad-glass-panel-strong flex items-center rounded-lg border border-border/80 px-1.5 py-1">
-                  <WindowControlButton
-                    label={
-                      mainWindowAlwaysOnTopEnabled ? translate('取消置顶') : translate('置顶窗口')
-                    }
-                    onClick={handleToggleAlwaysOnTop}
-                  >
-                    <Pin
-                      className={`h-4 w-4 ${
-                        mainWindowAlwaysOnTopEnabled ? 'text-blue-500 dark:text-blue-300' : ''
-                      }`}
-                    />
-                  </WindowControlButton>
-                </div>
-                <div className="launchpad-glass-panel-strong flex items-center gap-1 rounded-lg border border-border/80 px-1.5 py-1">
-                  <WindowControlButton label={translate('最小化')} onClick={handleMinimizeWindow}>
-                    <Minus className="h-4 w-4" />
-                  </WindowControlButton>
-                  <WindowControlButton
-                    label={translate('关闭窗口')}
-                    tone="danger"
-                    onClick={requestCloseLaunchpad}
-                  >
-                    <X className="h-4 w-4" />
-                  </WindowControlButton>
-                </div>
-              </>
-            ) : null}
-          </div>
+          <LaunchpadWindowControls
+            aiOrganizeMode={isAiOrganizeMode}
+            aiSidebarOpen={isAiOrganizeSidebarOpen}
+            windowPersistentEnabled={windowPersistentEnabled}
+            alwaysOnTopEnabled={mainWindowAlwaysOnTopEnabled}
+            onToggleAi={toggleAiOrganizeSidebar}
+            onToggleAlwaysOnTop={handleToggleAlwaysOnTop}
+            onMinimize={handleMinimizeWindow}
+            onClose={requestCloseLaunchpad}
+          />
 
           {windowPersistentEnabled ? (
             <div
@@ -1838,165 +780,6 @@ export function Launchpad() {
             </div>
           ) : null}
 
-          {isExternalDragActive || (pendingDropDrafts.length > 0 && editingDropIndex === null) ? (
-            <div className="fixed inset-0 z-[260] flex items-center justify-center bg-black/25 p-4 backdrop-blur-[2px] dark:bg-black/55">
-              <div
-                role={isExternalDragActive ? 'status' : 'dialog'}
-                aria-modal={isExternalDragActive ? undefined : true}
-                aria-labelledby={isExternalDragActive ? undefined : 'drop-import-title'}
-                className="w-full max-w-3xl overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
-              >
-                {isExternalDragActive ? (
-                  <div className="p-5 sm:p-6">
-                    <div className="flex min-h-64 flex-col items-center justify-center rounded-lg border-2 border-dashed border-primary/45 bg-primary/[0.04] px-6 py-10 text-center">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                        <Download className="h-5 w-5" />
-                      </div>
-                      <p className="mt-4 text-base font-semibold text-foreground">
-                        {translate('拖到这里准备导入')}
-                      </p>
-                      <p className="mt-1.5 max-w-sm text-sm leading-6 text-muted-foreground">
-                        {translate('松开后将打开导入表单，确认前不会添加到图标库。')}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <form
-                    onSubmit={event => {
-                      event.preventDefault()
-                      void handleConfirmDroppedImport()
-                    }}
-                  >
-                    <div className="flex items-start justify-between gap-4 border-b border-border/80 px-4 py-4 sm:px-5">
-                      <div className="min-w-0 space-y-1">
-                        <h2
-                          id="drop-import-title"
-                          className="text-base font-semibold text-foreground"
-                        >
-                          {translate('确认导入图标')}
-                        </h2>
-                        <p className="text-xs leading-5 text-muted-foreground">
-                          {translate('选择需要导入的图标；可单独编辑名称、启动选项和图标。')}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        aria-label={translate('关闭')}
-                        onClick={() => setPendingDropDrafts([])}
-                        disabled={isImportingDrop}
-                        className="shrink-0"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-
-                    <div className="max-h-[min(28rem,56vh)] overflow-y-auto px-4 py-3 sm:px-5">
-                      <div className="grid justify-start gap-x-2 gap-y-1 [grid-template-columns:repeat(auto-fill,5rem)]">
-                        {pendingDropDrafts.map((draft, index) => (
-                          <div key={draft.key} className="group relative min-w-0">
-                            <button
-                              type="button"
-                              aria-pressed={draft.selected}
-                              aria-label={
-                                draft.selected
-                                  ? translate('取消选择 {name}', { name: draft.displayName })
-                                  : translate('选择 {name}', { name: draft.displayName })
-                              }
-                              onClick={() =>
-                                setPendingDropDrafts(current =>
-                                  current.map((item, itemIndex) =>
-                                    itemIndex === index
-                                      ? { ...item, selected: !item.selected }
-                                      : item
-                                  )
-                                )
-                              }
-                              disabled={isImportingDrop}
-                              className={`flex h-[4.75rem] w-full min-w-0 flex-col items-center justify-start gap-1 px-1 py-1 text-center transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 ${
-                                draft.selected ? 'opacity-100' : 'opacity-70 hover:opacity-100'
-                              }`}
-                            >
-                              <span
-                                className={`pointer-events-none absolute left-1.5 top-0.5 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full transition-opacity ${
-                                  draft.selected
-                                    ? 'bg-primary text-primary-foreground opacity-100'
-                                    : 'border border-border bg-background opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
-                                }`}
-                              >
-                                {draft.selected ? <Check className="h-2.5 w-2.5" /> : null}
-                              </span>
-                              <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden">
-                                {draft.previewLoading ? (
-                                  <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-                                ) : draft.preview ? (
-                                  <img
-                                    src={draft.preview}
-                                    alt=""
-                                    className="h-full w-full object-contain"
-                                  />
-                                ) : (
-                                  <FileIcon className="h-5 w-5 text-muted-foreground" />
-                                )}
-                              </span>
-                              <span
-                                className="min-h-6 w-full overflow-hidden text-[11px] font-medium leading-3 text-foreground [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
-                                title={draft.displayName}
-                              >
-                                {draft.displayName}
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={translate('编辑 {name}', { name: draft.displayName })}
-                              title={translate('编辑')}
-                              onClick={() => handleEditDroppedDraft(index)}
-                              disabled={isImportingDrop}
-                              className="absolute right-0.5 top-0.5 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-background/90 text-muted-foreground opacity-100 shadow-sm transition-[opacity,color] hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap justify-end gap-2 border-t border-border/80 bg-muted/15 px-4 py-3 sm:px-5">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setPendingDropDrafts([])}
-                        disabled={isImportingDrop}
-                        className="min-w-0 flex-1 sm:flex-none"
-                      >
-                        {translate('取消')}
-                      </Button>
-                      <Button
-                        type="submit"
-                        disabled={
-                          isImportingDrop || !pendingDropDrafts.some(draft => draft.selected)
-                        }
-                        className="min-w-0 flex-1 sm:flex-none"
-                      >
-                        {isImportingDrop ? (
-                          <RefreshCw className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Download className="h-4 w-4" />
-                        )}
-                        {isImportingDrop
-                          ? translate('正在导入...')
-                          : translate('确认导入（{count}）', {
-                              count: pendingDropDrafts.filter(draft => draft.selected).length,
-                            })}
-                      </Button>
-                    </div>
-                  </form>
-                )}
-              </div>
-            </div>
-          ) : null}
-
           {marquee ? (
             <div
               className="pointer-events-none fixed z-40 rounded-sm border border-blue-500/60 bg-blue-500/15 shadow-sm"
@@ -2092,24 +875,9 @@ export function Launchpad() {
         onAiOrganize={enterAiOrganizeMode}
         onOpenSettings={openSettings}
       />
+      <LaunchpadIconImportLayer controller={iconImport} />
 
       <Suspense fallback={null}>
-        {addIconDialogOpen ? (
-          <AddIconDialog
-            open
-            onOpenChange={handleAddIconDialogOpenChange}
-            onCreated={handleIconCreated}
-            initialDraft={addIconInitialDraft}
-            onSubmitDraft={
-              editingIcon
-                ? handleSaveIconEdit
-                : editingDropIndex !== null
-                  ? handleSaveDroppedDraft
-                  : undefined
-            }
-          />
-        ) : null}
-
         {isAiOrganizeMode ? (
           <AiOrganizePanel
             ref={aiOrganizePanelRef}
