@@ -8,80 +8,26 @@ import {
   type PointerEvent as ReactPointerEvent,
   type SetStateAction,
 } from 'react'
-import type { EvasionDirection, GridItem, HoverZone } from '../model'
-import { getGridItemSpan, getId } from '../model'
-import { DRAG_HOLE_ID, areSlotsEqual } from '../domain/slots'
-import { moveDragHoleToIndex } from '../domain/evasionPolicy'
-import { getFolderChildSelectionsByIds, getFolderChildrenById } from '../domain/folderPolicy'
-import { clampNumber, classifyZone, getRectArea, getRectIntersection } from '../domain/geometry'
-import {
-  applyOuterEvasionPolicy,
-  findHitByMetrics,
-  findOuterMaxOverlapHitByMetrics,
-  resolveNearestAnchorIndexByMetrics,
-  resolveNearestSlotIndexByMetrics,
-} from '../domain/dragMovePolicy'
-import {
-  canPlaceItemAtAnchorIndex,
-  findNearestValidAnchorIndex,
-  normalizeOuterSlots,
-} from '../domain/topLevelLayout'
-import {
-  buildCompactOuterDropPreview,
-  compactOuterSlotsWithinPages,
-  maskDraggingIdsInCompactOrder,
-  isCompactSlotVacantForDrag,
-  resolveCompactStableTargetId,
-} from './scrollTopLevelLayout'
-import { getDockItemKeys, resolveOuterItemIds } from '../domain/dock'
-import { buildDockLinearPreviewOrder } from '../domain/dockDragPolicy'
-import { resolveMixedSelectionDragIds } from '../domain/multiSelectionPolicy'
-import { OUTER_DRAG_RULES } from '../constants'
+import type { GridItem, HoverZone } from '../model'
+import { getId } from '../model'
+import { areSlotsEqual } from '../domain/slots'
+import { getFolderChildrenById } from '../domain/folderPolicy'
 import { usePointerDragController } from '../hooks/usePointerDragController'
 import { useEdgeAutoPaging } from '../hooks/useEdgeAutoPaging'
 import { useScrollableDragDropCommit } from './useScrollableDragDropCommit'
+import { useScrollableDragGeometryController } from './useScrollableDragGeometryController'
+import { useScrollableDragMoveProcessor } from './useScrollableDragMoveProcessor'
+import { useScrollableDragStarter } from './useScrollableDragStarter'
+import { useScrollableFolderDragController } from './useScrollableFolderDragController'
 import {
   buildScrollGroupDragPreviewOrder,
-  buildScrollFolderAutoOpenOrder,
-  buildScrollGroupEntries,
   canExitScrollFolderThroughMask,
-  hasScrollEvasionRearmed,
-  isPointInsideScrollDropTarget,
   isPointOutsideScrollFolderContent,
-  resolveScrollDropPosition,
-  SCROLL_FOLDER_AUTO_OPEN_DWELL_MS,
-  SCROLL_FOLDER_EXIT_DWELL_MS,
-  SCROLL_FOLDER_PREVIEW_DWELL_MS,
-  SCROLL_PREVIEW_REORDER_DWELL_MS,
-  SCROLL_PREVIEW_REORDER_LOCK_MS,
 } from './scrollGroupLayout'
-import { activateDragPointerCapture, releaseDragPointerCapture } from '../hooks/dragPointerCapture'
-import {
-  findDockMaxOverlapHit,
-  resolveDockNearestSlotIndex,
-  resolveDockTopLevelContextAtPoint,
-} from '../hooks/dockDragHitTesting'
+import { releaseDragPointerCapture } from '../hooks/dragPointerCapture'
 import { resetOuterInteraction } from '../state/dragMachine'
-import {
-  collectElementCenters as collectCenters,
-  buildDragItemMap,
-  getFolderIconMapById as getFolderMapById,
-  hasRenderableDragStateChanged,
-  seedMissingInitialCenters,
-} from '../domain/dragWorkflowShared'
-import {
-  buildCompactOuterBaseOrder,
-  buildCompactOuterPreviewItems as createCompactOuterPreviewItems,
-  resolveCompactOuterPreview,
-} from './scrollCompactPreviewPolicy'
-import type {
-  DragHit,
-  DragState,
-  FolderDropFlight,
-  MultiDropFlightItem,
-  OuterOverlapHit,
-  PendingDrag,
-} from '../state/types'
+import { hasRenderableDragStateChanged } from '../domain/dragWorkflowShared'
+import type { DragState, FolderDropFlight, MultiDropFlightItem, PendingDrag } from '../state/types'
 
 interface DragWorkflowConfig {
   gridGap: number
@@ -416,908 +362,66 @@ export function useScrollableIconGridDragWorkflow({
     setDragState(next)
   }
 
-  const resolveAllItemIds = () => itemsRef.current.map(getId)
-
-  const resolveOuterItemsForLayout = (dockOrder: Array<string | null> = dockKeysRef.current) => {
-    const outerItemIds = resolveOuterItemIds(resolveAllItemIds(), dockOrder)
-    const outerItemIdSet = new Set(outerItemIds)
-    return itemsRef.current.filter(item => outerItemIdSet.has(getId(item)))
-  }
-
-  const resolveDockItemOrder = (draggingIds: string[] = []): string[] =>
-    getDockItemKeys(dockKeysRef.current, draggingIds)
-  const isDraggingFromDock = (draggingId: string): boolean =>
-    dockKeysRef.current.includes(draggingId)
-
-  const seedMissingOuterDragCenters = ({
-    initialCenters,
-    draggingIds,
-    sourceOrder,
-    leadId,
-    fallbackX,
-    fallbackY,
-  }: {
-    initialCenters: Record<string, { x: number; y: number }>
-    draggingIds: string[]
-    sourceOrder: Array<string | null>
-    leadId: string
-    fallbackX: number
-    fallbackY: number
-  }) => {
-    const missingIds = draggingIds.filter(id => !initialCenters[id])
-    if (missingIds.length === 0) return
-
-    const safePageSize = Math.max(1, pageSizeRef.current)
-    const safeColumns = Math.max(1, columns)
-    const stepX = itemWidth + config.gridGap
-    const stepY = itemHeight + config.gridGap
-    const leadIndex = sourceOrder.indexOf(leadId)
-    const leadPage = leadIndex >= 0 ? Math.floor(leadIndex / safePageSize) : currentPageRef.current
-    const gridRect = gridRef.current?.getBoundingClientRect() ?? null
-    const sideOffset = Math.min(28, Math.max(12, Math.round(iconConfig.imgSize * 0.24)))
-    const stackOffset = Math.min(14, Math.max(6, Math.round(iconConfig.imgSize * 0.12)))
-    const sideCounts = { left: 0, right: 0 }
-
-    missingIds.forEach((id, missingIndex) => {
-      const sourceIndex = sourceOrder.indexOf(id)
-      if (!gridRect || sourceIndex < 0) {
-        initialCenters[id] = {
-          x: fallbackX + ((missingIndex % 2) - 0.5) * stackOffset * 2,
-          y: fallbackY + Math.floor(missingIndex / 2) * stackOffset,
-        }
-        return
-      }
-
-      const sourcePage = Math.floor(sourceIndex / safePageSize)
-      const localIndex = sourceIndex - sourcePage * safePageSize
-      const row = Math.floor(localIndex / safeColumns)
-      const col = localIndex % safeColumns
-
-      if (sourcePage === leadPage) {
-        initialCenters[id] = {
-          x: gridRect.left + col * stepX + itemWidth / 2,
-          y: gridRect.top + row * stepY + itemHeight / 2,
-        }
-        return
-      }
-
-      const side = sourcePage < leadPage ? 'left' : 'right'
-      const sideIndex = sideCounts[side]
-      sideCounts[side] += 1
-      const pageDistance = Math.max(1, Math.abs(sourcePage - leadPage))
-      const verticalJitter = (sideIndex % 3) - 1
-      const baseY = gridRect.top + row * stepY + itemHeight / 2 + verticalJitter * stackOffset
-
-      initialCenters[id] = {
-        x:
-          side === 'left'
-            ? gridRect.left - sideOffset - (pageDistance - 1) * stackOffset
-            : gridRect.right + sideOffset + (pageDistance - 1) * stackOffset,
-        y: clampNumber(baseY, gridRect.top + itemHeight / 2, gridRect.bottom - itemHeight / 2),
-      }
-    })
-  }
-
-  const resolvePagedOuterTopLevelOrder = (): Array<string | null> => {
-    const outerItems = resolveOuterItemsForLayout()
-    return normalizeOuterSlots(
-      outerSlotsRef.current,
-      outerItems,
-      pageSizeRef.current,
-      Math.max(1, columns)
-    )
-  }
-
-  const resolveCompactOuterTopLevelOrder = (): Array<string | null> => {
-    const outerItems = resolveOuterItemsForLayout()
-    const normalized = normalizeOuterSlots(
-      outerSlotsRef.current,
-      outerItems,
-      pageSizeRef.current,
-      Math.max(1, columns)
-    )
-    return compactOuterSlotsWithinPages(
-      normalized,
-      outerItems,
-      pageSizeRef.current,
-      Math.max(1, columns),
-      getOuterMinPageCount?.()
-    )
-  }
-
-  const resolveOuterTopLevelOrder = (): Array<string | null> =>
-    isCompactOuterDrop ? resolveCompactOuterTopLevelOrder() : resolvePagedOuterTopLevelOrder()
-
-  const resolveTopLevelOrder = (context: 'outer' | 'dock'): Array<string | null> =>
-    context === 'dock' ? resolveDockItemOrder() : resolveOuterTopLevelOrder()
-
-  const resolveTopLevelContextAtPoint = (x: number, y: number): 'outer' | 'dock' =>
-    resolveDockTopLevelContextAtPoint({ x, y, dockContainer: dockContainerRef.current })
-
-  const resolveActiveScrollGroupOrder = (state: DragState): string[] | null => {
-    if (!isCompactOuterDrop || !getActiveScrollGroupItemIds) return null
-    const availableIds = new Set(resolveCompactOuterPreviewItems(state).map(getId))
-    const order: string[] = []
-    const consumed = new Set<string>()
-    const append = (id: string) => {
-      if (consumed.has(id) || !availableIds.has(id)) return
-      consumed.add(id)
-      order.push(id)
-    }
-    getActiveScrollGroupItemIds().forEach(append)
-    state.draggingIds.forEach(append)
-    return order
-  }
-
-  const resolveScrollGroupOrderFromWorkingOrder = (
-    state: DragState,
-    workingOrder: Array<string | null>
-  ): string[] | null => {
-    if (!isCompactOuterDrop || !getActiveScrollGroupItemIds || !state.scrollGroupOrder) {
-      return state.scrollGroupOrder ?? null
-    }
-    return buildScrollGroupDragPreviewOrder({
-      groupItemIds: getActiveScrollGroupItemIds(),
-      workingOrder,
-      draggingIds: state.draggingIds,
-      availableIds: new Set(resolveCompactOuterPreviewItems(state).map(getId)),
-    })
-  }
-
-  const resolveCompactOuterPreviewItems = (state: DragState): GridItem[] => {
-    if (compactOuterPreviewItemsRef.current) return compactOuterPreviewItemsRef.current
-    const previewItems = createCompactOuterPreviewItems({
-      state,
-      outerItems: resolveOuterItemsForLayout(),
-      allItems: itemsRef.current,
-      itemById,
-    })
-    compactOuterPreviewItemsRef.current = previewItems
-    return previewItems
-  }
-
-  const compactOuterPreviewOrderWithoutDragging = (state: DragState): Array<string | null> => {
-    if (compactOuterDragBaseWithoutDraggingRef.current) {
-      return compactOuterDragBaseWithoutDraggingRef.current
-    }
-
-    const sourceOrder = compactOuterDragBaseOrderRef.current ?? resolveCompactOuterTopLevelOrder()
-    const compacted = buildCompactOuterBaseOrder({
-      state,
-      sourceOrder,
-      previewItems: resolveCompactOuterPreviewItems(state),
-      pageSize: pageSizeRef.current,
-      columns,
-      minPageCount: getOuterMinPageCount?.(),
-    })
-    compactOuterDragBaseWithoutDraggingRef.current = compacted
-    return compacted
-  }
-
-  const buildCompactOuterPreviewOrder = (
-    state: DragState,
-    hit: OuterOverlapHit
-  ): { order: Array<string | null>; previewSlotIndex: number | null } => {
-    const currentPreviewContainsDrag = state.draggingIds.some(id => state.workingOrder.includes(id))
-    const sourceOrder = currentPreviewContainsDrag
-      ? state.workingOrder
-      : (compactOuterDragBaseOrderRef.current ?? resolveCompactOuterTopLevelOrder())
-    const resolved = resolveCompactOuterPreview({
-      state,
-      targetId: hit.targetId,
-      zone: hit.zone,
-      baseOrder: compactOuterPreviewOrderWithoutDragging(state),
-      sourceOrder,
-      previewItems: resolveCompactOuterPreviewItems(state),
-      pageSize: pageSizeRef.current,
-      columns,
-      minPageCount: getOuterMinPageCount?.(),
-      cached: compactOuterPreviewResultRef.current,
-    })
-    compactOuterPreviewResultRef.current = resolved.cache
-    return resolved.preview
-  }
-  const resolveGridMetrics = (context: 'outer' | 'folder' | 'dock') => {
-    if (context === 'folder') {
-      return {
-        gridElement: folderGridRef.current,
-        columns: Math.max(1, folderColumns),
-        rows: Math.max(1, Math.ceil(Math.max(1, folderOrderLength) / Math.max(1, folderColumns))),
-        itemWidth: folderItemWidth,
-        itemHeight: folderItemHeight,
-        pageOffset: 0,
-      }
-    }
-
-    if (context === 'dock') {
-      const dockItemCount = Math.max(1, resolveDockItemOrder().length)
-      return {
-        gridElement: dockGridRef.current,
-        columns: dockItemCount,
-        rows: 1,
-        itemWidth: iconConfig.imgSize,
-        itemHeight: iconConfig.imgSize,
-        pageOffset: 0,
-      }
-    }
-
-    if (!isCompactOuterDrop) {
-      return {
-        gridElement: gridRef.current,
-        columns: Math.max(1, columns),
-        rows: Math.max(1, rows),
-        itemWidth,
-        itemHeight,
-        pageOffset: currentPageRef.current * pageSizeRef.current,
-      }
-    }
-
-    const outerGridElement = getOuterGridElementAtPoint
-      ? (getOuterGridElementAtPoint(
-          dragPointerRef.current?.pointerX ?? 0,
-          dragPointerRef.current?.pointerY ?? 0
-        )?.element ?? gridRef.current)
-      : gridRef.current
-    const outerRows = outerGridElement
-      ? Math.max(
-          1,
-          Math.ceil(outerGridElement.scrollHeight / Math.max(1, itemHeight + config.gridGap))
-        )
-      : Math.max(1, rows)
-
-    return {
-      gridElement: outerGridElement,
-      columns: Math.max(1, columns),
-      rows: outerRows,
-      itemWidth,
-      itemHeight,
-      pageOffset: currentPageRef.current * pageSizeRef.current,
-    }
-  }
-
-  const findHitByContext = (state: DragState, x: number, y: number): DragHit | null => {
-    if (state.context === 'dock') {
-      const slotEntries = Array.from(dockSlotRefs.current.entries()).sort(([a], [b]) => a - b)
-      for (const [index, node] of slotEntries) {
-        const rect = node.getBoundingClientRect()
-        if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) continue
-        const rawTargetId =
-          node.querySelector<HTMLElement>('[data-dock-key]')?.dataset.dockKey ??
-          state.workingOrder[index]
-        const targetId =
-          !rawTargetId || rawTargetId === DRAG_HOLE_ID || rawTargetId === state.draggingId
-            ? null
-            : rawTargetId
-        return {
-          targetId,
-          zone: classifyZone(rect, x, y),
-          globalSlotIndex: index,
-        }
-      }
-      return null
-    }
-
-    if (state.context === 'outer' && isCompactOuterDrop && getOuterGridElementAtPoint) {
-      const resolved = getOuterGridElementAtPoint(x, y)
-      if (resolved) {
-        currentPageRef.current = resolved.pageIndex
-        return findHitByMetrics(
-          state,
-          x,
-          y,
-          {
-            gridElement: resolved.element,
-            columns: Math.max(1, columns),
-            rows:
-              isCompactOuterDrop && resolved.element
-                ? Math.max(
-                    1,
-                    Math.ceil(
-                      resolved.element.scrollHeight / Math.max(1, itemHeight + config.gridGap)
-                    )
-                  )
-                : Math.max(1, rows),
-            itemWidth,
-            itemHeight,
-            pageOffset: resolved.pageIndex * pageSizeRef.current,
-          },
-          config.gridGap
-        )
-      }
-    }
-
-    return findHitByMetrics(state, x, y, resolveGridMetrics(state.context), config.gridGap)
-  }
-
-  const resolveNearestSlotIndexByContext = (
-    state: DragState,
-    options?: { allowOutside?: boolean }
-  ): number | null => {
-    if (state.context === 'outer') {
-      if (isCompactOuterDrop) {
-        return null
-      }
-      const metrics = resolveGridMetrics('outer')
-      const gridElement = metrics.gridElement
-      if (!gridElement) return null
-      const outerItems = resolveOuterItemsForLayout()
-
-      const draggingSpan = getGridItemSpan(state.draggingItem)
-      if (draggingSpan.cols === 1 && draggingSpan.rows === 1) {
-        const rawIndex = resolveNearestSlotIndexByMetrics(state, metrics, config.gridGap, options)
-        if (
-          rawIndex !== null &&
-          canPlaceItemAtAnchorIndex(
-            state.workingOrder,
-            outerItems,
-            rawIndex,
-            draggingSpan,
-            metrics.columns,
-            pageSizeRef.current
-          )
-        ) {
-          return rawIndex
-        }
-
-        return findNearestValidAnchorIndex({
-          pointerX: state.pointerX,
-          pointerY: state.pointerY,
-          gridRect: gridElement.getBoundingClientRect(),
-          slots: state.workingOrder,
-          items: outerItems,
-          draggingItem: state.draggingItem,
-          columns: metrics.columns,
-          rows: metrics.rows,
-          itemWidth: metrics.itemWidth,
-          itemHeight: metrics.itemHeight,
-          pageOffset: metrics.pageOffset,
-          pageSize: pageSizeRef.current,
-          gridGap: config.gridGap,
-          allowOutside: options?.allowOutside,
-        })
-      }
-
-      return findNearestValidAnchorIndex({
-        pointerX: state.pointerX,
-        pointerY: state.pointerY,
-        gridRect: gridElement.getBoundingClientRect(),
-        slots: state.workingOrder,
-        items: outerItems,
-        draggingItem: state.draggingItem,
-        columns: metrics.columns,
-        rows: metrics.rows,
-        itemWidth: metrics.itemWidth,
-        itemHeight: metrics.itemHeight,
-        pageOffset: metrics.pageOffset,
-        pageSize: pageSizeRef.current,
-        gridGap: config.gridGap,
-        allowOutside: options?.allowOutside,
-      })
-    }
-
-    if (state.context === 'dock') {
-      return resolveDockNearestSlotIndex({
-        state,
-        dockContainer: dockContainerRef.current,
-        slotNodes: dockSlotRefs.current,
-        allowOutside: options?.allowOutside,
-      })
-    }
-
-    return resolveNearestSlotIndexByMetrics(
-      state,
-      resolveGridMetrics(state.context),
-      config.gridGap,
-      options
-    )
-  }
-
-  const resolveNearestDropOrderByContext = (state: DragState): Array<string | null> => {
-    const globalSlotIndex = resolveNearestSlotIndexByContext(state, { allowOutside: true })
-    if (globalSlotIndex === null) return state.workingOrder
-    return moveDragHoleToIndex(state.workingOrder, globalSlotIndex)
-  }
-
-  const resolveCandidateAnchorIndexByContext = (
-    state: DragState,
-    options?: { allowOutside?: boolean }
-  ): number | null => {
-    if (state.context !== 'outer') {
-      return resolveNearestSlotIndexByContext(state, options)
-    }
-
-    if (isCompactOuterDrop) {
-      return null
-    }
-
-    const metrics = resolveGridMetrics('outer')
-    const draggingSpan = getGridItemSpan(state.draggingItem)
-    if (draggingSpan.cols === 1 && draggingSpan.rows === 1) {
-      return resolveNearestSlotIndexByContext(state, options)
-    }
-
-    return resolveNearestAnchorIndexByMetrics(state, metrics, config.gridGap, draggingSpan, options)
-  }
-
-  const findCompactScrollGroupOverlapHit = (state: DragState): OuterOverlapHit | null => {
-    const order = state.scrollGroupOrder
-    const gridElement = resolveGridMetrics('outer').gridElement
-    if (!order || order.length === 0 || !gridElement) return null
-
-    const itemMap = new Map(resolveCompactOuterPreviewItems(state).map(item => [getId(item), item]))
-    const entries = buildScrollGroupEntries(order, itemMap, Math.max(1, columns))
-    const gridRect = gridElement.getBoundingClientRect()
-    const strideX = itemWidth + config.gridGap
-    const strideY = itemHeight + config.gridGap
-    const draggingSpan = getGridItemSpan(state.draggingItem)
-    const dragWidth =
-      draggingSpan.cols * itemWidth + Math.max(0, draggingSpan.cols - 1) * config.gridGap
-    const dragHeight =
-      draggingSpan.rows * itemHeight + Math.max(0, draggingSpan.rows - 1) * config.gridGap
-    const offsetX = clampNumber(state.offsetX, 0, dragWidth)
-    const offsetY = clampNumber(state.offsetY, 0, dragHeight)
-    const dragRect = new DOMRect(
-      state.pointerX - offsetX,
-      state.pointerY - offsetY,
-      dragWidth,
-      dragHeight
-    )
-    // WeTab resolves small tiles from the dragged clone's center and larger tiles from the
-    // pointer itself. It does not start a target dwell merely because two rectangles overlap.
-    const point =
-      draggingSpan.cols === 1 && draggingSpan.rows === 1
-        ? {
-            x: dragRect.left + dragRect.width / 2,
-            y: dragRect.top + dragRect.height / 2,
-          }
-        : { x: state.pointerX, y: state.pointerY }
-    const getEntryRect = (entry: (typeof entries)[number]) =>
-      new DOMRect(
-        gridRect.left + entry.col * strideX,
-        gridRect.top + entry.row * strideY,
-        entry.span.cols * itemWidth + Math.max(0, entry.span.cols - 1) * config.gridGap,
-        entry.span.rows * itemHeight + Math.max(0, entry.span.rows - 1) * config.gridGap
-      )
-    const draggedIdSet = new Set(state.draggingIds)
-    const candidates = entries.filter(entry => !draggedIdSet.has(entry.id))
-    const cachedPoint = compactScrollLastHitPointRef.current
-    const cachedId = compactScrollLastHitIdRef.current
-    let resolvedEntry =
-      cachedPoint && cachedId && Math.hypot(point.x - cachedPoint.x, point.y - cachedPoint.y) < 10
-        ? (candidates.find(
-            entry =>
-              entry.id === cachedId && isPointInsideScrollDropTarget(point, getEntryRect(entry))
-          ) ?? null)
-        : null
-
-    if (!resolvedEntry) {
-      resolvedEntry =
-        candidates.find(entry => isPointInsideScrollDropTarget(point, getEntryRect(entry))) ?? null
-    }
-    if (!resolvedEntry) return null
-
-    const targetRect = getEntryRect(resolvedEntry)
-    const overlapRect = getRectIntersection(dragRect, targetRect)
-    if (!overlapRect) return null
-    compactScrollLastHitPointRef.current = point
-    compactScrollLastHitIdRef.current = resolvedEntry.id
-    return {
-      targetId: resolvedEntry.id,
-      targetIndex: order.indexOf(resolvedEntry.id),
-      targetRect,
-      overlapRect,
-      iou: getRectArea(overlapRect) / Math.max(1, getRectArea(dragRect)),
-      intersectionArea: getRectArea(overlapRect),
-      centerManhattanDistance:
-        Math.abs(point.x - (targetRect.left + targetRect.width / 2)) +
-        Math.abs(point.y - (targetRect.top + targetRect.height / 2)),
-      zone: classifyZone(targetRect, point.x, point.y),
-    }
-  }
-
-  const findTopLevelMaxOverlapHit = (state: DragState): OuterOverlapHit | null => {
-    if (state.context === 'folder') return null
-
-    if (state.context === 'dock') {
-      return findDockMaxOverlapHit({
-        state,
-        iconSize: iconConfig.imgSize,
-        slotNodes: dockSlotRefs.current,
-        itemNodes: dockItemRefs.current,
-      })
-    }
-
-    if (!isCompactOuterDrop) {
-      const metrics = resolveGridMetrics('outer')
-      const draggingSpan = getGridItemSpan(state.draggingItem)
-      const dragWidth =
-        state.draggingItem.kind === 'folder'
-          ? draggingSpan.cols * metrics.itemWidth +
-            Math.max(0, draggingSpan.cols - 1) * config.gridGap
-          : iconConfig.imgSize
-      const dragHeight =
-        state.draggingItem.kind === 'folder'
-          ? draggingSpan.rows * metrics.itemHeight +
-            Math.max(0, draggingSpan.rows - 1) * config.gridGap
-          : iconConfig.imgSize
-      return findOuterMaxOverlapHitByMetrics({
-        state,
-        gridElement: metrics.gridElement,
-        columns: metrics.columns,
-        rows: metrics.rows,
-        itemWidth: metrics.itemWidth,
-        itemHeight: metrics.itemHeight,
-        gridGap: config.gridGap,
-        dragWidth,
-        dragHeight,
-        pageSize: pageSizeRef.current,
-        currentPage: currentPageRef.current,
-        tileRefs: tileRefs.current,
-        items: resolveOuterItemsForLayout(),
-      })
-    }
-
-    if (state.scrollGroupOrder) {
-      return findCompactScrollGroupOverlapHit(state)
-    }
-
-    if (getOuterGridElementAtPoint) {
-      const resolved = getOuterGridElementAtPoint(state.pointerX, state.pointerY)
-      if (resolved) {
-        currentPageRef.current = resolved.pageIndex
-      }
-    }
-    const metrics = resolveGridMetrics('outer')
-    const draggingSpan = getGridItemSpan(state.draggingItem)
-    const dragWidth =
-      state.draggingItem.kind === 'folder'
-        ? draggingSpan.cols * metrics.itemWidth +
-          Math.max(0, draggingSpan.cols - 1) * config.gridGap
-        : iconConfig.imgSize
-    const dragHeight =
-      state.draggingItem.kind === 'folder'
-        ? draggingSpan.rows * metrics.itemHeight +
-          Math.max(0, draggingSpan.rows - 1) * config.gridGap
-        : iconConfig.imgSize
-    const hitState = {
-      ...state,
-      workingOrder: maskDraggingIdsInCompactOrder(state.workingOrder, state.draggingIds),
-    }
-    const hitItems = resolveCompactOuterPreviewItems(state)
-
-    return findOuterMaxOverlapHitByMetrics({
-      state: hitState,
-      gridElement: metrics.gridElement,
-      columns: metrics.columns,
-      rows: metrics.rows,
-      itemWidth: metrics.itemWidth,
-      itemHeight: metrics.itemHeight,
-      gridGap: config.gridGap,
-      dragWidth,
-      dragHeight,
-      pageSize: pageSizeRef.current,
-      currentPage: currentPageRef.current,
-      tileRefs: tileRefs.current,
-      items: hitItems,
-    })
-  }
-
-  const resolvePreviewIndexWithinTargetSpan = (
-    state: DragState,
-    overlapHit: OuterOverlapHit,
-    targetSpan: { cols: number; rows: number }
-  ) => {
-    const safeColumns = Math.max(1, columns)
-    const safePageSize = Math.max(1, pageSizeRef.current)
-    const pageStart = Math.floor(overlapHit.targetIndex / safePageSize) * safePageSize
-    const localIndex = Math.max(0, overlapHit.targetIndex - pageStart)
-    const anchorRow = Math.floor(localIndex / safeColumns)
-    const anchorCol = localIndex % safeColumns
-    const rect = overlapHit.targetRect
-    const relativeX =
-      rect.width > 0 ? clampNumber((state.pointerX - rect.left) / rect.width, 0, 0.999999) : 0
-    const relativeY =
-      rect.height > 0 ? clampNumber((state.pointerY - rect.top) / rect.height, 0, 0.999999) : 0
-
-    let colOffset = targetSpan.cols > 1 ? Math.floor(relativeX * targetSpan.cols) : 0
-    let rowOffset = targetSpan.rows > 1 ? Math.floor(relativeY * targetSpan.rows) : 0
-
-    if (overlapHit.zone === 'left') colOffset = 0
-    if (overlapHit.zone === 'right') colOffset = Math.max(0, targetSpan.cols - 1)
-    if (overlapHit.zone === 'up') rowOffset = 0
-    if (overlapHit.zone === 'down') rowOffset = Math.max(0, targetSpan.rows - 1)
-
-    colOffset = clampNumber(colOffset, 0, Math.max(0, targetSpan.cols - 1))
-    rowOffset = clampNumber(rowOffset, 0, Math.max(0, targetSpan.rows - 1))
-
-    return pageStart + (anchorRow + rowOffset) * safeColumns + (anchorCol + colOffset)
-  }
-
-  const resolveTopLevelOverlapPreviewIndex = (
-    state: DragState,
-    target: GridItem,
-    overlapHit: OuterOverlapHit,
-    _nearestSlotIndex: number | null,
-    candidateAnchorIndex: number | null
-  ) => {
-    if (state.context !== 'outer') return overlapHit.targetIndex
-    if (isCompactOuterDrop) return overlapHit.targetIndex
-    const draggingSpan = getGridItemSpan(state.draggingItem)
-    if (draggingSpan.cols > 1 || draggingSpan.rows > 1) {
-      return candidateAnchorIndex
-    }
-    const targetSpan = getGridItemSpan(target)
-    if (targetSpan.cols === 1 && targetSpan.rows === 1) return overlapHit.targetIndex
-    return resolvePreviewIndexWithinTargetSpan(state, overlapHit, targetSpan)
-  }
-
-  const applyTopLevelEvasion = (
-    state: DragState,
-    hit: OuterOverlapHit
-  ): { order: Array<string | null>; direction: EvasionDirection | null } => {
-    const outerItems = state.context === 'outer' ? resolveOuterItemsForLayout() : null
-    const draggingSpan = getGridItemSpan(state.draggingItem)
-    const targetItem =
-      state.context === 'outer'
-        ? (outerItems?.find(item => getId(item) === hit.targetId) ?? null)
-        : null
-    const targetSpan = targetItem ? getGridItemSpan(targetItem) : null
-    const shouldUsePreviewAnchor =
-      state.context === 'outer' &&
-      (state.draggingIds.length > 1 ||
-        draggingSpan.cols > 1 ||
-        draggingSpan.rows > 1 ||
-        Boolean(targetSpan && (targetSpan.cols > 1 || targetSpan.rows > 1)))
-    const targetAnchorIndex = shouldUsePreviewAnchor
-      ? (state.previewSlotIndex ?? hit.targetIndex)
-      : undefined
-
-    return applyOuterEvasionPolicy(
-      state.workingOrder,
-      hit,
-      state.context === 'dock' ? Math.max(1, state.workingOrder.length) : pageSizeRef.current,
-      state.context === 'dock' ? Math.max(1, state.workingOrder.length) : columns,
-      OUTER_DRAG_RULES.directionTieBreakByOverlap,
-      state.context === 'outer'
-        ? {
-            items: outerItems ?? [],
-            draggingItem: state.draggingItem,
-            draggingIds: state.draggingIds,
-            targetAnchorIndex,
-          }
-        : undefined
-    )
-  }
-
-  const tryApplyTopLevelEvasion = (
-    state: DragState,
-    overlapHit: OuterOverlapHit,
-    now: number
-  ): DragState => {
-    const movedSinceLastEvasion =
-      !state.lastEvasionTriggerPointer ||
-      Math.hypot(
-        state.pointerX - state.lastEvasionTriggerPointer.x,
-        state.pointerY - state.lastEvasionTriggerPointer.y
-      ) >= config.evasionRearmDistance
-    const cooledDownSinceLastEvasion =
-      state.lastEvasionAt === null || now - state.lastEvasionAt >= config.evasionCooldownMs
-    if (!movedSinceLastEvasion || !cooledDownSinceLastEvasion) return state
-
-    const evasionResult = applyTopLevelEvasion(state, overlapHit)
-    const nextEvasionSignature = `${overlapHit.targetId}:${state.previewSlotIndex ?? overlapHit.targetIndex}:${evasionResult.direction ?? 'fallback'}`
-    if (nextEvasionSignature === state.lastEvasionSignature) return state
-    if (areSlotsEqual(evasionResult.order, state.workingOrder)) return state
-
-    return {
-      ...state,
-      workingOrder: evasionResult.order,
-      previewSlotIndex: state.previewSlotIndex,
-      dockPreviewIndex: state.context === 'dock' ? overlapHit.targetIndex : null,
-      hoverTargetId: overlapHit.targetId,
-      hoverZone: overlapHit.zone,
-      hoverIou: overlapHit.iou,
-      folderPreviewTargetId: null,
-      lastEvasionSignature: nextEvasionSignature,
-      lastEvasionTriggerPointer: { x: state.pointerX, y: state.pointerY },
-      lastEvasionAt: now,
-      dwellStartedAt: now,
-    }
-  }
-
-  const resolveCompactScrollHoverZone = (
-    state: DragState,
-    target: GridItem,
-    overlapHit: OuterOverlapHit
-  ): HoverZone => {
-    const mergeAllowed =
-      state.draggingItem.kind === 'icon' && (target.kind === 'icon' || target.kind === 'folder')
-    const draggingSpan = getGridItemSpan(state.draggingItem)
-    const dragWidth =
-      draggingSpan.cols * itemWidth + Math.max(0, draggingSpan.cols - 1) * config.gridGap
-    const dragHeight =
-      draggingSpan.rows * itemHeight + Math.max(0, draggingSpan.rows - 1) * config.gridGap
-    const dragCenter = {
-      x: state.pointerX - clampNumber(state.offsetX, 0, dragWidth) + dragWidth / 2,
-      y: state.pointerY - clampNumber(state.offsetY, 0, dragHeight) + dragHeight / 2,
-    }
-    const position = resolveScrollDropPosition(dragCenter, overlapHit.targetRect, mergeAllowed)
-    return position === 'middle' ? 'center' : position === 'before' ? 'left' : 'right'
-  }
-
-  const triggerCompactFolderPreview = (expectedTargetId: string) => {
-    const latest = dragRef.current
-    if (!latest || latest.context !== 'outer' || !isCompactOuterDrop) return
-    if (latest.hoverTargetId !== expectedTargetId || latest.hoverZone !== 'center') return
-
-    const overlapHit = findCompactScrollGroupOverlapHit(latest)
-    if (!overlapHit || overlapHit.targetId !== expectedTargetId) return
-    const target = buildDragItemMap(latest, itemsRef.current).get(expectedTargetId)
-    if (!target) return
-    const zone = resolveCompactScrollHoverZone(latest, target, overlapHit)
-    if (zone !== 'center') return
-
-    const canCreateFolder =
-      latest.draggingIds.length === 1 &&
-      latest.draggingItem.kind === 'icon' &&
-      target.kind === 'icon'
-    const canAddToFolder = latest.draggingItem.kind === 'icon' && target.kind === 'folder'
-    if (!canCreateFolder && !canAddToFolder) return
-
-    publishMoveDragState({
-      ...latest,
-      hoverIou: overlapHit.iou,
-      folderPreviewTargetId: expectedTargetId,
-      dwellStartedAt: null,
-      lastEvasionSignature: null,
-    })
-    if (target.kind === 'folder') {
-      scheduleFolderAutoOpen(expectedTargetId)
-    }
-  }
-
-  const triggerTopLevelDwellEvasion = (
-    expectedTargetId: string,
-    expectedZone: HoverZone | null = null
-  ) => {
-    const latest = dragRef.current
-    if (!latest || latest.context === 'folder') return
-    if (latest.context === 'dock' && !isDraggingFromDock(latest.draggingId)) return
-    if (latest.hoverTargetId !== expectedTargetId) return
-    if (expectedZone !== null && latest.hoverZone !== expectedZone) return
-    if (latest.folderPreviewTargetId) return
-    const isMultiOuterDrag = latest.context === 'outer' && latest.draggingIds.length > 1
-
-    let overlapHit = findTopLevelMaxOverlapHit(latest)
-    if (!overlapHit || overlapHit.targetId !== expectedTargetId) return
-
-    const itemMap = buildDragItemMap(latest, itemsRef.current)
-    const source = latest.draggingItem
-    const target = itemMap.get(overlapHit.targetId)
-    if (!target) return
-
-    if (isCompactOuterDrop && latest.context === 'outer') {
-      overlapHit = {
-        ...overlapHit,
-        zone: resolveCompactScrollHoverZone(latest, target, overlapHit),
-      }
-      if (expectedZone !== null && overlapHit.zone !== expectedZone) return
-      if (overlapHit.zone === 'center') return
-
-      const signature = `compact-overlap:${overlapHit.targetId}:${overlapHit.zone}`
-      const rearmed = hasScrollEvasionRearmed(
-        { x: latest.pointerX, y: latest.pointerY },
-        latest.lastEvasionTriggerPointer,
-        config.evasionRearmDistance
-      )
-      if (latest.lastEvasionSignature === signature && !rearmed) return
-      const now = performance.now()
-      if (
-        latest.lastEvasionAt !== null &&
-        now - latest.lastEvasionAt < SCROLL_PREVIEW_REORDER_LOCK_MS
-      ) {
-        return
-      }
-
-      const compactPreview = buildCompactOuterPreviewOrder(latest, overlapHit)
-      const nextScrollGroupOrder = resolveScrollGroupOrderFromWorkingOrder(
-        latest,
-        compactPreview.order
-      )
-      if (
-        areSlotsEqual(compactPreview.order, latest.workingOrder) &&
-        areSlotsEqual(nextScrollGroupOrder ?? [], latest.scrollGroupOrder ?? [])
-      ) {
-        syncDragRuntime({
-          ...latest,
-          dwellStartedAt: null,
-          lastEvasionSignature: signature,
-        })
-        return
-      }
-      publishMoveDragState({
-        ...latest,
-        workingOrder: compactPreview.order,
-        scrollGroupOrder: nextScrollGroupOrder ?? latest.scrollGroupOrder,
-        previewSlotIndex: compactPreview.previewSlotIndex,
-        hoverTargetId: overlapHit.targetId,
-        hoverZone: overlapHit.zone,
-        hoverIou: overlapHit.iou,
-        folderPreviewTargetId: null,
-        dwellStartedAt: null,
-        lastEvasionSignature: signature,
-        lastEvasionTriggerPointer: { x: latest.pointerX, y: latest.pointerY },
-        lastEvasionAt: now,
-      })
-      return
-    }
-
-    const now = performance.now()
-    const candidateAnchorIndex = resolveCandidateAnchorIndexByContext(latest, {
-      allowOutside: true,
-    })
-    const previewSlotIndex = resolveTopLevelOverlapPreviewIndex(
-      latest,
-      target,
-      overlapHit,
-      resolveNearestSlotIndexByContext(latest, { allowOutside: true }),
-      candidateAnchorIndex
-    )
-    const canAddToExistingFolder =
-      source.kind === 'icon' &&
-      target.kind === 'folder' &&
-      overlapHit.zone === 'center' &&
-      overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
-    if (canAddToExistingFolder) {
-      const nextState: DragState = {
-        ...latest,
-        previewSlotIndex,
-        dockPreviewIndex: null,
-        hoverTargetId: overlapHit.targetId,
-        hoverZone: overlapHit.zone,
-        hoverIou: overlapHit.iou,
-        folderPreviewTargetId: overlapHit.targetId,
-        dwellStartedAt: null,
-        lastEvasionSignature: null,
-      }
-      publishMoveDragState(nextState)
-      return
-    }
-
-    const canFolderPreview = !isMultiOuterDrag && source.kind === 'icon' && target.kind === 'icon'
-    if (
-      canFolderPreview &&
-      overlapHit.zone === 'center' &&
-      overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
-    ) {
-      const previewState: DragState = {
-        ...latest,
-        previewSlotIndex,
-        dockPreviewIndex: null,
-        hoverTargetId: overlapHit.targetId,
-        hoverZone: overlapHit.zone,
-        hoverIou: overlapHit.iou,
-        folderPreviewTargetId: overlapHit.targetId,
-        dwellStartedAt: null,
-        lastEvasionSignature: null,
-      }
-      publishMoveDragState(previewState)
-      return
-    }
-
-    const base: DragState = {
-      ...latest,
-      previewSlotIndex,
-      dockPreviewIndex: null,
-      hoverTargetId: overlapHit.targetId,
-      hoverZone: overlapHit.zone,
-      hoverIou: overlapHit.iou,
-      folderPreviewTargetId: null,
-    }
-    const next = tryApplyTopLevelEvasion(base, overlapHit, now)
-    publishMoveDragState(next)
-  }
-
+  const {
+    resolveDockItemOrder,
+    isDraggingFromDock,
+    seedMissingOuterDragCenters,
+    resolvePagedOuterTopLevelOrder,
+    resolveCompactOuterTopLevelOrder,
+    resolveTopLevelOrder,
+    resolveTopLevelContextAtPoint,
+    resolveActiveScrollGroupOrder,
+    resolveScrollGroupOrderFromWorkingOrder,
+    resolveCompactOuterPreviewItems,
+    compactOuterPreviewOrderWithoutDragging,
+    buildCompactOuterPreviewOrder,
+    findHitByContext,
+    resolveNearestSlotIndexByContext,
+    resolveNearestDropOrderByContext,
+    resolveCandidateAnchorIndexByContext,
+    findCompactScrollGroupOverlapHit,
+    findTopLevelMaxOverlapHit,
+    resolveTopLevelOverlapPreviewIndex,
+    tryApplyTopLevelEvasion,
+    resolveCompactScrollHoverZone,
+  } = useScrollableDragGeometryController({
+    gridGap: config.gridGap,
+    evasionRearmDistance: config.evasionRearmDistance,
+    evasionCooldownMs: config.evasionCooldownMs,
+    iconImageSize: iconConfig.imgSize,
+    columns,
+    rows,
+    itemWidth,
+    itemHeight,
+    folderColumns,
+    folderItemWidth,
+    folderItemHeight,
+    folderOrderLength,
+    isCompactOuterDrop,
+    getOuterMinPageCount,
+    itemById,
+    gridRef,
+    folderGridRef,
+    dockContainerRef,
+    dockGridRef,
+    tileRefs,
+    dockSlotRefs,
+    dockItemRefs,
+    itemsRef,
+    outerSlotsRef,
+    dockKeysRef,
+    currentPageRef,
+    pageSizeRef,
+    dragPointerRef,
+    compactOuterDragBaseOrderRef,
+    compactOuterDragBaseWithoutDraggingRef,
+    compactOuterPreviewItemsRef,
+    compactOuterPreviewResultRef,
+    compactScrollLastHitPointRef,
+    compactScrollLastHitIdRef,
+    getOuterGridElementAtPoint,
+    getActiveScrollGroupItemIds,
+  })
   const {
     folderDropFlight,
     multiDropFlight,
@@ -1350,1006 +454,138 @@ export function useScrollableIconGridDragWorkflow({
     onFolderCreateCommitted,
   })
 
-  const openExistingFolderDuringDrag = (expectedTargetId: string) => {
-    const latest = dragRef.current
-    if (
-      !latest ||
-      latest.context !== 'outer' ||
-      latest.draggingIds.length !== 1 ||
-      latest.draggingItem.kind !== 'icon' ||
-      latest.folderPreviewTargetId !== expectedTargetId ||
-      latest.hoverTargetId !== expectedTargetId ||
-      latest.hoverZone !== 'center'
-    ) {
-      return
-    }
-
-    const target = itemsRef.current.find(
-      item => item.kind === 'folder' && getId(item) === expectedTargetId
-    )
-    if (!target || target.kind !== 'folder') return
-
-    const pointer = dragPointerRef.current
-    const validationState = pointer
-      ? { ...latest, pointerX: pointer.pointerX, pointerY: pointer.pointerY }
-      : latest
-    const currentOverlap = isCompactOuterDrop
-      ? findCompactScrollGroupOverlapHit(validationState)
-      : findTopLevelMaxOverlapHit(validationState)
-    if (!currentOverlap || currentOverlap.targetId !== expectedTargetId) return
-    const currentZone = isCompactOuterDrop
-      ? resolveCompactScrollHoverZone(validationState, target, currentOverlap)
-      : currentOverlap.zone
-    if (currentZone !== 'center') return
-
-    const sourceFolderReplacementId = latest.sourceFolderId
-      ? (() => {
-          const draggingIdSet = new Set(latest.draggingIds)
-          const remainingChildren = getFolderChildrenById(
-            itemsRef.current,
-            latest.sourceFolderId
-          ).filter(child => !draggingIdSet.has(child.key))
-          return remainingChildren.length === 1 ? remainingChildren[0].key : null
-        })()
-      : null
-    const nextChildren = commitIntoExistingFolderForAutoOpen(latest, expectedTargetId)
-    if (!nextChildren) return
-    const nextWorkingOrder = buildScrollFolderAutoOpenOrder(
-      nextChildren.map(child => child.key),
-      latest.draggingId
-    )
-    if (!nextWorkingOrder) return
-
-    clearOuterDwellTimer()
-    clearFolderAutoOpenTimer()
-    onOuterDragFinished?.(latest, null, sourceFolderReplacementId)
-    dragPointerCaptureTargetRef.current = releaseDragPointerCapture(
-      dragPointerCaptureTargetRef.current,
-      latest.pointerId
-    )
-    dragPointerCaptureTargetRef.current = activateDragPointerCapture(
-      containerRef.current,
-      latest.pointerId
-    )
-    if (onOpenFolder) onOpenFolder(target.id)
-    else setOpenFolderId(target.id)
-
-    commitDragState({
-      ...latest,
-      context: 'folder',
-      sourceFolderId: target.id,
-      workingOrder: nextWorkingOrder,
-      scrollGroupOrder: null,
-      sourceSlotIndex: null,
-      previewSlotIndex: null,
-      dockPreviewIndex: null,
-      hoverTargetId: null,
-      hoverZone: null,
-      hoverIou: 0,
-      centerStartedAt: null,
-      dwellStartedAt: null,
-      folderPreviewTargetId: null,
-      lastEvasionSignature: null,
-      lastEvasionTriggerPointer: null,
-      lastEvasionAt: null,
-      initialCenters: {
-        ...collectCenters(folderTileRefs.current),
-        [latest.draggingId]: { x: latest.pointerX, y: latest.pointerY },
-      },
-    })
-  }
-
-  const scheduleFolderAutoOpen = (targetFolderId: string) => {
-    const current = dragRef.current
-    const target = itemsRef.current.find(
-      item => item.kind === 'folder' && getId(item) === targetFolderId
-    )
-    if (
-      !current ||
-      current.context !== 'outer' ||
-      current.draggingIds.length !== 1 ||
-      current.draggingItem.kind !== 'icon' ||
-      !target ||
-      target.kind !== 'folder'
-    ) {
-      clearFolderAutoOpenTimer()
-      return
-    }
-    if (
-      folderAutoOpenTimerRef.current !== null &&
-      folderAutoOpenTargetIdRef.current === targetFolderId
-    ) {
-      return
-    }
-
-    clearFolderAutoOpenTimer()
-    folderAutoOpenTargetIdRef.current = targetFolderId
-    folderAutoOpenTimerRef.current = window.setTimeout(() => {
-      const expectedTargetId = folderAutoOpenTargetIdRef.current
-      folderAutoOpenTimerRef.current = null
-      folderAutoOpenTargetIdRef.current = null
-      if (expectedTargetId) openExistingFolderDuringDrag(expectedTargetId)
-    }, SCROLL_FOLDER_AUTO_OPEN_DWELL_MS)
-  }
-
-  const moveDragToTopLevelContext = (
-    state: DragState,
-    context: 'outer' | 'dock',
-    x: number,
-    y: number
-  ): DragState => {
-    if (state.context === 'folder' && state.draggingItem.kind !== 'icon') {
-      return { ...state, pointerX: x, pointerY: y }
-    }
-    if (state.context === 'folder') {
-      if (onCloseFolder) onCloseFolder()
-      else setOpenFolderId(null)
-    }
-
-    const nextOrder = resolveTopLevelOrder(context)
-    const sourceIndex = nextOrder.indexOf(state.draggingId)
-    let workingOrder = [...nextOrder]
-    if (sourceIndex >= 0) {
-      workingOrder[sourceIndex] = null
-    }
-    const initialCenters = collectCenters(
-      context === 'dock' ? dockItemRefs.current : tileRefs.current
-    )
-    state.draggingIds.forEach(id => {
-      if (!initialCenters[id] && state.initialCenters[id]) {
-        initialCenters[id] = state.initialCenters[id]
-      }
-    })
-    initialCenters[state.draggingId] = { x, y }
-    if (context === 'outer' && state.draggingIds.length > 1) {
-      seedMissingOuterDragCenters({
-        initialCenters,
-        draggingIds: state.draggingIds,
-        sourceOrder: nextOrder,
-        leadId: state.draggingId,
-        fallbackX: x,
-        fallbackY: y,
-      })
-    }
-
-    const nextState: DragState = {
-      ...state,
-      context,
-      pointerX: x,
-      pointerY: y,
-      workingOrder,
-      sourceSlotIndex: sourceIndex >= 0 ? sourceIndex : null,
-      previewSlotIndex: null,
-      dockPreviewIndex: null,
-      hoverTargetId: null,
-      hoverZone: null,
-      hoverIou: 0,
-      centerStartedAt: null,
-      dwellStartedAt: null,
-      folderPreviewTargetId: null,
-      lastEvasionSignature: null,
-      lastEvasionTriggerPointer: null,
-      lastEvasionAt: null,
-      initialCenters,
-    }
-    nextState.scrollGroupOrder =
-      context === 'outer' ? resolveActiveScrollGroupOrder(nextState) : null
-    if (context === 'outer' && isCompactOuterDrop) {
-      compactOuterDragBaseOrderRef.current = nextOrder
-      compactOuterDragBaseWithoutDraggingRef.current = null
-      compactOuterPreviewItemsRef.current = null
-      compactOuterPreviewResultRef.current = null
-      nextState.workingOrder = compactOuterPreviewOrderWithoutDragging(nextState)
-      return {
-        ...nextState,
-        previewSlotIndex: null,
-        dockPreviewIndex: null,
-      }
-    }
-    const previewSlotIndex = resolveNearestSlotIndexByContext(nextState, { allowOutside: true })
-    return {
-      ...nextState,
-      previewSlotIndex,
-      dockPreviewIndex: context === 'dock' ? previewSlotIndex : null,
-    }
-  }
-
-  const scheduleFolderExit = () => {
-    if (
-      !canExitScrollFolderThroughMask({
-        dragStartedInFolder: dragStartedInFolderRef.current,
-        enteredFolderContent: enteredFolderContentRef.current,
-      })
-    ) {
-      clearFolderExitTimer()
-      return
-    }
-    if (folderExitTimerRef.current !== null) return
-    folderExitTimerRef.current = window.setTimeout(() => {
-      folderExitTimerRef.current = null
-      const latest = dragRef.current
-      const pointer = dragPointerRef.current
-      const panel = folderPanelRef.current
-      if (!latest || latest.context !== 'folder' || !pointer || !panel) return
-      const panelRect = panel.getBoundingClientRect()
-      if (
-        !canExitScrollFolderThroughMask({
-          dragStartedInFolder: dragStartedInFolderRef.current,
-          enteredFolderContent: enteredFolderContentRef.current,
-        })
-      ) {
-        return
-      }
-      if (
-        !isPointOutsideScrollFolderContent({ x: pointer.pointerX, y: pointer.pointerY }, panelRect)
-      ) {
-        return
-      }
-      commitDragState(
-        moveDragToTopLevelContext(
-          { ...latest, pointerX: pointer.pointerX, pointerY: pointer.pointerY },
-          resolveTopLevelContextAtPoint(pointer.pointerX, pointer.pointerY),
-          pointer.pointerX,
-          pointer.pointerY
-        )
-      )
-    }, SCROLL_FOLDER_EXIT_DWELL_MS)
-  }
-
-  const beginDrag = (pending: PendingDrag, x: number, y: number) => {
-    clearTimer()
-    clearOuterDwellTimer()
-    clearFolderExitTimer()
-    dragStartedInFolderRef.current = pending.context === 'folder'
-    enteredFolderContentRef.current = false
-    resetDropVisuals()
-    compactOuterDragBaseOrderRef.current = null
-    compactOuterDragBaseWithoutDraggingRef.current = null
-    compactOuterPreviewItemsRef.current = null
-    compactOuterPreviewResultRef.current = null
-    compactScrollLastHitPointRef.current = null
-    compactScrollLastHitIdRef.current = null
-    const sourceOrder =
-      pending.context === 'folder' && pending.sourceFolderId
-        ? getFolderChildrenById(itemsRef.current, pending.sourceFolderId).map(child => child.key)
-        : pending.context === 'dock'
-          ? resolveDockItemOrder()
-          : isCompactOuterDrop
-            ? resolveCompactOuterTopLevelOrder()
-            : resolvePagedOuterTopLevelOrder()
-    if (pending.context === 'outer' && isCompactOuterDrop) {
-      compactOuterDragBaseOrderRef.current = sourceOrder
-    }
-    if (
-      pending.context === 'outer' &&
-      !isCompactOuterDrop &&
-      !areSlotsEqual(sourceOrder, outerSlotsRef.current)
-    ) {
-      outerSlotsRef.current = sourceOrder
-      setOuterSlots(sourceOrder)
-    }
-    const sourceIndex = sourceOrder.indexOf(pending.itemId)
-    if (sourceIndex < 0) {
-      clearPending()
-      return
-    }
-
-    const draggingItem =
-      pending.context === 'folder' && pending.sourceFolderId
-        ? getFolderMapById(pending.sourceFolderId, itemsRef.current).get(pending.itemId)
-        : itemById.get(pending.itemId)
-    if (!draggingItem) {
-      clearPending()
-      return
-    }
-
-    const draggingIds = resolveMixedSelectionDragIds({
-      context: pending.context,
-      leadId: pending.itemId,
-      leadItem: draggingItem,
-      sourceOrder,
-      sourceFolderId: pending.sourceFolderId,
-      openFolderId,
-      selectionMode,
-      selectedIconKeys: selectedIconKeySet,
-      items: itemsRef.current,
-      itemById,
-      getTopLevelOrder: resolveTopLevelOrder,
-    })
-    const selectedFolderChildrenByFolderId = getFolderChildSelectionsByIds(
-      itemsRef.current,
-      draggingIds
-    )
-    const selectedFolderDragIds = Array.from(selectedFolderChildrenByFolderId.values()).flatMap(
-      children => children.map(child => child.key)
-    )
-
-    let workingOrder: Array<string | null> = [...sourceOrder]
-    if (pending.context === 'folder') {
-      workingOrder[sourceIndex] = DRAG_HOLE_ID
-    } else {
-      workingOrder[sourceIndex] = null
-    }
-    const nextState: DragState = {
-      context: pending.context,
-      sourceFolderId: pending.sourceFolderId,
-      pointerId: pending.pointerId,
-      dragStartedAt: performance.now(),
-      draggingId: pending.itemId,
-      draggingItem,
-      draggingIds,
-      pointerX: x,
-      pointerY: y,
-      offsetX: pending.offsetX,
-      offsetY: pending.offsetY,
-      workingOrder,
-      sourceSlotIndex: pending.context === 'folder' ? null : sourceIndex,
-      previewSlotIndex: pending.context === 'folder' ? null : sourceIndex,
-      dockPreviewIndex: pending.context === 'dock' ? sourceIndex : null,
-      hoverTargetId: null,
-      hoverZone: null,
-      hoverIou: 0,
-      centerStartedAt: null,
-      dwellStartedAt: null,
-      folderPreviewTargetId: null,
-      lastEvasionSignature: null,
-      lastEvasionTriggerPointer: null,
-      lastEvasionAt: null,
-      initialCenters:
-        pending.context === 'folder'
-          ? collectCenters(folderTileRefs.current)
-          : pending.context === 'dock'
-            ? collectCenters(dockItemRefs.current)
-            : collectCenters(tileRefs.current),
-    }
-    nextState.scrollGroupOrder =
-      pending.context === 'outer' ? resolveActiveScrollGroupOrder(nextState) : null
-    if (pending.context === 'outer' && isCompactOuterDrop) {
-      nextState.workingOrder = compactOuterPreviewOrderWithoutDragging(nextState)
-      nextState.previewSlotIndex = null
-      nextState.dockPreviewIndex = null
-    }
-    seedMissingInitialCenters(
-      nextState.initialCenters,
-      draggingIds,
-      tileRefs.current,
-      dockItemRefs.current
-    )
-    if (pending.context !== 'folder' && selectedFolderDragIds.length > 0) {
-      const folderCenters = collectCenters(folderTileRefs.current)
-      selectedFolderChildrenByFolderId.forEach((children, folderId) => {
-        const folderTileNode =
-          tileRefs.current.get(`folder:${folderId}`) ??
-          dockItemRefs.current.get(`folder:${folderId}`)
-        const folderTileRect = folderTileNode?.getBoundingClientRect() ?? null
-        const collapsedFolderCenter = folderTileRect
-          ? {
-              x: folderTileRect.left + folderTileRect.width / 2,
-              y: folderTileRect.top + folderTileRect.height / 2,
-            }
-          : null
-        const stackOffset = Math.min(10, Math.max(4, Math.round(iconConfig.imgSize * 0.14)))
-
-        children.forEach((child, index) => {
-          if (folderCenters[child.key]) {
-            nextState.initialCenters[child.key] = folderCenters[child.key]
-            return
-          }
-          if (!collapsedFolderCenter) return
-
-          const columnOffset = (index % 2) - 0.5
-          const rowOffset = Math.floor(index / 2)
-          nextState.initialCenters[child.key] = {
-            x: collapsedFolderCenter.x + columnOffset * stackOffset * 2,
-            y: collapsedFolderCenter.y + rowOffset * stackOffset - stackOffset / 2,
-          }
-        })
-      })
-      setOpenFolderId(null)
-    }
-    if (pending.context === 'outer' && draggingIds.length > 1) {
-      seedMissingOuterDragCenters({
-        initialCenters: nextState.initialCenters,
-        draggingIds,
-        sourceOrder,
-        leadId: pending.itemId,
-        fallbackX: x,
-        fallbackY: y,
-      })
-    }
-
-    if (pending.context === 'folder' && draggingIds.length > 1 && draggingItem.kind === 'icon') {
-      commitDragState(moveDragToTopLevelContext(nextState, 'outer', x, y))
-      clearPending()
-      return
-    }
-
-    // 只有真正进入拖拽后才抢占 pointer capture，避免普通点击的 click 被外层 tile 吞掉。
-    dragPointerCaptureTargetRef.current = activateDragPointerCapture(
-      pendingPointerCaptureTargetRef.current,
-      pending.pointerId
-    )
-    pendingPointerCaptureTargetRef.current = null
-    commitDragState(nextState)
-    clearPending()
-  }
-
-  const processDragMove = (pointerId: number, x: number, y: number) => {
-    const current = dragRef.current
-    if (!current || current.pointerId !== pointerId) return
-
-    let baseState: DragState = { ...current, pointerX: x, pointerY: y }
-    if (current.context === 'folder') {
-      const panel = folderPanelRef.current
-      if (panel) {
-        const panelRect = panel.getBoundingClientRect()
-        const outsidePanel = isPointOutsideScrollFolderContent({ x, y }, panelRect)
-        if (outsidePanel) {
-          scheduleFolderExit()
-        } else {
-          enteredFolderContentRef.current = true
-          clearFolderExitTimer()
-        }
-      }
-    }
-
-    if (baseState.context !== 'folder') {
-      const topLevelContext = resolveTopLevelContextAtPoint(x, y)
-      if (baseState.context !== topLevelContext) {
-        baseState = moveDragToTopLevelContext(baseState, topLevelContext, x, y)
-      }
-      const isMultiOuterDrag = baseState.context === 'outer' && baseState.draggingIds.length > 1
-
-      if (baseState.context === 'outer' && !isCompactOuterDrop) {
-        maybeHandleOuterEdgeSwitch(baseState, x, y)
-      } else {
-        clearEdgeSwitchTimer()
-      }
-
-      const nearestSlotIndex = resolveNearestSlotIndexByContext(baseState, {
-        allowOutside: true,
-      })
-      const candidateAnchorIndex = resolveCandidateAnchorIndexByContext(baseState, {
-        allowOutside: true,
-      })
-      const compactGridAtPointer =
-        isCompactOuterDrop &&
-        baseState.context === 'outer' &&
-        !baseState.scrollGroupOrder &&
-        getOuterGridElementAtPoint
-          ? getOuterGridElementAtPoint(x, y)
-          : null
-      const rawCompactGridHit =
-        isCompactOuterDrop && baseState.context === 'outer' && !baseState.scrollGroupOrder
-          ? findHitByContext(baseState, x, y)
-          : null
-      const compactGridHit = rawCompactGridHit
-        ? {
-            ...rawCompactGridHit,
-            targetId: resolveCompactStableTargetId({
-              baseOrder: compactOuterPreviewOrderWithoutDragging(baseState),
-              workingOrder: baseState.workingOrder,
-              draggingIds: baseState.draggingIds,
-              slotIndex: rawCompactGridHit.globalSlotIndex,
-            }),
-          }
-        : null
-      let overlapHit = findTopLevelMaxOverlapHit(baseState)
-      if (overlapHit && baseState.draggingIds.includes(overlapHit.targetId)) {
-        overlapHit = null
-      }
-      const compactGapOverlapTarget = overlapHit
-        ? resolveCompactOuterPreviewItems(baseState).find(
-            item => getId(item) === overlapHit?.targetId
-          )
-        : null
-      const isCompactFolderBoundaryGap = compactGapOverlapTarget?.kind === 'folder'
-      if (compactGridAtPointer && !compactGridHit && !isCompactFolderBoundaryGap) {
-        overlapHit = null
-      }
-      if (
-        compactGridHit?.targetId &&
-        overlapHit &&
-        overlapHit.targetId !== compactGridHit.targetId
-      ) {
-        overlapHit = null
-      }
-      if (
-        compactGridHit &&
-        isCompactSlotVacantForDrag({
-          order: baseState.workingOrder,
-          items: resolveCompactOuterPreviewItems(baseState),
-          draggingIds: baseState.draggingIds,
-          slotIndex: compactGridHit.globalSlotIndex,
-          pageSize: pageSizeRef.current,
-          columns,
-        })
-      ) {
-        overlapHit = null
-      }
-      const compactOverlapTargetChanged =
-        isCompactOuterDrop &&
-        baseState.context === 'outer' &&
-        overlapHit !== null &&
-        baseState.hoverTargetId !== null &&
-        baseState.hoverTargetId !== overlapHit.targetId
-      const compactMovedSinceLastReorder =
-        !baseState.lastEvasionTriggerPointer ||
-        Math.hypot(
-          x - baseState.lastEvasionTriggerPointer.x,
-          y - baseState.lastEvasionTriggerPointer.y
-        ) >= config.evasionRearmDistance
-      if (compactOverlapTargetChanged && !compactMovedSinceLastReorder) {
-        clearOuterDwellTimer()
-        publishMoveDragState(baseState)
-        return
-      }
-      const draggingFromDock = isDraggingFromDock(baseState.draggingId)
-      const isMultiDockDrag = baseState.context === 'dock' && baseState.draggingIds.length > 1
-
-      if (!overlapHit) {
-        clearOuterDwellTimer()
-        if (compactGridHit) {
-          const compactPreview = buildCompactOuterDropPreview({
-            slots: compactOuterDragBaseOrderRef.current ?? resolveCompactOuterTopLevelOrder(),
-            items: resolveCompactOuterPreviewItems(baseState),
-            draggingIds: baseState.draggingIds,
-            sourceIndex: baseState.sourceSlotIndex,
-            targetIndex: compactGridHit.globalSlotIndex,
-            targetId: compactGridHit.targetId,
-            zone: compactGridHit.zone,
-            pageSize: pageSizeRef.current,
-            columns,
-            minPageCount: getOuterMinPageCount?.(),
-          })
-          const compactPreviewChanged = !areSlotsEqual(compactPreview.order, baseState.workingOrder)
-          publishMoveDragState({
-            ...baseState,
-            workingOrder: compactPreview.order,
-            scrollGroupOrder: resolveScrollGroupOrderFromWorkingOrder(
-              baseState,
-              compactPreview.order
-            ),
-            previewSlotIndex: compactPreview.previewSlotIndex,
-            dockPreviewIndex: null,
-            hoverTargetId: compactGridHit.targetId,
-            hoverZone: compactGridHit.zone,
-            hoverIou: 0,
-            centerStartedAt: null,
-            dwellStartedAt: null,
-            folderPreviewTargetId: null,
-            lastEvasionSignature: compactPreviewChanged
-              ? `compact-grid:${compactGridHit.targetId ?? 'empty'}:${compactGridHit.globalSlotIndex}`
-              : baseState.lastEvasionSignature,
-            lastEvasionTriggerPointer: compactPreviewChanged
-              ? { x, y }
-              : baseState.lastEvasionTriggerPointer,
-            lastEvasionAt: compactPreviewChanged ? performance.now() : baseState.lastEvasionAt,
-          })
-          return
-        }
-        const resetState: DragState =
-          isCompactOuterDrop && baseState.context === 'outer'
-            ? {
-                ...baseState,
-                hoverTargetId: null,
-                hoverZone: null,
-                hoverIou: 0,
-                centerStartedAt: null,
-                dwellStartedAt: null,
-                folderPreviewTargetId: null,
-                lastEvasionSignature: null,
-                dockPreviewIndex: null,
-              }
-            : {
-                ...resetOuterInteraction(baseState, nearestSlotIndex),
-                dockPreviewIndex: baseState.context === 'dock' ? nearestSlotIndex : null,
-              }
-        publishMoveDragState(resetState)
-        return
-      }
-
-      const itemMap = buildDragItemMap(baseState, itemsRef.current)
-      const source = baseState.draggingItem
-      const target = itemMap.get(overlapHit.targetId)
-      if (!target) {
-        clearOuterDwellTimer()
-        const resetState: DragState =
-          isCompactOuterDrop && baseState.context === 'outer'
-            ? {
-                ...baseState,
-                hoverTargetId: null,
-                hoverZone: null,
-                hoverIou: 0,
-                centerStartedAt: null,
-                dwellStartedAt: null,
-                folderPreviewTargetId: null,
-                lastEvasionSignature: null,
-                dockPreviewIndex: null,
-              }
-            : {
-                ...resetOuterInteraction(baseState, nearestSlotIndex),
-                dockPreviewIndex: baseState.context === 'dock' ? nearestSlotIndex : null,
-              }
-        publishMoveDragState(resetState)
-        return
-      }
-
-      if (isCompactOuterDrop && baseState.context === 'outer') {
-        overlapHit = {
-          ...overlapHit,
-          zone: resolveCompactScrollHoverZone(baseState, target, overlapHit),
-        }
-      }
-
-      if (baseState.context === 'dock' && !draggingFromDock) {
-        clearOuterDwellTimer()
-        const stableDockPreviewIndex =
-          baseState.dockPreviewIndex ?? nearestSlotIndex ?? overlapHit.targetIndex
-
-        const canCreateFolder =
-          !isMultiDockDrag &&
-          source.kind === 'icon' &&
-          target.kind === 'icon' &&
-          overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
-        const canAddToExistingFolder =
-          source.kind === 'icon' &&
-          target.kind === 'folder' &&
-          overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
-
-        if (canCreateFolder || canAddToExistingFolder) {
-          const previewState: DragState = {
-            ...baseState,
-            previewSlotIndex: overlapHit.targetIndex,
-            dockPreviewIndex: stableDockPreviewIndex,
-            hoverTargetId: overlapHit.targetId,
-            hoverZone: overlapHit.zone,
-            hoverIou: overlapHit.iou,
-            centerStartedAt: null,
-            dwellStartedAt: null,
-            folderPreviewTargetId: overlapHit.targetId,
-            lastEvasionSignature: null,
-          }
-          publishMoveDragState(previewState)
-          return
-        }
-
-        const insertState: DragState = {
-          ...resetOuterInteraction(baseState, nearestSlotIndex),
-          dockPreviewIndex: nearestSlotIndex,
-          hoverTargetId: overlapHit.targetId,
-          hoverZone: overlapHit.zone,
-          hoverIou: overlapHit.iou,
-        }
-        publishMoveDragState(insertState)
-        return
-      }
-
-      if (baseState.context === 'dock' && draggingFromDock) {
-        clearOuterDwellTimer()
-        const canFolderPreview =
-          !isMultiDockDrag &&
-          source.kind === 'icon' &&
-          target.kind === 'icon' &&
-          overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
-        const canAddToExistingFolder =
-          source.kind === 'icon' &&
-          target.kind === 'folder' &&
-          overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
-
-        if (canFolderPreview || canAddToExistingFolder) {
-          const previewState: DragState = {
-            ...baseState,
-            previewSlotIndex: overlapHit.targetIndex,
-            dockPreviewIndex: overlapHit.targetIndex,
-            hoverTargetId: overlapHit.targetId,
-            hoverZone: overlapHit.zone,
-            hoverIou: overlapHit.iou,
-            centerStartedAt: null,
-            dwellStartedAt: null,
-            folderPreviewTargetId: overlapHit.targetId,
-            lastEvasionSignature: null,
-          }
-          publishMoveDragState(previewState)
-          return
-        }
-
-        const currentHoleIndex = baseState.workingOrder.indexOf(null)
-        const currentTargetIndex = baseState.workingOrder.indexOf(overlapHit.targetId)
-        const placeAfter =
-          overlapHit.zone === 'right'
-            ? true
-            : overlapHit.zone === 'left'
-              ? false
-              : currentHoleIndex > currentTargetIndex
-        const nextWorkingOrder = buildDockLinearPreviewOrder(
-          baseState.workingOrder,
-          overlapHit.targetId,
-          placeAfter
-        )
-        const nextPreviewIndex = nextWorkingOrder.indexOf(null)
-        const insertState: DragState = {
-          ...resetOuterInteraction(baseState, nextPreviewIndex),
-          workingOrder: nextWorkingOrder,
-          previewSlotIndex: nextPreviewIndex,
-          dockPreviewIndex: nextPreviewIndex,
-          hoverTargetId: overlapHit.targetId,
-          hoverZone: overlapHit.zone,
-          hoverIou: overlapHit.iou,
-        }
-        publishMoveDragState(insertState)
-        return
-      }
-
-      const now = performance.now()
-      const previewSlotIndex = resolveTopLevelOverlapPreviewIndex(
-        baseState,
-        target,
-        overlapHit,
-        nearestSlotIndex,
-        candidateAnchorIndex
-      )
-      const next: DragState = {
-        ...baseState,
-        previewSlotIndex,
-        dockPreviewIndex: null,
-        hoverTargetId: overlapHit.targetId,
-        hoverZone: overlapHit.zone,
-        hoverIou: overlapHit.iou,
-        centerStartedAt: null,
-      }
-
-      const canFolderPreview = !isMultiOuterDrag && source.kind === 'icon' && target.kind === 'icon'
-      const canAddToExistingFolder = source.kind === 'icon' && target.kind === 'folder'
-      const canPreviewFolderAtCenter =
-        overlapHit.zone === 'center' &&
-        (canFolderPreview || canAddToExistingFolder) &&
-        (isCompactOuterDrop || overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold)
-      if (canPreviewFolderAtCenter) {
-        if (isCompactOuterDrop && baseState.context === 'outer') {
-          if (baseState.folderPreviewTargetId === overlapHit.targetId) {
-            clearOuterDwellTimer()
-            next.folderPreviewTargetId = overlapHit.targetId
-            next.dwellStartedAt = null
-            next.lastEvasionSignature = null
-            publishMoveDragState(next)
-            if (target.kind === 'folder') {
-              scheduleFolderAutoOpen(overlapHit.targetId)
-            }
-            return
-          }
-
-          const now = performance.now()
-          const sameTargetAndZone =
-            baseState.hoverTargetId === overlapHit.targetId && baseState.hoverZone === 'center'
-          next.folderPreviewTargetId = null
-          next.dwellStartedAt =
-            sameTargetAndZone && baseState.dwellStartedAt !== null ? baseState.dwellStartedAt : now
-          next.lastEvasionSignature = null
-          const dwellElapsed = now - (next.dwellStartedAt ?? now)
-          const targetChanged =
-            outerDwellTargetIdRef.current !== overlapHit.targetId ||
-            outerDwellZoneRef.current !== 'center'
-          if (targetChanged) clearOuterDwellTimer()
-          if (outerDwellTimerRef.current === null) {
-            outerDwellTargetIdRef.current = overlapHit.targetId
-            outerDwellZoneRef.current = 'center'
-            outerDwellTimerRef.current = window.setTimeout(
-              () => {
-                const targetId = outerDwellTargetIdRef.current
-                outerDwellTimerRef.current = null
-                if (targetId) triggerCompactFolderPreview(targetId)
-              },
-              Math.max(0, SCROLL_FOLDER_PREVIEW_DWELL_MS - dwellElapsed)
-            )
-          }
-          publishMoveDragState(next)
-          return
-        }
-
-        clearOuterDwellTimer()
-        next.folderPreviewTargetId = overlapHit.targetId
-        next.dwellStartedAt = null
-        next.lastEvasionSignature = null
-        publishMoveDragState(next)
-        if (baseState.context === 'outer' && target.kind === 'folder') {
-          scheduleFolderAutoOpen(overlapHit.targetId)
-        }
-        return
-      }
-
-      if (isCompactOuterDrop && baseState.context === 'outer') {
-        next.folderPreviewTargetId = null
-        const signature = `compact-overlap:${overlapHit.targetId}:${overlapHit.zone}`
-        const rearmed = hasScrollEvasionRearmed(
-          { x, y },
-          baseState.lastEvasionTriggerPointer,
-          config.evasionRearmDistance
-        )
-        if (baseState.lastEvasionSignature === signature && !rearmed) {
-          clearOuterDwellTimer()
-          next.dwellStartedAt = null
-          publishMoveDragState(next)
-          return
-        }
-
-        const now = performance.now()
-        const sameTargetAndZone =
-          baseState.hoverTargetId === overlapHit.targetId && baseState.hoverZone === overlapHit.zone
-        next.dwellStartedAt =
-          sameTargetAndZone && baseState.dwellStartedAt !== null ? baseState.dwellStartedAt : now
-        const dwellElapsed = now - (next.dwellStartedAt ?? now)
-        const lockRemaining =
-          baseState.lastEvasionAt === null
-            ? 0
-            : Math.max(0, SCROLL_PREVIEW_REORDER_LOCK_MS - (now - baseState.lastEvasionAt))
-        const remainingMs = Math.max(
-          0,
-          SCROLL_PREVIEW_REORDER_DWELL_MS - dwellElapsed,
-          lockRemaining
-        )
-        const targetChanged =
-          outerDwellTargetIdRef.current !== overlapHit.targetId ||
-          outerDwellZoneRef.current !== overlapHit.zone
-        if (targetChanged) clearOuterDwellTimer()
-        if (outerDwellTimerRef.current === null) {
-          outerDwellTargetIdRef.current = overlapHit.targetId
-          outerDwellZoneRef.current = overlapHit.zone
-          outerDwellTimerRef.current = window.setTimeout(() => {
-            const targetId = outerDwellTargetIdRef.current
-            const zone = outerDwellZoneRef.current
-            outerDwellTimerRef.current = null
-            if (!targetId || !zone) return
-            triggerTopLevelDwellEvasion(targetId, zone)
-          }, remainingMs)
-        }
-        publishMoveDragState(next)
-        return
-      }
-
-      next.folderPreviewTargetId = null
-      const sameTarget = baseState.hoverTargetId === overlapHit.targetId
-      next.dwellStartedAt =
-        sameTarget && baseState.dwellStartedAt !== null ? baseState.dwellStartedAt : now
-      if (!sameTarget) {
-        next.lastEvasionSignature = null
-      }
-
-      const dwellSince = next.dwellStartedAt ?? now
-      const remainingMs = Math.max(0, OUTER_DRAG_RULES.evasionDwellMs - (now - dwellSince))
-      const targetChanged = outerDwellTargetIdRef.current !== overlapHit.targetId
-      if (targetChanged) {
-        clearOuterDwellTimer()
-      }
-      if (outerDwellTimerRef.current === null) {
-        outerDwellTargetIdRef.current = overlapHit.targetId
-        outerDwellZoneRef.current = null
-        outerDwellTimerRef.current = window.setTimeout(() => {
-          const targetId = outerDwellTargetIdRef.current
-          outerDwellTimerRef.current = null
-          if (!targetId) return
-          triggerTopLevelDwellEvasion(targetId)
-        }, remainingMs)
-      }
-
-      publishMoveDragState(next)
-      return
-    }
-
-    clearOuterDwellTimer()
-
-    const hit = findHitByContext(baseState, x, y)
-    if (!hit) {
-      const resetState: DragState = {
-        ...baseState,
-        hoverTargetId: null,
-        hoverZone: null,
-        hoverIou: 0,
-        centerStartedAt: null,
-        dwellStartedAt: null,
-        folderPreviewTargetId: null,
-        lastEvasionSignature: null,
-      }
-      publishMoveDragState(resetState)
-      return
-    }
-
-    if (hit.targetId === null) {
-      const next: DragState = {
-        ...baseState,
-        hoverTargetId: null,
-        hoverZone: null,
-        hoverIou: 0,
-        centerStartedAt: null,
-        dwellStartedAt: null,
-        folderPreviewTargetId: null,
-        lastEvasionSignature: null,
-        workingOrder: moveDragHoleToIndex(baseState.workingOrder, hit.globalSlotIndex),
-      }
-      publishMoveDragState(next)
-      return
-    }
-
-    const itemMap = buildDragItemMap(baseState, itemsRef.current)
-    const source = baseState.draggingItem
-    const target = itemMap.get(hit.targetId)
-    if (!target) {
-      publishMoveDragState(baseState)
-      return
-    }
-
-    const next: DragState = {
-      ...baseState,
-      hoverTargetId: hit.targetId,
-      hoverZone: hit.zone,
-      hoverIou: 0,
-      dwellStartedAt: null,
-    }
-
-    const canFolder = source.kind === 'icon' && target.kind === 'icon'
-    next.centerStartedAt = null
-    next.folderPreviewTargetId = null
-
-    const sourceCenter = baseState.initialCenters[baseState.draggingId]
-    const targetCenter = baseState.initialCenters[hit.targetId]
-    const horizontal =
-      !sourceCenter || !targetCenter
-        ? null
-        : targetCenter.x > sourceCenter.x
-          ? 'right'
-          : targetCenter.x < sourceCenter.x
-            ? 'left'
-            : null
-
-    const sideZone = hit.zone === 'left' || hit.zone === 'right'
-    const shouldEvasion = canFolder && sideZone && horizontal === hit.zone
-    const targetIndex = baseState.workingOrder.indexOf(hit.targetId)
-    if (targetIndex < 0) {
-      publishMoveDragState(next)
-      return
-    }
-
-    let desiredHoleIndex = targetIndex
-    if (shouldEvasion) {
-      const now = performance.now()
-      const signature = `${hit.targetId}:${hit.zone}`
-      const movedSinceLastEvasion =
-        !baseState.lastEvasionTriggerPointer ||
-        Math.hypot(
-          x - baseState.lastEvasionTriggerPointer.x,
-          y - baseState.lastEvasionTriggerPointer.y
-        ) >= config.evasionRearmDistance
-      const cooledDownSinceLastEvasion =
-        baseState.lastEvasionAt === null ||
-        now - baseState.lastEvasionAt >= config.evasionCooldownMs
-
-      const shouldTriggerThisFrame =
-        movedSinceLastEvasion &&
-        cooledDownSinceLastEvasion &&
-        baseState.lastEvasionSignature !== signature
-
-      if (!shouldTriggerThisFrame) {
-        next.lastEvasionSignature = baseState.lastEvasionSignature
-        next.lastEvasionAt = baseState.lastEvasionAt
-        publishMoveDragState(next)
-        return
-      }
-
-      next.lastEvasionSignature = signature
-      next.lastEvasionTriggerPointer = { x, y }
-      next.lastEvasionAt = now
-    } else {
-      next.lastEvasionSignature = null
-      next.lastEvasionAt = baseState.lastEvasionAt
-      if (hit.zone === 'right' || hit.zone === 'down') {
-        desiredHoleIndex = Math.min(baseState.workingOrder.length - 1, targetIndex + 1)
-      }
-    }
-
-    next.workingOrder = moveDragHoleToIndex(baseState.workingOrder, desiredHoleIndex)
-    publishMoveDragState(next)
-  }
-
+  const {
+    triggerCompactFolderPreview,
+    triggerTopLevelDwellEvasion,
+    scheduleFolderAutoOpen,
+    moveDragToTopLevelContext,
+    scheduleFolderExit,
+  } = useScrollableFolderDragController({
+    isCompactOuterDrop,
+    evasionRearmDistance: config.evasionRearmDistance,
+    dragRef,
+    itemsRef,
+    dragPointerRef,
+    folderAutoOpenTimerRef,
+    folderAutoOpenTargetIdRef,
+    folderExitTimerRef,
+    dragStartedInFolderRef,
+    enteredFolderContentRef,
+    dragPointerCaptureTargetRef,
+    containerRef,
+    folderPanelRef,
+    folderTileRefs,
+    tileRefs,
+    dockItemRefs,
+    compactOuterDragBaseOrderRef,
+    compactOuterDragBaseWithoutDraggingRef,
+    compactOuterPreviewItemsRef,
+    compactOuterPreviewResultRef,
+    findCompactScrollGroupOverlapHit,
+    findTopLevelMaxOverlapHit,
+    resolveCompactScrollHoverZone,
+    isDraggingFromDock,
+    buildCompactOuterPreviewOrder,
+    resolveScrollGroupOrderFromWorkingOrder,
+    syncDragRuntime,
+    publishMoveDragState,
+    resolveCandidateAnchorIndexByContext,
+    resolveTopLevelOverlapPreviewIndex,
+    resolveNearestSlotIndexByContext,
+    tryApplyTopLevelEvasion,
+    commitIntoExistingFolderForAutoOpen,
+    onOuterDragFinished,
+    onOpenFolder,
+    onCloseFolder,
+    setOpenFolderId,
+    commitDragState,
+    clearOuterDwellTimer,
+    clearFolderAutoOpenTimer,
+    clearFolderExitTimer,
+    resolveTopLevelOrder,
+    resolveActiveScrollGroupOrder,
+    compactOuterPreviewOrderWithoutDragging,
+    seedMissingOuterDragCenters,
+    resolveTopLevelContextAtPoint,
+  })
+  const beginDrag = useScrollableDragStarter({
+    isCompactOuterDrop,
+    iconImageSize: iconConfig.imgSize,
+    selectionMode,
+    selectedIconKeys: selectedIconKeySet,
+    openFolderId,
+    itemById,
+    itemsRef,
+    outerSlotsRef,
+    tileRefs,
+    folderTileRefs,
+    dockItemRefs,
+    pendingPointerCaptureTargetRef,
+    dragPointerCaptureTargetRef,
+    dragStartedInFolderRef,
+    enteredFolderContentRef,
+    compactOuterDragBaseOrderRef,
+    compactOuterDragBaseWithoutDraggingRef,
+    compactOuterPreviewItemsRef,
+    compactOuterPreviewResultRef,
+    compactScrollLastHitPointRef,
+    compactScrollLastHitIdRef,
+    setOuterSlots,
+    setOpenFolderId,
+    clearTimer,
+    clearOuterDwellTimer,
+    clearFolderExitTimer,
+    clearPending,
+    resetDropVisuals,
+    resolveDockItemOrder,
+    resolveCompactOuterTopLevelOrder,
+    resolvePagedOuterTopLevelOrder,
+    resolveTopLevelOrder,
+    resolveActiveScrollGroupOrder,
+    compactOuterPreviewOrderWithoutDragging,
+    seedMissingOuterDragCenters,
+    moveDragToTopLevelContext,
+    commitDragState,
+  })
+  const processDragMove = useScrollableDragMoveProcessor({
+    isCompactOuterDrop,
+    columns,
+    evasionRearmDistance: config.evasionRearmDistance,
+    evasionCooldownMs: config.evasionCooldownMs,
+    dragRef,
+    folderPanelRef,
+    enteredFolderContentRef,
+    itemsRef,
+    pageSizeRef,
+    compactOuterDragBaseOrderRef,
+    outerDwellTargetIdRef,
+    outerDwellZoneRef,
+    outerDwellTimerRef,
+    scheduleFolderExit,
+    clearFolderExitTimer,
+    clearOuterDwellTimer,
+    maybeHandleOuterEdgeSwitch,
+    clearEdgeSwitchTimer,
+    resolveTopLevelContextAtPoint,
+    moveDragToTopLevelContext,
+    resolveNearestSlotIndexByContext,
+    resolveCandidateAnchorIndexByContext,
+    getOuterGridElementAtPoint,
+    findHitByContext,
+    compactOuterPreviewOrderWithoutDragging,
+    findTopLevelMaxOverlapHit,
+    resolveCompactOuterPreviewItems,
+    resolveCompactOuterTopLevelOrder,
+    getOuterMinPageCount,
+    resolveScrollGroupOrderFromWorkingOrder,
+    publishMoveDragState,
+    isDraggingFromDock,
+    resolveCompactScrollHoverZone,
+    resolveTopLevelOverlapPreviewIndex,
+    scheduleFolderAutoOpen,
+    triggerCompactFolderPreview,
+    triggerTopLevelDwellEvasion,
+  })
   const scheduleDragMove = (pointerId: number, x: number, y: number) => {
     syncRawDragPointer(pointerId, x, y)
     queuedDragMoveRef.current = { pointerId, x, y }

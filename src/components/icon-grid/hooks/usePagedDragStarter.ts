@@ -1,7 +1,7 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { GridItem } from '../model'
 import { DRAG_HOLE_ID, areSlotsEqual } from '../domain/slots'
-import { getFolderChildSelectionsByIds, getFolderChildrenById } from '../domain/folderPolicy'
+import { getFolderChildrenById } from '../domain/folderPolicy'
 import { normalizeOuterSlots } from '../domain/topLevelLayout'
 import { resolveMixedSelectionDragIds } from '../domain/multiSelectionPolicy'
 import {
@@ -9,6 +9,7 @@ import {
   getFolderIconMapById,
   seedMissingInitialCenters,
 } from '../domain/dragWorkflowShared'
+import { seedSelectedFolderChildCenters } from './seedSelectedFolderChildCenters'
 import type { DragState, PendingDrag } from '../state/types'
 import { activateDragPointerCapture } from './dragPointerCapture'
 
@@ -95,7 +96,20 @@ export function usePagedDragStarter(params: UsePagedDragStarterParams) {
       x,
       y
     )
-    seedSelectedFolderChildCenters(params, nextState, draggingIds)
+    if (
+      nextState.context !== 'folder' &&
+      seedSelectedFolderChildCenters({
+        items: params.itemsRef.current,
+        draggingIds,
+        initialCenters: nextState.initialCenters,
+        folderTileRefs: params.folderTileRefs.current,
+        tileRefs: params.tileRefs.current,
+        dockItemRefs: params.dockItemRefs.current,
+        iconImageSize: params.iconImageSize,
+      })
+    ) {
+      params.setOpenFolderId(null)
+    }
 
     if (pending.context === 'outer' && draggingIds.length > 1) {
       params.seedMissingOuterDragCenters({
@@ -211,36 +225,4 @@ function buildInitialDragState(
     lastEvasionAt: null,
     initialCenters,
   }
-}
-
-function seedSelectedFolderChildCenters(
-  params: UsePagedDragStarterParams,
-  state: DragState,
-  draggingIds: string[]
-) {
-  if (state.context === 'folder') return
-  const selections = getFolderChildSelectionsByIds(params.itemsRef.current, draggingIds)
-  if (selections.size === 0) return
-  const folderCenters = collectCenters(params.folderTileRefs.current)
-  selections.forEach((children, folderId) => {
-    const folderNode =
-      params.tileRefs.current.get(`folder:${folderId}`) ??
-      params.dockItemRefs.current.get(`folder:${folderId}`)
-    const folderRect = folderNode?.getBoundingClientRect() ?? null
-    const collapsedCenter = folderRect
-      ? { x: folderRect.left + folderRect.width / 2, y: folderRect.top + folderRect.height / 2 }
-      : null
-    const stackOffset = Math.min(10, Math.max(4, Math.round(params.iconImageSize * 0.14)))
-    children.forEach((child, index) => {
-      if (folderCenters[child.key]) {
-        state.initialCenters[child.key] = folderCenters[child.key]
-      } else if (collapsedCenter) {
-        state.initialCenters[child.key] = {
-          x: collapsedCenter.x + ((index % 2) - 0.5) * stackOffset * 2,
-          y: collapsedCenter.y + Math.floor(index / 2) * stackOffset - stackOffset / 2,
-        }
-      }
-    })
-  })
-  params.setOpenFolderId(null)
 }
