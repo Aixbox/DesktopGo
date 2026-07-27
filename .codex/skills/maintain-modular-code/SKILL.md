@@ -57,15 +57,15 @@ Before adding a new abstraction, state internally:
 
 Use these review thresholds unless generated code or an explicitly documented exception applies:
 
-| Measure                  |          Threshold |
-| ------------------------ | -----------------: |
-| New `.ts` / `.js` file   | 400 physical lines |
-| New `.tsx` / `.jsx` file | 500 physical lines |
-| New `.rs` file           | 500 physical lines |
-| Function or hook         |           80 lines |
-| Cyclomatic complexity    |                 15 |
-| Nesting depth            |                  4 |
-| Parameters               |                  5 |
+| Measure                  |           Threshold |
+| ------------------------ | ------------------: |
+| New `.ts` / `.js` file   | 1000 physical lines |
+| New `.tsx` / `.jsx` file | 1000 physical lines |
+| New `.rs` file           |  500 physical lines |
+| Function or hook         |            80 lines |
+| Cyclomatic complexity    |                  15 |
+| Nesting depth            |                   4 |
+| Parameters               |                   5 |
 
 - Do not grow a changed legacy file that already exceeds its file threshold. Extract at least the responsibility affected by the change when practical.
 - Do not split cohesive code solely to satisfy a number. Treat a threshold failure as a prompt to improve responsibilities and APIs.

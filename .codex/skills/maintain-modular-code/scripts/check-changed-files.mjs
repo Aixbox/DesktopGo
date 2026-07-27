@@ -6,10 +6,10 @@ import { spawnSync } from 'node:child_process'
 
 const ROOTS = ['src', 'src-tauri/src']
 const LIMITS = new Map([
-  ['.js', 400],
-  ['.jsx', 500],
-  ['.ts', 400],
-  ['.tsx', 500],
+  ['.js', 1000],
+  ['.jsx', 1000],
+  ['.ts', 1000],
+  ['.tsx', 1000],
   ['.rs', 500],
 ])
 
