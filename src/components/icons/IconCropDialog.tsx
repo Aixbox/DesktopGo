@@ -9,18 +9,7 @@ import {
 import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
 import Cropper, { type MediaSize, type Point, type Size } from 'react-easy-crop'
-import {
-  Check,
-  Crop,
-  Pipette,
-  RefreshCw,
-  RotateCcw,
-  RotateCw,
-  Sparkles,
-  X,
-  ZoomIn,
-  ZoomOut,
-} from 'lucide-react'
+import { Crop, Pipette, RefreshCw, X } from 'lucide-react'
 import {
   constrainCropFramePosition,
   constrainMediaPositionToViewport,
@@ -48,6 +37,12 @@ import {
 } from '@/lib/textIcon'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import {
+  ICON_TRANSPARENT_CHECKERBOARD,
+  IconCropBackgroundControls,
+  IconCropImageTools,
+  IconCropTransformControls,
+} from '@/components/icons/IconCropControls'
 
 export type IconCropResult = {
   dataUri: string
@@ -67,8 +62,6 @@ const INITIAL_CROP: Point = { x: 0, y: 0 }
 const INITIAL_CORNER_RADII: CropCornerRadii = { nw: 0, ne: 0, se: 0, sw: 0 }
 const MIN_CROP_SIZE = 10
 const CORNER_RADIUS_HANDLE_MIN_INSET = 18
-const TRANSPARENT_CHECKERBOARD =
-  'conic-gradient(#94a3b8 25%, #cbd5e1 0 50%, #94a3b8 0 75%, #cbd5e1 0)'
 
 type CropResizeSession = {
   pointerId: number
@@ -120,26 +113,6 @@ const CROP_CORNER_RADIUS_POINTS: Array<{ corner: CropCorner; className: string }
   { corner: 'se', className: 'cursor-nwse-resize' },
   { corner: 'sw', className: 'cursor-nesw-resize' },
 ]
-
-function CornerRadiusIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={className}
-    >
-      <path d="M8 3H6a3 3 0 0 0-3 3v2" />
-      <path d="M16 3h2a3 3 0 0 1 3 3v2" />
-      <path d="M21 16v2a3 3 0 0 1-3 3h-2" />
-      <path d="M8 21H6a3 3 0 0 1-3-3v-2" />
-    </svg>
-  )
-}
 
 export function IconCropDialog({
   open,
@@ -621,6 +594,25 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
     }
   }
 
+  const toggleColorExtraction = () => {
+    setExtractingColor(current => !current)
+    setError('')
+  }
+
+  const selectPresetColor = (nextColorId: IconColorId) => {
+    setColorId(nextColorId)
+    setUsingCustomColor(false)
+    setExtractingColor(false)
+    setError('')
+  }
+
+  const selectCustomColor = () => {
+    setUsingCustomColor(true)
+    setColorId('none')
+    setExtractingColor(false)
+    setError('')
+  }
+
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     event.stopPropagation()
     if (event.key === 'Escape') {
@@ -700,7 +692,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
               !usingCustomColor && colorId === 'none'
                 ? {
                     backgroundColor: '#cbd5e1',
-                    backgroundImage: TRANSPARENT_CHECKERBOARD,
+                    backgroundImage: ICON_TRANSPARENT_CHECKERBOARD,
                     backgroundSize: '16px 16px',
                   }
                 : { backgroundColor: visibleBackgroundColor ?? undefined }
@@ -874,215 +866,39 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
               </div>
             ) : null}
 
-            <div
-              role="group"
-              aria-label={translate('图像工具')}
-              className="absolute right-2 top-2 z-40 flex flex-col gap-2 sm:left-full sm:right-auto sm:top-0 sm:ml-3"
-            >
-              <Button
-                type="button"
-                variant={cornerRadiiLinked ? 'secondary' : 'outline'}
-                size="icon"
-                aria-label={
-                  cornerRadiiLinked ? translate('四角圆角同步调整') : translate('四角圆角独立调整')
-                }
-                aria-pressed={cornerRadiiLinked}
-                title={
-                  cornerRadiiLinked ? translate('四角圆角同步调整') : translate('四角圆角独立调整')
-                }
-                onClick={() => setCornerRadiiLinked(current => !current)}
-                disabled={applying}
-                className="h-9 w-9"
-              >
-                <CornerRadiusIcon className="h-4 w-4" />
-              </Button>
-
-              <Button
-                type="button"
-                variant={imageOptimized ? 'secondary' : 'outline'}
-                size="icon"
-                aria-label={imageOptimized ? translate('取消清晰优化') : translate('清晰优化')}
-                aria-pressed={imageOptimized}
-                title={imageOptimized ? translate('取消清晰优化') : translate('清晰优化')}
-                onClick={() => void handleOptimizeImage()}
-                disabled={applying || optimizing || !mediaSize}
-                className="h-9 w-9"
-              >
-                {optimizing ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-[18px] flex items-center justify-between text-muted-foreground">
-            <div className="flex items-center gap-4">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={translate('向右旋转')}
-                title={translate('向右旋转')}
-                onClick={() => rotateBy(90)}
-                disabled={applying}
-                className="h-8 w-8 hover:text-foreground"
-              >
-                <RotateCw className="h-5 w-5" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={translate('向左旋转')}
-                title={translate('向左旋转')}
-                onClick={() => rotateBy(-90)}
-                disabled={applying}
-                className="h-8 w-8 hover:text-foreground"
-              >
-                <RotateCcw className="h-5 w-5" />
-              </Button>
-            </div>
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label={translate('复位')}
-              title={translate('复位')}
-              onClick={resetCrop}
+            <IconCropImageTools
+              cornerRadiiLinked={cornerRadiiLinked}
+              imageOptimized={imageOptimized}
+              optimizing={optimizing}
               disabled={applying}
-              className="h-8 w-8 hover:text-foreground"
-            >
-              <RefreshCw className="h-5 w-5" />
-            </Button>
-
-            <div className="flex items-center gap-4">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={translate('缩小')}
-                title={translate('缩小')}
-                onClick={() => changeZoom(-0.1)}
-                disabled={applying || zoom <= ICON_CROP_MIN_ZOOM}
-                className="h-8 w-8 hover:text-foreground"
-              >
-                <ZoomOut className="h-5 w-5" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={translate('放大')}
-                title={translate('放大')}
-                onClick={() => changeZoom(0.1)}
-                disabled={applying || zoom >= ICON_CROP_MAX_ZOOM}
-                className="h-8 w-8 hover:text-foreground"
-              >
-                <ZoomIn className="h-5 w-5" />
-              </Button>
-            </div>
+              optimizeDisabled={optimizing || !mediaSize}
+              onToggleCornerRadiiLinked={() => setCornerRadiiLinked(current => !current)}
+              onToggleImageOptimization={() => void handleOptimizeImage()}
+            />
           </div>
 
-          <div className="mt-6 flex items-center justify-between gap-3">
-            <span className="text-sm font-medium text-foreground">{translate('图标背景')}</span>
-            <Button
-              type="button"
-              variant={extractingColor ? 'secondary' : 'ghost'}
-              size="sm"
-              aria-pressed={extractingColor}
-              onClick={() => {
-                setExtractingColor(current => !current)
-                setError('')
-              }}
-              disabled={applying || !cropSize || !mediaSize}
-              className="h-8 gap-1.5 px-2.5 text-xs"
-            >
-              {samplingColor ? (
-                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Pipette className="h-3.5 w-3.5" />
-              )}
-              {translate('提取颜色')}
-            </Button>
-          </div>
+          <IconCropTransformControls
+            zoom={zoom}
+            minZoom={ICON_CROP_MIN_ZOOM}
+            maxZoom={ICON_CROP_MAX_ZOOM}
+            disabled={applying}
+            onRotate={rotateBy}
+            onReset={resetCrop}
+            onZoom={changeZoom}
+          />
 
-          <div
-            role="radiogroup"
-            aria-label={translate('图标背景')}
-            className="mt-3 grid grid-cols-6 justify-items-center gap-x-2 gap-y-2"
-          >
-            {ICON_COLOR_PRESETS.map(preset => {
-              const selected = !usingCustomColor && preset.id === colorId
-              return (
-                <button
-                  key={preset.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  aria-label={translate(preset.id === 'none' ? '透明背景' : '选择图标背景')}
-                  title={translate(preset.id === 'none' ? '透明背景' : '选择图标背景')}
-                  onClick={() => {
-                    setColorId(preset.id)
-                    setUsingCustomColor(false)
-                    setExtractingColor(false)
-                    setError('')
-                  }}
-                  disabled={applying}
-                  className={cn(
-                    'relative flex h-7 w-7 items-center justify-center rounded-full border transition-[border-color,box-shadow,transform] duration-150 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transform-none',
-                    selected
-                      ? 'border-foreground ring-2 ring-foreground/15'
-                      : 'border-border hover:border-foreground/40'
-                  )}
-                  style={
-                    preset.id === 'none'
-                      ? {
-                          backgroundColor: '#cbd5e1',
-                          backgroundImage: TRANSPARENT_CHECKERBOARD,
-                          backgroundSize: '8px 8px',
-                        }
-                      : { backgroundColor: preset.color }
-                  }
-                >
-                  {preset.id === 'none' ? (
-                    <X className="h-3.5 w-3.5 text-slate-600 drop-shadow-[0_1px_1px_rgba(255,255,255,0.9)]" />
-                  ) : selected ? (
-                    <Check className="h-3.5 w-3.5 text-white" />
-                  ) : null}
-                </button>
-              )
-            })}
-            {customColor ? (
-              <button
-                type="button"
-                role="radio"
-                aria-checked={usingCustomColor}
-                aria-label={translate('选择提取的颜色')}
-                title={`${translate('选择提取的颜色')} ${customColor}`}
-                onClick={() => {
-                  setUsingCustomColor(true)
-                  setColorId('none')
-                  setExtractingColor(false)
-                  setError('')
-                }}
-                disabled={applying}
-                className={cn(
-                  'relative flex h-7 w-7 items-center justify-center rounded-full border transition-[border-color,box-shadow,transform] duration-150 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transform-none',
-                  usingCustomColor
-                    ? 'border-foreground ring-2 ring-foreground/15'
-                    : 'border-border hover:border-foreground/40'
-                )}
-                style={{ backgroundColor: customColor }}
-              >
-                {usingCustomColor ? (
-                  <Check className="h-3.5 w-3.5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]" />
-                ) : null}
-              </button>
-            ) : null}
-          </div>
+          <IconCropBackgroundControls
+            colorId={colorId}
+            customColor={customColor}
+            usingCustomColor={usingCustomColor}
+            extractingColor={extractingColor}
+            samplingColor={samplingColor}
+            disabled={applying}
+            extractionDisabled={!cropSize || !mediaSize}
+            onToggleExtraction={toggleColorExtraction}
+            onSelectPreset={selectPresetColor}
+            onSelectCustomColor={selectCustomColor}
+          />
 
           {error ? (
             <p role="alert" className="mt-3 text-xs leading-5 text-destructive">
