@@ -41,11 +41,12 @@ import {
   type WindowPersistentSyncPayload,
 } from '@/lib/windowPersistent'
 import { applyWindowStyle, getSavedWindowStyle } from '@/lib/windowStyle'
-import { getSearchPreview, recordSearchResultRun } from '@/lib/search/api'
+import { recordSearchResultRun } from '@/lib/search/api'
 import { getSearchFilterLabel, getSearchFilterOptions } from '@/lib/search/filters'
-import type { SearchSource } from '@/lib/search/scope'
-import { searchSourceIncludesFiles } from '@/lib/search/scope'
+import { searchSourceIncludesFiles, type SearchSource } from '@/lib/search/scope'
+import { useSearchPreview } from '@/lib/search/useSearchPreview'
 import { useShortcutSearchResults } from '@/lib/search/useShortcutSearchResults'
+import { useSearchScopeChange } from '@/lib/search/useSearchScopeChange'
 import { SearchFloatingMenu } from '@/components/search/SearchFloatingMenu'
 import { handleSearchNavigation } from '@/components/search/searchNavigation'
 import { LaunchpadContextMenuContent } from '@/components/launchpad/LaunchpadContextMenuContent'
@@ -281,8 +282,6 @@ export function Launchpad() {
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false)
   const [selectedIconResultIndex, setSelectedIconResultIndex] = useState(-1)
   const [combinedSelectedIndex, setCombinedSelectedIndex] = useState(-1)
-  const [searchPreviewLoading, setSearchPreviewLoading] = useState(false)
-  const [searchPreviewError, setSearchPreviewError] = useState<string | null>(null)
   const [layoutResetToken, setLayoutResetToken] = useState(0)
   const [windowPersistentEnabled, setWindowPersistentEnabled] = useState(false)
   const [mainWindowAlwaysOnTopEnabled, setMainWindowAlwaysOnTopEnabled] = useState(false)
@@ -317,10 +316,6 @@ export function Launchpad() {
     iconKeys: string[]
     targetGroupId?: string
   } | null>(null)
-  const [searchPreview, setSearchPreview] = useState<Awaited<
-    ReturnType<typeof getSearchPreview>
-  > | null>(null)
-
   const resetAiOrganizeRunState = useCallback(() => {
     setAiOrganizeRunState({
       canApply: false,
@@ -1111,34 +1106,25 @@ export function Launchpad() {
         : null
   const selectedSearchPath = selectedSearchItem?.path ?? ''
   const selectedFilterLabel = getSearchFilterLabel(searchFilter)
+  const {
+    preview: searchPreview,
+    loading: searchPreviewLoading,
+    error: searchPreviewError,
+    reset: resetSearchPreview,
+  } = useSearchPreview({
+    enabled: isSearchPanelVisible && isSearchPreviewVisible,
+    path: selectedSearchPath,
+  })
 
-  useEffect(() => {
-    if (!isSearchPanelVisible || !isSearchPreviewVisible || !selectedSearchPath) {
-      return
-    }
-
-    let cancelled = false
-    void Promise.resolve().then(async () => {
-      if (cancelled) return
-      setSearchPreviewLoading(true)
-      setSearchPreviewError(null)
-
-      try {
-        const preview = await getSearchPreview(selectedSearchPath)
-        if (!cancelled) setSearchPreview(preview)
-      } catch (previewError) {
-        if (cancelled) return
-        setSearchPreview(null)
-        setSearchPreviewError(String(previewError))
-      } finally {
-        if (!cancelled) setSearchPreviewLoading(false)
-      }
-    })
-
-    return () => {
-      cancelled = true
-    }
-  }, [isSearchPanelVisible, isSearchPreviewVisible, selectedSearchPath])
+  const handleSearchSourceChange = useSearchScopeChange({
+    currentSource: searchSource,
+    setSource: setSearchSource,
+    setSelectedIconIndex: setSelectedIconResultIndex,
+    setSelectedFileIndex: setSelectedIndex,
+    setCombinedIndex: setCombinedSelectedIndex,
+    resetPreview: resetSearchPreview,
+    setFilterMenuOpen: setIsFilterMenuOpen,
+  })
 
   const selectUnifiedSearchIndex = useCallback(
     (index: number) => {
@@ -1696,11 +1682,7 @@ export function Launchpad() {
               <SearchPanel
                 source={searchSource}
                 keyword={keyword}
-                onSourceChange={source => {
-                  setSearchSource(source)
-                  setCombinedSelectedIndex(-1)
-                  setIsFilterMenuOpen(false)
-                }}
+                onSourceChange={handleSearchSourceChange}
                 visible={isSearchPanelOpen}
                 loading={searchLoading}
                 searchPending={searchPending}
