@@ -72,11 +72,11 @@
 
 截至 2026-07-27，第一阶段 ESLint 配置治理已经完成：
 
-- `pnpm lint` 限定检查 `src`、`vite.config.ts` 和 `eslint.config.js`，当前为 `0 errors / 81 warnings`。
+- `pnpm lint` 限定检查 `src`、`vite.config.ts` 和 `eslint.config.js`，当前为 `0 errors / 68 warnings`。
 - `pnpm lint:strict` 保留 `--max-warnings 0`，用于衡量技术债是否真正清零。
 - ESLint 与 Prettier 已解耦，并提供独立的 `format` 和 `format:check` 命令。
 - React Compiler 相关规则只在 8 个明确列出的旧文件中临时降级为 warning，不允许扩大例外范围。
-- 当前 81 条告警分布为：`exhaustive-deps` 41 条、`set-state-in-effect` 20 条、`only-export-components` 13 条、`immutability` 4 条、`refs` 3 条。
+- 当前 68 条告警分布为：`exhaustive-deps` 41 条、`set-state-in-effect` 20 条、`immutability` 4 条、`refs` 3 条；`only-export-components` 已清零。
 - 当前有 26 个手写 `.ts/.tsx` 文件超过模块预算：`.ts` 上限 400 行，`.tsx` 上限 500 行。
 
 ### 治理原则
@@ -94,7 +94,7 @@
 | 批次 | 状态   | 范围                          | 当前告警 | 处理策略                                                                                                                                                                | 完成后目标 |
 | ---- | ------ | ----------------------------- | -------: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------: |
 | E-00 | 已完成 | ESLint/Prettier 基线          |        - | 收窄检查范围、移除 `eslint-plugin-prettier`、增加 `lint:strict` 和格式检查。                                                                                            |         81 |
-| E-01 | 待开发 | Fast Refresh 导出边界         |       13 | 将 `FolderVisuals.tsx` 的常量/辅助逻辑、`i18n.tsx` 的非组件能力、`button.tsx`/`input.tsx` 的变体定义移到单一职责模块；组件文件只导出组件。                              |         68 |
+| E-01 | 已完成 | Fast Refresh 导出边界         |       13 | 文件夹视觉 policy、按钮变体和输入样式已与组件分离；i18n 已拆出语言运行态、Context/Hook 和仅导出组件的 Provider，组件文件不再混合导出纯能力。                            |         68 |
 | E-02 | 待开发 | 搜索、设置、AI 和图标编辑流程 |       16 | 处理 `useSearch.ts` 的递归 callback、分页调度和 effect 状态同步；将设置加载、更新检查、AI 步骤状态和图标预览重置移动到明确的事件或控制器状态转换。                      |         52 |
 | E-03 | 待开发 | 分页图标网格                  |       29 | 覆盖 `IconGrid.tsx`、`useIconGridDragWorkflow.ts`、`DragOverlays.tsx`、`DockBar.tsx` 和 `FolderModalView.tsx`；先抽取生命周期与拖拽控制器，再修复依赖、ref 和派生状态。 |         23 |
 | E-04 | 待开发 | 滚动图标网格                  |       23 | 覆盖 `ScrollableIconGrid.tsx` 和 `useScrollableIconGridDragWorkflow.ts`；复用分页网格已经稳定的纯策略与控制器接口，清理重复的拖拽、自动翻页、预览和 ref 同步逻辑。      |          0 |
@@ -114,7 +114,7 @@
 | M-04 图标网格领域规则 | P1     | `dragMovePolicy.ts` 1669、`topLevelLayout.ts` 1029、`dropPolicy.ts` 667、`scrollDropPolicy.ts` 800、`scrollGroupLayout.ts` 522、`scrollTopLevelLayout.ts` 447 | 按稳定规则拆为坐标/占位、候选目标、移动决策、提交变换和滚动分组策略；保持 domain 无 React、store、DOM、Tauri 和持久化依赖；每个策略模块配表驱动边界测试。                                                                                     |
 | M-05 AI 与图标编辑    | P1     | `AiOrganizePanel.tsx` 2208、`AddIconDialog.tsx` 1510、`IconCropDialog.tsx` 1111                                                                               | 视图按步骤或面板拆分；草稿、验证、异步预览、裁剪几何和保存流程进入专用 controller/domain/service；父组件只组合状态和步骤。每个视图不超过 500 行，复杂 Hook 不超过 400 行。                                                                    |
 | M-06 设置界面         | P1     | `GeneralSettingsPanel.tsx` 879、`IconManagerPanel.tsx` 793                                                                                                    | 按设置分区拆成 feature-local sections；持久化由现有 settings service/store 统一处理；列表操作与导入/删除流程进入控制器，避免分区组件直接组合平台调用。                                                                                        |
-| M-07 基础设施         | P2     | `i18n.tsx` 1151、`iconStore.ts` 456                                                                                                                           | i18n 拆为纯翻译目录/解析、React provider 和 hook；store 保留稳定公共 facade，将选择、启动、布局偏好等 action 按职责拆到独立 slice 或 domain policy，避免消费者迁移期间出现多个状态源。                                                        |
+| M-07 基础设施         | P2     | `i18n.tsx` 977、`iconStore.ts` 456                                                                                                                            | i18n 已拆出 React Provider、Context/Hook 和语言运行态，后续继续按领域拆分翻译目录；store 保留稳定公共 facade，将选择、启动、布局偏好等 action 按职责拆到独立 slice 或 domain policy，避免消费者迁移期间出现多个状态源。                       |
 
 ### 拆分执行顺序
 

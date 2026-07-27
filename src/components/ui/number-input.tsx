@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 
 import { translate, useI18n } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
-import { inputBaseClassName } from '@/components/ui/input'
+import { inputBaseClassName } from '@/components/ui/inputStyles'
 
 interface NumberInputProps extends Omit<
   React.ComponentProps<'input'>,

@@ -6,11 +6,8 @@ import { useIconStore } from '../../../stores/iconStore'
 import type { FolderItem, GridItem } from '../model'
 import { getGridItemSpan } from '../model'
 import type { FolderDropFlight, MultiDropFlightItem } from '../state/types'
-import {
-  DESKTOP_FOLDER_SURFACE_CLASS,
-  FolderIconVisual,
-  getDesktopFolderTileMetrics,
-} from './FolderVisuals'
+import { FolderIconVisual } from './FolderVisuals'
+import { DESKTOP_FOLDER_SURFACE_CLASS, getDesktopFolderTileMetrics } from './folderVisualPolicy'
 
 interface DragGhostPointer {
   pointerX: number

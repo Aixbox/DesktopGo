@@ -26,12 +26,12 @@ import { DOCK_GAP } from '../domain/dock'
 import {
   DOCK_FOLDER_SURFACE_ACTIVE_CLASS,
   DOCK_FOLDER_SURFACE_CLASS,
-  FolderIconVisual,
   FOLDER_SHARED_LAYOUT_TRANSITION,
   type DesktopSingleSlotFolderMetrics,
   getDesktopSingleSlotFolderMetrics,
   getFolderSharedLayoutId,
-} from './FolderVisuals'
+} from './folderVisualPolicy'
+import { FolderIconVisual } from './FolderVisuals'
 
 interface DockBarProps {
   alignToContentColumn?: boolean

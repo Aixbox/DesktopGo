@@ -1,26 +1,10 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react'
-import { emit, listen } from '@tauri-apps/api/event'
 import type { AppLanguage } from '@/types'
-import { getSetting, setSetting } from './settingsStore'
+import type { TranslationParams } from './i18n/context'
+import { getCurrentLanguage } from './i18n/language'
 import { EN_SEARCH_MESSAGES } from './i18n/searchMessages'
 
-type TranslationParams = Record<string, string | number | null | undefined>
-
-type I18nContextValue = {
-  language: AppLanguage
-  locale: string
-  ready: boolean
-  setLanguage: (language: AppLanguage) => Promise<void>
-  t: (message: string, params?: TranslationParams) => string
-}
+export { useI18n } from './i18n/context'
+export { getCurrentLanguage, getIntlLocale } from './i18n/language'
 
 const ZH_MESSAGES: Record<string, string> = {
   'Loading...': '加载中...',
@@ -972,23 +956,6 @@ const MESSAGES: Record<AppLanguage, Record<string, string>> = {
   en: EN_MESSAGES,
 }
 
-const I18nContext = createContext<I18nContextValue | null>(null)
-const LANGUAGE_CHANGED_EVENT = 'desktopgo://language-changed'
-
-let currentLanguage: AppLanguage = 'zh'
-
-type LanguageChangedPayload = {
-  language: AppLanguage
-}
-
-function setActiveLanguage(language: AppLanguage) {
-  currentLanguage = language
-}
-
-function isAppLanguage(value: unknown): value is AppLanguage {
-  return value === 'zh' || value === 'en'
-}
-
 function formatMessage(template: string, params?: TranslationParams) {
   if (!params) {
     return template
@@ -1000,152 +967,11 @@ function formatMessage(template: string, params?: TranslationParams) {
   })
 }
 
-export function getIntlLocale(language: AppLanguage = currentLanguage) {
-  return language === 'zh' ? 'zh-CN' : 'en-US'
-}
-
-export function getCurrentLanguage() {
-  return currentLanguage
-}
-
 export function translate(
   message: string,
   params?: TranslationParams,
-  language: AppLanguage = currentLanguage
+  language: AppLanguage = getCurrentLanguage()
 ) {
   const translated = MESSAGES[language][message] ?? message
   return formatMessage(translated, params)
-}
-
-function syncDocumentLanguage(language: AppLanguage) {
-  setActiveLanguage(language)
-  if (typeof document === 'undefined') {
-    return
-  }
-  document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en'
-}
-
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<AppLanguage>('zh')
-  const [ready, setReady] = useState(false)
-
-  const applyLanguageState = useCallback((nextLanguage: AppLanguage) => {
-    setActiveLanguage(nextLanguage)
-    setLanguageState(current => (current === nextLanguage ? current : nextLanguage))
-  }, [])
-
-  setActiveLanguage(language)
-
-  useEffect(() => {
-    let disposed = false
-
-    void getSetting('language')
-      .then(savedLanguage => {
-        if (disposed) return
-        applyLanguageState(savedLanguage)
-      })
-      .catch(error => {
-        console.error('Failed to load app language:', error)
-      })
-      .finally(() => {
-        if (!disposed) {
-          setReady(true)
-        }
-      })
-
-    return () => {
-      disposed = true
-    }
-  }, [applyLanguageState])
-
-  useEffect(() => {
-    let disposed = false
-    let detachLanguageListener: (() => void) | null = null
-
-    const syncSavedLanguage = async () => {
-      try {
-        const savedLanguage = await getSetting('language')
-        if (!disposed) {
-          applyLanguageState(savedLanguage)
-        }
-      } catch (error) {
-        console.error('Failed to sync app language:', error)
-      }
-    }
-
-    void listen<LanguageChangedPayload>(LANGUAGE_CHANGED_EVENT, event => {
-      if (disposed || !isAppLanguage(event.payload?.language)) {
-        return
-      }
-
-      applyLanguageState(event.payload.language)
-    })
-      .then(unlisten => {
-        if (disposed) {
-          unlisten()
-          return
-        }
-
-        detachLanguageListener = unlisten
-      })
-      .catch(error => {
-        console.error('Failed to listen for language changes:', error)
-      })
-
-    const handleFocus = () => {
-      void syncSavedLanguage()
-    }
-
-    window.addEventListener('focus', handleFocus)
-
-    return () => {
-      disposed = true
-      window.removeEventListener('focus', handleFocus)
-      detachLanguageListener?.()
-    }
-  }, [applyLanguageState])
-
-  useEffect(() => {
-    syncDocumentLanguage(language)
-  }, [language])
-
-  const setLanguage = useCallback(
-    async (nextLanguage: AppLanguage) => {
-      applyLanguageState(nextLanguage)
-      try {
-        await setSetting('language', nextLanguage)
-      } catch (error) {
-        console.error('Failed to persist app language:', error)
-      }
-
-      try {
-        await emit<LanguageChangedPayload>(LANGUAGE_CHANGED_EVENT, { language: nextLanguage })
-      } catch (error) {
-        console.error('Failed to broadcast app language change:', error)
-      }
-    },
-    [applyLanguageState]
-  )
-
-  const value = useMemo<I18nContextValue>(
-    () => ({
-      language,
-      locale: getIntlLocale(language),
-      ready,
-      setLanguage,
-      t: (message, params) => translate(message, params, language),
-    }),
-    [language, ready, setLanguage]
-  )
-
-  return <I18nContext.Provider value={value}>{ready ? children : null}</I18nContext.Provider>
-}
-
-export function useI18n() {
-  const context = useContext(I18nContext)
-  if (!context) {
-    throw new Error('useI18n must be used within an I18nProvider')
-  }
-
-  return context
 }

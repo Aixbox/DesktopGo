@@ -16,7 +16,7 @@ import {
   FOLDER_MODAL_TRANSITION_EASING,
   FOLDER_SHARED_LAYOUT_TRANSITION,
   getFolderSharedLayoutId,
-} from './FolderVisuals'
+} from './folderVisualPolicy'
 import { Input } from '@/components/ui/input'
 import { translate, useI18n } from '@/lib/i18n'
 

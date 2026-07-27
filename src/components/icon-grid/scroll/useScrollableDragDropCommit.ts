@@ -33,7 +33,7 @@ import {
   FOLDER_PREVIEW_TOP_OFFSET,
   getFolderPreviewFrameSize,
   getFolderPreviewSlotSize,
-} from '../views/FolderVisuals'
+} from '../views/folderVisualPolicy'
 import { normalizeOuterSlots } from '../domain/topLevelLayout'
 import {
   compactOuterSlotsWithinPages,

@@ -25,10 +25,10 @@ import type { FolderItem, FolderSize, GridSpan } from '../model'
 import {
   DESKTOP_FOLDER_SURFACE_CLASS,
   FOLDER_SHARED_LAYOUT_TRANSITION,
-  FolderIconVisual,
   getDesktopFolderTileMetrics,
   getFolderSharedLayoutId,
-} from './FolderVisuals'
+} from './folderVisualPolicy'
+import { FolderIconVisual } from './FolderVisuals'
 
 interface OuterFolderTileProps {
   folder: FolderItem

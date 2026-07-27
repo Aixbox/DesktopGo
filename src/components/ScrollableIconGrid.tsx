@@ -36,7 +36,7 @@ import {
   FOLDER_MODAL_MAX_HEIGHT,
   FOLDER_MODAL_MAX_WIDTH,
   FOLDER_PREVIEW_EASING,
-} from './icon-grid/views/FolderVisuals'
+} from './icon-grid/views/folderVisualPolicy'
 import { DOCK_GAP, resolveDockDisplaySlots, resolveOuterItemIds } from './icon-grid/domain/dock'
 import {
   buildPersistedItemCoordinates,
