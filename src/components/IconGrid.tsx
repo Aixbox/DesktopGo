@@ -2,6 +2,7 @@ import { LayoutGroup } from 'framer-motion'
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -23,6 +24,7 @@ import {
   writeLayout,
 } from './icon-grid/services/layoutStore'
 import { useIconGridDragWorkflow } from './icon-grid/hooks/useIconGridDragWorkflow'
+import { createLayoutDimensionsTracker } from './icon-grid/state/layoutDimensionsTracker'
 import {
   FOLDER_MODAL_MAX_HEIGHT,
   FOLDER_MODAL_MAX_WIDTH,
@@ -148,7 +150,6 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   const itemsRef = useRef<GridItem[]>([])
   const outerSlotsRef = useRef<Array<string | null>>([])
   const dockKeysRef = useRef<Array<string | null>>([])
-  const dockEnabledRef = useRef(dockEnabled)
   const currentPageRef = useRef(0)
   const pageSizeRef = useRef(1)
   const layoutReadyRef = useRef(false)
@@ -161,6 +162,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   const layoutRowHeight = getIconGridLayoutRowHeight(iconSize)
   const rowHeight = getIconGridRowHeight(iconSize)
   const geometryKey = buildGeometryKey(windowMode, iconSize, dockEnabled)
+  const readLayoutHydrationEnvironment = useEffectEvent(() => ({ dockEnabled, geometryKey }))
 
   const [columns, setColumns] = useState(1)
   const [rows, setRows] = useState(1)
@@ -181,8 +183,9 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   const [folderColumns, setFolderColumns] = useState<number>(() =>
     getDefaultFolderColumnCount(columnWidth, FOLDER_MODAL_MAX_WIDTH)
   )
-
-  dockEnabledRef.current = dockEnabled
+  const [layoutDimensionsTracker] = useState(() =>
+    createLayoutDimensionsTracker({ pageSize: Math.max(1, columns * rows), columns })
+  )
 
   const clearImportHighlightTimer = () => {
     if (importHighlightTimerRef.current === null) return
@@ -237,6 +240,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       scheduleFolderSharedLayoutRelease(folderId)
     })
   }
+  const closeFolderFromKeyboard = useEffectEvent(closeFolderWithAnimation)
 
   const closeFolderImmediately = () => {
     cancelPendingFolderClose()
@@ -247,6 +251,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
 
   useEffect(() => {
     let cancelled = false
+    const hydrationEnvironment = readLayoutHydrationEnvironment()
 
     const hydrate = async () => {
       if (!hydratedRef.current && icons.length === 0) return
@@ -260,17 +265,18 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       })
 
       if (hydrationSource === 'memory') {
+        const layoutDimensions = layoutDimensionsTracker.read()
         persisted = {
           items: serializeItems(itemsRef.current),
           slots: outerSlotsRef.current,
           dockKeys: dockKeysRef.current,
-          pageSize: prevPageSizeRef.current,
-          columns: prevColumnsRef.current,
+          pageSize: layoutDimensions.pageSize,
+          columns: layoutDimensions.columns,
           coordinates: buildPersistedItemCoordinates(
             outerSlotsRef.current,
             itemsRef.current,
-            prevPageSizeRef.current,
-            prevColumnsRef.current
+            layoutDimensions.pageSize,
+            layoutDimensions.columns
           ),
           geometryKey: persistedGeometryKeyRef.current ?? undefined,
         }
@@ -299,7 +305,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
 
       const nextItems = hydrateItems(icons, persisted?.items ?? null)
       const nextItemIds = nextItems.map(getId)
-      const nextDockKeys = dockEnabledRef.current
+      const nextDockKeys = hydrationEnvironment.dockEnabled
         ? hydrateDockKeys(nextItemIds, persisted?.dockKeys)
         : []
 
@@ -319,7 +325,11 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       // 仅在从持久化水合时重建锁；内存水合（icons 刷新）保留会话内已建立的锁，
       // 避免把 DPI 漂移期的实测值重新锁入。
       if (hydrationSource !== 'memory') {
-        if (hasDims && persisted?.geometryKey && persisted.geometryKey === geometryKey) {
+        if (
+          hasDims &&
+          persisted?.geometryKey &&
+          persisted.geometryKey === hydrationEnvironment.geometryKey
+        ) {
           const lockedColumns = persisted!.columns!
           const lockedRows = Math.max(1, Math.round(persisted!.pageSize! / lockedColumns))
           lockedGeometryRef.current = {
@@ -349,7 +359,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     return () => {
       cancelled = true
     }
-  }, [icons, layoutResetToken])
+  }, [icons, layoutDimensionsTracker, layoutResetToken])
 
   useEffect(() => {
     return () => {
@@ -366,8 +376,9 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     const nextItems = items
     const nextSlots = outerSlots
     const nextDockKeys = dockKeys
-    const nextPageSize = prevPageSizeRef.current
-    const nextColumns = prevColumnsRef.current
+    const layoutDimensions = layoutDimensionsTracker.read()
+    const nextPageSize = layoutDimensions.pageSize
+    const nextColumns = layoutDimensions.columns
     if (nextPageSize === 1 && nextColumns === 1) {
       return
     }
@@ -387,22 +398,11 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       .catch(e => {
         console.error('Failed to persist launchpad layout:', e)
       })
-  }, [dockKeys, items, outerSlots, geometryKey])
+  }, [dockKeys, geometryKey, items, layoutDimensionsTracker, outerSlots])
 
   useEffect(() => {
     currentPageRef.current = currentPage
   }, [currentPage])
-
-  useEffect(() => {
-    if (!openFolderId) return
-    const exists = items.some(item => item.kind === 'folder' && item.id === openFolderId)
-    if (!exists) {
-      cancelPendingFolderClose()
-      clearFolderSharedLayoutTimer()
-      setActiveFolderSharedLayoutId(null)
-      setOpenFolderId(null)
-    }
-  }, [openFolderId, items])
 
   const itemById = useMemo(() => {
     const map = new Map<string, GridItem>()
@@ -415,6 +415,8 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     const found = items.find(item => item.kind === 'folder' && item.id === openFolderId)
     return found && found.kind === 'folder' ? found : null
   }, [items, openFolderId])
+  const visibleOpenFolderId = openFolder?.id ?? null
+  const visibleActiveFolderSharedLayoutId = visibleOpenFolderId ? activeFolderSharedLayoutId : null
 
   const folderItemById = useMemo(() => {
     const map = new Map<string, IconItem>()
@@ -435,15 +437,12 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   )
   const selectedSet = useMemo(() => new Set(selectedIconKeys), [selectedIconKeys])
   const iconConfig = ICON_SIZE_CONFIG[iconSize]
-  const activeDockKeys = dockEnabled ? dockKeys : []
+  const activeDockKeys = useMemo(() => (dockEnabled ? dockKeys : []), [dockEnabled, dockKeys])
   const outerItemIds = useMemo(
     () => resolveOuterItemIds(itemIds, activeDockKeys),
     [activeDockKeys, itemIds]
   )
   const pageSize = Math.max(1, columns * rows)
-  const prevDockEnabledRef = useRef(dockEnabled)
-  const prevPageSizeRef = useRef(pageSize)
-  const prevColumnsRef = useRef(columns)
 
   const capturePagedGridItemPositions = useCallback(() => {
     const positions = new Map<string, { left: number; top: number }>()
@@ -523,7 +522,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     currentPageRef,
     setCurrentPage,
     pageSizeRef,
-    openFolderId,
+    openFolderId: visibleOpenFolderId,
     setOpenFolderId,
   })
   const activeDragIdSet = useMemo(() => new Set(dragState?.draggingIds ?? []), [dragState])
@@ -671,7 +670,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   }, [dragState, frozenOuterOrder, outerPreviewSpillOrder, outerSlots])
 
   useEffect(() => {
-    if (!openFolderId) return
+    if (!visibleOpenFolderId) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (dragRef.current?.context === 'folder') {
@@ -682,13 +681,13 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur()
       }
-      closeFolderWithAnimation()
+      closeFolderFromKeyboard()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => {
       window.removeEventListener('keydown', onKeyDown)
     }
-  }, [dragRef, openFolderId])
+  }, [dragRef, visibleOpenFolderId])
 
   useEffect(() => {
     const el = containerRef.current
@@ -808,11 +807,16 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     if (!hydratedRef.current || !layoutReadyRef.current) return
     const outerItems = filterItemsByIds(itemsRef.current, outerItemIds)
     const layoutMetrics = getLayoutNormalizationMetrics(outerItems, Math.max(1, columns), pageSize)
+    const previousDimensions = layoutDimensionsTracker.read()
+    layoutDimensionsTracker.update({
+      pageSize: layoutMetrics.pageSize,
+      columns: layoutMetrics.columns,
+    })
     const currentCoordinates = buildPersistedItemCoordinates(
       outerSlotsRef.current,
       outerItems,
-      prevPageSizeRef.current,
-      prevColumnsRef.current
+      previousDimensions.pageSize,
+      previousDimensions.columns
     )
 
     let result: Array<string | null>
@@ -841,9 +845,9 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       result = resizeSlotPages(
         outerSlotsRef.current,
         outerItems,
-        prevPageSizeRef.current,
+        previousDimensions.pageSize,
         layoutMetrics.pageSize,
-        prevColumnsRef.current,
+        previousDimensions.columns,
         layoutMetrics.columns,
         currentCoordinates
       )
@@ -856,13 +860,10 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     )
     const compacted = compactEmptyPages(repaired, layoutMetrics.pageSize)
 
-    prevDockEnabledRef.current = dockEnabled
-    prevPageSizeRef.current = layoutMetrics.pageSize
-    prevColumnsRef.current = layoutMetrics.columns
     if (areSlotsEqual(compacted, outerSlotsRef.current)) return
     outerSlotsRef.current = compacted
     setOuterSlots(compacted)
-  }, [columns, dockEnabled, outerItemIds, pageSize])
+  }, [columns, dockEnabled, layoutDimensionsTracker, outerItemIds, pageSize])
 
   useEffect(() => {
     if (!hydratedRef.current || !layoutBaselineRef.current || dockEnabled) return
@@ -931,8 +932,9 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     }
 
     const importedIdSet = new Set(importedIds)
-    const safeColumns = Math.max(1, prevColumnsRef.current || columns)
-    const safePageSize = Math.max(1, prevPageSizeRef.current || pageSize)
+    const layoutDimensions = layoutDimensionsTracker.read()
+    const safeColumns = Math.max(1, layoutDimensions.columns || columns)
+    const safePageSize = Math.max(1, layoutDimensions.pageSize || pageSize)
     const activePage = clampNumber(currentPageRef.current, 0, Number.MAX_SAFE_INTEGER)
     const currentPageStart = activePage * safePageSize
     const currentPageEnd = currentPageStart + safePageSize
@@ -1046,20 +1048,12 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       currentPageRef.current = targetPage
       setCurrentPage(targetPage)
     }
-  }, [columns, importPlacementRequest, outerItemIds, pageSize])
+  }, [columns, importPlacementRequest, layoutDimensionsTracker, outerItemIds, pageSize])
 
   const outerRenderCount = Math.max(pageSize, renderOrder.length)
   const pageCount = Math.max(1, Math.ceil(outerRenderCount / pageSize))
-  useEffect(() => {
-    if (currentPage >= pageCount) {
-      const nextPage = pageCount - 1
-      currentPageRef.current = nextPage
-      setCurrentPage(nextPage)
-    }
-  }, [currentPage, pageCount])
-  useEffect(() => {
-    if (hoverPage !== null && hoverPage >= pageCount) setHoverPage(null)
-  }, [hoverPage, pageCount])
+  if (currentPage >= pageCount) setCurrentPage(pageCount - 1)
+  if (hoverPage !== null && hoverPage >= pageCount) setHoverPage(null)
 
   const handleWheelPageSwitch = (event: ReactWheelEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null
@@ -1133,21 +1127,22 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     const safePS = Math.max(1, layoutMetrics.pageSize)
     const safeCols = Math.max(1, layoutMetrics.columns)
 
+    const layoutDimensions = layoutDimensionsTracker.read()
     const baseOuterSlots =
-      prevPageSizeRef.current === safePS && prevColumnsRef.current === safeCols
+      layoutDimensions.pageSize === safePS && layoutDimensions.columns === safeCols
         ? [...outerSlotsRef.current]
         : resizeSlotPages(
             outerSlotsRef.current,
             prevOuterItems,
-            prevPageSizeRef.current,
+            layoutDimensions.pageSize,
             safePS,
-            prevColumnsRef.current,
+            layoutDimensions.columns,
             safeCols,
             buildPersistedItemCoordinates(
               outerSlotsRef.current,
               prevOuterItems,
-              prevPageSizeRef.current,
-              prevColumnsRef.current
+              layoutDimensions.pageSize,
+              layoutDimensions.columns
             )
           )
 
@@ -1445,7 +1440,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       cancelPendingFolderClose()
       clearEdgeSwitchTimer()
     }
-  }, [])
+  }, [clearEdgeSwitchTimer])
 
   const gridWidth = columns * itemWidth + Math.max(0, columns - 1) * GRID_GAP
   const gridHeight = rows * itemHeight + Math.max(0, rows - 1) * GRID_GAP
@@ -1528,8 +1523,8 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
             iconConfig={iconConfig}
             selectionMode={selectionMode}
             selectedSet={selectedSet}
-            openFolderId={openFolderId}
-            activeFolderSharedLayoutId={activeFolderSharedLayoutId}
+            openFolderId={visibleOpenFolderId}
+            activeFolderSharedLayoutId={visibleActiveFolderSharedLayoutId}
             onToggleSelectIcon={toggleSelectIcon}
             onTilePointerDown={handleTilePointerDown}
             onTileClickCapture={handleTileClickCapture}
@@ -1586,8 +1581,8 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
             selectionMode={selectionMode}
             selectedSet={selectedSet}
             onToggleSelectIcon={toggleSelectIcon}
-            openFolderId={openFolderId}
-            activeFolderSharedLayoutId={activeFolderSharedLayoutId}
+            openFolderId={visibleOpenFolderId}
+            activeFolderSharedLayoutId={visibleActiveFolderSharedLayoutId}
             bindDockContainerRef={node => {
               dockContainerRef.current = node
             }}
@@ -1617,7 +1612,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
 
         <FolderModalView
           openFolder={openFolder}
-          activeFolderSharedLayoutId={activeFolderSharedLayoutId}
+          activeFolderSharedLayoutId={visibleActiveFolderSharedLayoutId}
           dragContext={dragState?.context === 'dock' ? null : (dragState?.context ?? null)}
           selectionMode={selectionMode}
           selectedSet={selectedSet}

@@ -289,7 +289,6 @@ export function DragOverlays({
   const stackPositionsRef = useRef<StackGhostPosition[]>([])
   const stackedIconsRef = useRef(stackedIcons)
   const lastMoveAtRef = useRef(0)
-  const stackedIconSignature = stackedIcons.map(entry => entry.id).join('|')
 
   useLayoutEffect(() => {
     stackedIconsRef.current = stackedIcons
@@ -326,7 +325,7 @@ export function DragOverlays({
       currentPointer.pointerX - ghostWidth / 2,
       currentPointer.pointerY - ghostHeight / 2
     )
-  }, [dragSessionId, ghostHeight, ghostItem?.kind, ghostWidth])
+  }, [dragPointerRef, dragSessionId, ghostHeight, ghostItem, ghostWidth])
 
   useLayoutEffect(() => {
     if (ghostItem?.kind !== 'icon' || stackedIcons.length === 0) return
@@ -348,7 +347,7 @@ export function DragOverlays({
         entry.sourceCenter.y - iconImageSize / 2
       )
     })
-  }, [dragSessionId, ghostItem?.kind, iconImageSize, stackedIconSignature])
+  }, [dragSessionId, ghostItem?.kind, iconImageSize, stackedIcons])
 
   useEffect(() => {
     if (!dragSessionId || !ghostItem) {
@@ -378,7 +377,7 @@ export function DragOverlays({
         pointerAnimationFrameRef.current = null
       }
     }
-  }, [dragPointerRef, dragSessionId, ghostHeight, ghostItem?.kind, ghostWidth])
+  }, [dragPointerRef, dragSessionId, ghostHeight, ghostItem, ghostWidth])
 
   useEffect(() => {
     const initialPointer = dragPointerRef.current
@@ -505,7 +504,7 @@ export function DragOverlays({
         animationFrameRef.current = null
       }
     }
-  }, [dragPointerRef, dragSessionId, ghostItem?.kind, iconImageSize, stackedIconSignature])
+  }, [dragPointerRef, dragSessionId, ghostItem?.kind, iconImageSize, stackedIcons])
 
   return (
     <>

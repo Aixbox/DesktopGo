@@ -1,6 +1,7 @@
 import { Check } from 'lucide-react'
 import { motion } from 'framer-motion'
 import {
+  useCallback,
   useLayoutEffect,
   useEffect,
   useRef,
@@ -213,7 +214,7 @@ export function DockBar({
 
   const hasVisibleItems = displaySlots.some(slot => typeof slot === 'string')
 
-  const updateOverflowState = () => {
+  const updateOverflowState = useCallback(() => {
     const panel = panelRef.current
     if (!panel) return
 
@@ -230,9 +231,9 @@ export function DockBar({
     const nextOverflow = dockContentWidth - maxPanelContentWidth > DOCK_OVERFLOW_THRESHOLD
 
     setHasHorizontalOverflow(current => (current === nextOverflow ? current : nextOverflow))
-  }
+  }, [dockContentWidth])
 
-  const syncIndicatorVisual = () => {
+  const syncIndicatorVisual = useCallback(() => {
     const scroller = scrollerRef.current
     const thumb = indicatorThumbRef.current
     if (!scroller || !thumb) return
@@ -250,71 +251,74 @@ export function DockBar({
     const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth)
     const scrollPercent = maxScrollLeft > 0 ? Math.round((scroller.scrollLeft / maxScrollLeft) * 100) : 0
     indicatorTrackRef.current?.setAttribute('aria-valuenow', String(scrollPercent))
-  }
+  }, [])
 
-  const refreshDockMetrics = () => {
+  const refreshDockMetrics = useCallback(() => {
     updateOverflowState()
     syncIndicatorVisual()
-  }
+  }, [syncIndicatorVisual, updateOverflowState])
 
-  const stopSmoothScroll = () => {
+  const stopSmoothScroll = useCallback(() => {
     if (smoothScrollRafRef.current !== null) {
       window.cancelAnimationFrame(smoothScrollRafRef.current)
       smoothScrollRafRef.current = null
     }
     smoothScrollTargetRef.current = null
     smoothScrollLastFrameRef.current = null
-  }
+  }, [])
 
-  const queueSmoothScroll = (delta: number, options?: { relativeToCurrent?: boolean }) => {
-    const scroller = scrollerRef.current
-    if (!scroller) return
+  const queueSmoothScroll = useCallback(
+    (delta: number, options?: { relativeToCurrent?: boolean }) => {
+      const scroller = scrollerRef.current
+      if (!scroller) return
 
-    const maxScrollLeft = scroller.scrollWidth - scroller.clientWidth
-    if (maxScrollLeft <= 0) return
+      const maxScrollLeft = scroller.scrollWidth - scroller.clientWidth
+      if (maxScrollLeft <= 0) return
 
-    const baseScrollLeft = options?.relativeToCurrent
-      ? scroller.scrollLeft
-      : (smoothScrollTargetRef.current ?? scroller.scrollLeft)
-    const nextTarget = Math.max(0, Math.min(maxScrollLeft, baseScrollLeft + delta))
-    smoothScrollTargetRef.current = nextTarget
+      const baseScrollLeft = options?.relativeToCurrent
+        ? scroller.scrollLeft
+        : (smoothScrollTargetRef.current ?? scroller.scrollLeft)
+      const nextTarget = Math.max(0, Math.min(maxScrollLeft, baseScrollLeft + delta))
+      smoothScrollTargetRef.current = nextTarget
 
-    if (smoothScrollRafRef.current !== null) return
+      if (smoothScrollRafRef.current !== null) return
 
-    const step = (timestamp: number) => {
-      const activeScroller = scrollerRef.current
-      const targetScrollLeft = smoothScrollTargetRef.current
-      if (!activeScroller || targetScrollLeft === null) {
-        stopSmoothScroll()
-        return
-      }
+      const step = (timestamp: number) => {
+        const activeScroller = scrollerRef.current
+        const targetScrollLeft = smoothScrollTargetRef.current
+        if (!activeScroller || targetScrollLeft === null) {
+          stopSmoothScroll()
+          return
+        }
 
-      const previousTimestamp = smoothScrollLastFrameRef.current
-      smoothScrollLastFrameRef.current = timestamp
-      const frameDuration =
-        previousTimestamp === null ? 16.667 : Math.min(34, timestamp - previousTimestamp)
-      const easing = 1 - Math.pow(1 - DOCK_SMOOTH_SCROLL_EASING, frameDuration / 16.667)
-      const currentScrollLeft = activeScroller.scrollLeft
-      const nextScrollLeft =
-        Math.abs(targetScrollLeft - currentScrollLeft) <= DOCK_SMOOTH_SCROLL_STOP_DISTANCE
-          ? targetScrollLeft
-          : currentScrollLeft + (targetScrollLeft - currentScrollLeft) * easing
+        const previousTimestamp = smoothScrollLastFrameRef.current
+        smoothScrollLastFrameRef.current = timestamp
+        const frameDuration =
+          previousTimestamp === null ? 16.667 : Math.min(34, timestamp - previousTimestamp)
+        const easing = 1 - Math.pow(1 - DOCK_SMOOTH_SCROLL_EASING, frameDuration / 16.667)
+        const currentScrollLeft = activeScroller.scrollLeft
+        const nextScrollLeft =
+          Math.abs(targetScrollLeft - currentScrollLeft) <= DOCK_SMOOTH_SCROLL_STOP_DISTANCE
+            ? targetScrollLeft
+            : currentScrollLeft + (targetScrollLeft - currentScrollLeft) * easing
 
-      activeScroller.scrollLeft = nextScrollLeft
-      syncIndicatorVisual()
-
-      if (Math.abs(targetScrollLeft - nextScrollLeft) <= DOCK_SMOOTH_SCROLL_STOP_DISTANCE) {
-        activeScroller.scrollLeft = targetScrollLeft
+        activeScroller.scrollLeft = nextScrollLeft
         syncIndicatorVisual()
-        stopSmoothScroll()
-        return
+
+        if (Math.abs(targetScrollLeft - nextScrollLeft) <= DOCK_SMOOTH_SCROLL_STOP_DISTANCE) {
+          activeScroller.scrollLeft = targetScrollLeft
+          syncIndicatorVisual()
+          stopSmoothScroll()
+          return
+        }
+
+        smoothScrollRafRef.current = window.requestAnimationFrame(step)
       }
 
       smoothScrollRafRef.current = window.requestAnimationFrame(step)
-    }
-
-    smoothScrollRafRef.current = window.requestAnimationFrame(step)
-  }
+    },
+    [stopSmoothScroll, syncIndicatorVisual]
+  )
 
   useLayoutEffect(() => {
     const panel = panelRef.current
@@ -366,7 +370,7 @@ export function DockBar({
       }
       stopSmoothScroll()
     }
-  }, [])
+  }, [stopSmoothScroll])
 
   useLayoutEffect(() => {
     const scroller = scrollerRef.current
@@ -390,12 +394,18 @@ export function DockBar({
       observer.disconnect()
       window.removeEventListener('resize', scheduleMetricsUpdate)
     }
-  }, [dockButtonSize, dockContentWidth])
+  }, [dockButtonSize, dockContentWidth, refreshDockMetrics])
 
   useLayoutEffect(() => {
     if (!hasHorizontalOverflow) return
     syncIndicatorVisual()
-  }, [hasHorizontalOverflow, isIndicatorDragging, dockButtonSize, dockContentWidth])
+  }, [
+    dockButtonSize,
+    dockContentWidth,
+    hasHorizontalOverflow,
+    isIndicatorDragging,
+    syncIndicatorVisual,
+  ])
 
   useEffect(() => {
     if (dragContext !== 'dock' || !hasHorizontalOverflow) return
@@ -458,7 +468,7 @@ export function DockBar({
         autoScrollRafRef.current = null
       }
     }
-  }, [dragContext, dragPointerRef, hasHorizontalOverflow])
+  }, [dragContext, dragPointerRef, hasHorizontalOverflow, queueSmoothScroll])
 
   const handleScrollWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
     const scroller = event.currentTarget
@@ -478,36 +488,34 @@ export function DockBar({
     }
   }
 
-  const scrollToIndicatorPointer = (
-    clientX: number,
-    thumbGrabOffset: number,
-    trackLeft?: number,
-    trackWidth?: number
-  ) => {
-    const scroller = scrollerRef.current
-    const track = indicatorTrackRef.current
-    if (!scroller || !track || !hasHorizontalOverflow) return
+  const scrollToIndicatorPointer = useCallback(
+    (clientX: number, thumbGrabOffset: number, trackLeft?: number, trackWidth?: number) => {
+      const scroller = scrollerRef.current
+      const track = indicatorTrackRef.current
+      if (!scroller || !track || !hasHorizontalOverflow) return
 
-    const resolvedTrackLeft = trackLeft ?? track.getBoundingClientRect().left
-    const resolvedTrackWidth = trackWidth ?? track.getBoundingClientRect().width
-    const maxScrollLeft = scroller.scrollWidth - scroller.clientWidth
-    if (maxScrollLeft <= 0) return
+      const resolvedTrackLeft = trackLeft ?? track.getBoundingClientRect().left
+      const resolvedTrackWidth = trackWidth ?? track.getBoundingClientRect().width
+      const maxScrollLeft = scroller.scrollWidth - scroller.clientWidth
+      if (maxScrollLeft <= 0) return
 
-    const { thumbWidth } = resolveIndicatorMetrics(
-      scroller.scrollLeft,
-      scroller.clientWidth,
-      scroller.scrollWidth,
-      resolvedTrackWidth
-    )
-    const maxThumbOffset = Math.max(0, resolvedTrackWidth - thumbWidth)
-    const rawThumbOffset = clientX - resolvedTrackLeft - thumbGrabOffset
-    const clampedThumbOffset = Math.max(0, Math.min(maxThumbOffset, rawThumbOffset))
-    const ratio = maxThumbOffset > 0 ? clampedThumbOffset / maxThumbOffset : 0
+      const { thumbWidth } = resolveIndicatorMetrics(
+        scroller.scrollLeft,
+        scroller.clientWidth,
+        scroller.scrollWidth,
+        resolvedTrackWidth
+      )
+      const maxThumbOffset = Math.max(0, resolvedTrackWidth - thumbWidth)
+      const rawThumbOffset = clientX - resolvedTrackLeft - thumbGrabOffset
+      const clampedThumbOffset = Math.max(0, Math.min(maxThumbOffset, rawThumbOffset))
+      const ratio = maxThumbOffset > 0 ? clampedThumbOffset / maxThumbOffset : 0
 
-    stopSmoothScroll()
-    scroller.scrollLeft = ratio * maxScrollLeft
-    syncIndicatorVisual()
-  }
+      stopSmoothScroll()
+      scroller.scrollLeft = ratio * maxScrollLeft
+      syncIndicatorVisual()
+    },
+    [hasHorizontalOverflow, stopSmoothScroll, syncIndicatorVisual]
+  )
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -539,7 +547,7 @@ export function DockBar({
       window.removeEventListener('pointerup', handlePointerEnd)
       window.removeEventListener('pointercancel', handlePointerEnd)
     }
-  }, [hasHorizontalOverflow])
+  }, [scrollToIndicatorPointer])
 
   const beginIndicatorDrag = (
     event: ReactPointerEvent<HTMLDivElement>,

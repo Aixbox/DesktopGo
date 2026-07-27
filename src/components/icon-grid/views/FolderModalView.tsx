@@ -102,7 +102,10 @@ export function FolderModalView({
   const previousFocusRef = useRef<HTMLElement | null>(null)
   const openFolderIdRef = useRef<string | undefined>(undefined)
   const openFolderId = openFolder?.id
-  openFolderIdRef.current = openFolderId
+
+  useEffect(() => {
+    openFolderIdRef.current = openFolderId
+  }, [openFolderId])
 
   const restorePreviousFocus = useCallback(() => {
     if (previousFocusRef.current?.isConnected) {
