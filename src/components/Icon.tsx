@@ -58,7 +58,6 @@ export const Icon = memo(function Icon({
   useEffect(() => {
     if (renameTriggerPath && renameTriggerPath === icon.path) {
       // An external context-menu request intentionally opens this local editor.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDraftName(displayName)
       setIsRenaming(true)
       clearRenameTrigger()

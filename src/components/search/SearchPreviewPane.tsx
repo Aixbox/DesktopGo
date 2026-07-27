@@ -156,9 +156,7 @@ export function SearchPreviewPane({
                   })}
                 </div>
                 <div>
-                  {preview?.isDirectory
-                    ? translate('文件夹预览')
-                    : translate('暂无内联预览')}
+                  {preview?.isDirectory ? translate('文件夹预览') : translate('暂无内联预览')}
                 </div>
               </div>
             </div>

@@ -5,8 +5,10 @@ import { translate, useI18n } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { inputBaseClassName } from '@/components/ui/input'
 
-interface NumberInputProps
-  extends Omit<React.ComponentProps<'input'>, 'defaultValue' | 'onChange' | 'type' | 'value'> {
+interface NumberInputProps extends Omit<
+  React.ComponentProps<'input'>,
+  'defaultValue' | 'onChange' | 'type' | 'value'
+> {
   value: number
   onValueChange: (value: number) => void
   step?: number
@@ -32,17 +34,7 @@ const resolvePrecision = (value: number) => {
 
 export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
   (
-    {
-      className,
-      disabled,
-      inputClassName,
-      max,
-      min,
-      onValueChange,
-      step = 1,
-      value,
-      ...props
-    },
+    { className, disabled, inputClassName, max, min, onValueChange, step = 1, value, ...props },
     ref
   ) => {
     useI18n()

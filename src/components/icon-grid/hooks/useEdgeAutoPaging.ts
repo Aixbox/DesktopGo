@@ -95,7 +95,8 @@ export function useEdgeAutoPaging({
       scheduleEdgeSwitch(`left:${targetPage}`, () => {
         const latest = dragRef.current
         if (!latest || latest.context !== 'outer') return
-        const maxPage = getPageCountBySlots(latest.workingOrder, Math.max(1, pageSizeRef.current)) - 1
+        const maxPage =
+          getPageCountBySlots(latest.workingOrder, Math.max(1, pageSizeRef.current)) - 1
         const nextPage = clampNumber(currentPageRef.current - 1, 0, Math.max(0, maxPage))
         if (nextPage === currentPageRef.current) return
         currentPageRef.current = nextPage
@@ -109,7 +110,8 @@ export function useEdgeAutoPaging({
       scheduleEdgeSwitch(`right:${targetPage}`, () => {
         const latest = dragRef.current
         if (!latest || latest.context !== 'outer') return
-        const maxPage = getPageCountBySlots(latest.workingOrder, Math.max(1, pageSizeRef.current)) - 1
+        const maxPage =
+          getPageCountBySlots(latest.workingOrder, Math.max(1, pageSizeRef.current)) - 1
         const nextPage = clampNumber(currentPageRef.current + 1, 0, Math.max(0, maxPage))
         if (nextPage === currentPageRef.current) return
         currentPageRef.current = nextPage
@@ -131,7 +133,11 @@ export function useEdgeAutoPaging({
       const latestPageSize = Math.max(1, pageSizeRef.current)
       const latestPageCount = getPageCountBySlots(latest.workingOrder, latestPageSize)
       if (hasTrailingEmptyPage(latest.workingOrder, latestPageSize)) {
-        const nextPage = clampNumber(currentPageRef.current + 1, 0, Math.max(0, latestPageCount - 1))
+        const nextPage = clampNumber(
+          currentPageRef.current + 1,
+          0,
+          Math.max(0, latestPageCount - 1)
+        )
         if (nextPage !== currentPageRef.current) {
           currentPageRef.current = nextPage
           setCurrentPage(nextPage)
@@ -139,7 +145,10 @@ export function useEdgeAutoPaging({
         return
       }
 
-      const expandedOrder = [...latest.workingOrder, ...Array.from({ length: latestPageSize }, () => null)]
+      const expandedOrder = [
+        ...latest.workingOrder,
+        ...Array.from({ length: latestPageSize }, () => null),
+      ]
       const nextState: DragState = { ...latest, workingOrder: expandedOrder }
       dragRef.current = nextState
       setDragState(nextState)

@@ -1,104 +1,95 @@
-import type { ThemeMode, WindowStyle } from "@/types";
-import { invoke } from "@tauri-apps/api/core";
-import { getSetting, setSetting } from "@/lib/settingsStore";
-import {
-    planThemeSyncOnSystemPreferenceChange,
-    resolveEffectiveThemeMode,
-} from "./themePolicy";
+import type { ThemeMode, WindowStyle } from '@/types'
+import { invoke } from '@tauri-apps/api/core'
+import { getSetting, setSetting } from '@/lib/settingsStore'
+import { planThemeSyncOnSystemPreferenceChange, resolveEffectiveThemeMode } from './themePolicy'
 
-export const THEME_MODE_SYNC_EVENT = "desktopgo:theme-mode-sync";
-export {
-    planThemeSyncOnSystemPreferenceChange,
-    resolveEffectiveThemeMode,
-} from "./themePolicy";
+export const THEME_MODE_SYNC_EVENT = 'desktopgo:theme-mode-sync'
+export { planThemeSyncOnSystemPreferenceChange, resolveEffectiveThemeMode } from './themePolicy'
 
 function emitThemeModeSync(mode: ThemeMode) {
-    window.dispatchEvent(
-        new CustomEvent(THEME_MODE_SYNC_EVENT, {
-            detail: { mode },
-        }),
-    );
+  window.dispatchEvent(
+    new CustomEvent(THEME_MODE_SYNC_EVENT, {
+      detail: { mode },
+    })
+  )
 }
 
 /**
  * 根据 ThemeMode 设置应用到 <html> 元素上的 dark class
  */
-export function applyTheme(mode: ThemeMode, windowStyle: WindowStyle = "default") {
-    const effectiveMode = resolveEffectiveThemeMode(mode, windowStyle);
-    const root = document.documentElement;
+export function applyTheme(mode: ThemeMode, windowStyle: WindowStyle = 'default') {
+  const effectiveMode = resolveEffectiveThemeMode(mode, windowStyle)
+  const root = document.documentElement
 
-    if (effectiveMode === "dark") {
-        root.classList.add("dark");
-    } else if (effectiveMode === "light") {
-        root.classList.remove("dark");
+  if (effectiveMode === 'dark') {
+    root.classList.add('dark')
+  } else if (effectiveMode === 'light') {
+    root.classList.remove('dark')
+  } else {
+    // system: 跟随系统偏好
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    if (prefersDark) {
+      root.classList.add('dark')
     } else {
-        // system: 跟随系统偏好
-        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        if (prefersDark) {
-            root.classList.add("dark");
-        } else {
-            root.classList.remove("dark");
-        }
+      root.classList.remove('dark')
     }
+  }
 }
 
 /**
  * 从 plugin-store 读取保存的主题模式
  */
 export async function getSavedTheme(): Promise<ThemeMode> {
-    return getSetting("themeMode");
+  return getSetting('themeMode')
 }
 
 export async function saveTheme(mode: ThemeMode): Promise<void> {
-    await setSetting("themeMode", mode);
+  await setSetting('themeMode', mode)
 }
 
 /**
  * 初始化主题，并设置系统主题变化监听
  */
 export async function initTheme(): Promise<() => void> {
-    const [mode, windowStyle] = await Promise.all([
+  const [mode, windowStyle] = await Promise.all([getSavedTheme(), getSetting('windowStyle')])
+  applyTheme(mode, windowStyle)
+
+  // 监听系统主题偏好变化（system 模式，或原生亚克力强制跟随系统时生效）
+  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+  const handleChange = () => {
+    void (async () => {
+      const [currentMode, windowStyle] = await Promise.all([
         getSavedTheme(),
-        getSetting("windowStyle"),
-    ]);
-    applyTheme(mode, windowStyle);
+        getSetting('windowStyle'),
+      ])
+      const plan = planThemeSyncOnSystemPreferenceChange(
+        currentMode,
+        windowStyle,
+        mediaQuery.matches
+      )
 
-    // 监听系统主题偏好变化（system 模式，或原生亚克力强制跟随系统时生效）
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = () => {
-        void (async () => {
-            const [currentMode, windowStyle] = await Promise.all([
-                getSavedTheme(),
-                getSetting("windowStyle"),
-            ]);
-            const plan = planThemeSyncOnSystemPreferenceChange(
-                currentMode,
-                windowStyle,
-                mediaQuery.matches,
-            );
+      if (!plan) {
+        return
+      }
 
-            if (!plan) {
-                return;
-            }
+      if (plan.saveMode && currentMode !== plan.saveMode) {
+        await saveTheme(plan.saveMode)
+      }
 
-            if (plan.saveMode && currentMode !== plan.saveMode) {
-                await saveTheme(plan.saveMode);
-            }
+      applyTheme(plan.applyMode, windowStyle)
+      emitThemeModeSync(plan.emitMode)
 
-            applyTheme(plan.applyMode, windowStyle);
-            emitThemeModeSync(plan.emitMode);
+      if (plan.refreshNativeAcrylic) {
+        await invoke('apply_window_style', {
+          style: windowStyle,
+          themeMode: plan.applyMode,
+        })
+      }
+    })().catch(e => {
+      console.error('Failed to sync system theme change:', e)
+    })
+  }
+  mediaQuery.addEventListener('change', handleChange)
 
-            if (plan.refreshNativeAcrylic) {
-                await invoke("apply_window_style", {
-                    style: windowStyle,
-                    themeMode: plan.applyMode,
-                });
-            }
-        })().catch((e) => {
-            console.error("Failed to sync system theme change:", e);
-        });
-    };
-    mediaQuery.addEventListener("change", handleChange);
-
-    return () => mediaQuery.removeEventListener("change", handleChange);
+  return () => mediaQuery.removeEventListener('change', handleChange)
 }

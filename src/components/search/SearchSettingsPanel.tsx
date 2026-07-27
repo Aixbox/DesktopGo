@@ -1,6 +1,5 @@
 ﻿import { useEffect, useState } from 'react'
 import { getSearchFilterOptions } from '@/lib/search/filters'
-import { useMemo } from 'react'
 import {
   DEFAULT_SEARCH_SETTINGS,
   loadSearchSettings,
@@ -19,14 +18,14 @@ import { translate, useI18n } from '@/lib/i18n'
 import { ShortcutUsageSettings } from './ShortcutUsageSettings'
 
 export function SearchSettingsPanel() {
-  const { language } = useI18n()
+  useI18n()
   const [settings, setSettings] = useState<SearchSettings>(DEFAULT_SEARCH_SETTINGS)
   const [loading, setLoading] = useState(true)
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [resetting, setResetting] = useState(false)
   const toast = useToast()
-  const filterOptions = useMemo(() => getSearchFilterOptions(), [language])
-  const sortOptions = useMemo(() => getSearchSortOptions(), [language])
+  const filterOptions = getSearchFilterOptions()
+  const sortOptions = getSearchSortOptions()
 
   useEffect(() => {
     setLoading(true)
@@ -92,7 +91,6 @@ export function SearchSettingsPanel() {
       for (const [key, value] of Object.entries(DEFAULT_SEARCH_SETTINGS) as Array<
         [keyof SearchSettings, SearchSettings[keyof SearchSettings]]
       >) {
-        // eslint-disable-next-line no-await-in-loop
         await persistSetting(key, value)
       }
       toast.success(translate('默认设置已恢复。'), {

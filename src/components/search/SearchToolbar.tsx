@@ -1,7 +1,7 @@
 import { getSearchSortLabel, getSearchSortOptions } from '@/lib/search/sorts'
 import type { SearchSort } from '@/lib/search/types'
 import { ArrowUpDown, Check, Eye, EyeOff, Settings2 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { translate, useI18n } from '@/lib/i18n'
 import { SearchFloatingMenu } from './SearchFloatingMenu'
 
@@ -73,7 +73,7 @@ export function SearchToolbar({
   previewVisible,
   onPreviewToggle,
 }: SearchToolbarProps) {
-  const { language } = useI18n()
+  useI18n()
   const [sortMenuOpen, setSortMenuOpen] = useState(false)
   const [matcherMenuOpen, setMatcherMenuOpen] = useState(false)
   const sortMenuRef = useRef<HTMLDivElement | null>(null)
@@ -82,21 +82,17 @@ export function SearchToolbar({
   const matcherButtonRef = useRef<HTMLButtonElement | null>(null)
   const hasActiveMatcher = matchCase || wholeWord || matchPath || regex
   const selectedSortLabel = getSearchSortLabel(sort)
-  const sortOptions = useMemo(() => getSearchSortOptions(), [language])
-  const groupedSortOptions = useMemo(
-    () =>
-      sortOptions.reduce(
-        (groups, option) => {
-          groups[option.group].push(option)
-          return groups
-        },
-        {
-          common: [] as typeof sortOptions,
-          metadata: [] as typeof sortOptions,
-          history: [] as typeof sortOptions,
-        }
-      ),
-    [sortOptions]
+  const sortOptions = getSearchSortOptions()
+  const groupedSortOptions = sortOptions.reduce(
+    (groups, option) => {
+      groups[option.group].push(option)
+      return groups
+    },
+    {
+      common: [] as typeof sortOptions,
+      metadata: [] as typeof sortOptions,
+      history: [] as typeof sortOptions,
+    }
   )
 
   useEffect(() => {

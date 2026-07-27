@@ -144,15 +144,14 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
     const selectedIndex = options.findIndex(option => option.value === value)
     const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : undefined
     const hasValue = selectedOption !== undefined
-    const resolvedMenuStyle =
-      menuStyle ?? {
-        position: 'fixed',
-        top: MENU_MARGIN,
-        left: MENU_MARGIN,
-        width: MENU_MIN_WIDTH,
-        visibility: 'hidden',
-        zIndex: 100,
-      }
+    const resolvedMenuStyle = menuStyle ?? {
+      position: 'fixed',
+      top: MENU_MARGIN,
+      left: MENU_MARGIN,
+      width: MENU_MIN_WIDTH,
+      visibility: 'hidden',
+      zIndex: 100,
+    }
     const viewportMaxHeight = getViewportMaxHeight(resolvedMenuStyle.maxHeight, '0.5rem')
 
     const setTriggerRef = React.useCallback(

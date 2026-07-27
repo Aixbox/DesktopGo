@@ -18,7 +18,8 @@ export const classifyZone = (rect: DOMRect, x: number, y: number): HoverZone => 
 export const clampNumber = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value))
 
-export const getRectArea = (rect: DOMRect): number => Math.max(0, rect.width) * Math.max(0, rect.height)
+export const getRectArea = (rect: DOMRect): number =>
+  Math.max(0, rect.width) * Math.max(0, rect.height)
 
 export const getRectIntersection = (a: DOMRect, b: DOMRect): DOMRect | null => {
   const left = Math.max(a.left, b.left)

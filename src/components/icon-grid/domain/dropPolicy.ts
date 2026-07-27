@@ -665,4 +665,3 @@ export const applyMultiOuterDropFromSession = ({
     previewSlots: resolveCommittedBaseSlots(previewSlots ?? session.workingOrder, dragIds),
   })
 }
-

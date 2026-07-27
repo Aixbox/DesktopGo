@@ -132,9 +132,7 @@ interface UseSearchResult {
   reloadSettings: () => Promise<void>
 }
 
-interface UseSearchOptions {
-  enabled?: boolean
-}
+type UseSearchOptions = { enabled?: boolean }
 
 export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchResult {
   const [settings, setSettings] = useState<SearchSettings>(DEFAULT_SEARCH_SETTINGS)
@@ -890,6 +888,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
       setFilter,
       setMatchCase,
       setMatchPath,
+      setKeyword,
       setRegex,
       setSort,
       setVisibleRange,

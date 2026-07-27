@@ -20,11 +20,54 @@ export function LogoIcon({ size = 24, className }: LogoIconProps) {
         </linearGradient>
       </defs>
       <rect width="80" height="80" rx="20" fill="#1a1a2e" />
-      <rect width="80" height="80" rx="20" fill="url(#logo-bg)" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-      <rect x="16" y="16" width="20" height="20" rx="6" fill="rgba(167,139,250,0.6)" stroke="#a78bfa" strokeWidth="2" />
-      <rect x="44" y="16" width="20" height="20" rx="6" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2" />
-      <rect x="16" y="44" width="20" height="20" rx="6" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2" />
-      <rect x="44" y="44" width="20" height="20" rx="6" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2" />
+      <rect
+        width="80"
+        height="80"
+        rx="20"
+        fill="url(#logo-bg)"
+        stroke="rgba(255,255,255,0.15)"
+        strokeWidth="1"
+      />
+      <rect
+        x="16"
+        y="16"
+        width="20"
+        height="20"
+        rx="6"
+        fill="rgba(167,139,250,0.6)"
+        stroke="#a78bfa"
+        strokeWidth="2"
+      />
+      <rect
+        x="44"
+        y="16"
+        width="20"
+        height="20"
+        rx="6"
+        fill="none"
+        stroke="rgba(255,255,255,0.6)"
+        strokeWidth="2"
+      />
+      <rect
+        x="16"
+        y="44"
+        width="20"
+        height="20"
+        rx="6"
+        fill="none"
+        stroke="rgba(255,255,255,0.6)"
+        strokeWidth="2"
+      />
+      <rect
+        x="44"
+        y="44"
+        width="20"
+        height="20"
+        rx="6"
+        fill="none"
+        stroke="rgba(255,255,255,0.6)"
+        strokeWidth="2"
+      />
     </svg>
   )
 }
@@ -47,9 +90,7 @@ export function LogoText({ size = 'md', className }: LogoTextProps) {
       <span className={`${textSizes[size]} font-light text-muted-foreground/70 tracking-wide`}>
         Desktop
       </span>
-      <span className={`${textSizes[size]} font-bold text-[#a78bfa] tracking-wide`}>
-        Go
-      </span>
+      <span className={`${textSizes[size]} font-bold text-[#a78bfa] tracking-wide`}>Go</span>
     </span>
   )
 }

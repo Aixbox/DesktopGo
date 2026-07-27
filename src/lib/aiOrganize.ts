@@ -72,10 +72,7 @@ export const inferAiFolderSize = (childCount: number): FolderSize => {
 
 const AI_FOLDER_SIZES = new Set<FolderSize>(['1x1', '1x2', '2x1', '2x2'])
 
-export const normalizeAiFolderSize = (
-  value: unknown,
-  fallbackChildCount: number
-): FolderSize => {
+export const normalizeAiFolderSize = (value: unknown, fallbackChildCount: number): FolderSize => {
   if (typeof value === 'string' && AI_FOLDER_SIZES.has(value as FolderSize)) {
     return value as FolderSize
   }

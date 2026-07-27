@@ -213,110 +213,110 @@ export function OuterGridView({
         <div
           ref={gridRef}
           className="grid h-full w-full content-start"
-        style={{
-          gridTemplateColumns: `repeat(${columns}, ${itemWidth}px)`,
-          gridTemplateRows: `repeat(${rows}, ${itemHeight}px)`,
-          gap: `${gridGap}px`,
-        }}
-      >
-        {Array.from({ length: pageCellCount }, (_, index) => {
-          return (
+          style={{
+            gridTemplateColumns: `repeat(${columns}, ${itemWidth}px)`,
+            gridTemplateRows: `repeat(${rows}, ${itemHeight}px)`,
+            gap: `${gridGap}px`,
+          }}
+        >
+          {Array.from({ length: pageCellCount }, (_, index) => {
+            return (
+              <div
+                key={`cell-${currentPage}-${index}`}
+                data-grid-item
+                className="h-full w-full rounded-2xl border border-transparent bg-transparent"
+                style={{ minHeight: `${itemHeight}px` }}
+                aria-hidden="true"
+              />
+            )
+          })}
+
+          {dragContext === 'outer' && dragPreviewSlotIndex !== null && previewFootprint !== null ? (
             <div
-              key={`cell-${currentPage}-${index}`}
-              data-grid-item
-              className="h-full w-full rounded-2xl border border-transparent bg-transparent"
-              style={{ minHeight: `${itemHeight}px` }}
+              className="pointer-events-none rounded-2xl border border-border/60 bg-background/35 dark:border-white/22 dark:bg-white/8"
+              style={{
+                gridColumn: `${previewFootprint.col + 1} / span ${previewFootprint.span.cols}`,
+                gridRow: `${previewFootprint.row + 1} / span ${previewFootprint.span.rows}`,
+              }}
               aria-hidden="true"
             />
-          )
-        })}
+          ) : null}
 
-        {dragContext === 'outer' && dragPreviewSlotIndex !== null && previewFootprint !== null ? (
-          <div
-            className="pointer-events-none rounded-2xl border border-border/60 bg-background/35 dark:border-white/22 dark:bg-white/8"
-            style={{
-              gridColumn: `${previewFootprint.col + 1} / span ${previewFootprint.span.cols}`,
-              gridRow: `${previewFootprint.row + 1} / span ${previewFootprint.span.rows}`,
-            }}
-            aria-hidden="true"
-          />
-        ) : null}
+          {pageAnchorEntries.map(entry => {
+            const hideItem = hiddenOuterItemIds.includes(entry.id)
+            const highlightedItem = highlightedOuterItemIdSet.has(entry.id)
+            const folderPreview =
+              (dragContext === 'outer' && dragFolderPreviewTargetId === entry.id) ||
+              folderPreviewFreezeTargetId === entry.id ||
+              folderCreateTransitionTargetId === entry.id
 
-        {pageAnchorEntries.map(entry => {
-          const hideItem = hiddenOuterItemIds.includes(entry.id)
-          const highlightedItem = highlightedOuterItemIdSet.has(entry.id)
-          const folderPreview =
-            (dragContext === 'outer' && dragFolderPreviewTargetId === entry.id) ||
-            folderPreviewFreezeTargetId === entry.id ||
-            folderCreateTransitionTargetId === entry.id
-
-          return (
-            <div
-              key={entry.id}
-              ref={node => {
-                bindTileRef(entry.id, node)
-              }}
-              className={`relative justify-self-center self-start transition-opacity duration-150 ${
-                hideItem ? 'opacity-0' : 'opacity-100'
-              }`}
-              style={{
-                gridColumn: `${entry.col + 1} / span ${entry.span.cols}`,
-                gridRow: `${entry.row + 1} / span ${entry.span.rows}`,
-                width: `${entry.span.cols * itemWidth + Math.max(0, entry.span.cols - 1) * gridGap}px`,
-                height: `${entry.span.rows * itemHeight + Math.max(0, entry.span.rows - 1) * gridGap}px`,
-              }}
-            >
-              {entry.item.kind === 'icon' ? (
-                <div
-                  className="relative touch-none"
-                  onPointerDown={event => onTilePointerDown(event, entry.id)}
-                  onClickCapture={onTileClickCapture}
-                >
+            return (
+              <div
+                key={entry.id}
+                ref={node => {
+                  bindTileRef(entry.id, node)
+                }}
+                className={`relative justify-self-center self-start transition-opacity duration-150 ${
+                  hideItem ? 'opacity-0' : 'opacity-100'
+                }`}
+                style={{
+                  gridColumn: `${entry.col + 1} / span ${entry.span.cols}`,
+                  gridRow: `${entry.row + 1} / span ${entry.span.rows}`,
+                  width: `${entry.span.cols * itemWidth + Math.max(0, entry.span.cols - 1) * gridGap}px`,
+                  height: `${entry.span.rows * itemHeight + Math.max(0, entry.span.rows - 1) * gridGap}px`,
+                }}
+              >
+                {entry.item.kind === 'icon' ? (
                   <div
-                    className={`transition-opacity duration-150 ${
-                      folderPreview ? 'opacity-0' : 'opacity-100'
-                    }`}
+                    className="relative touch-none"
+                    onPointerDown={event => onTilePointerDown(event, entry.id)}
+                    onClickCapture={onTileClickCapture}
                   >
-                    <Icon
+                    <div
+                      className={`transition-opacity duration-150 ${
+                        folderPreview ? 'opacity-0' : 'opacity-100'
+                      }`}
+                    >
+                      <Icon
+                        icon={entry.item.icon}
+                        selectionKey={entry.item.key}
+                        selectionMode={selectionMode}
+                        selected={selectedSet.has(entry.item.key)}
+                        onToggleSelect={onToggleSelectIcon}
+                        highlighted={highlightedItem}
+                      />
+                    </div>
+                    <FolderCreatePreview
+                      active={folderPreview}
                       icon={entry.item.icon}
-                      selectionKey={entry.item.key}
-                      selectionMode={selectionMode}
-                      selected={selectedSet.has(entry.item.key)}
-                      onToggleSelect={onToggleSelectIcon}
-                      highlighted={highlightedItem}
+                      imgSize={iconConfig.imgSize}
+                      reorderAnimationMs={reorderAnimationMs}
+                      tileWidth={itemWidth}
+                      tileHeight={itemHeight}
                     />
                   </div>
-                  <FolderCreatePreview
-                    active={folderPreview}
-                    icon={entry.item.icon}
-                    imgSize={iconConfig.imgSize}
-                    reorderAnimationMs={reorderAnimationMs}
-                    tileWidth={itemWidth}
-                    tileHeight={itemHeight}
+                ) : (
+                  <OuterFolderTile
+                    folder={entry.item}
+                    span={entry.span}
+                    slotWidth={itemWidth}
+                    slotHeight={itemHeight}
+                    gridGap={gridGap}
+                    folderPreview={folderPreview}
+                    folderOpen={openFolderId === entry.item.id}
+                    sharedLayoutActive={activeFolderSharedLayoutId === entry.item.id}
+                    selectionMode={selectionMode}
+                    onPointerDown={event => onTilePointerDown(event, entry.id)}
+                    onClickCapture={onTileClickCapture}
+                    onOpenFolder={onOpenFolder}
+                    onLaunchIcon={onLaunchIcon}
+                    onResizeFolder={onResizeFolder}
                   />
-                </div>
-              ) : (
-                <OuterFolderTile
-                  folder={entry.item}
-                  span={entry.span}
-                  slotWidth={itemWidth}
-                  slotHeight={itemHeight}
-                  gridGap={gridGap}
-                  folderPreview={folderPreview}
-                  folderOpen={openFolderId === entry.item.id}
-                  sharedLayoutActive={activeFolderSharedLayoutId === entry.item.id}
-                  selectionMode={selectionMode}
-                  onPointerDown={event => onTilePointerDown(event, entry.id)}
-                  onClickCapture={onTileClickCapture}
-                  onOpenFolder={onOpenFolder}
-                  onLaunchIcon={onLaunchIcon}
-                  onResizeFolder={onResizeFolder}
-                />
-              )}
-            </div>
-          )
-        })}
-      </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       {canGoLeft ? (

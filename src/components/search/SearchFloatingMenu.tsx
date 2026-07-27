@@ -93,18 +93,17 @@ export function SearchFloatingMenu({
   children,
 }: SearchFloatingMenuProps) {
   const [style, setStyle] = useState<CSSProperties | null>(null)
-  const resolvedStyle =
-    style ?? {
-      position: 'fixed',
-      top: FLOATING_MENU_MARGIN,
-      left: FLOATING_MENU_MARGIN,
-      width:
-        typeof window === 'undefined'
-          ? width
-          : Math.min(width, window.innerWidth - FLOATING_MENU_MARGIN * 2),
-      visibility: 'hidden',
-      zIndex: FLOATING_MENU_Z_INDEX,
-    }
+  const resolvedStyle = style ?? {
+    position: 'fixed',
+    top: FLOATING_MENU_MARGIN,
+    left: FLOATING_MENU_MARGIN,
+    width:
+      typeof window === 'undefined'
+        ? width
+        : Math.min(width, window.innerWidth - FLOATING_MENU_MARGIN * 2),
+    visibility: 'hidden',
+    zIndex: FLOATING_MENU_Z_INDEX,
+  }
   const viewportMaxHeight = getViewportMaxHeight(
     resolvedStyle.maxHeight,
     FLOATING_MENU_VERTICAL_INSET

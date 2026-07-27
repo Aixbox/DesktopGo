@@ -24,7 +24,10 @@ export const resetOuterInteraction = <TState extends OuterInteractionFields<TZon
   lastEvasionSignature: null,
 })
 
-export const clearOuterInteractionForPageSwitch = <TState extends OuterInteractionFields<TZone>, TZone>(
+export const clearOuterInteractionForPageSwitch = <
+  TState extends OuterInteractionFields<TZone>,
+  TZone,
+>(
   state: TState
 ): TState => ({
   ...state,

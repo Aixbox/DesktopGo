@@ -237,9 +237,7 @@ const applyCompactPageDrop = ({
     .filter((slot): slot is string => typeof slot === 'string' && !dragIdSet.has(slot))
   const targetId = typeof nextSlots[dropIndex] === 'string' ? nextSlots[dropIndex] : null
   const targetCompactIndex =
-    targetId && !dragIdSet.has(targetId)
-      ? targetPageIds.indexOf(targetId)
-      : -1
+    targetId && !dragIdSet.has(targetId) ? targetPageIds.indexOf(targetId) : -1
   const targetLocalIndex =
     targetCompactIndex >= 0
       ? targetCompactIndex
@@ -279,13 +277,7 @@ const applyCompactPageDrop = ({
     nextSlots.push(...overflowIds)
   }
 
-  return compactOuterSlotsWithinPages(
-    nextSlots,
-    items,
-    safePageSize,
-    safeColumns,
-    safeMinPageCount
-  )
+  return compactOuterSlotsWithinPages(nextSlots, items, safePageSize, safeColumns, safeMinPageCount)
 }
 
 const prioritizeDraggedItems = (items: GridItem[], dragIds: string[]) => {
@@ -414,7 +406,11 @@ const placeIdsIntoSlotsRowMajor = ({
   const nextSlots = [...slots]
   const remainingIds = [...ids]
 
-  for (let anchorIndex = pageStart; anchorIndex < pageStart + pageSize && remainingIds.length > 0; anchorIndex += 1) {
+  for (
+    let anchorIndex = pageStart;
+    anchorIndex < pageStart + pageSize && remainingIds.length > 0;
+    anchorIndex += 1
+  ) {
     const itemId = remainingIds[0]
     const item = items.find(candidate => getId(candidate) === itemId)
     if (!item) {
@@ -521,7 +517,11 @@ const insertIntoPageFromAnchor = ({
   }
 
   const carryIds = [...dragIds]
-  for (let localIndex = dropLocalIndex; localIndex < pageSize && carryIds.length > 0; localIndex += 1) {
+  for (
+    let localIndex = dropLocalIndex;
+    localIndex < pageSize && carryIds.length > 0;
+    localIndex += 1
+  ) {
     const nextId = carryIds.shift()
     if (nextId === undefined) break
     const displacedId = pageEntries[localIndex]
@@ -534,9 +534,7 @@ const insertIntoPageFromAnchor = ({
   const sourcePageIds = sourceSlots
     .slice(pageStart, pageEnd)
     .filter((id): id is string => typeof id === 'string')
-  const pageEntryIdSet = new Set(
-    pageEntries.filter((id): id is string => typeof id === 'string')
-  )
+  const pageEntryIdSet = new Set(pageEntries.filter((id): id is string => typeof id === 'string'))
   const carryIdSet = new Set(carryIds)
   sourcePageIds.forEach(id => {
     if (pageEntryIdSet.has(id) || carryIdSet.has(id)) return
@@ -571,7 +569,7 @@ const insertIntoPageFromAnchor = ({
 
   return remainingCarryIds
 }
- 
+
 const stabilizeMultiDropPage = ({
   sourceSlots,
   insertedSlots,
@@ -800,4 +798,3 @@ export const applyMultiOuterDropFromSession = ({
     previewSlots: resolveCommittedBaseSlots(previewSlots ?? session.workingOrder, dragIds),
   })
 }
-
