@@ -14,7 +14,7 @@
 | 编号  | 优先级 | 状态   | 事项                            | 目标                                                                                                   |
 | ----- | ------ | ------ | ------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | D-001 | P0     | 待开发 | 安装包启动时先选择语言          | 使用一个安装包承载简体中文和英文；启动安装包后首先选择语言，再进入对应语言的完整安装流程。             |
-| D-002 | P0     | 进行中 | ESLint 告警清零与超大文件模块化 | 将当前 11 条 ESLint 告警分批降至 0；逐步把 11 个超预算手写文件拆回清晰的视图、控制器、领域和服务边界。 |
+| D-002 | P0     | 进行中 | ESLint 告警清零与超大文件模块化 | 将当前 10 条 ESLint 告警分批降至 0；逐步把 10 个超预算手写文件拆回清晰的视图、控制器、领域和服务边界。 |
 
 ## D-001：安装包启动时先选择语言
 
@@ -72,13 +72,13 @@
 
 截至 2026-07-27，第一阶段 ESLint 配置治理已经完成：
 
-- `pnpm lint` 限定检查 `src`、`vite.config.ts` 和 `eslint.config.js`，当前为 `0 errors / 11 warnings`。
+- `pnpm lint` 限定检查 `src`、`vite.config.ts` 和 `eslint.config.js`，当前为 `0 errors / 10 warnings`。
 - `pnpm lint:strict` 保留 `--max-warnings 0`，用于衡量技术债是否真正清零。
 - ESLint 与 Prettier 已解耦，并提供独立的 `format` 和 `format:check` 命令。
 - React Compiler 相关规则只在 8 个明确列出的旧文件中临时降级为 warning，不允许扩大例外范围。
-- 当前 11 条告警全部为 `max-lines`；`exhaustive-deps`、`set-state-in-effect`、`refs`、`only-export-components` 与 `immutability` 已清零。
-- E-03 与 E-04 已将功能代码告警从 52 降到 0；当前仅剩后续启用的 11 条 1000 行 `max-lines` 门禁告警。
-- 当前有 11 个手写 `.ts/.tsx` 文件超过统一的 1000 行模块预算；ESLint 与变更文件预算脚本使用相同阈值。
+- 当前 10 条告警全部为 `max-lines`；`exhaustive-deps`、`set-state-in-effect`、`refs`、`only-export-components` 与 `immutability` 已清零。
+- E-03 与 E-04 已将功能代码告警从 52 降到 0；E-05 已消除 1 条 1000 行 `max-lines` 门禁告警。
+- 当前有 10 个手写 `.ts/.tsx` 文件超过统一的 1000 行模块预算；ESLint 与变更文件预算脚本使用相同阈值。
 
 ### 治理原则
 
@@ -99,7 +99,7 @@
 | E-02 | 已完成 | 搜索、设置、AI 和图标编辑流程 |       16 | 搜索重试与分页改为迭代调度，关键词和选择状态改为纯策略；设置加载、图标会话重置、AI 提示队列和应用请求已移动到异步结果或显式事件边界。                              |         63 |
 | E-03 | 已完成 | 分页图标网格                  |       29 | 布局尺寸快照进入独立状态控制器，自动翻页回调保持稳定；拖拽处理器在指针会话开始时显式装配，覆盖层、Dock 和文件夹弹窗改用真实依赖与 effect 同步边界。                |         34 |
 | E-04 | 已完成 | 滚动图标网格                  |       23 | 已复用布局尺寸控制器与稳定自动翻页接口；滚动分组数量、文件夹可见状态和页码改为派生或渲染期校正，拖拽处理器改为在指针会话开始时显式装配。                         |         11 |
-| E-05 | 待开发 | 恢复零告警门禁                |       11 | 完成超大文件治理并清零 `max-lines`，删除 8 个 legacy 文件规则降级，令日常 `lint` 启用 `--max-warnings 0`；`lint:strict` 可保留为 CI 别名或合并为同一命令。         |          0 |
+| E-05 | 进行中 | 恢复零告警门禁                |       11 | `topLevelLayout.ts` 已进入预算；继续完成其余超大文件治理，删除 8 个 legacy 文件规则降级，并让日常 `lint` 启用 `--max-warnings 0`。                           |          0 |
 
 每个批次必须严格达到表中的告警目标；如果发现新增告警，必须在同一批次处理，不能把基线数字向上调整。
 
@@ -119,6 +119,12 @@
 - 启用和关闭 Dock 后拖入、拖出及重排图标，确认落点预览、隐藏占位、选择清理和持久化顺序一致。
 - 新增、删除、编辑和重排滚动分组，删除当前打开的文件夹，并切换图标尺寸、窗口模式和侧栏宽度，确认分组数量、可见弹窗与布局几何立即收敛。
 
+#### E-05 模块化进度
+
+- `topLevelLayout.ts` 已从 1029 行降至 929 行，并消除对应的 `max-lines` 告警。
+- 新增 111 行的 `gridCoordinates.ts`，集中负责持久化网格坐标的转换、校验和越界投影。
+- 新增 56 行的表驱动测试，覆盖跨页坐标、锚点选择、非法坐标和越界投影。
+
 ### 超大文件治理轨道
 
 告警清理和文件拆分必须同步进行。优先处理同时携带告警的模块，随后处理虽然暂时无告警、但已经形成职责聚合的文件。
@@ -128,7 +134,7 @@
 | M-01 搜索与启动台     | P0     | `Launchpad.tsx` 2137、`SearchPanel.tsx` 839、`useSearch.ts` 883                                                                                               | `useSearch` 已抽出关键词提交与选择钳制策略，并改为迭代重试/分页调度；后续让 `Launchpad` 仅组合主窗口区域，将搜索范围、键盘导航和启动流程继续移入 feature controller。最终每个手写 TypeScript 模块不超过 1000 行。       |
 | M-02 分页图标网格     | P0     | `IconGrid.tsx` 1685、`useIconGridDragWorkflow.ts` 1947、`useDragDropCommit.ts` 764、`DragOverlays.tsx` 668、`DockBar.tsx` 904、`OuterFolderTile.tsx` 537      | 布局尺寸快照已进入 `layoutDimensionsTracker`，自动翻页 Hook 已提供稳定回调，拖拽处理器改为按指针会话显式装配；后续继续拆分水合、文件夹、导入放置、选择和拖拽 session。                                                  |
 | M-03 滚动图标网格     | P0     | `ScrollableIconGrid.tsx` 2473、`ScrollableOuterGridView.tsx` 2133、`useScrollableIconGridDragWorkflow.ts` 2710、`useScrollableDragDropCommit.ts` 810          | 已复用分页网格的布局尺寸控制器、自动翻页与指针会话装配边界；后续拆滚动分组、可视区域、自动滚动、拖拽预览和提交控制器。最终每个组合视图、Hook 或控制器不超过 1000 行。                                                     |
-| M-04 图标网格领域规则 | P1     | `dragMovePolicy.ts` 1669、`topLevelLayout.ts` 1029、`dropPolicy.ts` 667、`scrollDropPolicy.ts` 800、`scrollGroupLayout.ts` 522、`scrollTopLevelLayout.ts` 447 | 按稳定规则拆为坐标/占位、候选目标、移动决策、提交变换和滚动分组策略；保持 domain 无 React、store、DOM、Tauri 和持久化依赖；每个策略模块配表驱动边界测试。                                                               |
+| M-04 图标网格领域规则 | P1     | `dragMovePolicy.ts` 1669、`topLevelLayout.ts` 929、`gridCoordinates.ts` 111、`dropPolicy.ts` 667、`scrollDropPolicy.ts` 800、`scrollGroupLayout.ts` 522        | 持久化网格坐标已抽到独立纯策略并配有边界测试；后续继续按候选目标、移动决策、提交变换和滚动分组策略拆分，保持 domain 无 React、store、DOM、Tauri 和持久化依赖。                                                          |
 | M-05 AI 与图标编辑    | P1     | `AiOrganizePanel.tsx` 2207、`AddIconDialog.tsx` 1420、`IconCropDialog.tsx` 1111                                                                               | 图标表单初始态和 AI 提示队列已分别抽到纯策略与专用 Hook；后续继续按步骤或面板拆分视图，将验证、异步预览、裁剪几何和保存流程移入 controller/domain/service。每个视图或复杂 Hook 不超过 1000 行。                         |
 | M-06 设置界面         | P1     | `GeneralSettingsPanel.tsx` 879、`IconManagerPanel.tsx` 793                                                                                                    | 按设置分区拆成 feature-local sections；持久化由现有 settings service/store 统一处理；列表操作与导入/删除流程进入控制器，避免分区组件直接组合平台调用。                                                                  |
 | M-07 基础设施         | P2     | `i18n.tsx` 977、`iconStore.ts` 456                                                                                                                            | i18n 已拆出 React Provider、Context/Hook 和语言运行态，后续继续按领域拆分翻译目录；store 保留稳定公共 facade，将选择、启动、布局偏好等 action 按职责拆到独立 slice 或 domain policy，避免消费者迁移期间出现多个状态源。 |
@@ -139,9 +145,9 @@
 2. `E-02` 已完成，并推进了 `M-01` 中的 `useSearch` 拆分；关键词提交、选择钳制和图标表单初始态已有纯逻辑回归测试。
 3. `E-03` 已完成，并推进了 `M-02`；布局尺寸控制器有独立状态转换测试，拖拽回调按指针会话固定，分页网格功能告警已清零。
 4. `E-04` 已完成并推进了 `M-03`；滚动网格已复用分页网格验证过的布局尺寸、自动翻页和会话装配边界，功能代码告警已清零。
-5. 继续处理 `M-01` 至 `M-07` 中超过 1000 行的模块，每次只选择一个领域或一个用户流程，不进行全仓库一次性重排。
+5. `E-05` 已从 M-04 的持久化网格坐标策略开始；继续处理 `M-01` 至 `M-07` 中超过 1000 行的模块，每次只选择一个领域或一个用户流程。
 6. 超大文件全部进入预算后完成 `E-05`，让普通 lint 和 CI 都回到零告警门禁。
-7. 当 11 个文件全部降到预算内，或仅剩经过例外协议记录的文件后，将 `D-002` 标记为已完成。
+7. 当剩余 10 个文件全部降到预算内，或仅剩经过例外协议记录的文件后，将 `D-002` 标记为已完成。
 
 ### 每批验收门禁
 
@@ -157,7 +163,7 @@
 
 - `pnpm lint` 和 `pnpm lint:strict` 均为 `0 errors / 0 warnings`。
 - `eslint.config.js` 中不存在针对旧业务文件的规则降级列表。
-- 11 个当前超预算文件全部进入 1000 行预算，或存在逐文件、可量化、经批准的例外记录。
+- 最初识别的 11 个超预算文件全部进入 1000 行预算，或存在逐文件、可量化、经批准的例外记录。
 - 分页和滚动图标网格共享同义的纯领域规则，不再复制修复。
 - 搜索、拖拽、AI、图标编辑和设置流程均有清晰的视图、控制器、领域与服务边界。
 - 全量测试、类型检查、格式检查、生产构建和变更文件预算检查通过。
