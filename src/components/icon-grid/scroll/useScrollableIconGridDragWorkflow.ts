@@ -2350,10 +2350,6 @@ export function useScrollableIconGridDragWorkflow({
     publishMoveDragState(next)
   }
 
-  useEffect(() => {
-    beginDragFnRef.current = beginDrag
-  }, [beginDrag])
-
   const scheduleDragMove = (pointerId: number, x: number, y: number) => {
     syncRawDragPointer(pointerId, x, y)
     queuedDragMoveRef.current = { pointerId, x, y }
@@ -2380,101 +2376,96 @@ export function useScrollableIconGridDragWorkflow({
     processDragMove(queued.pointerId, queued.x, queued.y)
   }
 
-  useEffect(() => {
-    onDragMoveFnRef.current = scheduleDragMove
-    flushDragMoveFnRef.current = flushDragMove
-  }, [flushDragMove, scheduleDragMove])
-
-  useEffect(() => {
-    finishDragFnRef.current = (pointerId: number) => {
-      let completedDrag = dragRef.current
-      if (completedDrag?.context === 'folder') {
-        const pointer = dragPointerRef.current
-        const panel = folderPanelRef.current
-        if (pointer && panel) {
-          const panelRect = panel.getBoundingClientRect()
-          const releasedOnFolderMask = isPointOutsideScrollFolderContent(
-            { x: pointer.pointerX, y: pointer.pointerY },
-            panelRect
+  const finishActiveDrag = (pointerId: number) => {
+    let completedDrag = dragRef.current
+    if (completedDrag?.context === 'folder') {
+      const pointer = dragPointerRef.current
+      const panel = folderPanelRef.current
+      if (pointer && panel) {
+        const panelRect = panel.getBoundingClientRect()
+        const releasedOnFolderMask = isPointOutsideScrollFolderContent(
+          { x: pointer.pointerX, y: pointer.pointerY },
+          panelRect
+        )
+        const canExitThroughMask = canExitScrollFolderThroughMask({
+          dragStartedInFolder: dragStartedInFolderRef.current,
+          enteredFolderContent: enteredFolderContentRef.current,
+        })
+        if (releasedOnFolderMask && canExitThroughMask) {
+          clearFolderExitTimer()
+          completedDrag = moveDragToTopLevelContext(
+            {
+              ...completedDrag,
+              pointerX: pointer.pointerX,
+              pointerY: pointer.pointerY,
+            },
+            resolveTopLevelContextAtPoint(pointer.pointerX, pointer.pointerY),
+            pointer.pointerX,
+            pointer.pointerY
           )
-          const canExitThroughMask = canExitScrollFolderThroughMask({
-            dragStartedInFolder: dragStartedInFolderRef.current,
-            enteredFolderContent: enteredFolderContentRef.current,
-          })
-          if (releasedOnFolderMask && canExitThroughMask) {
-            clearFolderExitTimer()
-            completedDrag = moveDragToTopLevelContext(
-              {
-                ...completedDrag,
-                pointerX: pointer.pointerX,
-                pointerY: pointer.pointerY,
-              },
-              resolveTopLevelContextAtPoint(pointer.pointerX, pointer.pointerY),
-              pointer.pointerX,
-              pointer.pointerY
-            )
-            commitDragState(completedDrag)
-          }
+          commitDragState(completedDrag)
         }
       }
-      const completedFolderTargetId = completedDrag?.folderPreviewTargetId ?? null
-      const completedFolderTarget = completedFolderTargetId
-        ? itemsRef.current.find(item => getId(item) === completedFolderTargetId)
-        : null
-      const folderCreateTargetId =
-        completedFolderTarget?.kind === 'icon' ? completedFolderTargetId : null
-      const sourceFolderReplacementId = completedDrag?.sourceFolderId
-        ? (() => {
-            const draggingIdSet = new Set(completedDrag.draggingIds)
-            const remainingChildren = getFolderChildrenById(
-              itemsRef.current,
-              completedDrag.sourceFolderId
-            ).filter(child => !draggingIdSet.has(child.key))
-            return remainingChildren.length === 1 ? remainingChildren[0].key : null
-          })()
-        : null
-      if (!finishDrag(pointerId)) return
-      if (completedDrag?.context === 'outer' && folderCreateTargetId === null) {
-        onOuterDragFinished?.(completedDrag, folderCreateTargetId, sourceFolderReplacementId)
-      }
-      dragPointerCaptureTargetRef.current = releaseDragPointerCapture(
-        dragPointerCaptureTargetRef.current,
-        pointerId
-      )
-      if (completedDrag && completedDrag.draggingIds.length > 0) {
-        unselectIcons(completedDrag.draggingIds)
-      }
-      clearOuterDwellTimer()
-      clearFolderExitTimer()
-      suppressClickUntilRef.current = performance.now() + 300
     }
-  }, [finishDrag, onOuterDragFinished, unselectIcons])
+    const completedFolderTargetId = completedDrag?.folderPreviewTargetId ?? null
+    const completedFolderTarget = completedFolderTargetId
+      ? itemsRef.current.find(item => getId(item) === completedFolderTargetId)
+      : null
+    const folderCreateTargetId =
+      completedFolderTarget?.kind === 'icon' ? completedFolderTargetId : null
+    const sourceFolderReplacementId = completedDrag?.sourceFolderId
+      ? (() => {
+          const draggingIdSet = new Set(completedDrag.draggingIds)
+          const remainingChildren = getFolderChildrenById(
+            itemsRef.current,
+            completedDrag.sourceFolderId
+          ).filter(child => !draggingIdSet.has(child.key))
+          return remainingChildren.length === 1 ? remainingChildren[0].key : null
+        })()
+      : null
+    if (!finishDrag(pointerId)) return
+    if (completedDrag?.context === 'outer' && folderCreateTargetId === null) {
+      onOuterDragFinished?.(completedDrag, folderCreateTargetId, sourceFolderReplacementId)
+    }
+    dragPointerCaptureTargetRef.current = releaseDragPointerCapture(
+      dragPointerCaptureTargetRef.current,
+      pointerId
+    )
+    if (completedDrag && completedDrag.draggingIds.length > 0) {
+      unselectIcons(completedDrag.draggingIds)
+    }
+    clearOuterDwellTimer()
+    clearFolderExitTimer()
+    suppressClickUntilRef.current = performance.now() + 300
+  }
 
-  useEffect(() => {
+  const abortPendingDrag = (pointerId: number) => {
+    if (pendingRef.current?.pointerId !== pointerId) return
+    clearPending()
+    suppressClickUntilRef.current = performance.now() + 300
+  }
+
+  const cancelActiveDrag = (pointerId: number) => {
+    if (dragRef.current?.pointerId !== pointerId) return
+    clearOuterDwellTimer()
+    clearEdgeSwitchTimer()
+    cancelQueuedDragMove()
+    dragPointerCaptureTargetRef.current = releaseDragPointerCapture(
+      dragPointerCaptureTargetRef.current,
+      pointerId
+    )
+    commitDragState(null)
+  }
+
+  const armPointerControllerSession = () => {
+    beginDragFnRef.current = beginDrag
+    onDragMoveFnRef.current = scheduleDragMove
+    flushDragMoveFnRef.current = flushDragMove
+    finishDragFnRef.current = finishActiveDrag
     clearPendingFnRef.current = clearPending
-  }, [clearPending])
-
-  useEffect(() => {
-    abortPendingFnRef.current = (pointerId: number) => {
-      if (pendingRef.current?.pointerId !== pointerId) return
-      clearPending()
-      suppressClickUntilRef.current = performance.now() + 300
-    }
-  }, [clearPending])
-
-  useEffect(() => {
-    cancelDragFnRef.current = (pointerId: number) => {
-      if (dragRef.current?.pointerId !== pointerId) return
-      clearOuterDwellTimer()
-      clearEdgeSwitchTimer()
-      cancelQueuedDragMove()
-      dragPointerCaptureTargetRef.current = releaseDragPointerCapture(
-        dragPointerCaptureTargetRef.current,
-        pointerId
-      )
-      commitDragState(null)
-    }
-  }, [clearEdgeSwitchTimer])
+    abortPendingFnRef.current = abortPendingDrag
+    cancelDragFnRef.current = cancelActiveDrag
+  }
 
   useEffect(() => {
     const cancelActiveInteractions = () => {
@@ -2531,6 +2522,7 @@ export function useScrollableIconGridDragWorkflow({
 
   const handleTilePointerDown = (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => {
     if (event.button !== 0) return
+    armPointerControllerSession()
     const rect = event.currentTarget.getBoundingClientRect()
     pendingPointerCaptureTargetRef.current = event.currentTarget
     pendingRef.current = {
@@ -2558,6 +2550,7 @@ export function useScrollableIconGridDragWorkflow({
     itemId: string
   ) => {
     if (event.button !== 0) return
+    armPointerControllerSession()
     const rect = event.currentTarget.getBoundingClientRect()
     pendingPointerCaptureTargetRef.current = event.currentTarget
     pendingRef.current = {
@@ -2580,6 +2573,7 @@ export function useScrollableIconGridDragWorkflow({
 
   const handleDockItemPointerDown = (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => {
     if (event.button !== 0) return
+    armPointerControllerSession()
     const rect = event.currentTarget.getBoundingClientRect()
     pendingPointerCaptureTargetRef.current = event.currentTarget
     pendingRef.current = {
@@ -2689,7 +2683,7 @@ export function useScrollableIconGridDragWorkflow({
       clearEdgeSwitchTimer()
       cancelQueuedDragMove()
     },
-    []
+    [clearEdgeSwitchTimer]
   )
 
   return {
