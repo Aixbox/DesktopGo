@@ -32,7 +32,7 @@ import {
 } from 'lucide-react'
 import { deriveIconEntryName } from '@/lib/iconManager'
 import { ICON_CROP_OUTPUT_SIZE, type CropCornerRadii } from '@/lib/imageCrop'
-import { deriveWebsiteName, isWebsiteTarget, normalizeWebsiteUrl } from '@/lib/websiteIcon'
+import { deriveWebsiteName, normalizeWebsiteUrl } from '@/lib/websiteIcon'
 import {
   createColoredIconDataUri,
   createTextIconDataUri,
@@ -47,15 +47,22 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/components/ui/toast'
 import { IconCropDialog, type IconCropResult } from './IconCropDialog'
+import {
+  createAddIconDialogInitialState,
+  DEFAULT_TEXT_ICON_COLOR,
+  DEFAULT_TEXT_ICON_TEXT,
+  type AddIconDialogDraft,
+  type AddIconKind,
+  type IconSource,
+} from './addIconDialogState'
+
+export type { AddIconDialogDraft, AddIconKind } from './addIconDialogState'
 
 type ImportIconsResult = {
   imported_count: number
   duplicate_count: number
   invalid_count: number
 }
-export type AddIconKind = 'app' | 'website'
-type IconSource = 'target' | 'custom' | 'text'
-
 const ICON_COLOR_LABELS: Record<IconColorId, string> = {
   none: '无色',
   ocean: '海蓝',
@@ -69,8 +76,6 @@ const ICON_COLOR_LABELS: Record<IconColorId, string> = {
   graphite: '石墨',
 }
 
-const DEFAULT_TEXT_ICON_TEXT = 'D'
-const DEFAULT_TEXT_ICON_COLOR: IconColorId = 'ocean'
 const ICON_EDITOR_SOURCE_SIZE = 256
 const ICON_PICKER_FOCUS_RING_CLASS_NAME =
   'focus-visible:border-blue-500/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45'
@@ -91,20 +96,6 @@ type CropEditorTarget =
 export type AddIconDialogCreatedEntry = {
   displayName: string
   targetPath: string
-}
-
-export type AddIconDialogDraft = {
-  entryKind?: AddIconKind
-  displayName: string
-  targetPath: string
-  launchArguments: string
-  workingDirectory: string
-  customIconPath: string
-  websiteIconBase64?: string
-  generatedIconBase64?: string
-  iconSource?: IconSource
-  iconColor?: IconColorId
-  iconText?: string
 }
 
 interface AddIconDialogProps {
@@ -145,14 +136,19 @@ function FormRow({
   )
 }
 
-export function AddIconDialog({
-  open,
+export function AddIconDialog(props: AddIconDialogProps) {
+  if (!props.open) return null
+  return <AddIconDialogSession {...props} />
+}
+
+function AddIconDialogSession({
   onOpenChange,
   onCreated,
   initialDraft = null,
   onSubmitDraft,
 }: AddIconDialogProps) {
   useI18n()
+  const initialState = createAddIconDialogInitialState(initialDraft)
 
   const titleId = useId()
   const descriptionId = useId()
@@ -165,31 +161,41 @@ export function AddIconDialog({
   const previousFocusRef = useRef<HTMLElement | null>(null)
   const targetPreviewRequestRef = useRef(0)
   const customPreviewRequestRef = useRef(0)
-  const [name, setName] = useState('')
-  const [targetPath, setTargetPath] = useState('')
+  const [name, setName] = useState(initialState.name)
+  const [targetPath, setTargetPath] = useState(initialState.targetPath)
   const websitePreviewRequestRef = useRef(0)
-  const [entryKind, setEntryKind] = useState<AddIconKind>('app')
+  const [entryKind, setEntryKind] = useState<AddIconKind>(initialState.entryKind)
   const [targetPickerOpen, setTargetPickerOpen] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [launchArguments, setLaunchArguments] = useState('')
-  const [workingDirectory, setWorkingDirectory] = useState('')
-  const [customIconPath, setCustomIconPath] = useState('')
-  const [selectedIconSource, setSelectedIconSource] = useState<IconSource>('text')
-  const [iconColor, setIconColor] = useState<IconColorId>(DEFAULT_TEXT_ICON_COLOR)
-  const [iconText, setIconText] = useState(DEFAULT_TEXT_ICON_TEXT)
-  const [editedTextIconPreview, setEditedTextIconPreview] = useState('')
-  const [targetPreview, setTargetPreview] = useState('')
-  const [targetPreviewLoading, setTargetPreviewLoading] = useState(false)
-  const [customPreview, setCustomPreview] = useState('')
-  const [customPreviewLoading, setCustomPreviewLoading] = useState(false)
+  const [launchArguments, setLaunchArguments] = useState(initialState.launchArguments)
+  const [workingDirectory, setWorkingDirectory] = useState(initialState.workingDirectory)
+  const [customIconPath, setCustomIconPath] = useState(initialState.customIconPath)
+  const [selectedIconSource, setSelectedIconSource] = useState<IconSource>(
+    initialState.selectedIconSource
+  )
+  const [iconColor, setIconColor] = useState<IconColorId>(initialState.iconColor)
+  const [iconText, setIconText] = useState(initialState.iconText)
+  const [editedTextIconPreview, setEditedTextIconPreview] = useState(
+    initialState.editedTextIconPreview
+  )
+  const [targetPreview, setTargetPreview] = useState(initialState.targetPreview)
+  const [targetPreviewLoading, setTargetPreviewLoading] = useState(
+    initialState.targetPreviewLoading
+  )
+  const [customPreview, setCustomPreview] = useState(initialState.customPreview)
+  const [customPreviewLoading, setCustomPreviewLoading] = useState(
+    initialState.customPreviewLoading
+  )
   const [customPreviewRevision, setCustomPreviewRevision] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const toast = useToast()
-  const [websitePreview, setWebsitePreview] = useState('')
-  const [websitePreviews, setWebsitePreviews] = useState<string[]>([])
+  const [websitePreview, setWebsitePreview] = useState(initialState.websitePreview)
+  const [websitePreviews, setWebsitePreviews] = useState<string[]>(initialState.websitePreviews)
   const [websitePreviewLoading, setWebsitePreviewLoading] = useState(false)
   const [websitePreviewError, setWebsitePreviewError] = useState('')
-  const [websitePreviewResolved, setWebsitePreviewResolved] = useState(false)
+  const [websitePreviewResolved, setWebsitePreviewResolved] = useState(
+    initialState.websitePreviewResolved
+  )
   const [cropEditorTarget, setCropEditorTarget] = useState<CropEditorTarget | null>(null)
   const [editedRasterPreviews, setEditedRasterPreviews] = useState<string[]>([])
   const [editedRasterCornerRadii, setEditedRasterCornerRadii] = useState<
@@ -200,43 +206,11 @@ export function AddIconDialog({
     [editedTextIconPreview, iconColor, iconText]
   )
 
-  const resetForm = () => {
-    targetPreviewRequestRef.current += 1
-    customPreviewRequestRef.current += 1
-    websitePreviewRequestRef.current += 1
-    setEntryKind('app')
-    setName('')
-    setTargetPath('')
-    setTargetPickerOpen(false)
-    setAdvancedOpen(false)
-    setLaunchArguments('')
-    setWorkingDirectory('')
-    setCustomIconPath('')
-    setSelectedIconSource('text')
-    setIconColor(DEFAULT_TEXT_ICON_COLOR)
-    setIconText(DEFAULT_TEXT_ICON_TEXT)
-    setEditedTextIconPreview('')
-    setTargetPreview('')
-    setTargetPreviewLoading(false)
-    setCustomPreview('')
-    setCustomPreviewLoading(false)
-    setWebsitePreview('')
-    setWebsitePreviews([])
-    setWebsitePreviewLoading(false)
-    setWebsitePreviewError('')
-    setWebsitePreviewResolved(false)
-    setCropEditorTarget(null)
-    setEditedRasterPreviews([])
-    setEditedRasterCornerRadii([])
-  }
-
   const closeDialog = () => {
     if (!submitting) onOpenChange(false)
   }
 
   useEffect(() => {
-    if (!open) return
-
     previousFocusRef.current = document.activeElement as HTMLElement | null
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -247,59 +221,7 @@ export function AddIconDialog({
       document.body.style.overflow = previousOverflow
       window.requestAnimationFrame(() => previousFocusRef.current?.focus())
     }
-  }, [open])
-
-  useEffect(() => {
-    if (!open) {
-      resetForm()
-      return
-    }
-    if (!initialDraft) return
-
-    targetPreviewRequestRef.current += 1
-    customPreviewRequestRef.current += 1
-    setName(initialDraft.displayName)
-    setTargetPath(initialDraft.targetPath)
-    websitePreviewRequestRef.current += 1
-    const nextEntryKind: AddIconKind =
-      initialDraft.entryKind ?? (isWebsiteTarget(initialDraft.targetPath) ? 'website' : 'app')
-    setEntryKind(nextEntryKind)
-    setLaunchArguments(initialDraft.launchArguments)
-    setWorkingDirectory(initialDraft.workingDirectory)
-    setCustomIconPath(initialDraft.customIconPath)
-    setSelectedIconSource(
-      initialDraft.iconSource ??
-        (initialDraft.generatedIconBase64
-          ? 'text'
-          : initialDraft.customIconPath
-            ? 'custom'
-            : 'target')
-    )
-    setIconColor(initialDraft.iconColor ?? 'none')
-    setIconText(initialDraft.iconText ?? '')
-    setEditedTextIconPreview(
-      initialDraft.iconSource === 'text' ? (initialDraft.generatedIconBase64 ?? '') : ''
-    )
-    const initialGeneratedPreview = initialDraft.generatedIconBase64 ?? ''
-    const initialTargetPreview =
-      nextEntryKind === 'app' && initialDraft.iconSource === 'target' ? initialGeneratedPreview : ''
-    const initialCustomPreview = initialDraft.iconSource === 'custom' ? initialGeneratedPreview : ''
-    setTargetPreview(initialTargetPreview)
-    setTargetPreviewLoading(
-      nextEntryKind === 'app' && Boolean(initialDraft.targetPath.trim()) && !initialTargetPreview
-    )
-    setCustomPreview(initialCustomPreview)
-    setCustomPreviewLoading(Boolean(initialDraft.customIconPath.trim()) && !initialCustomPreview)
-    const initialWebsitePreview = initialDraft.websiteIconBase64 ?? ''
-    setWebsitePreview(initialWebsitePreview)
-    setWebsitePreviews(initialWebsitePreview ? [initialWebsitePreview] : [])
-    setWebsitePreviewLoading(false)
-    setWebsitePreviewError('')
-    setWebsitePreviewResolved(Boolean(initialDraft.websiteIconBase64))
-    setCropEditorTarget(null)
-    setEditedRasterPreviews([])
-    setEditedRasterCornerRadii([])
-  }, [initialDraft, open])
+  }, [])
 
   useEffect(() => {
     if (!targetPickerOpen) return
@@ -316,7 +238,7 @@ export function AddIconDialog({
     const requestId = targetPreviewRequestRef.current
     const previewPath = targetPath.trim()
 
-    if (open && !previewPath && initialDraft?.targetPath.trim()) {
+    if (!previewPath && initialDraft?.targetPath.trim()) {
       return
     }
 
@@ -325,7 +247,6 @@ export function AddIconDialog({
         ? (initialDraft.generatedIconBase64 ?? '')
         : ''
     if (
-      open &&
       entryKind === 'app' &&
       previewPath &&
       previewPath === initialDraft?.targetPath.trim() &&
@@ -334,11 +255,7 @@ export function AddIconDialog({
       return
     }
 
-    if (!open || entryKind !== 'app' || !previewPath) {
-      setTargetPreview('')
-      setTargetPreviewLoading(false)
-      return
-    }
+    if (entryKind !== 'app' || !previewPath) return
 
     const timer = window.setTimeout(() => {
       void invoke<string>('get_drag_preview_icon', {
@@ -357,21 +274,20 @@ export function AddIconDialog({
     }, 280)
 
     return () => window.clearTimeout(timer)
-  }, [entryKind, initialDraft, open, targetPath])
+  }, [entryKind, initialDraft, targetPath])
 
   useEffect(() => {
     customPreviewRequestRef.current += 1
     const requestId = customPreviewRequestRef.current
     const previewPath = customIconPath.trim()
 
-    if (open && !previewPath && initialDraft?.customIconPath.trim()) {
+    if (!previewPath && initialDraft?.customIconPath.trim()) {
       return
     }
 
     const initialGeneratedPreview =
       initialDraft?.iconSource === 'custom' ? (initialDraft.generatedIconBase64 ?? '') : ''
     if (
-      open &&
       previewPath &&
       previewPath === initialDraft?.customIconPath.trim() &&
       initialGeneratedPreview
@@ -379,11 +295,7 @@ export function AddIconDialog({
       return
     }
 
-    if (!open || !previewPath) {
-      setCustomPreview('')
-      setCustomPreviewLoading(false)
-      return
-    }
+    if (!previewPath) return
 
     const timer = window.setTimeout(() => {
       void invoke<string>('get_custom_icon_source', {
@@ -401,7 +313,7 @@ export function AddIconDialog({
     }, 280)
 
     return () => window.clearTimeout(timer)
-  }, [customIconPath, customPreviewRevision, initialDraft, open])
+  }, [customIconPath, customPreviewRevision, initialDraft])
 
   const handleDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
@@ -766,8 +678,6 @@ export function AddIconDialog({
       setSubmitting(false)
     }
   }
-
-  if (!open) return null
 
   const normalizedTargetPath =
     entryKind === 'website' ? normalizeWebsiteUrl(targetPath) : targetPath.trim()

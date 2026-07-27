@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { searchFiles } from './api'
 import { buildSearchKeyword } from './filters'
 import { rankSearchPageItems } from './relevance'
+import { clampSearchSelection, resolveCommittedKeyword } from './searchState'
 import {
   addSearchHistoryEntry,
   clearSearchHistory,
@@ -110,6 +111,7 @@ interface UseSearchResult {
   selectedIndex: number
   setSelectedIndex: (index: number) => void
   moveSelection: (delta: number) => void
+  resetResults: () => void
   clear: () => void
   filter: SearchDefaultFilter
   setFilter: (filter: SearchDefaultFilter) => void
@@ -137,7 +139,7 @@ type UseSearchOptions = { enabled?: boolean }
 export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchResult {
   const [settings, setSettings] = useState<SearchSettings>(DEFAULT_SEARCH_SETTINGS)
   const [keyword, setKeywordState] = useState('')
-  const [committedKeyword, setCommittedKeyword] = useState('')
+  const [submittedKeyword, setSubmittedKeyword] = useState('')
   const [filter, setFilterState] = useState<SearchDefaultFilter>(
     DEFAULT_SEARCH_SETTINGS.defaultFilter
   )
@@ -174,6 +176,11 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     () => Object.values(pages).reduce((sum, page) => sum + page.length, 0),
     [pages]
   )
+  const committedKeyword = resolveCommittedKeyword({
+    keyword,
+    submittedKeyword,
+    liveOnType: settings.liveOnType,
+  })
 
   const setPagesAndRef = useCallback((nextPages: PageCache) => {
     pagesRef.current = nextPages
@@ -224,6 +231,19 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     setSelectedIndex(-1)
   }, [clearFlushTimer, invalidateRangeRequest])
 
+  const applySearchConfiguration = useCallback(
+    (loaded: SearchSettings, nextFilter: SearchDefaultFilter) => {
+      setSettings(loaded)
+      setFilterState(nextFilter)
+      setMatchPathState(loaded.matchPath)
+      setMatchCaseState(loaded.matchCase)
+      setRegexState(loaded.regex)
+      setWholeWordState(loaded.matchWholeWord)
+      setSortState(loaded.sortBy)
+    },
+    []
+  )
+
   const loadSettingsAndFilter = useCallback(async () => {
     const loaded = await loadSearchSettings()
     let nextFilter = loaded.defaultFilter
@@ -233,14 +253,8 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
         nextFilter = saved
       }
     }
-    setSettings(loaded)
-    setFilterState(nextFilter)
-    setMatchPathState(loaded.matchPath)
-    setMatchCaseState(loaded.matchCase)
-    setRegexState(loaded.regex)
-    setWholeWordState(loaded.matchWholeWord)
-    setSortState(loaded.sortBy)
-  }, [])
+    applySearchConfiguration(loaded, nextFilter)
+  }, [applySearchConfiguration])
 
   const isContextActive = useCallback((context: SearchContext) => {
     const current = activeQueryRef.current
@@ -248,21 +262,25 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
   }, [])
 
   const executeSearchWithRetry = useCallback(
-    async (context: SearchContext, offset: number, retryAttempt = 0): Promise<SearchPage> => {
-      try {
-        return await searchFiles({
-          keyword: context.queryKeyword,
-          offset,
-          ...context.queryOptions,
-        })
-      } catch (error) {
-        if (isSearchBusyError(error) && isContextActive(context)) {
+    async (context: SearchContext, offset: number): Promise<SearchPage> => {
+      let retryAttempt = 0
+
+      while (true) {
+        try {
+          return await searchFiles({
+            keyword: context.queryKeyword,
+            offset,
+            ...context.queryOptions,
+          })
+        } catch (error) {
+          if (!isSearchBusyError(error) || !isContextActive(context)) {
+            throw error
+          }
           await new Promise<void>(resolve => {
             window.setTimeout(resolve, getBusyRetryDelay(retryAttempt))
           })
-          return executeSearchWithRetry(context, offset, retryAttempt + 1)
+          retryAttempt += 1
         }
-        throw error
       }
     },
     [isContextActive]
@@ -305,83 +323,64 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     [executeSearchWithRetry, isContextActive, setPagesAndRef]
   )
 
-  const flushRequestedOffsets = useCallback(() => {
+  const flushRequestedOffsets = useCallback(async () => {
     flushTimerRef.current = null
 
-    const context = activeQueryRef.current
-    if (!context || loading || rangeRequestRef.current) {
-      return
-    }
+    while (true) {
+      const context = activeQueryRef.current
+      if (!context || loading || rangeRequestRef.current) return
 
-    const pageSize = context.queryOptions.limit
-    const visibleStartPage =
-      visibleRangeRef.current.end >= 0
-        ? Math.floor(visibleRangeRef.current.start / pageSize) * pageSize
-        : 0
+      const pageSize = context.queryOptions.limit
+      const visibleStartPage =
+        visibleRangeRef.current.end >= 0
+          ? Math.floor(visibleRangeRef.current.start / pageSize) * pageSize
+          : 0
+      const visibleCandidates: number[] = []
 
-    const visibleCandidates: number[] = []
-    if (visibleRangeRef.current.end >= visibleRangeRef.current.start) {
-      const safeStart = Math.max(0, visibleRangeRef.current.start)
-      const safeEnd =
-        totalResultsRef.current > 0
-          ? Math.min(totalResultsRef.current - 1, visibleRangeRef.current.end)
-          : visibleRangeRef.current.end
+      if (visibleRangeRef.current.end >= visibleRangeRef.current.start) {
+        const safeStart = Math.max(0, visibleRangeRef.current.start)
+        const safeEnd =
+          totalResultsRef.current > 0
+            ? Math.min(totalResultsRef.current - 1, visibleRangeRef.current.end)
+            : visibleRangeRef.current.end
 
-      for (
-        let offset = Math.floor(safeStart / pageSize) * pageSize;
-        offset <= safeEnd;
-        offset += pageSize
-      ) {
-        if (offset < 0) {
-          continue
+        for (
+          let offset = Math.floor(safeStart / pageSize) * pageSize;
+          offset <= safeEnd;
+          offset += pageSize
+        ) {
+          if (offset < 0) continue
+          if (totalResultsRef.current > 0 && offset >= totalResultsRef.current) continue
+          if (pagesRef.current[offset]) continue
+          visibleCandidates.push(offset)
         }
-        if (totalResultsRef.current > 0 && offset >= totalResultsRef.current) {
-          continue
-        }
-        if (pagesRef.current[offset]) {
-          continue
-        }
-        visibleCandidates.push(offset)
       }
-    }
 
-    const requestedOffsets = [...requestedOffsetsRef.current].filter(offset => {
-      if (offset < 0) return false
-      if (totalResultsRef.current > 0 && offset >= totalResultsRef.current) return false
-      return !pagesRef.current[offset]
-    })
-    requestedOffsetsRef.current.clear()
-
-    let nextOffset: number | null = null
-    if (requestedOffsets.length > 0) {
-      nextOffset = requestedOffsets[0]
-    } else if (visibleCandidates.length > 0) {
-      visibleCandidates.sort((left, right) => {
-        const leftDistance = Math.abs(left - visibleStartPage)
-        const rightDistance = Math.abs(right - visibleStartPage)
-        if (leftDistance !== rightDistance) {
-          return leftDistance - rightDistance
-        }
-        return left - right
+      const requestedOffsets = [...requestedOffsetsRef.current].filter(offset => {
+        if (offset < 0) return false
+        if (totalResultsRef.current > 0 && offset >= totalResultsRef.current) return false
+        return !pagesRef.current[offset]
       })
-      nextOffset = visibleCandidates[0]
-    }
+      requestedOffsetsRef.current.clear()
 
-    if (nextOffset === null) {
-      return
-    }
+      let nextOffset: number | null = requestedOffsets[0] ?? null
+      if (nextOffset === null && visibleCandidates.length > 0) {
+        visibleCandidates.sort((left, right) => {
+          const leftDistance = Math.abs(left - visibleStartPage)
+          const rightDistance = Math.abs(right - visibleStartPage)
+          return leftDistance === rightDistance ? left - right : leftDistance - rightDistance
+        })
+        nextOffset = visibleCandidates[0]
+      }
+      if (nextOffset === null) return
 
-    const nextToken = rangeRequestTokenRef.current + 1
-    rangeRequestTokenRef.current = nextToken
-    rangeRequestRef.current = {
-      seq: context.seq,
-      token: nextToken,
-      offset: nextOffset,
-    }
-    setLoadingMore(true)
+      const nextToken = rangeRequestTokenRef.current + 1
+      rangeRequestTokenRef.current = nextToken
+      rangeRequestRef.current = { seq: context.seq, token: nextToken, offset: nextOffset }
+      setLoadingMore(true)
 
-    void executeSearchWithRetry(context, nextOffset)
-      .then(page => {
+      try {
+        const page = await executeSearchWithRetry(context, nextOffset)
         if (!isContextActive(context)) return
 
         const activeRangeRequest = rangeRequestRef.current
@@ -400,12 +399,12 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
         })
         totalResultsRef.current = page.totalResults
         setTotalResults(page.totalResults)
+        setSelectedIndex(current => clampSearchSelection(current, page.totalResults))
         setProvider(page.provider)
         setRuntimeState(page.runtimeState)
         setTookMs(currentTookMs => currentTookMs + page.tookMs)
         setError(null)
-      })
-      .catch(searchError => {
+      } catch (searchError) {
         if (!isContextActive(context)) return
 
         const activeRangeRequest = rangeRequestRef.current
@@ -421,8 +420,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
         const rawMessage = asErrorMessage(searchError)
         setRuntimeState(getSearchRuntimeStateFromError(rawMessage))
         setError(describeSearchRuntimeError(rawMessage))
-      })
-      .finally(() => {
+      } finally {
         const activeRangeRequest = rangeRequestRef.current
         if (
           activeRangeRequest &&
@@ -433,11 +431,11 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
           rangeRequestRef.current = null
           setLoadingMore(false)
         }
+      }
 
-        clearFlushTimer()
-        flushTimerRef.current = window.setTimeout(flushRequestedOffsets, 0)
-      })
-  }, [clearFlushTimer, executeSearchWithRetry, isContextActive, loading, setPagesAndRef])
+      await new Promise<void>(resolve => window.setTimeout(resolve, 0))
+    }
+  }, [executeSearchWithRetry, isContextActive, loading, setPagesAndRef])
 
   const scheduleOffsetRequest = useCallback(
     (offset: number) => {
@@ -535,10 +533,15 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     [settings.maxResultsPerPage]
   )
   useEffect(() => {
-    void loadSettingsAndFilter().catch(searchError => {
-      setError(describeSearchRuntimeError(asErrorMessage(searchError)))
-    })
-  }, [loadSettingsAndFilter])
+    void loadSearchSettings()
+      .then(async loaded => {
+        const savedFilter = loaded.rememberLastFilter ? await loadLastFilter() : null
+        applySearchConfiguration(loaded, savedFilter ?? loaded.defaultFilter)
+      })
+      .catch(searchError => {
+        setError(describeSearchRuntimeError(asErrorMessage(searchError)))
+      })
+  }, [applySearchConfiguration])
 
   useEffect(() => {
     void loadSearchHistory()
@@ -551,27 +554,14 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
   }, [])
 
   useEffect(() => {
-    if (settings.liveOnType) {
-      setCommittedKeyword(keyword.trim())
-    }
-  }, [keyword, settings.liveOnType])
-
-  useEffect(() => {
-    if (enabled) {
-      return
-    }
-
-    setCommittedKeyword(settings.liveOnType ? keyword.trim() : '')
-    setSearchPending(false)
-    resetSearchState()
-  }, [enabled, keyword, resetSearchState, settings.liveOnType])
-
-  useEffect(() => {
-    if (keyword.trim().length === 0) {
-      setCommittedKeyword('')
-      resetSearchState()
-    }
-  }, [keyword, resetSearchState])
+    if (enabled) return
+    requestSeqRef.current += 1
+    activeQueryRef.current = null
+    clearFlushTimer()
+    requestedOffsetsRef.current.clear()
+    rangeRequestTokenRef.current += 1
+    rangeRequestRef.current = null
+  }, [clearFlushTimer, enabled])
 
   useEffect(() => {
     if (!enabled) {
@@ -638,19 +628,6 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     requestRange(selectedIndex, selectedIndex)
   }, [requestRange, selectedIndex])
 
-  useEffect(() => {
-    if (totalResults === 0) {
-      if (selectedIndex !== -1) {
-        setSelectedIndex(-1)
-      }
-      return
-    }
-
-    if (selectedIndex >= totalResults) {
-      setSelectedIndex(totalResults - 1)
-    }
-  }, [selectedIndex, totalResults])
-
   const reloadSettings = useCallback(async () => {
     await loadSettingsAndFilter()
   }, [loadSettingsAndFilter])
@@ -664,7 +641,6 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     }
     if (settings.liveOnType) {
       setSearchPending(true)
-      setCommittedKeyword(keyword.trim())
     }
   }, [enabled, keyword, settings.liveOnType])
 
@@ -690,19 +666,20 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     (value: string) => {
       setKeywordState(value)
       if (value.trim().length === 0) {
-        setSearchPending(false)
+        setSubmittedKeyword('')
+        resetSearchState()
         return
       }
       if (enabled && settings.liveOnType) {
         setSearchPending(true)
       }
     },
-    [enabled, settings.liveOnType]
+    [enabled, resetSearchState, settings.liveOnType]
   )
 
   const clear = useCallback(() => {
     setKeywordState('')
-    setCommittedKeyword('')
+    setSubmittedKeyword('')
     resetSearchState()
   }, [resetSearchState])
 
@@ -782,7 +759,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
       setWholeWordState(entry.wholeWord)
       setSortState(entry.sort)
       setSearchPending(true)
-      setCommittedKeyword(entry.keyword.trim())
+      setSubmittedKeyword(entry.keyword.trim())
 
       if (settings.rememberLastFilter) {
         void saveLastFilter(entry.filter).catch(() => {
@@ -810,7 +787,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
         // Ignore history persistence failure for live search.
       })
     }
-    setCommittedKeyword(keyword.trim())
+    setSubmittedKeyword(keyword.trim())
   }, [keyword, recordCurrentSearch])
 
   const isKeywordCommitted = keyword.trim() === committedKeyword.trim()
@@ -838,6 +815,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
       selectedIndex,
       setSelectedIndex,
       moveSelection,
+      resetResults: resetSearchState,
       clear,
       filter,
       setFilter,
@@ -883,6 +861,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
       removeHistoryEntry,
       regex,
       requestRange,
+      resetSearchState,
       searchPending,
       selectedIndex,
       setFilter,

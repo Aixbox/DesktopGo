@@ -1,5 +1,5 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react'
-import { getSearchScopeTransition, type SearchSource } from './scope'
+import { getSearchScopeTransition, searchSourceIncludesFiles, type SearchSource } from './scope'
 
 interface UseSearchScopeChangeOptions {
   currentSource: SearchSource
@@ -8,6 +8,7 @@ interface UseSearchScopeChangeOptions {
   setSelectedFileIndex: (index: number) => void
   setCombinedIndex: Dispatch<SetStateAction<number>>
   resetPreview: () => void
+  resetFileResults: () => void
   setFilterMenuOpen: Dispatch<SetStateAction<boolean>>
 }
 
@@ -18,6 +19,7 @@ export function useSearchScopeChange({
   setSelectedFileIndex,
   setCombinedIndex,
   resetPreview,
+  resetFileResults,
   setFilterMenuOpen,
 }: UseSearchScopeChangeOptions) {
   return useCallback(
@@ -34,9 +36,13 @@ export function useSearchScopeChange({
       if (transition.resetPreview) {
         resetPreview()
       }
+      if (transition.changed && !searchSourceIncludesFiles(nextSource)) {
+        resetFileResults()
+      }
     },
     [
       currentSource,
+      resetFileResults,
       resetPreview,
       setCombinedIndex,
       setFilterMenuOpen,

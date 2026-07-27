@@ -14,7 +14,7 @@
 | 编号  | 优先级 | 状态   | 事项                            | 目标                                                                                                   |
 | ----- | ------ | ------ | ------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | D-001 | P0     | 待开发 | 安装包启动时先选择语言          | 使用一个安装包承载简体中文和英文；启动安装包后首先选择语言，再进入对应语言的完整安装流程。             |
-| D-002 | P0     | 进行中 | ESLint 告警清零与超大文件模块化 | 将当前 79 条 ESLint 告警分批降至 0；逐步把 11 个超预算手写文件拆回清晰的视图、控制器、领域和服务边界。 |
+| D-002 | P0     | 进行中 | ESLint 告警清零与超大文件模块化 | 将当前 63 条 ESLint 告警分批降至 0；逐步把 11 个超预算手写文件拆回清晰的视图、控制器、领域和服务边界。 |
 
 ## D-001：安装包启动时先选择语言
 
@@ -72,12 +72,12 @@
 
 截至 2026-07-27，第一阶段 ESLint 配置治理已经完成：
 
-- `pnpm lint` 限定检查 `src`、`vite.config.ts` 和 `eslint.config.js`，当前为 `0 errors / 79 warnings`。
+- `pnpm lint` 限定检查 `src`、`vite.config.ts` 和 `eslint.config.js`，当前为 `0 errors / 63 warnings`。
 - `pnpm lint:strict` 保留 `--max-warnings 0`，用于衡量技术债是否真正清零。
 - ESLint 与 Prettier 已解耦，并提供独立的 `format` 和 `format:check` 命令。
 - React Compiler 相关规则只在 8 个明确列出的旧文件中临时降级为 warning，不允许扩大例外范围。
-- 当前 79 条告警分布为：`exhaustive-deps` 41 条、`set-state-in-effect` 20 条、`max-lines` 11 条、`immutability` 4 条、`refs` 3 条；`only-export-components` 已清零。
-- E-01 完成时的 68 条功能代码告警没有回升；当前新增的 11 条全部来自后续启用的 1000 行 `max-lines` 门禁。
+- 当前 63 条告警分布为：`exhaustive-deps` 40 条、`max-lines` 11 条、`set-state-in-effect` 7 条、`refs` 3 条、`immutability` 2 条；`only-export-components` 已清零。
+- E-02 已将功能代码告警从 68 降到 52；当前总数额外包含后续启用的 11 条 1000 行 `max-lines` 门禁告警。
 - 当前有 11 个手写 `.ts/.tsx` 文件超过统一的 1000 行模块预算；ESLint 与变更文件预算脚本使用相同阈值。
 
 ### 治理原则
@@ -96,7 +96,7 @@
 | ---- | ------ | ----------------------------- | -------: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------: |
 | E-00 | 已完成 | ESLint/Prettier 基线          |        - | 收窄检查范围、移除 `eslint-plugin-prettier`、增加 `lint:strict` 和格式检查。                                                                                            |         81 |
 | E-01 | 已完成 | Fast Refresh 导出边界         |       13 | 文件夹视觉 policy、按钮变体和输入样式已与组件分离；i18n 已拆出语言运行态、Context/Hook 和仅导出组件的 Provider，组件文件不再混合导出纯能力。                            |         68 |
-| E-02 | 待开发 | 搜索、设置、AI 和图标编辑流程 |       16 | 处理 `useSearch.ts` 的递归 callback、分页调度和 effect 状态同步；将设置加载、更新检查、AI 步骤状态和图标预览重置移动到明确的事件或控制器状态转换。                      |         63 |
+| E-02 | 已完成 | 搜索、设置、AI 和图标编辑流程 |       16 | 搜索重试与分页改为迭代调度，关键词和选择状态改为纯策略；设置加载、图标会话重置、AI 提示队列和应用请求已移动到异步结果或显式事件边界。                                   |         63 |
 | E-03 | 待开发 | 分页图标网格                  |       29 | 覆盖 `IconGrid.tsx`、`useIconGridDragWorkflow.ts`、`DragOverlays.tsx`、`DockBar.tsx` 和 `FolderModalView.tsx`；先抽取生命周期与拖拽控制器，再修复依赖、ref 和派生状态。 |         34 |
 | E-04 | 待开发 | 滚动图标网格                  |       23 | 覆盖 `ScrollableIconGrid.tsx` 和 `useScrollableIconGridDragWorkflow.ts`；复用分页网格已经稳定的纯策略与控制器接口，清理重复的拖拽、自动翻页、预览和 ref 同步逻辑。      |         11 |
 | E-05 | 待开发 | 恢复零告警门禁                |       11 | 完成超大文件治理并清零 `max-lines`，删除 8 个 legacy 文件规则降级，令日常 `lint` 启用 `--max-warnings 0`；`lint:strict` 可保留为 CI 别名或合并为同一命令。              |          0 |
@@ -107,20 +107,20 @@
 
 告警清理和文件拆分必须同步进行。优先处理同时携带告警的模块，随后处理虽然暂时无告警、但已经形成职责聚合的文件。
 
-| 轨道                  | 优先级 | 文件与当前规模                                                                                                                                                | 目标边界                                                                                                                                                                                                                         |
-| --------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M-01 搜索与启动台     | P0     | `Launchpad.tsx` 2137、`SearchPanel.tsx` 839、`useSearch.ts` 904                                                                                               | `Launchpad` 仅组合主窗口区域；搜索范围、键盘导航和启动流程进入 feature controller；`SearchPanel` 拆为结果列表、历史和预览布局；`useSearch` 拆为查询、分页、选择、历史和设置 facade。最终每个手写 TypeScript 模块不超过 1000 行。 |
-| M-02 分页图标网格     | P0     | `IconGrid.tsx` 1690、`useIconGridDragWorkflow.ts` 1953、`useDragDropCommit.ts` 764、`DragOverlays.tsx` 672、`DockBar.tsx` 896、`OuterFolderTile.tsx` 537      | `IconGrid` 降为组合根；水合、分页、文件夹、导入放置和选择分别由 feature hooks/controllers 管理；拖拽 session、目标解析、预览和 commit 分离；视图组件不持有持久化或平台逻辑。                                                     |
-| M-03 滚动图标网格     | P0     | `ScrollableIconGrid.tsx` 2474、`ScrollableOuterGridView.tsx` 2133、`useScrollableIconGridDragWorkflow.ts` 2716、`useScrollableDragDropCommit.ts` 810          | 先定义与分页网格共享的纯拖拽策略合同，再拆滚动分组、可视区域、自动滚动、拖拽预览和提交控制器；禁止复制分页网格修复。最终每个组合视图、Hook 或控制器不超过 1000 行。                                                              |
-| M-04 图标网格领域规则 | P1     | `dragMovePolicy.ts` 1669、`topLevelLayout.ts` 1029、`dropPolicy.ts` 667、`scrollDropPolicy.ts` 800、`scrollGroupLayout.ts` 522、`scrollTopLevelLayout.ts` 447 | 按稳定规则拆为坐标/占位、候选目标、移动决策、提交变换和滚动分组策略；保持 domain 无 React、store、DOM、Tauri 和持久化依赖；每个策略模块配表驱动边界测试。                                                                        |
-| M-05 AI 与图标编辑    | P1     | `AiOrganizePanel.tsx` 2208、`AddIconDialog.tsx` 1510、`IconCropDialog.tsx` 1111                                                                               | 视图按步骤或面板拆分；草稿、验证、异步预览、裁剪几何和保存流程进入专用 controller/domain/service；父组件只组合状态和步骤。每个视图或复杂 Hook 不超过 1000 行。                                                                   |
-| M-06 设置界面         | P1     | `GeneralSettingsPanel.tsx` 879、`IconManagerPanel.tsx` 793                                                                                                    | 按设置分区拆成 feature-local sections；持久化由现有 settings service/store 统一处理；列表操作与导入/删除流程进入控制器，避免分区组件直接组合平台调用。                                                                           |
-| M-07 基础设施         | P2     | `i18n.tsx` 977、`iconStore.ts` 456                                                                                                                            | i18n 已拆出 React Provider、Context/Hook 和语言运行态，后续继续按领域拆分翻译目录；store 保留稳定公共 facade，将选择、启动、布局偏好等 action 按职责拆到独立 slice 或 domain policy，避免消费者迁移期间出现多个状态源。          |
+| 轨道                  | 优先级 | 文件与当前规模                                                                                                                                                | 目标边界                                                                                                                                                                                                                |
+| --------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M-01 搜索与启动台     | P0     | `Launchpad.tsx` 2137、`SearchPanel.tsx` 839、`useSearch.ts` 883                                                                                               | `useSearch` 已抽出关键词提交与选择钳制策略，并改为迭代重试/分页调度；后续让 `Launchpad` 仅组合主窗口区域，将搜索范围、键盘导航和启动流程继续移入 feature controller。最终每个手写 TypeScript 模块不超过 1000 行。       |
+| M-02 分页图标网格     | P0     | `IconGrid.tsx` 1690、`useIconGridDragWorkflow.ts` 1953、`useDragDropCommit.ts` 764、`DragOverlays.tsx` 672、`DockBar.tsx` 896、`OuterFolderTile.tsx` 537      | `IconGrid` 降为组合根；水合、分页、文件夹、导入放置和选择分别由 feature hooks/controllers 管理；拖拽 session、目标解析、预览和 commit 分离；视图组件不持有持久化或平台逻辑。                                            |
+| M-03 滚动图标网格     | P0     | `ScrollableIconGrid.tsx` 2474、`ScrollableOuterGridView.tsx` 2133、`useScrollableIconGridDragWorkflow.ts` 2716、`useScrollableDragDropCommit.ts` 810          | 先定义与分页网格共享的纯拖拽策略合同，再拆滚动分组、可视区域、自动滚动、拖拽预览和提交控制器；禁止复制分页网格修复。最终每个组合视图、Hook 或控制器不超过 1000 行。                                                     |
+| M-04 图标网格领域规则 | P1     | `dragMovePolicy.ts` 1669、`topLevelLayout.ts` 1029、`dropPolicy.ts` 667、`scrollDropPolicy.ts` 800、`scrollGroupLayout.ts` 522、`scrollTopLevelLayout.ts` 447 | 按稳定规则拆为坐标/占位、候选目标、移动决策、提交变换和滚动分组策略；保持 domain 无 React、store、DOM、Tauri 和持久化依赖；每个策略模块配表驱动边界测试。                                                               |
+| M-05 AI 与图标编辑    | P1     | `AiOrganizePanel.tsx` 2207、`AddIconDialog.tsx` 1420、`IconCropDialog.tsx` 1111                                                                               | 图标表单初始态和 AI 提示队列已分别抽到纯策略与专用 Hook；后续继续按步骤或面板拆分视图，将验证、异步预览、裁剪几何和保存流程移入 controller/domain/service。每个视图或复杂 Hook 不超过 1000 行。                         |
+| M-06 设置界面         | P1     | `GeneralSettingsPanel.tsx` 879、`IconManagerPanel.tsx` 793                                                                                                    | 按设置分区拆成 feature-local sections；持久化由现有 settings service/store 统一处理；列表操作与导入/删除流程进入控制器，避免分区组件直接组合平台调用。                                                                  |
+| M-07 基础设施         | P2     | `i18n.tsx` 977、`iconStore.ts` 456                                                                                                                            | i18n 已拆出 React Provider、Context/Hook 和语言运行态，后续继续按领域拆分翻译目录；store 保留稳定公共 facade，将选择、启动、布局偏好等 action 按职责拆到独立 slice 或 domain policy，避免消费者迁移期间出现多个状态源。 |
 
 ### 拆分执行顺序
 
 1. 先完成 `E-01`，以低行为风险的导出边界拆分验证模块化方法，并把告警降到 68。
-2. 完成 `E-02` 与 `M-01` 中的 `useSearch` 拆分；搜索状态转换必须先有纯逻辑或 Hook 回归测试，再调整 effect。
+2. `E-02` 已完成，并推进了 `M-01` 中的 `useSearch` 拆分；关键词提交、选择钳制和图标表单初始态已有纯逻辑回归测试。
 3. 完成 `E-03`，同时推进 `M-02`。先提取纯策略和生命周期控制器，再修改依赖数组，避免闭包语义变化。
 4. 完成 `E-04` 与 `M-03`。滚动网格复用分页网格已验证的接口，不并行维护两套同义规则。
 5. 继续处理 `M-01` 至 `M-07` 中超过 1000 行的模块，每次只选择一个领域或一个用户流程，不进行全仓库一次性重排。

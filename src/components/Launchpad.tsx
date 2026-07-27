@@ -56,7 +56,7 @@ import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { useToast } from '@/components/ui/toast'
 import { buildIconSelectionKey, useIconStore } from '@/stores/iconStore'
 import type { DesktopIcon } from '@/types'
-import type { AiOrganizePanelRunState } from './ai/AiOrganizePanel'
+import type { AiOrganizePanelHandle, AiOrganizePanelRunState } from './ai/AiOrganizePanel'
 import type { AddIconDialogDraft } from './icons/AddIconDialog'
 import { Button } from './ui/button'
 
@@ -217,7 +217,7 @@ export function Launchpad() {
   const [isAiOrganizeMode, setIsAiOrganizeMode] = useState(false)
   const [isAiOrganizeSidebarOpen, setIsAiOrganizeSidebarOpen] = useState(false)
   const [isScrollSidebarCompact, setIsScrollSidebarCompact] = useState(false)
-  const [aiOrganizeApplyRequestToken, setAiOrganizeApplyRequestToken] = useState(0)
+  const aiOrganizePanelRef = useRef<AiOrganizePanelHandle>(null)
   const [aiOrganizeRunState, setAiOrganizeRunState] = useState<AiOrganizePanelRunState>({
     canApply: false,
     applying: false,
@@ -245,6 +245,7 @@ export function Launchpad() {
     selectedIndex,
     setSelectedIndex,
     moveSelection,
+    resetResults: resetSearchResults,
     filter: searchFilter,
     setFilter: setSearchFilter,
     matchPath: searchMatchPath,
@@ -347,10 +348,6 @@ export function Launchpad() {
     resetAiOrganizeRunState()
   }, [resetAiOrganizeRunState])
 
-  const requestApplyAiOrganizePreview = useCallback(() => {
-    setIsAiOrganizeSidebarOpen(true)
-    setAiOrganizeApplyRequestToken(token => token + 1)
-  }, [])
   const importPlacementTokenRef = useRef(0)
   const dropPreviewRequestRef = useRef(0)
   const pendingAddIconKeySetRef = useRef<Set<string>>(new Set())
@@ -1123,6 +1120,7 @@ export function Launchpad() {
     setSelectedFileIndex: setSelectedIndex,
     setCombinedIndex: setCombinedSelectedIndex,
     resetPreview: resetSearchPreview,
+    resetFileResults: resetSearchResults,
     setFilterMenuOpen: setIsFilterMenuOpen,
   })
 
@@ -1788,7 +1786,10 @@ export function Launchpad() {
               </button>
               <button
                 type="button"
-                onClick={requestApplyAiOrganizePreview}
+                onClick={() => {
+                  setIsAiOrganizeSidebarOpen(true)
+                  aiOrganizePanelRef.current?.applyPreview()
+                }}
                 disabled={!aiOrganizeRunState.canApply || aiOrganizeRunState.applying}
                 className="rounded-full border border-blue-500/30 bg-blue-500/12 px-3 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-500/18 disabled:cursor-not-allowed disabled:opacity-45 dark:text-blue-200 dark:hover:bg-blue-500/25"
               >
@@ -2111,11 +2112,10 @@ export function Launchpad() {
 
         {isAiOrganizeMode ? (
           <AiOrganizePanel
-            open
+            ref={aiOrganizePanelRef}
             visible={isAiOrganizeSidebarOpen}
             icons={icons}
             customNames={customNames}
-            applyRequestToken={aiOrganizeApplyRequestToken}
             onRunStateChange={setAiOrganizeRunState}
             onCollapse={() => setIsAiOrganizeSidebarOpen(false)}
             onClose={exitAiOrganizeMode}

@@ -1,6 +1,8 @@
 import {
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -54,13 +56,19 @@ import {
 } from '@/components/icon-grid/services/layoutStore'
 import type { DesktopIcon } from '@/types'
 import type { FolderSize } from '@/components/icon-grid/model'
+import { useQueuedPrompts } from './useQueuedPrompts'
+import {
+  useAiOrganizeRunState,
+  type AiOrganizePanelRunState,
+} from './useAiOrganizeRunState'
+
+export type { AiOrganizePanelRunState } from './useAiOrganizeRunState'
 
 interface AiOrganizePanelProps {
-  open: boolean
+  open?: boolean
   visible?: boolean
   icons: DesktopIcon[]
   customNames: Record<string, string>
-  applyRequestToken?: number
   onRunStateChange?: (state: AiOrganizePanelRunState) => void
   onCollapse?: () => void
   onClose: () => void
@@ -68,6 +76,10 @@ interface AiOrganizePanelProps {
   onPreviewed?: () => void | Promise<void>
   /** 应用成功后由调用方负责通知主窗口刷新布局。 */
   onApplied: () => void | Promise<void>
+}
+
+export interface AiOrganizePanelHandle {
+  applyPreview: () => void
 }
 
 type Phase = 'idle' | 'loading' | 'preview' | 'applying'
@@ -137,12 +149,6 @@ interface AiAgentRunResult extends AiClassifyResult {
 
 interface AiChatResult {
   content: string
-}
-
-export interface AiOrganizePanelRunState {
-  canApply: boolean
-  applying: boolean
-  hasPreview: boolean
 }
 
 interface StreamChunk {
@@ -450,18 +456,21 @@ function AssistantRunInline({
   )
 }
 
-export function AiOrganizePanel({
-  open,
-  visible = open,
-  icons,
-  customNames,
-  applyRequestToken = 0,
-  onRunStateChange,
-  onCollapse,
-  onClose,
-  onPreviewed,
-  onApplied,
-}: AiOrganizePanelProps) {
+export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanelProps>(
+  function AiOrganizePanel(
+    {
+      open = true,
+      visible = open,
+      icons,
+      customNames,
+      onRunStateChange,
+      onCollapse,
+      onClose,
+      onPreviewed,
+      onApplied,
+    },
+    ref
+  ) {
   const toast = useToast()
   const prefersReducedMotion = useReducedMotion()
   const [phase, setPhase] = useState<Phase>('idle')
@@ -484,15 +493,14 @@ export function AiOrganizePanel({
   const [sessionSaveError, setSessionSaveError] = useState<string | null>(null)
   const [historyExpanded, setHistoryExpanded] = useState(false)
   const [presetsExpanded, setPresetsExpanded] = useState(false)
-  const [queuedPrompts, setQueuedPrompts] = useState<QueuedPrompt[]>([])
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const runSeqRef = useRef(0)
-  const lastApplyRequestTokenRef = useRef(applyRequestToken)
   const streamChunkSeqRef = useRef(0)
   const streamBufferRef = useRef('')
   const streamFlushTimerRef = useRef<number | null>(null)
   const streamFirstBufferedAtRef = useRef<number | null>(null)
   const sessionsRef = useRef<AiOrganizeSession[]>([])
+  const groupsRef = useRef<EditableGroup[]>([])
   const activeSessionIdRef = useRef<string | null>(null)
   const activeSnapshotIdRef = useRef<string | null>(null)
   const shouldStickToBottomRef = useRef(true)
@@ -648,6 +656,7 @@ export function AiOrganizePanel({
       activeSessionIdRef.current = session.id
       setActiveSessionId(session.id)
       if (!snapshot) {
+        groupsRef.current = []
         activeSnapshotIdRef.current = null
         setActiveSnapshotId(null)
         setEditingSnapshotId(null)
@@ -661,7 +670,9 @@ export function AiOrganizePanel({
 
       activeSnapshotIdRef.current = snapshot.id
       setActiveSnapshotId(snapshot.id)
-      setGroups(toEditableGroups(snapshot.groups))
+      const nextGroups = toEditableGroups(snapshot.groups)
+      groupsRef.current = nextGroups
+      setGroups(nextGroups)
       setPhase('preview')
       setRunId(snapshot.runId ?? null)
       setError(null)
@@ -676,7 +687,9 @@ export function AiOrganizePanel({
       activeSnapshotIdRef.current = snapshot.id
       setActiveSessionId(session.id)
       setActiveSnapshotId(snapshot.id)
-      setGroups(toEditableGroups(snapshot.groups))
+      const nextGroups = toEditableGroups(snapshot.groups)
+      groupsRef.current = nextGroups
+      setGroups(nextGroups)
       setRunId(snapshot.runId ?? null)
       setError(null)
       setNotConfigured(false)
@@ -687,6 +700,7 @@ export function AiOrganizePanel({
   const activateSessionOnly = useCallback((session: AiOrganizeSession) => {
     activeSessionIdRef.current = session.id
     activeSnapshotIdRef.current = null
+    groupsRef.current = []
     setActiveSessionId(session.id)
     setActiveSnapshotId(null)
     setEditingSnapshotId(null)
@@ -925,6 +939,7 @@ export function AiOrganizePanel({
     setSessions(nextSessions)
     activeSessionIdRef.current = session.id
     activeSnapshotIdRef.current = null
+    groupsRef.current = []
     setActiveSessionId(session.id)
     setActiveSnapshotId(null)
     setEditingSnapshotId(null)
@@ -946,7 +961,7 @@ export function AiOrganizePanel({
   const runChat = useCallback(
     async (instruction: string) => {
       const normalizedInstruction = instruction.trim()
-      if (!normalizedInstruction || phase === 'loading' || phase === 'applying') return
+      if (!normalizedInstruction) return
 
       const sequence = runSeqRef.current + 1
       runSeqRef.current = sequence
@@ -1045,7 +1060,7 @@ export function AiOrganizePanel({
           ),
         }
         await commitSession(successSession)
-        setPhase(groups.length > 0 ? 'preview' : 'idle')
+        setPhase(groupsRef.current.length > 0 ? 'preview' : 'idle')
         setRunFinishedAt(Date.now())
       } catch (e) {
         if (!isCurrentRun()) return
@@ -1066,17 +1081,17 @@ export function AiOrganizePanel({
         }
         await commitSession(failedSession)
         setError(message)
-        setPhase(groups.length > 0 ? 'preview' : 'idle')
+        setPhase(groupsRef.current.length > 0 ? 'preview' : 'idle')
         setRunFinishedAt(Date.now())
       }
     },
-    [commitSession, groups.length, phase, resetStreamOutput]
+    [commitSession, resetStreamOutput]
   )
 
   const runClassification = useCallback(
     async (instruction: string, promptLabel?: string) => {
       const normalizedInstruction = instruction.trim()
-      if (!normalizedInstruction || phase === 'loading' || phase === 'applying') return
+      if (!normalizedInstruction) return
 
       const sequence = runSeqRef.current + 1
       runSeqRef.current = sequence
@@ -1186,7 +1201,7 @@ export function AiOrganizePanel({
           basePrompt: config.customPrompt,
           instruction: normalizedInstruction,
           session: runningSession,
-          currentGroups: groups,
+          currentGroups: groupsRef.current,
         })
         const result = await invoke<AiAgentRunResult>('ai_organize_icons_agent', {
           config: buildAiConfigPayload(config, prompt),
@@ -1274,9 +1289,7 @@ export function AiOrganizePanel({
       commitSession,
       customNames,
       flushPendingStream,
-      groups,
       icons,
-      phase,
       resetStreamOutput,
     ]
   )
@@ -1287,7 +1300,6 @@ export function AiOrganizePanel({
     let active = true
     let unlisten: (() => void) | null = null
 
-    setSessionsLoaded(false)
     void loadAiOrganizeSessions()
       .then(loadedSessions => {
         if (!active) return
@@ -1371,7 +1383,6 @@ export function AiOrganizePanel({
       setSessionSaveError(null)
       setComposerValue('')
       setComposerCommand(null)
-      setQueuedPrompts([])
       setPresetsExpanded(false)
       setRunId(null)
       setRunStartedAt(null)
@@ -1379,7 +1390,7 @@ export function AiOrganizePanel({
       setElapsedMs(0)
       appliedRef.current = false
     }
-  }, [activateSessionOnly, appendStreamDelta, open, resetStreamOutput])
+  }, [activateSessionOnly, appendStreamDelta, open, resetStreamOutput, restoreLayoutPreview])
 
   useEffect(() => {
     if (!runStartedAt) {
@@ -1497,16 +1508,10 @@ export function AiOrganizePanel({
     }
   }, [error, groups.length, isStreaming, latestEvent, runStatus])
 
-  useEffect(() => {
-    onRunStateChange?.({
-      canApply: phase === 'preview' && applicableGroups.length > 0,
-      applying: phase === 'applying',
-      hasPreview: phase === 'preview' && groups.length > 0,
-    })
-  }, [applicableGroups.length, groups.length, onRunStateChange, phase])
+  useAiOrganizeRunState(phase, applicableGroups.length, groups.length, onRunStateChange)
 
   const dispatchPrompt = useCallback(
-    (prompt: string, command?: ComposerCommand | null, label?: string) => {
+    async (prompt: string, command?: ComposerCommand | null, label?: string) => {
       const normalizedPrompt = prompt.trim()
       if (command) {
         const instruction =
@@ -1514,16 +1519,25 @@ export function AiOrganizePanel({
           (command.kind === 'edit'
             ? translate('参考此版布局继续优化。')
             : translate('按用途整理当前图标库。'))
-        void runClassification(
+        await runClassification(
           instruction,
           label ?? getComposerCommandLabel(command)
         )
         return
       }
 
-      void runChat(normalizedPrompt)
+      await runChat(normalizedPrompt)
     },
     [runChat, runClassification]
+  )
+
+  const {
+    items: queuedPrompts,
+    enqueue: enqueuePrompt,
+    drain: drainQueuedPrompts,
+    clear: clearQueuedPrompts,
+  } = useQueuedPrompts((nextPrompt: QueuedPrompt) =>
+    dispatchPrompt(nextPrompt.prompt, nextPrompt.command, nextPrompt.label)
   )
 
   const sendPrompt = useCallback(
@@ -1537,30 +1551,18 @@ export function AiOrganizePanel({
       setComposerValue('')
       setComposerCommand(null)
       if (phase === 'loading') {
-        setQueuedPrompts(current => [
-          ...current,
-          {
-            id: createAiOrganizeId('queued-prompt'),
-            prompt: normalizedPrompt,
-            label,
-            command: command ?? undefined,
-          },
-        ])
+        enqueuePrompt({
+          id: createAiOrganizeId('queued-prompt'),
+          prompt: normalizedPrompt,
+          label,
+          command: command ?? undefined,
+        })
         return
       }
-      dispatchPrompt(normalizedPrompt, command, label)
+      void dispatchPrompt(normalizedPrompt, command, label).finally(drainQueuedPrompts)
     },
-    [composerCommand, dispatchPrompt, phase, sessionsLoaded]
+    [composerCommand, dispatchPrompt, drainQueuedPrompts, enqueuePrompt, phase, sessionsLoaded]
   )
-
-  useEffect(() => {
-    if (!open || !sessionsLoaded || queuedPrompts.length === 0) return
-    if (phase === 'loading' || phase === 'applying') return
-
-    const [nextPrompt, ...remainingPrompts] = queuedPrompts
-    setQueuedPrompts(remainingPrompts)
-    dispatchPrompt(nextPrompt.prompt, nextPrompt.command, nextPrompt.label)
-  }, [dispatchPrompt, open, phase, queuedPrompts, sessionsLoaded])
 
   const handleComposerKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -1633,16 +1635,13 @@ export function AiOrganizePanel({
     }
   }, [applicableGroups, icons, onApplied, onClose, runId, toast])
 
-  useEffect(() => {
-    if (!open) {
-      lastApplyRequestTokenRef.current = applyRequestToken
-      return
-    }
-    if (applyRequestToken === lastApplyRequestTokenRef.current) return
-    lastApplyRequestTokenRef.current = applyRequestToken
-    if (applyRequestToken <= 0) return
-    void handleApply()
-  }, [applyRequestToken, handleApply, open])
+  useImperativeHandle(
+    ref,
+    () => ({
+      applyPreview: () => void handleApply(),
+    }),
+    [handleApply]
+  )
 
   const renderLayoutPreview = (snapshot: AiOrganizeSnapshot, snapshotIndex: number) => {
     const isActiveSnapshot = snapshot.id === activeSnapshotId
@@ -1805,8 +1804,7 @@ export function AiOrganizePanel({
     )
   }
 
-  if (!open) return null
-  if (!visible) return null
+  if (!open || !visible) return null
 
   const collapseOrClose = onCollapse ?? onClose
   const hasComposerText = composerValue.trim().length > 0
@@ -2083,7 +2081,7 @@ export function AiOrganizePanel({
                   </span>
                   <button
                     type="button"
-                    onClick={() => setQueuedPrompts([])}
+                    onClick={clearQueuedPrompts}
                     className="shrink-0 rounded px-1.5 py-0.5 text-[11px] transition-colors hover:bg-blue-500/10"
                   >
                     {translate('清空')}
@@ -2205,4 +2203,5 @@ export function AiOrganizePanel({
       </motion.aside>
     </div>
   )
-}
+  }
+)

@@ -68,16 +68,32 @@ export function UpdatePanel() {
   const [contentLength, setContentLength] = useState<number | null>(null)
   const toast = useToast()
 
+  const applyConfigurationStatus = useCallback((nextStatus: UpdaterConfigurationStatus) => {
+    setConfigStatus(nextStatus)
+    if (!nextStatus.configured) {
+      setCheckResult(null)
+    }
+  }, [])
+
+  const reportConfigurationError = useCallback(
+    (error: unknown) => {
+      const message = translate('读取更新配置失败：{error}', { error: String(error) })
+      setConfigStatus(null)
+      setCheckResult(null)
+      toast.error(message, {
+        key: 'update-panel',
+        title: translate('应用更新'),
+      })
+    },
+    [toast]
+  )
+
   const refreshConfiguration = useCallback(
     async (options?: { notifySuccess?: boolean }) => {
       setLoadingConfig(true)
       try {
         const nextStatus = await getUpdaterConfigurationStatus()
-        setConfigStatus(nextStatus)
-
-        if (!nextStatus.configured) {
-          setCheckResult(null)
-        }
+        applyConfigurationStatus(nextStatus)
         if (options?.notifySuccess) {
           toast.info(nextStatus.message ?? translate('更新配置已刷新。'), {
             key: 'update-panel',
@@ -85,23 +101,32 @@ export function UpdatePanel() {
           })
         }
       } catch (error) {
-        const message = translate('读取更新配置失败：{error}', { error: String(error) })
-        setConfigStatus(null)
-        setCheckResult(null)
-        toast.error(message, {
-          key: 'update-panel',
-          title: translate('应用更新'),
-        })
+        reportConfigurationError(error)
       } finally {
         setLoadingConfig(false)
       }
     },
-    [toast]
+    [applyConfigurationStatus, reportConfigurationError, toast]
   )
 
   useEffect(() => {
-    void refreshConfiguration()
-  }, [refreshConfiguration])
+    let active = true
+
+    void getUpdaterConfigurationStatus()
+      .then(nextStatus => {
+        if (active) applyConfigurationStatus(nextStatus)
+      })
+      .catch(error => {
+        if (active) reportConfigurationError(error)
+      })
+      .finally(() => {
+        if (active) setLoadingConfig(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [applyConfigurationStatus, reportConfigurationError])
 
   useEffect(() => {
     let disposed = false

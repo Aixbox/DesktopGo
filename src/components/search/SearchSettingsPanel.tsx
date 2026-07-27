@@ -28,7 +28,6 @@ export function SearchSettingsPanel() {
   const sortOptions = getSearchSortOptions()
 
   useEffect(() => {
-    setLoading(true)
     void (async () => {
       try {
         const next = await loadSearchSettings()
@@ -41,7 +40,10 @@ export function SearchSettingsPanel() {
           duration: 8000,
           action: {
             label: translate('重试'),
-            onClick: () => setLoadAttempt(attempt => attempt + 1),
+            onClick: () => {
+              setLoading(true)
+              setLoadAttempt(attempt => attempt + 1)
+            },
           },
         })
       } finally {
