@@ -294,7 +294,7 @@
 
 ### 当前基线
 
-截至 2026-07-28，R-00 至 R-02 已完成，R-03 已进入网站图标子批次，Rust 零告警门禁以及 AI/LLM、Everything 模块化边界已经建立：
+截至 2026-07-28，R-00 至 R-03 已完成，Rust 零告警门禁以及 AI/LLM、Everything、网站图标和 Windows 图标目录模块化边界已经建立：
 
 - 仓库已提供 `rustfmt.toml`、`clippy.toml` 和统一的 `scripts/check-rust.ps1` 检查脚本。
 - `package.json` 已提供 rustfmt、Clippy、check、test 的分项命令和 `rust:quality` 聚合命令；GitHub Actions 已增加 Windows Rust 质量任务。
@@ -302,15 +302,14 @@
 - `ai.rs` 与 `agent/llm.rs` 已收敛为 facade/编排入口，请求模型、端点策略、结果校验、HTTP operation、请求构建、SSE 解码和观测事件均已进入独立模块。
 - `everything/ipc.rs` 已收敛为跨平台 facade，SDK 动态绑定、回复窗口、查询会话和工作线程已进入独立模块；搜索调试日志也已从运行时编排中分离。
 - `icons/website.rs` 已收敛为 facade，候选策略、文档资源解析、HTTP、图像处理和异步发现流程已进入独立模块。
-- 当前文件预算脚本继续以 500 行作为手写 Rust 模块阈值，全量扫描仍有 4 个既有文件超出预算。
+- `icons/catalog_windows.rs` 与 `catalog_windows/operations.rs` 已收敛为 facade，快照存储、图像缓存、条目建模、视图转换以及创建、更新、导入、查询和变更操作已进入独立模块。
+- 当前文件预算脚本继续以 500 行作为手写 Rust 模块阈值，全量扫描仅剩 2 个既有文件超出预算。
 - 文件行数预算属于模块化约束；Clippy 主要检查代码正确性与惯用写法，不能替代整个文件的规模门禁。
 
-| 文件                                                | 当前行数 | 主要风险                                                                | 目标边界                                                                        |
-| --------------------------------------------------- | -------: | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `src-tauri/src/lib.rs`                              |     1547 | Tauri 初始化、状态装配、窗口事件、命令注册和业务实现混合                | 仅保留应用装配与命令注册，将窗口、托盘、生命周期和业务操作迁入独立模块          |
-| `src-tauri/src/icons/catalog_windows/operations.rs` |      752 | Windows 图标目录扫描、提取、转换和持久化操作集中                        | 拆分扫描、提取、图像规范化、目录写入和失败恢复                                  |
-| `src-tauri/src/icons/catalog_windows.rs`            |      724 | Windows 图标目录领域类型、查询、缓存和操作入口混合                      | 保留目录 facade，将缓存、查询策略和平台操作委派给子模块                         |
-| `src-tauri/src/commands.rs`                         |      550 | 多领域 Tauri 命令集中，容易继续形成中央命令文件                         | 按窗口、图标、布局、搜索和设置领域拆分命令模块，中央文件只负责统一导出          |
+| 文件                        | 当前行数 | 主要风险                                                 | 目标边界                                                               |
+| --------------------------- | -------: | -------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `src-tauri/src/lib.rs`      |     1547 | Tauri 初始化、状态装配、窗口事件、命令注册和业务实现混合 | 仅保留应用装配与命令注册，将窗口、托盘、生命周期和业务操作迁入独立模块 |
+| `src-tauri/src/commands.rs` |      550 | 多领域 Tauri 命令集中，容易继续形成中央命令文件          | 按窗口、图标、布局、搜索和设置领域拆分命令模块，中央文件只负责统一导出 |
 
 ### 治理原则
 
@@ -329,7 +328,7 @@
 | R-00 | 已完成 | Rust 静态检查基线       | 增加统一脚本与 CI 门禁，执行 rustfmt、Clippy、check、test 和文件预算检查，并清理首次扫描发现的 Clippy 告警。      | 可重复执行的 Rust 零告警质量门禁 |
 | R-01 | 已完成 | AI 与 LLM               | 拆分 `agent/llm.rs` 和 `ai.rs` 的请求模型、流式解析、工具编排、结果校验与运行记录边界。                           | 2 个模块进入 500 行预算          |
 | R-02 | 已完成 | Everything 集成         | 拆分 `everything/ipc.rs` 与 `everything/runtime.rs` 的协议、连接、查询、安装发现、进程生命周期和重试策略。        | 2 个模块进入 500 行预算          |
-| R-03 | 进行中 | 图标网站与 Windows 目录 | 拆分 `icons/website.rs`、`catalog_windows.rs` 和 `operations.rs` 的网络、解析、候选策略、扫描、提取与持久化边界。 | 3 个模块进入 500 行预算          |
+| R-03 | 已完成 | 图标网站与 Windows 目录 | 拆分 `icons/website.rs`、`catalog_windows.rs` 和 `operations.rs` 的网络、解析、候选策略、扫描、提取与持久化边界。 | 3 个模块进入 500 行预算          |
 | R-04 | 待开发 | Tauri 入口与命令组织    | 将 `lib.rs` 和 `commands.rs` 收敛为装配与导出层，按窗口、图标、布局、搜索、设置和生命周期拆分命令及操作。         | 2 个中央模块进入 500 行预算      |
 | R-05 | 待开发 | 零告警与预算收尾        | 清理临时 Clippy 例外，执行全仓门禁与 Windows 真实运行回归，并在路线图记录最终文件规模。                           | 0 个 Rust 超预算文件、0 条新告警 |
 
@@ -370,15 +369,20 @@
 - 新增 1 个纯协议测试，覆盖全部 27 个 `SearchSort` 变体到 Everything SDK 排序值的映射；聚合门禁实测为 42 passed / 0 failed。
 - R-02 完成后超预算 Rust 文件从 7 个降至 5 个，剩余文件均属于 R-03 与 R-04 范围。
 
-#### R-03 当前进度
+#### R-03 实施结果
 
 - 网站图标子批次已完成，`icons/website.rs` 从 1885 行降至 18 行，仅保留模块声明、稳定导出和异步 operation 委派入口。
 - 新增 `icons/website/candidate.rs` 279 行，集中负责候选类型、URL 解析、Manifest/BrowserConfig/Link Header 候选、去重和质量排序。
 - 新增 `icons/website/document.rs` 303 行与 `document_assets.rs` 293 行，分别负责页面元数据/重定向解析，以及图片、CSS、前端资源和内联 SVG 候选发现。
 - 新增 `icons/website/http.rs` 96 行、`image.rs` 227 行和 `operation.rs` 281 行，分别负责受限网络读取、SVG/位图解码与优化、异步发现编排。
-- 原有 18 项网站图标及 Windows 目录兼容性测试迁入 438 行的 `icons/website/tests.rs`，覆盖页面解析、Manifest、Link Header、候选排序、SVG、透明度、优化和旧快照迁移。
+- 原有 14 项网站图标测试迁入 332 行的 `icons/website/tests.rs`，覆盖页面解析、Manifest、Link Header、候选排序、SVG、透明度和优化。
 - 保持 `extract_website_icon`、`optimize_icon_data_uri`、URL 规范化、网络限制、候选上限、并发数和前端 IPC 数据结构兼容。
-- 网站子批次完成后超预算 Rust 文件从 5 个降至 4 个；R-03 仍需继续拆分 `catalog_windows.rs` 与 `catalog_windows/operations.rs`。
+- `icons/catalog_windows.rs` 从 724 行降至 11 行，仅保留模块声明、测试模块和 `get_path_icon_base64_windows` 稳定导出；`catalog_windows/operations.rs` 从 752 行降至 16 行，仅保留操作模块声明和服务入口导出。
+- 新增 `catalog_windows/source.rs` 32 行、`storage.rs` 203 行、`image.rs` 178 行、`item.rs` 166 行和 `view.rs` 133 行，分别负责目录来源、快照迁移与持久化、图像提取与缓存、扫描条目建模以及查询视图转换。
+- 新增 `catalog_windows/operations/mutation.rs` 169 行、`import.rs` 105 行、`create.rs` 215 行、`update.rs` 241 行和 `query.rs` 87 行，分别负责隐藏/恢复/删除、拖放导入、创建、更新和查询操作。
+- 4 项 Windows 目录兼容性测试迁入 101 行的 `catalog_windows/tests.rs`，覆盖旧快照单图标迁移、旧尺寸桶识别和按文件内容解码自定义图标；全量 Rust 测试仍为 42 passed / 0 failed。
+- 保持 Tauri 服务入口、快照 JSON 结构、显示顺序、缓存路径、错误文案和创建/更新失败清理行为兼容；Clippy、check、test、diff 与变更文件预算门禁通过。
+- R-03 完成后超预算 Rust 文件从 5 个降至 2 个，仅剩 R-04 范围内的 `lib.rs` 与 `commands.rs`。
 
 ### 每批质量门禁
 
