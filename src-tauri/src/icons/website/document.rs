@@ -103,59 +103,59 @@ fn client_side_redirect(document: &Html, base_url: &Url) -> Option<Url> {
 pub(super) fn website_icon_candidates(html: &str, page_url: &Url) -> WebsitePageCandidates {
     let document = Html::parse_document(html);
     let base_url = document_base_url(&document, page_url);
-    let title_selector = Selector::parse("title").expect("valid title selector");
-    let link_selector = Selector::parse("link").expect("valid link selector");
-    let meta_selector = Selector::parse("meta[content]").expect("valid meta selector");
-    let json_ld_selector =
-        Selector::parse("script[type='application/ld+json']").expect("valid JSON-LD selector");
-    let script_selector = Selector::parse("script[src]").expect("valid script selector");
-    let noscript_selector = Selector::parse("noscript").expect("valid noscript selector");
     let mut result = WebsitePageCandidates {
-        title: document
-            .select(&title_selector)
-            .next()
-            .map(|element| element.text().collect::<String>().trim().to_string())
-            .unwrap_or_default(),
+        title: document_title(&document),
         redirect: client_side_redirect(&document, &base_url),
         ..WebsitePageCandidates::default()
     };
 
-    for element in document.select(&link_selector) {
-        let rel_values = element
-            .value()
-            .attr("rel")
-            .unwrap_or_default()
-            .split_ascii_whitespace()
-            .collect::<Vec<_>>();
+    collect_link_candidates(&document, &base_url, &mut result);
+    collect_script_urls(&document, &base_url, &mut result);
+    collect_image_candidates(&document, &base_url, &mut result.candidates);
+    collect_document_css_candidates(&document, &base_url, &mut result.candidates);
+    collect_inline_svg_candidates(&document, &base_url, &mut result.candidates);
+    collect_noscript_candidates(&document, &base_url, &mut result);
+    collect_meta_candidates(&document, &base_url, &mut result);
+    collect_json_ld_candidates(&document, &base_url, &mut result);
+
+    result.has_explicit_sources = !result.candidates.is_empty() || !result.manifests.is_empty();
+    append_default_candidates(page_url, &mut result);
+    result
+}
+
+fn document_title(document: &Html) -> String {
+    let selector = Selector::parse("title").expect("valid title selector");
+    document
+        .select(&selector)
+        .next()
+        .map(|element| element.text().collect::<String>().trim().to_string())
+        .unwrap_or_default()
+}
+
+fn rel_contains(rel: &str, expected: &str) -> bool {
+    rel.split_ascii_whitespace()
+        .any(|value| value.eq_ignore_ascii_case(expected))
+}
+
+fn collect_link_candidates(document: &Html, base_url: &Url, result: &mut WebsitePageCandidates) {
+    let selector = Selector::parse("link").expect("valid link selector");
+    for element in document.select(&selector) {
+        let rel = element.value().attr("rel").unwrap_or_default();
         let href = element.value().attr("href").unwrap_or_default();
-        if rel_values
-            .iter()
-            .any(|value| value.eq_ignore_ascii_case("manifest"))
-        {
-            push_unique_http_url(&mut result.manifests, &base_url, href);
+        if rel_contains(rel, "manifest") {
+            push_unique_http_url(&mut result.manifests, base_url, href);
         }
-        if rel_values
-            .iter()
-            .any(|value| value.eq_ignore_ascii_case("stylesheet"))
-        {
-            push_unique_http_url(&mut result.stylesheets, &base_url, href);
+        if rel_contains(rel, "stylesheet") {
+            push_unique_http_url(&mut result.stylesheets, base_url, href);
         }
 
-        let is_apple_touch_icon = rel_values.iter().any(|value| {
-            value.eq_ignore_ascii_case("apple-touch-icon")
-                || value.eq_ignore_ascii_case("apple-touch-icon-precomposed")
-        });
+        let is_apple_touch_icon = rel_contains(rel, "apple-touch-icon")
+            || rel_contains(rel, "apple-touch-icon-precomposed");
         let is_icon = is_apple_touch_icon
-            || rel_values.iter().any(|value| {
-                value.eq_ignore_ascii_case("icon")
-                    || value.eq_ignore_ascii_case("mask-icon")
-                    || value.eq_ignore_ascii_case("fluid-icon")
-                    || value.eq_ignore_ascii_case("logo")
-                    || value.eq_ignore_ascii_case("image_src")
-            });
-        let is_image_preload = rel_values
-            .iter()
-            .any(|value| value.eq_ignore_ascii_case("preload"))
+            || ["icon", "mask-icon", "fluid-icon", "logo", "image_src"]
+                .iter()
+                .any(|expected| rel_contains(rel, expected));
+        let is_image_preload = rel_contains(rel, "preload")
             && element
                 .value()
                 .attr("as")
@@ -176,7 +176,7 @@ pub(super) fn website_icon_candidates(html: &str, page_url: &Url) -> WebsitePage
             };
             push_website_icon_candidate(
                 &mut result.candidates,
-                &base_url,
+                base_url,
                 href,
                 declared_website_icon_size(element.value().attr("sizes")),
                 priority,
@@ -186,7 +186,7 @@ pub(super) fn website_icon_candidates(html: &str, page_url: &Url) -> WebsitePage
             {
                 push_website_icon_candidate(
                     &mut result.candidates,
-                    &base_url,
+                    base_url,
                     source,
                     declared_size,
                     priority,
@@ -194,19 +194,26 @@ pub(super) fn website_icon_candidates(html: &str, page_url: &Url) -> WebsitePage
             }
         }
     }
+}
 
-    for element in document.select(&script_selector) {
+fn collect_script_urls(document: &Html, base_url: &Url, result: &mut WebsitePageCandidates) {
+    let selector = Selector::parse("script[src]").expect("valid script selector");
+    for element in document.select(&selector) {
         push_unique_http_url(
             &mut result.scripts,
-            &base_url,
+            base_url,
             element.value().attr("src").unwrap_or_default(),
         );
     }
-    collect_image_candidates(&document, &base_url, &mut result.candidates);
-    collect_document_css_candidates(&document, &base_url, &mut result.candidates);
-    collect_inline_svg_candidates(&document, &base_url, &mut result.candidates);
+}
 
-    for element in document.select(&noscript_selector) {
+fn collect_noscript_candidates(
+    document: &Html,
+    base_url: &Url,
+    result: &mut WebsitePageCandidates,
+) {
+    let selector = Selector::parse("noscript").expect("valid noscript selector");
+    for element in document.select(&selector) {
         let text_content = element.text().collect::<String>();
         let fragment_source = if text_content.trim().is_empty() {
             element.inner_html()
@@ -214,12 +221,15 @@ pub(super) fn website_icon_candidates(html: &str, page_url: &Url) -> WebsitePage
             text_content
         };
         let fragment = Html::parse_fragment(&fragment_source);
-        collect_image_candidates(&fragment, &base_url, &mut result.candidates);
-        collect_document_css_candidates(&fragment, &base_url, &mut result.candidates);
-        collect_inline_svg_candidates(&fragment, &base_url, &mut result.candidates);
+        collect_image_candidates(&fragment, base_url, &mut result.candidates);
+        collect_document_css_candidates(&fragment, base_url, &mut result.candidates);
+        collect_inline_svg_candidates(&fragment, base_url, &mut result.candidates);
     }
+}
 
-    for element in document.select(&meta_selector) {
+fn collect_meta_candidates(document: &Html, base_url: &Url, result: &mut WebsitePageCandidates) {
+    let selector = Selector::parse("meta[content]").expect("valid meta selector");
+    for element in document.select(&selector) {
         let property = element
             .value()
             .attr("property")
@@ -230,7 +240,7 @@ pub(super) fn website_icon_candidates(html: &str, page_url: &Url) -> WebsitePage
         let content = element.value().attr("content").unwrap_or_default();
         if property == "msapplication-config" {
             if !content.eq_ignore_ascii_case("none") {
-                push_unique_http_url(&mut result.browser_configs, &base_url, content);
+                push_unique_http_url(&mut result.browser_configs, base_url, content);
             }
             continue;
         }
@@ -246,11 +256,15 @@ pub(super) fn website_icon_candidates(html: &str, page_url: &Url) -> WebsitePage
                 | "thumbnail"
                 | "thumbnailurl"
         ) {
-            push_website_icon_candidate(&mut result.candidates, &base_url, content, 0, 3);
+            push_website_icon_candidate(&mut result.candidates, base_url, content, 0, 3);
         }
     }
+}
 
-    for element in document.select(&json_ld_selector) {
+fn collect_json_ld_candidates(document: &Html, base_url: &Url, result: &mut WebsitePageCandidates) {
+    let selector =
+        Selector::parse("script[type='application/ld+json']").expect("valid JSON-LD selector");
+    for element in document.select(&selector) {
         let Ok(value) =
             serde_json::from_str::<serde_json::Value>(&element.text().collect::<String>())
         else {
@@ -259,13 +273,9 @@ pub(super) fn website_icon_candidates(html: &str, page_url: &Url) -> WebsitePage
         let mut logos = Vec::new();
         collect_json_logo_values(&value, &mut logos);
         for logo in logos {
-            push_website_icon_candidate(&mut result.candidates, &base_url, &logo, 0, 3);
+            push_website_icon_candidate(&mut result.candidates, base_url, &logo, 0, 3);
         }
     }
-
-    result.has_explicit_sources = !result.candidates.is_empty() || !result.manifests.is_empty();
-    append_default_candidates(page_url, &mut result);
-    result
 }
 
 fn append_default_candidates(page_url: &Url, result: &mut WebsitePageCandidates) {

@@ -281,22 +281,14 @@ fn to_wide_null_terminated(value: &str) -> Vec<u16> {
 }
 
 #[cfg(windows)]
-fn show_shell_context_menu_on_main_thread(
-    app_handle: &tauri::AppHandle,
-    path: &str,
-) -> Result<Option<String>, String> {
-    if path.trim().is_empty() {
-        return Err("无法打开 Shell 右键菜单：路径为空。".to_string());
-    }
+struct ShellContextMenu {
+    _absolute_pidl: PidlGuard,
+    context_menu: IContextMenu,
+    popup_menu: PopupMenuGuard,
+}
 
-    let window = app_handle
-        .get_webview_window("main")
-        .ok_or_else(|| "无法获取主窗口，Shell 右键菜单无法显示。".to_string())?;
-    let hwnd = window
-        .hwnd()
-        .map_err(|error| format!("无法获取主窗口句柄：{}", error))?;
-    let _com_guard = ComInitGuard::new()?;
-
+#[cfg(windows)]
+fn create_shell_context_menu(hwnd: HWND, path: &str) -> Result<ShellContextMenu, String> {
     let wide_path = to_wide_null_terminated(path);
     let mut absolute_pidl = null_mut();
     unsafe {
@@ -340,8 +332,19 @@ fn show_shell_context_menu_on_main_thread(
             .ok()
             .map_err(|error| format!("无法填充 Windows Shell 菜单项：{}", error))?;
     }
+    Ok(ShellContextMenu {
+        _absolute_pidl: absolute_pidl,
+        context_menu,
+        popup_menu,
+    })
+}
 
-    let _hook_guard = unsafe { install_context_menu_hook(hwnd, &context_menu)? };
+#[cfg(windows)]
+fn track_shell_popup(
+    window: &tauri::WebviewWindow,
+    hwnd: HWND,
+    popup_menu: &PopupMenuGuard,
+) -> Result<(u32, POINT), String> {
     let mut cursor = POINT::default();
     unsafe {
         GetCursorPos(&mut cursor)
@@ -369,12 +372,27 @@ fn show_shell_context_menu_on_main_thread(
     unsafe {
         let _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
     }
+    Ok((selected_command, cursor))
+}
 
+#[cfg(windows)]
+fn restore_main_window_mode(app_handle: &tauri::AppHandle) {
+    crate::apply_main_window_runtime_mode(
+        app_handle,
+        app_handle.state::<crate::MainWindowState>().inner(),
+    );
+}
+
+#[cfg(windows)]
+fn invoke_shell_command(
+    app_handle: &tauri::AppHandle,
+    hwnd: HWND,
+    context_menu: &IContextMenu,
+    cursor: POINT,
+    selected_command: u32,
+) -> Result<Option<String>, String> {
     if selected_command == 0 {
-        crate::apply_main_window_runtime_mode(
-            app_handle,
-            app_handle.state::<crate::MainWindowState>().inner(),
-        );
+        restore_main_window_mode(app_handle);
         return Ok(None);
     }
 
@@ -382,13 +400,10 @@ fn show_shell_context_menu_on_main_thread(
         .checked_sub(COMMAND_ID_FIRST)
         .ok_or_else(|| "Windows Shell 返回了无效的菜单命令编号。".to_string())?
         as usize;
-    let selected_verb = resolve_command_verb(&context_menu, command_offset);
+    let selected_verb = resolve_command_verb(context_menu, command_offset);
 
     if selected_verb.eq_ignore_ascii_case("rename") {
-        crate::apply_main_window_runtime_mode(
-            app_handle,
-            app_handle.state::<crate::MainWindowState>().inner(),
-        );
+        restore_main_window_mode(app_handle);
         return Ok(Some(selected_verb));
     }
 
@@ -415,15 +430,40 @@ fn show_shell_context_menu_on_main_thread(
             .InvokeCommand((&invoke as *const CMINVOKECOMMANDINFOEX).cast::<CMINVOKECOMMANDINFO>())
     };
     if let Err(error) = invoke_result {
-        crate::apply_main_window_runtime_mode(
-            app_handle,
-            app_handle.state::<crate::MainWindowState>().inner(),
-        );
+        restore_main_window_mode(app_handle);
         return Err(format!("执行 Windows Shell 菜单命令失败：{}", error));
     }
 
     crate::hide_main_window(app_handle);
     Ok(Some(selected_verb))
+}
+
+#[cfg(windows)]
+fn show_shell_context_menu_on_main_thread(
+    app_handle: &tauri::AppHandle,
+    path: &str,
+) -> Result<Option<String>, String> {
+    if path.trim().is_empty() {
+        return Err("无法打开 Shell 右键菜单：路径为空。".to_string());
+    }
+
+    let window = app_handle
+        .get_webview_window("main")
+        .ok_or_else(|| "无法获取主窗口，Shell 右键菜单无法显示。".to_string())?;
+    let hwnd = window
+        .hwnd()
+        .map_err(|error| format!("无法获取主窗口句柄：{}", error))?;
+    let _com_guard = ComInitGuard::new()?;
+    let shell_menu = create_shell_context_menu(hwnd, path)?;
+    let _hook_guard = unsafe { install_context_menu_hook(hwnd, &shell_menu.context_menu)? };
+    let (selected_command, cursor) = track_shell_popup(&window, hwnd, &shell_menu.popup_menu)?;
+    invoke_shell_command(
+        app_handle,
+        hwnd,
+        &shell_menu.context_menu,
+        cursor,
+        selected_command,
+    )
 }
 
 #[cfg(windows)]

@@ -71,6 +71,38 @@ pub(crate) struct LlmClient {
 
 struct StreamingRequestInput<'a>(&'a AiConfig, &'a [LlmMessage], bool);
 
+pub(crate) struct ObservedLlmRequest<'a> {
+    messages: Vec<LlmMessage>,
+    strict_json: bool,
+    window: &'a tauri::Window,
+    run_id: &'a str,
+    attempt_label: &'a str,
+}
+
+impl<'a> ObservedLlmRequest<'a> {
+    pub(crate) fn new(
+        messages: Vec<LlmMessage>,
+        strict_json: bool,
+        window: &'a tauri::Window,
+        run_id: &'a str,
+        attempt_label: &'a str,
+    ) -> Self {
+        Self {
+            messages,
+            strict_json,
+            window,
+            run_id,
+            attempt_label,
+        }
+    }
+}
+
+struct StreamingAttempt<'a, 'b> {
+    surface: ApiSurface,
+    observation: Option<&'a LlmObservation<'b>>,
+    started_at: Instant,
+}
+
 impl LlmClient {
     pub(crate) fn from_config(_config: &AiConfig) -> Self {
         Self {
@@ -85,17 +117,15 @@ impl LlmClient {
     pub(crate) async fn complete_json_observed(
         &self,
         config: &AiConfig,
-        messages: Vec<LlmMessage>,
-        strict_json: bool,
-        window: &tauri::Window,
-        run_id: &str,
-        attempt_label: &str,
+        request: ObservedLlmRequest<'_>,
     ) -> Result<LlmResponse, String> {
+        let observation =
+            LlmObservation::new(request.window, request.run_id, request.attempt_label);
         self.complete_json_inner(
             config,
-            &messages,
-            strict_json,
-            Some(LlmObservation::new(window, run_id, attempt_label)),
+            &request.messages,
+            request.strict_json,
+            Some(observation),
         )
         .await
     }
@@ -119,22 +149,26 @@ impl LlmClient {
         if !should_try_responses_first(&config.base_url) {
             return self
                 .complete_streaming_request(
-                    ApiSurface::ChatCompletions,
                     &client,
                     StreamingRequestInput(config, messages, strict_json),
-                    observation.as_ref(),
-                    started_at,
+                    StreamingAttempt {
+                        surface: ApiSurface::ChatCompletions,
+                        observation: observation.as_ref(),
+                        started_at,
+                    },
                 )
                 .await;
         }
 
         match self
             .complete_streaming_request(
-                ApiSurface::Responses,
                 &client,
                 StreamingRequestInput(config, messages, strict_json),
-                observation.as_ref(),
-                started_at,
+                StreamingAttempt {
+                    surface: ApiSurface::Responses,
+                    observation: observation.as_ref(),
+                    started_at,
+                },
             )
             .await
         {
@@ -147,11 +181,13 @@ impl LlmClient {
                 );
 
                 self.complete_streaming_request(
-                    ApiSurface::ChatCompletions,
                     &client,
                     StreamingRequestInput(config, messages, strict_json),
-                    observation.as_ref(),
-                    started_at,
+                    StreamingAttempt {
+                        surface: ApiSurface::ChatCompletions,
+                        observation: observation.as_ref(),
+                        started_at,
+                    },
                 )
                 .await
                 .map_err(|chat_error| {
@@ -165,13 +201,16 @@ impl LlmClient {
 
     async fn complete_streaming_request(
         &self,
-        surface: ApiSurface,
         client: &reqwest::Client,
         input: StreamingRequestInput<'_>,
-        observation: Option<&LlmObservation<'_>>,
-        started_at: Instant,
+        attempt: StreamingAttempt<'_, '_>,
     ) -> Result<LlmResponse, String> {
         let StreamingRequestInput(config, messages, strict_json) = input;
+        let StreamingAttempt {
+            surface,
+            observation,
+            started_at,
+        } = attempt;
         let endpoint = surface.endpoint(&config.base_url)?;
         let request_body = match surface {
             ApiSurface::Responses => build_responses_request(config, messages, strict_json),

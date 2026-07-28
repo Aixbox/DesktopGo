@@ -5,6 +5,7 @@ use std::thread;
 use std::time::Duration;
 
 use once_cell::sync::Lazy;
+use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, PeekMessageW, TranslateMessage, MSG, PM_REMOVE, WM_QUIT,
 };
@@ -31,110 +32,181 @@ enum WorkerCommand {
 static WORKER_SENDER: Lazy<Mutex<Option<Sender<WorkerCommand>>>> = Lazy::new(|| Mutex::new(None));
 static WORKER_INIT_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
-fn worker_loop(
+struct IpcWorker {
     api: EverythingApi,
-    reply_hwnd: windows::Win32::Foundation::HWND,
+    reply_hwnd: HWND,
     command_rx: Receiver<WorkerCommand>,
     app_handle: tauri::AppHandle,
-) {
-    let mut active: Option<ActiveRequest> = None;
-    let mut first_page_cache: Option<FirstPageCache> = None;
+    active: Option<ActiveRequest>,
+    first_page_cache: Option<FirstPageCache>,
+}
 
-    loop {
+impl IpcWorker {
+    fn new(
+        api: EverythingApi,
+        reply_hwnd: HWND,
+        command_rx: Receiver<WorkerCommand>,
+        app_handle: tauri::AppHandle,
+    ) -> Self {
+        Self {
+            api,
+            reply_hwnd,
+            command_rx,
+            app_handle,
+            active: None,
+            first_page_cache: None,
+        }
+    }
+
+    fn run(mut self) {
+        loop {
+            if !self.pump_messages() || !self.dispatch_commands() {
+                return;
+            }
+            self.finish_pending_request();
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    fn pump_messages(&mut self) -> bool {
         let mut message = MSG::default();
         while unsafe { PeekMessageW(&mut message, None, 0, 0, PM_REMOVE) }.into() {
             if message.message == WM_QUIT {
-                query::teardown_worker(&api, reply_hwnd, &app_handle, &mut active);
-                return;
+                self.teardown();
+                return false;
             }
             unsafe {
                 let _ = TranslateMessage(&message);
                 DispatchMessageW(&message);
             }
         }
+        true
+    }
 
-        while let Ok(command) = command_rx.try_recv() {
-            query::cancel_active_request(&app_handle, &mut active);
+    fn dispatch_commands(&mut self) -> bool {
+        while let Ok(command) = self.command_rx.try_recv() {
+            query::cancel_active_request(&self.app_handle, &mut self.active);
             match command {
-                WorkerCommand::Probe { response } => {
-                    match query::start_probe(&api, reply_hwnd, &app_handle, response.clone()) {
-                        Ok(request) => active = Some(request),
-                        Err(error) => {
-                            append_debug_log(
-                                &app_handle,
-                                format!("ipc worker failed to start probe: {}", error),
-                            );
-                            let _ = response.send(Err(error));
-                        }
-                    }
-                }
-                WorkerCommand::Search { query, response } => {
-                    if query.offset == 0 {
-                        if let Some(cache) = first_page_cache.as_ref() {
-                            if cache.query == query {
-                                append_debug_log(
-                                    &app_handle,
-                                    "ipc search: reused cached first page",
-                                );
-                                let _ = response.send(Ok(cache.response.clone()));
-                                continue;
-                            }
-                        }
-                        first_page_cache = None;
-                    }
-
-                    match query::start_search(
-                        &api,
-                        reply_hwnd,
-                        query,
-                        &app_handle,
-                        response.clone(),
-                    ) {
-                        Ok(request) => active = Some(request),
-                        Err(error) => {
-                            append_debug_log(
-                                &app_handle,
-                                format!("ipc worker failed to start search: {}", error),
-                            );
-                            let _ = response.send(Err(error));
-                        }
-                    }
-                }
+                WorkerCommand::Probe { response } => self.start_probe(response),
+                WorkerCommand::Search { query, response } => self.start_search(query, response),
                 WorkerCommand::Shutdown { response } => {
-                    append_debug_log(&app_handle, "ipc worker shutdown requested");
-                    query::teardown_worker(&api, reply_hwnd, &app_handle, &mut active);
+                    append_debug_log(&self.app_handle, "ipc worker shutdown requested");
+                    self.teardown();
                     let _ = response.send(());
-                    return;
+                    return false;
                 }
             }
         }
+        true
+    }
 
-        if reply_window::is_completed() {
-            query::finish_active_request(
-                &api,
-                &app_handle,
-                &mut active,
-                &mut first_page_cache,
-                false,
-            );
-        } else if active
-            .as_ref()
-            .map(|request| {
-                request.is_probe() && request.started_at().elapsed() >= request.timeout()
-            })
-            .unwrap_or(false)
-        {
-            query::finish_active_request(
-                &api,
-                &app_handle,
-                &mut active,
-                &mut first_page_cache,
-                true,
-            );
+    fn start_probe(&mut self, response: Sender<Result<(), String>>) {
+        match query::start_probe(
+            &self.api,
+            self.reply_hwnd,
+            &self.app_handle,
+            response.clone(),
+        ) {
+            Ok(request) => self.active = Some(request),
+            Err(error) => {
+                append_debug_log(
+                    &self.app_handle,
+                    format!("ipc worker failed to start probe: {}", error),
+                );
+                let _ = response.send(Err(error));
+            }
+        }
+    }
+
+    fn start_search(
+        &mut self,
+        search_query: SearchQuery,
+        response: Sender<Result<SearchResponse, String>>,
+    ) {
+        if self.reuse_cached_first_page(&search_query, &response) {
+            return;
         }
 
-        thread::sleep(Duration::from_millis(10));
+        match query::start_search(
+            &self.api,
+            self.reply_hwnd,
+            search_query,
+            &self.app_handle,
+            response.clone(),
+        ) {
+            Ok(request) => self.active = Some(request),
+            Err(error) => {
+                append_debug_log(
+                    &self.app_handle,
+                    format!("ipc worker failed to start search: {}", error),
+                );
+                let _ = response.send(Err(error));
+            }
+        }
     }
+
+    fn reuse_cached_first_page(
+        &mut self,
+        search_query: &SearchQuery,
+        response: &Sender<Result<SearchResponse, String>>,
+    ) -> bool {
+        if search_query.offset != 0 {
+            return false;
+        }
+        if let Some(cache) = self.first_page_cache.as_ref() {
+            if cache.query == *search_query {
+                append_debug_log(&self.app_handle, "ipc search: reused cached first page");
+                let _ = response.send(Ok(cache.response.clone()));
+                return true;
+            }
+        }
+        self.first_page_cache = None;
+        false
+    }
+
+    fn finish_pending_request(&mut self) {
+        if reply_window::is_completed() {
+            query::finish_active_request(
+                &self.api,
+                &self.app_handle,
+                &mut self.active,
+                &mut self.first_page_cache,
+                false,
+            );
+            return;
+        }
+
+        let probe_timed_out = self.active.as_ref().is_some_and(|request| {
+            request.is_probe() && request.started_at().elapsed() >= request.timeout()
+        });
+        if probe_timed_out {
+            query::finish_active_request(
+                &self.api,
+                &self.app_handle,
+                &mut self.active,
+                &mut self.first_page_cache,
+                probe_timed_out,
+            );
+        }
+    }
+
+    fn teardown(&mut self) {
+        query::teardown_worker(
+            &self.api,
+            self.reply_hwnd,
+            &self.app_handle,
+            &mut self.active,
+        );
+    }
+}
+
+fn worker_loop(
+    api: EverythingApi,
+    reply_hwnd: HWND,
+    command_rx: Receiver<WorkerCommand>,
+    app_handle: tauri::AppHandle,
+) {
+    IpcWorker::new(api, reply_hwnd, command_rx, app_handle).run();
 }
 
 fn ensure_worker(

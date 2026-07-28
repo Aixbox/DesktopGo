@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use once_cell::sync::Lazy;
 use serde::Serialize;
@@ -9,12 +9,14 @@ use crate::layout_db;
 
 use super::debug_log::append as append_debug_log;
 use super::errors::{build_error, SearchErrorCode};
-use super::installed;
 use super::ipc;
 use super::models::{
     SearchPage, SearchProvider, SearchQuery, SearchRuntimeState, SearchRuntimeStatus,
 };
-use super::sdk;
+
+mod startup;
+
+pub use startup::start_search_runtime;
 
 const DEFAULT_SEARCH_LIMIT: u32 = 50;
 const MAX_SEARCH_LIMIT: u32 = 200;
@@ -53,17 +55,6 @@ impl RuntimeState {
 }
 
 static RUNTIME_STATE: Lazy<Mutex<RuntimeState>> = Lazy::new(|| Mutex::new(RuntimeState::default()));
-
-fn wait_for_ipc_ready(app_handle: &tauri::AppHandle, dll_path: &Path, timeout: Duration) -> bool {
-    let started_at = Instant::now();
-    while started_at.elapsed() < timeout {
-        if ipc::probe_connection(dll_path, app_handle).is_ok() {
-            return true;
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
-    false
-}
 
 fn set_json_setting<T>(app_handle: &tauri::AppHandle, key: &str, value: &T)
 where
@@ -155,25 +146,6 @@ fn build_initializing_error(message: impl AsRef<str>) -> String {
     build_error(SearchErrorCode::Initializing, message)
 }
 
-fn resolve_runtime_status(
-    app_handle: &tauri::AppHandle,
-    dll_path: &Path,
-) -> Result<SearchRuntimeStatus, String> {
-    match ipc::inspect_runtime(dll_path, app_handle) {
-        Ok(runtime_status) => set_runtime_status(app_handle, runtime_status.database_loaded),
-        Err(error) => {
-            append_debug_log(
-                app_handle,
-                format!(
-                    "start_search_runtime: inspect_runtime failed after successful probe: {}",
-                    error
-                ),
-            );
-            set_runtime_ready(app_handle)
-        }
-    }
-}
-
 fn map_search_query_error(app_handle: &tauri::AppHandle, dll_path: &Path, error: String) -> String {
     if error.starts_with("EverythingBusy") {
         return error;
@@ -198,165 +170,6 @@ pub fn get_search_runtime_status() -> Result<SearchRuntimeStatus, String> {
         .lock()
         .map_err(|_| "Failed to lock search runtime state".to_string())?;
     Ok(guard.snapshot())
-}
-
-pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRuntimeStatus, String> {
-    ensure_runtime_defaults(app_handle);
-    append_debug_log(app_handle, "start_search_runtime: enter");
-
-    {
-        let guard = RUNTIME_STATE
-            .lock()
-            .map_err(|_| "Failed to lock search runtime state".to_string())?;
-        if matches!(guard.state, Some(SearchRuntimeState::InstalledReady))
-            && guard.dll_path.is_some()
-        {
-            append_debug_log(
-                app_handle,
-                "start_search_runtime: reuse installed_ready state",
-            );
-            return Ok(guard.snapshot());
-        }
-    }
-
-    let Some(installation) = installed::detect_installed_everything()? else {
-        let error = build_error(
-            SearchErrorCode::NotFound,
-            "Installed Everything was not found",
-        );
-        append_debug_log(
-            app_handle,
-            format!("start_search_runtime: not installed: {}", error),
-        );
-        let _ = set_not_installed_state(error.clone());
-        return Err(error);
-    };
-    append_debug_log(
-        app_handle,
-        format!(
-            "start_search_runtime: installed exe={:?} version={:?}",
-            installation.exe_path, installation.version
-        ),
-    );
-
-    let dll_path = match sdk::ensure_sdk_dll(app_handle) {
-        Ok(path) => path,
-        Err(e) => {
-            let error = build_error(
-                SearchErrorCode::SdkUnavailable,
-                format!("Everything SDK is unavailable: {}", e),
-            );
-            append_debug_log(
-                app_handle,
-                format!("start_search_runtime: sdk unavailable: {}", error),
-            );
-            let _ = set_unavailable_state(error.clone());
-            return Err(error);
-        }
-    };
-    append_debug_log(
-        app_handle,
-        format!("start_search_runtime: sdk ready at {:?}", dll_path),
-    );
-
-    {
-        let mut guard = RUNTIME_STATE
-            .lock()
-            .map_err(|_| "Failed to lock search runtime state".to_string())?;
-        guard.dll_path = Some(dll_path.clone());
-    }
-
-    let cached_dll_path = {
-        let guard = RUNTIME_STATE
-            .lock()
-            .map_err(|_| "Failed to lock search runtime state".to_string())?;
-        guard.dll_path.clone()
-    };
-    if let Some(dll_path) = cached_dll_path.as_ref() {
-        if ipc::probe_connection(dll_path, app_handle).is_ok() {
-            append_debug_log(app_handle, "start_search_runtime: probe ok");
-            return resolve_runtime_status(app_handle, dll_path);
-        }
-    }
-    append_debug_log(app_handle, "start_search_runtime: initial probe failed");
-
-    if let Err(error) = installed::start_installed_everything(&installation.exe_path) {
-        let error = build_error(
-            SearchErrorCode::IpcUnavailable,
-            format!(
-                "Failed to start installed Everything desktop instance: {}",
-                error
-            ),
-        );
-        append_debug_log(
-            app_handle,
-            format!("start_search_runtime: start failed: {}", error),
-        );
-        let _ = set_unavailable_state(error.clone());
-        return Err(error);
-    }
-    append_debug_log(
-        app_handle,
-        "start_search_runtime: desktop instance start requested",
-    );
-
-    if wait_for_ipc_ready(app_handle, &dll_path, Duration::from_secs(5)) {
-        append_debug_log(
-            app_handle,
-            "start_search_runtime: probe ok after desktop start",
-        );
-        return resolve_runtime_status(app_handle, &dll_path);
-    }
-
-    match ipc::inspect_runtime(&dll_path, app_handle) {
-        Ok(runtime_status) if runtime_status.reachable && !runtime_status.database_loaded => {
-            let error = build_initializing_error(
-                "Installed Everything is still starting or building its initial index",
-            );
-            append_debug_log(
-                app_handle,
-                format!("start_search_runtime: initializing: {}", error),
-            );
-            let _ = set_initializing_state(error.clone());
-            return Err(error);
-        }
-        Ok(runtime_status) => {
-            append_debug_log(
-                app_handle,
-                format!(
-                    "start_search_runtime: inspect_runtime after timeout reachable={} database_loaded={}",
-                    runtime_status.reachable, runtime_status.database_loaded
-                ),
-            );
-        }
-        Err(error) => {
-            append_debug_log(
-                app_handle,
-                format!(
-                    "start_search_runtime: inspect_runtime after timeout failed: {}",
-                    error
-                ),
-            );
-        }
-    }
-
-    let version_text = installation
-        .version
-        .map(|version| format!(" (version {})", version))
-        .unwrap_or_default();
-    let error = build_error(
-        SearchErrorCode::IpcUnavailable,
-        format!(
-            "Installed Everything{} is running but DesktopGo could not reach its desktop IPC instance",
-            version_text
-        ),
-    );
-    append_debug_log(
-        app_handle,
-        format!("start_search_runtime: ipc unavailable: {}", error),
-    );
-    let _ = set_unavailable_state(error.clone());
-    Err(error)
 }
 
 pub fn search_files(

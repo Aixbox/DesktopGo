@@ -40,7 +40,11 @@ try {
     "--manifest-path", $manifestPath,
     "--all-targets",
     "--all-features",
-    "--", "-D", "warnings"
+    "--",
+    "-D", "warnings",
+    "-D", "clippy::too_many_lines",
+    "-D", "clippy::cognitive_complexity",
+    "-D", "clippy::too_many_arguments"
   )
   Invoke-QualityStep "cargo clippy (release)" "cargo" @(
     "clippy",
@@ -48,7 +52,11 @@ try {
     "--release",
     "--all-targets",
     "--all-features",
-    "--", "-D", "warnings"
+    "--",
+    "-D", "warnings",
+    "-D", "clippy::too_many_lines",
+    "-D", "clippy::cognitive_complexity",
+    "-D", "clippy::too_many_arguments"
   )
   Invoke-QualityStep "cargo check" "cargo" @(
     "check",

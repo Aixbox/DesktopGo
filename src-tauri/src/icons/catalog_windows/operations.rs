@@ -1,4 +1,5 @@
 mod create;
+mod entry;
 mod import;
 mod mutation;
 mod query;

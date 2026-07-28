@@ -52,6 +52,28 @@ pub(crate) use window_style::{
     set_main_window_manual_always_on_top_enabled, set_main_window_persistent_enabled,
 };
 
+fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    storage_profile::ensure_dev_profile_seeded(app.handle())?;
+    tray::initialize_language(app.handle());
+
+    let main_window_state = app.state::<MainWindowState>();
+    main_window_state.window_persistent_enabled.store(
+        window_style::read_saved_window_persistent_enabled(app.handle()),
+        Ordering::SeqCst,
+    );
+
+    tray::install(app)?;
+    window::create_main_window(app.handle());
+    console_exit::install(app.handle());
+    startup::initialize_launch_on_startup(app.handle());
+    launchpad_shortcut::initialize(app.handle());
+
+    if startup::should_show_on_launch(app.handle()) {
+        window::request_main_window_show(app.handle());
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -69,28 +91,7 @@ pub fn run() {
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
     let app = builder
-        .setup(|app| {
-            storage_profile::ensure_dev_profile_seeded(app.handle())?;
-            tray::initialize_language(app.handle());
-
-            let main_window_state = app.state::<MainWindowState>();
-            main_window_state.window_persistent_enabled.store(
-                window_style::read_saved_window_persistent_enabled(app.handle()),
-                Ordering::SeqCst,
-            );
-
-            tray::install(app)?;
-            window::create_main_window(app.handle());
-            console_exit::install(app.handle());
-            startup::initialize_launch_on_startup(app.handle());
-            launchpad_shortcut::initialize(app.handle());
-
-            if startup::should_show_on_launch(app.handle()) {
-                window::request_main_window_show(app.handle());
-            }
-
-            Ok(())
-        })
+        .setup(setup_app)
         .invoke_handler(tauri::generate_handler![
             toggle_window,
             activate_main_window,

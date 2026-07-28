@@ -15,7 +15,7 @@
 | ----- | ------ | ------ | ------------------------------- | ------------------------------------------------------------------------------------------ |
 | D-001 | P0     | 待开发 | 安装包启动时先选择语言          | 使用一个安装包承载简体中文和英文；启动安装包后首先选择语言，再进入对应语言的完整安装流程。 |
 | D-002 | P0     | 已完成 | ESLint 告警清零与超大文件模块化 | 普通与严格 ESLint 均恢复零告警；所有手写 TypeScript 模块已进入统一的 1000 行预算。         |
-| D-003 | P1     | 进行中 | Rust 静态检查与超大模块治理     | 建立 rustfmt、Clippy、check、test 门禁，并将 9 个超预算 Rust 模块分批拆回 500 行预算。     |
+| D-003 | P1     | 已完成 | Rust 静态检查与超大模块治理     | 建立 rustfmt、Clippy、check、test 门禁，并将 9 个超预算 Rust 模块分批拆回 500 行预算。     |
 
 ## D-001：安装包启动时先选择语言
 
@@ -294,7 +294,7 @@
 
 ### 当前基线
 
-截至 2026-07-28，R-00 至 R-04 已完成，R-05 进入真实运行回归阶段，R-06 开始治理函数预算；Rust 零告警门禁和全部规划模块化边界已经建立：
+截至 2026-07-28，R-00 至 R-06 已完成；Rust 零告警门禁、文件预算、函数预算和全部规划模块化边界已经建立：
 
 - 仓库已提供 `rustfmt.toml`、`clippy.toml` 和统一的 `scripts/check-rust.ps1` 检查脚本。
 - `package.json` 已提供 rustfmt、debug/release Clippy、check、debug/release test 的分项命令和 `rust:quality` 聚合命令；GitHub Actions 已增加 Windows Rust 质量任务。
@@ -304,7 +304,7 @@
 - `icons/website.rs` 已收敛为 facade，候选策略、文档资源解析、HTTP、图像处理和异步发现流程已进入独立模块。
 - `icons/catalog_windows.rs` 与 `catalog_windows/operations.rs` 已收敛为 facade，快照存储、图像缓存、条目建模、视图转换以及创建、更新、导入、查询和变更操作已进入独立模块。
 - `lib.rs` 与 `commands.rs` 已收敛为应用装配和命令导出入口，窗口、托盘、启动、状态和领域命令均已进入独立模块。
-- 文件预算脚本继续以 500 行作为手写 Rust 模块阈值；全仓 272 个源码文件扫描通过，既有超预算 Rust 文件已从 9 个降至 0 个。
+- 文件预算脚本继续以 500 行作为手写 Rust 模块阈值；全仓 274 个源码文件扫描通过，既有超预算 Rust 文件已从 9 个降至 0 个。
 - 文件行数预算属于模块化约束；Clippy 主要检查代码正确性与惯用写法，不能替代整个文件的规模门禁。
 
 ### 治理原则
@@ -326,8 +326,8 @@
 | R-02 | 已完成 | Everything 集成         | 拆分 `everything/ipc.rs` 与 `everything/runtime.rs` 的协议、连接、查询、安装发现、进程生命周期和重试策略。        | 2 个模块进入 500 行预算          |
 | R-03 | 已完成 | 图标网站与 Windows 目录 | 拆分 `icons/website.rs`、`catalog_windows.rs` 和 `operations.rs` 的网络、解析、候选策略、扫描、提取与持久化边界。 | 3 个模块进入 500 行预算          |
 | R-04 | 已完成 | Tauri 入口与命令组织    | 将 `lib.rs` 和 `commands.rs` 收敛为装配与导出层，按窗口、图标、布局、搜索、设置和生命周期拆分命令及操作。         | 2 个中央模块进入 500 行预算      |
-| R-05 | 进行中 | 零告警与预算收尾        | 清理临时 Clippy 例外，执行全仓门禁与 Windows 真实运行回归，并在路线图记录最终文件规模。                           | 0 个 Rust 超预算文件、0 条新告警 |
-| R-06 | 进行中 | 函数规模与复杂度治理    | 启用函数长度、认知复杂度和参数数量诊断，按领域拆分超预算编排函数，清零后纳入统一 Clippy 门禁。                   | 0 条函数预算告警                 |
+| R-05 | 已完成 | 零告警与预算收尾        | 清理临时 Clippy 例外，执行全仓门禁与 Windows 真实运行回归，并在路线图记录最终文件规模。                           | 0 个 Rust 超预算文件、0 条新告警 |
+| R-06 | 已完成 | 函数规模与复杂度治理    | 启用函数长度、认知复杂度和参数数量诊断，按领域拆分超预算编排函数，清零后纳入统一 Clippy 门禁。                   | 0 条函数预算告警                 |
 
 #### R-00 实施结果
 
@@ -390,26 +390,29 @@
 - 保持全部 Tauri command 名称、参数/返回类型、`generate_handler!` 注册顺序、窗口事件名和错误文案兼容；窗口几何与原生激活策略测试随职责迁移。
 - 聚合门禁实测为 42 passed / 0 failed，Clippy 零告警，变更文件预算通过；全仓 272 个源码文件的预算扫描首次全部通过。
 
-#### R-05 当前进度
+#### R-05 实施结果
 
 - release Clippy 首次补扫发现 5 个仅在 debug 配置使用的辅助项；现已通过精确的条件编译边界消除，并移除 `is_enabled` 的临时 `allow(dead_code)`，未改变启动或存储行为。
 - 统一质量脚本和 CI 现同时覆盖 debug/release Clippy 与测试；两套 Clippy 均为零告警，两套测试均为 42 passed / 0 failed。
 - 静态收尾已经完成：没有全局 Clippy 例外、没有新告警、没有超预算 Rust 文件，全仓 272 个源码文件预算扫描通过。
-- 根据项目进程所有权约束，本批未启动 DesktopGo、Tauri 或 Vite；R-05 仅剩 Windows 主窗口、设置窗口、托盘、全局快捷键、启动和退出流程的用户侧真实运行回归。
+- 用户已确认 Windows 主窗口、设置窗口、托盘、全局快捷键、启动和退出流程的真实运行回归无问题，R-05 完成。
 
-#### R-06 当前进度
+#### R-06 实施结果
 
-- `clippy.toml` 已配置函数 80 行和认知复杂度 15 的阈值，但对应 lint 尚未进入统一门禁；首次专项扫描发现 9 条告警，包括 8 个超长函数和 1 个复杂度超限函数。
+- `clippy.toml` 统一配置函数 80 行、认知复杂度 15 和参数 5 个的阈值；三类专项 lint 已进入 debug/release Clippy 与 CI 门禁。
 - `agent/icon_agent.rs` 的 187 行 `run` 已拆分为上下文读取、模型选择、消息构建、严格/宽松请求、响应观测、结果校验和草稿持久化阶段；事件顺序、错误文案、降级策略与 IPC 返回结构保持不变。
-- AI Agent 子批次完成后专项告警从 9 条降至 8 条；剩余范围为 Everything 运行时、Windows 图标创建/更新、网站文档候选解析、Shell 上下文菜单和 Tauri 装配入口。
-- 全部专项告警清零前，仅把函数预算 lint 用于债务盘点；清零后再以 `-D warnings` 纳入 debug/release Clippy，避免建立无法通过的门禁。
+- Everything IPC worker 已拆分消息泵、命令分发、缓存复用和请求完成检查；运行时启动已拆分安装发现、SDK 准备、IPC 探测、进程启动和超时分类。
+- 网站图标文档解析已按 link、script、noscript、meta 和 JSON-LD 资源类型拆分；Shell 上下文菜单已拆分对象创建、弹出选择和命令执行。
+- Windows 图标创建与更新已共享输入规范化、重复判定和托管快捷方式适配器；各操作继续独立负责快照写入和失败清理。
+- LLM 观测请求、草稿记录和图标更新写入参数已收敛为操作上下文；三类专项告警从校准后的 13 条降至 0 条。
+- 新增 3 个图标输入规范化测试，覆盖网站参数清理、创建时严格校验自定义图标路径和更新时接受生成图标替代路径；debug/release 测试均为 45 passed / 0 failed，全仓 274 个源码文件预算扫描通过。
 
 ### 每批质量门禁
 
 ```powershell
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
-cargo clippy --manifest-path src-tauri/Cargo.toml --release --all-targets --all-features -- -D warnings
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings -D clippy::too_many_lines -D clippy::cognitive_complexity -D clippy::too_many_arguments
+cargo clippy --manifest-path src-tauri/Cargo.toml --release --all-targets --all-features -- -D warnings -D clippy::too_many_lines -D clippy::cognitive_complexity -D clippy::too_many_arguments
 cargo check --manifest-path src-tauri/Cargo.toml
 cargo test --manifest-path src-tauri/Cargo.toml
 cargo test --manifest-path src-tauri/Cargo.toml --release

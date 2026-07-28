@@ -67,14 +67,25 @@ fn save_memory(app_handle: &tauri::AppHandle, memory: &AgentMemory) -> Result<()
     layout_db::set_layout_payload(app_handle, MEMORY_KEY, &payload)
 }
 
+pub(crate) struct DraftRecordInput<'a> {
+    pub run_id: &'a str,
+    pub model: &'a str,
+    pub custom_prompt: Option<&'a str>,
+    pub result: &'a AiClassifyResult,
+    pub icons: &'a [AiIconInput],
+}
+
 pub(crate) fn save_draft(
     app_handle: &tauri::AppHandle,
-    run_id: &str,
-    model: &str,
-    custom_prompt: Option<&str>,
-    result: &AiClassifyResult,
-    icons: &[AiIconInput],
+    input: DraftRecordInput<'_>,
 ) -> Result<(), String> {
+    let DraftRecordInput {
+        run_id,
+        model,
+        custom_prompt,
+        result,
+        icons,
+    } = input;
     let mut memory = load_memory(app_handle)?;
     let now = unix_timestamp_secs();
     let icon_name_by_key: HashMap<&str, &str> = icons

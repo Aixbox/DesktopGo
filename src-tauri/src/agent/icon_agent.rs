@@ -1,5 +1,5 @@
 use crate::agent::event::{emit_agent_event, AgentEvent, AgentEventPhase};
-use crate::agent::llm::{LlmClient, LlmMessage, LlmResponse};
+use crate::agent::llm::{LlmClient, LlmMessage, LlmResponse, ObservedLlmRequest};
 use crate::agent::memory;
 use crate::agent::tool::{AgentTool, ToolResponse};
 use crate::ai::{self, AiClassifyResult, AiConfig, AiGroup, AiIconInput};
@@ -169,11 +169,13 @@ impl IconOrganizerAgent {
         let model_response = match model_client
             .complete_json_observed(
                 config,
-                messages.clone(),
-                true,
-                &self.window,
-                &self.run_id,
-                "严格 JSON 流式请求",
+                ObservedLlmRequest::new(
+                    messages.clone(),
+                    true,
+                    &self.window,
+                    &self.run_id,
+                    "严格 JSON 流式请求",
+                ),
             )
             .await
         {
@@ -188,11 +190,13 @@ impl IconOrganizerAgent {
                 match model_client
                     .complete_json_observed(
                         config,
-                        messages,
-                        false,
-                        &self.window,
-                        &self.run_id,
-                        "宽松 JSON 流式请求",
+                        ObservedLlmRequest::new(
+                            messages,
+                            false,
+                            &self.window,
+                            &self.run_id,
+                            "宽松 JSON 流式请求",
+                        ),
                     )
                     .await
                 {
@@ -293,14 +297,14 @@ impl IconOrganizerAgent {
         result: &AiClassifyResult,
         icons: &[AiIconInput],
     ) {
-        match memory::save_draft(
-            app_handle,
-            &self.run_id,
-            &config.model,
-            config.custom_prompt.as_deref(),
+        let input = memory::DraftRecordInput {
+            run_id: &self.run_id,
+            model: &config.model,
+            custom_prompt: config.custom_prompt.as_deref(),
             result,
             icons,
-        ) {
+        };
+        match memory::save_draft(app_handle, input) {
             Ok(()) => self.emit(AgentEventPhase::Saved, "整理草稿已保存到本地上下文。"),
             Err(error) => self.emit_detail(
                 AgentEventPhase::Error,
