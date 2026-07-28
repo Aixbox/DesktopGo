@@ -147,7 +147,7 @@ mod windows_impl {
 pub fn detect_installed_everything() -> Result<Option<InstalledEverything>, String> {
     #[cfg(windows)]
     {
-        return Ok(windows_impl::detect_installed_everything());
+        Ok(windows_impl::detect_installed_everything())
     }
 
     #[cfg(not(windows))]

@@ -499,10 +499,10 @@ pub(in crate::icons) fn update_icon_entry_windows(
     if !working_directory.is_empty() && !PathBuf::from(&working_directory).is_dir() {
         return Err("Working directory does not exist or is not a folder".to_string());
     }
-    if !custom_icon_path.is_empty()
-        && !PathBuf::from(&custom_icon_path).is_file()
-        && !(icon_source == "custom" && !generated_icon_base64.is_empty())
-    {
+    let custom_icon_is_missing =
+        !custom_icon_path.is_empty() && !PathBuf::from(&custom_icon_path).is_file();
+    let has_generated_custom_icon = icon_source == "custom" && !generated_icon_base64.is_empty();
+    if custom_icon_is_missing && !has_generated_custom_icon {
         return Err("Custom icon path does not exist or is not a file".to_string());
     }
 

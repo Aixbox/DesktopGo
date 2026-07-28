@@ -91,7 +91,7 @@ fn resolve_window_work_area_bounds(window: &tauri::WebviewWindow) -> Option<Wind
 
 #[tauri::command]
 pub fn toggle_window(window: tauri::Window) {
-    crate::hide_main_window(&window.app_handle());
+    crate::hide_main_window(window.app_handle());
 }
 
 #[tauri::command]

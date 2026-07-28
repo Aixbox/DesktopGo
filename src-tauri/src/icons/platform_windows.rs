@@ -1,5 +1,5 @@
 use base64::Engine;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub(super) fn get_dpi_scale() -> f64 {
     unsafe {
@@ -64,7 +64,7 @@ unsafe fn extract_shell_item_icon(path: &str, size: i32) -> Option<String> {
 }
 
 #[cfg(windows)]
-pub(super) fn resolve_lnk(lnk_path: &PathBuf) -> Option<String> {
+pub(super) fn resolve_lnk(lnk_path: &Path) -> Option<String> {
     use windows::core::Interface;
     use windows::core::PCWSTR;
     use windows::Win32::System::Com::*;
@@ -103,7 +103,7 @@ pub(super) fn resolve_lnk(lnk_path: &PathBuf) -> Option<String> {
 
 #[cfg(windows)]
 pub(super) fn create_shortcut_windows(
-    shortcut_path: &PathBuf,
+    shortcut_path: &Path,
     target_path: &str,
     launch_arguments: &str,
     working_directory: &str,
@@ -179,7 +179,7 @@ pub(super) fn create_shortcut_windows(
 
 #[cfg(windows)]
 pub(super) fn update_shortcut_launch_options_windows(
-    shortcut_path: &PathBuf,
+    shortcut_path: &Path,
     launch_arguments: &str,
     working_directory: &str,
 ) -> Result<(), String> {
@@ -337,7 +337,7 @@ unsafe fn hbitmap_to_base64(hbitmap: windows::Win32::Graphics::Gdi::HBITMAP) -> 
 
 #[cfg(windows)]
 pub(super) fn extract_icon_for_item(
-    item_path: &PathBuf,
+    item_path: &Path,
     target_path: &str,
     item_type: &str,
     icon_size: i32,

@@ -67,6 +67,8 @@ struct LlmObservation<'a> {
     attempt_label: &'a str,
 }
 
+struct StreamingRequestInput<'a>(&'a AiConfig, &'a [LlmMessage], bool);
+
 struct StreamAccumulator {
     content: String,
     usage: Option<LlmUsage>,
@@ -130,15 +132,12 @@ impl LlmClient {
                 emit_observed_error(observation.as_ref(), &started_at, &message);
                 message
             })?;
-
         if !should_try_responses_first(&config.base_url) {
             return self
                 .complete_streaming_request(
                     ApiSurface::ChatCompletions,
                     &client,
-                    config,
-                    messages,
-                    strict_json,
+                    StreamingRequestInput(config, messages, strict_json),
                     observation.as_ref(),
                     started_at,
                 )
@@ -149,9 +148,7 @@ impl LlmClient {
             .complete_streaming_request(
                 ApiSurface::Responses,
                 &client,
-                config,
-                messages,
-                strict_json,
+                StreamingRequestInput(config, messages, strict_json),
                 observation.as_ref(),
                 started_at,
             )
@@ -168,9 +165,7 @@ impl LlmClient {
                 self.complete_streaming_request(
                     ApiSurface::ChatCompletions,
                     &client,
-                    config,
-                    messages,
-                    strict_json,
+                    StreamingRequestInput(config, messages, strict_json),
                     observation.as_ref(),
                     started_at,
                 )
@@ -188,12 +183,11 @@ impl LlmClient {
         &self,
         surface: ApiSurface,
         client: &reqwest::Client,
-        config: &AiConfig,
-        messages: &[LlmMessage],
-        strict_json: bool,
+        input: StreamingRequestInput<'_>,
         observation: Option<&LlmObservation<'_>>,
         started_at: Instant,
     ) -> Result<LlmResponse, String> {
+        let StreamingRequestInput(config, messages, strict_json) = input;
         let endpoint = surface.endpoint(&config.base_url)?;
         let request_body = match surface {
             ApiSurface::Responses => build_responses_request(config, messages, strict_json),

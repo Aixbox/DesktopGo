@@ -113,11 +113,7 @@ pub(super) fn append_debug_log(app_handle: &tauri::AppHandle, message: impl AsRe
     let _ = writeln!(file, "[{}] {}", ts, text);
 }
 
-fn wait_for_ipc_ready(
-    app_handle: &tauri::AppHandle,
-    dll_path: &PathBuf,
-    timeout: Duration,
-) -> bool {
+fn wait_for_ipc_ready(app_handle: &tauri::AppHandle, dll_path: &Path, timeout: Duration) -> bool {
     let started_at = Instant::now();
     while started_at.elapsed() < timeout {
         if ipc::probe_connection(dll_path, app_handle).is_ok() {
@@ -215,7 +211,7 @@ fn set_initializing_state(message: String) -> Result<(), String> {
 }
 
 fn build_initializing_error(message: impl AsRef<str>) -> String {
-    build_error(SearchErrorCode::EverythingInitializing, message)
+    build_error(SearchErrorCode::Initializing, message)
 }
 
 fn resolve_runtime_status(
@@ -251,7 +247,7 @@ fn map_search_query_error(app_handle: &tauri::AppHandle, dll_path: &Path, error:
     }
 
     build_error(
-        SearchErrorCode::EverythingIpcUnavailable,
+        SearchErrorCode::IpcUnavailable,
         format!("Everything query failed: {}", error),
     )
 }
@@ -284,7 +280,7 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
 
     let Some(installation) = installed::detect_installed_everything()? else {
         let error = build_error(
-            SearchErrorCode::EverythingNotFound,
+            SearchErrorCode::NotFound,
             "Installed Everything was not found",
         );
         append_debug_log(
@@ -306,7 +302,7 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
         Ok(path) => path,
         Err(e) => {
             let error = build_error(
-                SearchErrorCode::EverythingSdkUnavailable,
+                SearchErrorCode::SdkUnavailable,
                 format!("Everything SDK is unavailable: {}", e),
             );
             append_debug_log(
@@ -345,7 +341,7 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
 
     if let Err(error) = installed::start_installed_everything(&installation.exe_path) {
         let error = build_error(
-            SearchErrorCode::EverythingIpcUnavailable,
+            SearchErrorCode::IpcUnavailable,
             format!(
                 "Failed to start installed Everything desktop instance: {}",
                 error
@@ -408,7 +404,7 @@ pub fn start_search_runtime(app_handle: &tauri::AppHandle) -> Result<SearchRunti
         .map(|version| format!(" (version {})", version))
         .unwrap_or_default();
     let error = build_error(
-        SearchErrorCode::EverythingIpcUnavailable,
+        SearchErrorCode::IpcUnavailable,
         format!(
             "Installed Everything{} is running but DesktopGo could not reach its desktop IPC instance",
             version_text
@@ -527,7 +523,7 @@ pub fn record_search_result_run(app_handle: &tauri::AppHandle, path: &str) -> Re
 
     ipc::increment_run_count(&dll_path, trimmed_path).map_err(|e| {
         build_error(
-            SearchErrorCode::EverythingIpcUnavailable,
+            SearchErrorCode::IpcUnavailable,
             format!("Failed to update Everything run count: {}", e),
         )
     })?;

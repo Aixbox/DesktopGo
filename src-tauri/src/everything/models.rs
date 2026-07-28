@@ -4,9 +4,10 @@ fn default_limit() -> u32 {
     50
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchSort {
+    #[default]
     Relevance,
     NameAsc,
     NameDesc,
@@ -34,12 +35,6 @@ pub enum SearchSort {
     DateAccessedDesc,
     DateRunAsc,
     DateRunDesc,
-}
-
-impl Default for SearchSort {
-    fn default() -> Self {
-        Self::Relevance
-    }
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]

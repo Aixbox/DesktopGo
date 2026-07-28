@@ -888,9 +888,7 @@ fn consume_install_language_marker() -> Option<&'static str> {
         .and_then(|path| path.parent())
         .map(|dir| dir.join(INSTALL_LANGUAGE_MARKER_FILE_NAME));
 
-    let Some(path) = marker else {
-        return None;
-    };
+    let path = marker?;
 
     let language = std::fs::read_to_string(&path)
         .ok()
@@ -1476,31 +1474,6 @@ pub(crate) fn activate_webview_window(window: &tauri::WebviewWindow) -> Result<(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[cfg(windows)]
-    #[test]
-    fn activation_window_pos_flags_only_change_z_order() {
-        assert_eq!(
-            resolve_activation_window_pos_flags(),
-            SWP_NOMOVE | SWP_NOSIZE
-        );
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn activation_window_pos_flags_do_not_force_show_window() {
-        use windows::Win32::UI::WindowsAndMessaging::SWP_SHOWWINDOW;
-
-        assert_ne!(
-            resolve_activation_window_pos_flags() | SWP_SHOWWINDOW,
-            resolve_activation_window_pos_flags()
-        );
-    }
-}
-
 #[cfg(windows)]
 fn install_windows_console_exit_handler(app: &tauri::AppHandle) {
     let _ = WINDOWS_CONSOLE_APP_HANDLE.set(app.clone());
@@ -1546,4 +1519,29 @@ unsafe extern "system" fn windows_console_ctrl_handler(ctrl_type: u32) -> window
     }
 
     true.into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn activation_window_pos_flags_only_change_z_order() {
+        assert_eq!(
+            resolve_activation_window_pos_flags(),
+            SWP_NOMOVE | SWP_NOSIZE
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn activation_window_pos_flags_do_not_force_show_window() {
+        use windows::Win32::UI::WindowsAndMessaging::SWP_SHOWWINDOW;
+
+        assert_ne!(
+            resolve_activation_window_pos_flags() | SWP_SHOWWINDOW,
+            resolve_activation_window_pos_flags()
+        );
+    }
 }

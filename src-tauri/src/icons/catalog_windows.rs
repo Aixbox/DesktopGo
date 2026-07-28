@@ -1,7 +1,7 @@
 use base64::Engine;
 use std::collections::HashSet;
 use std::io::Cursor;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::image_data::decode_data_uri;
 use super::models::{
@@ -97,14 +97,14 @@ fn image_bytes_to_data_uri(data: &[u8]) -> Option<String> {
 }
 
 #[cfg(windows)]
-fn image_file_to_original_data_uri(path: &PathBuf) -> Option<String> {
+fn image_file_to_original_data_uri(path: &Path) -> Option<String> {
     let data = std::fs::read(path).ok()?;
     image::load_from_memory(&data).ok()?;
     image_bytes_to_data_uri(&data)
 }
 
 #[cfg(windows)]
-fn image_file_to_data_uri(path: &PathBuf, icon_size: i32) -> Option<String> {
+fn image_file_to_data_uri(path: &Path, icon_size: i32) -> Option<String> {
     let size = icon_size.max(1) as u32;
     let image = image::load_from_memory(&std::fs::read(path).ok()?)
         .ok()?
@@ -329,8 +329,7 @@ fn icon_file_rel_path(id: &str, source: IconSource) -> String {
 }
 
 #[cfg(windows)]
-#[cfg(windows)]
-fn read_icon_file_as_data_uri(path: &PathBuf) -> String {
+fn read_icon_file_as_data_uri(path: &Path) -> String {
     match std::fs::read(path) {
         Ok(data) => image_bytes_to_data_uri(&data).unwrap_or_default(),
         Err(_) => String::new(),
@@ -338,7 +337,7 @@ fn read_icon_file_as_data_uri(path: &PathBuf) -> String {
 }
 
 #[cfg(windows)]
-fn has_extension(path: &PathBuf, ext: &str) -> bool {
+fn has_extension(path: &Path, ext: &str) -> bool {
     path.extension()
         .and_then(|v| v.to_str())
         .map(|v| v.eq_ignore_ascii_case(ext))
@@ -351,7 +350,7 @@ fn is_web_url(value: &str) -> bool {
     normalized.starts_with("https://") || normalized.starts_with("http://")
 }
 
-fn build_scanned_item_from_path(path: &PathBuf) -> Option<ScannedDesktopItem> {
+fn build_scanned_item_from_path(path: &Path) -> Option<ScannedDesktopItem> {
     if !path.exists() {
         return None;
     }
@@ -400,7 +399,7 @@ fn import_identity_key(item: &ScannedDesktopItem) -> String {
 }
 
 #[cfg(windows)]
-fn build_import_file_path(custom_dir: &PathBuf, source_path: &PathBuf) -> PathBuf {
+fn build_import_file_path(custom_dir: &Path, source_path: &Path) -> PathBuf {
     let ext = "lnk";
     let stem = source_path
         .file_stem()
