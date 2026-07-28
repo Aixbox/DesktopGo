@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Maintain Modular Code'
+  short_description: 'Keep changes modular, reusable, and maintainable'
+  default_prompt: 'Use $maintain-modular-code to implement this change with clear boundaries, reuse, and quality gates.'
