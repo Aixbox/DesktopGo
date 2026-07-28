@@ -294,7 +294,7 @@
 
 ### 当前基线
 
-截至 2026-07-28，R-00 至 R-04 已完成，R-05 进入真实运行回归阶段；Rust 零告警门禁和全部规划模块化边界已经建立：
+截至 2026-07-28，R-00 至 R-04 已完成，R-05 进入真实运行回归阶段，R-06 开始治理函数预算；Rust 零告警门禁和全部规划模块化边界已经建立：
 
 - 仓库已提供 `rustfmt.toml`、`clippy.toml` 和统一的 `scripts/check-rust.ps1` 检查脚本。
 - `package.json` 已提供 rustfmt、debug/release Clippy、check、debug/release test 的分项命令和 `rust:quality` 聚合命令；GitHub Actions 已增加 Windows Rust 质量任务。
@@ -327,6 +327,7 @@
 | R-03 | 已完成 | 图标网站与 Windows 目录 | 拆分 `icons/website.rs`、`catalog_windows.rs` 和 `operations.rs` 的网络、解析、候选策略、扫描、提取与持久化边界。 | 3 个模块进入 500 行预算          |
 | R-04 | 已完成 | Tauri 入口与命令组织    | 将 `lib.rs` 和 `commands.rs` 收敛为装配与导出层，按窗口、图标、布局、搜索、设置和生命周期拆分命令及操作。         | 2 个中央模块进入 500 行预算      |
 | R-05 | 进行中 | 零告警与预算收尾        | 清理临时 Clippy 例外，执行全仓门禁与 Windows 真实运行回归，并在路线图记录最终文件规模。                           | 0 个 Rust 超预算文件、0 条新告警 |
+| R-06 | 进行中 | 函数规模与复杂度治理    | 启用函数长度、认知复杂度和参数数量诊断，按领域拆分超预算编排函数，清零后纳入统一 Clippy 门禁。                   | 0 条函数预算告警                 |
 
 #### R-00 实施结果
 
@@ -396,6 +397,13 @@
 - 静态收尾已经完成：没有全局 Clippy 例外、没有新告警、没有超预算 Rust 文件，全仓 272 个源码文件预算扫描通过。
 - 根据项目进程所有权约束，本批未启动 DesktopGo、Tauri 或 Vite；R-05 仅剩 Windows 主窗口、设置窗口、托盘、全局快捷键、启动和退出流程的用户侧真实运行回归。
 
+#### R-06 当前进度
+
+- `clippy.toml` 已配置函数 80 行和认知复杂度 15 的阈值，但对应 lint 尚未进入统一门禁；首次专项扫描发现 9 条告警，包括 8 个超长函数和 1 个复杂度超限函数。
+- `agent/icon_agent.rs` 的 187 行 `run` 已拆分为上下文读取、模型选择、消息构建、严格/宽松请求、响应观测、结果校验和草稿持久化阶段；事件顺序、错误文案、降级策略与 IPC 返回结构保持不变。
+- AI Agent 子批次完成后专项告警从 9 条降至 8 条；剩余范围为 Everything 运行时、Windows 图标创建/更新、网站文档候选解析、Shell 上下文菜单和 Tauri 装配入口。
+- 全部专项告警清零前，仅把函数预算 lint 用于债务盘点；清零后再以 `-D warnings` 纳入 debug/release Clippy，避免建立无法通过的门禁。
+
 ### 每批质量门禁
 
 ```powershell
@@ -425,6 +433,7 @@ node .codex/skills/maintain-modular-code/scripts/check-changed-files.mjs
 
 - `cargo fmt --check`、debug/release `cargo clippy -- -D warnings`、`cargo check` 与 debug/release `cargo test` 均通过并进入 CI。
 - 9 个既有超预算 Rust 文件全部进入 500 行预算，且没有新增超预算模块。
+- `clippy::too_many_lines`、`clippy::cognitive_complexity` 与 `clippy::too_many_arguments` 专项扫描零告警并进入统一门禁。
 - `lib.rs` 和中央 commands 模块只负责装配、注册与导出，不再承载跨领域完整业务实现。
 - Everything、AI、网站图标和 Windows 图标目录具有清晰的 command、operation、domain 与 adapter 边界。
 - Rust 错误能够跨 IPC 返回类型化、可操作的信息，不泄露敏感路径、令牌或不受信任原始内容。

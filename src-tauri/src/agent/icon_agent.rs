@@ -1,8 +1,8 @@
 use crate::agent::event::{emit_agent_event, AgentEvent, AgentEventPhase};
-use crate::agent::llm::{LlmClient, LlmMessage};
+use crate::agent::llm::{LlmClient, LlmMessage, LlmResponse};
 use crate::agent::memory;
 use crate::agent::tool::{AgentTool, ToolResponse};
-use crate::ai::{self, AiConfig, AiGroup, AiIconInput};
+use crate::ai::{self, AiClassifyResult, AiConfig, AiGroup, AiIconInput};
 use serde::Serialize;
 use tauri::Manager;
 use uuid::Uuid;
@@ -82,7 +82,25 @@ impl IconOrganizerAgent {
         }
 
         let app_handle = self.window.app_handle().clone();
-        let memory = match memory::load_memory(&app_handle) {
+        let memory_summary = self.load_memory_summary(&app_handle)?;
+        let model_client = self.select_model_client(&config);
+        let messages = self.build_messages(&config, &icons, memory_summary.as_deref())?;
+        let model_response = self
+            .request_model_response(&model_client, &config, messages)
+            .await?;
+        let result = self.validate_model_response(&model_response.content, &icons)?;
+        self.save_draft(&app_handle, &config, &result, &icons);
+
+        self.emit(AgentEventPhase::Done, "AI Agent 已完成整理草稿。");
+        Ok(AiAgentRunResult {
+            run_id: self.run_id,
+            groups: result.groups,
+            leftover: result.leftover,
+        })
+    }
+
+    fn load_memory_summary(&self, app_handle: &tauri::AppHandle) -> Result<Option<String>, String> {
+        let loaded_memory = match memory::load_memory(app_handle) {
             Ok(memory) => memory,
             Err(error) => {
                 self.emit_detail(
@@ -94,15 +112,18 @@ impl IconOrganizerAgent {
                 return Err(error);
             }
         };
-        let memory_summary = memory::build_preference_summary(&memory);
+        let memory_summary = memory::build_preference_summary(&loaded_memory);
         self.emit_detail(
             AgentEventPhase::Context,
             "已读取历史整理偏好。",
             memory_summary.as_deref().unwrap_or("没有可用的历史偏好。"),
             None,
         );
+        Ok(memory_summary)
+    }
 
-        let model_client = LlmClient::from_config(&config);
+    fn select_model_client(&self, config: &AiConfig) -> LlmClient {
+        let model_client = LlmClient::from_config(config);
         self.emit_detail(
             AgentEventPhase::Model,
             "已选择模型适配器。",
@@ -113,8 +134,16 @@ impl IconOrganizerAgent {
             ),
             None,
         );
+        model_client
+    }
 
-        let messages = match build_agent_messages(&config, &icons, memory_summary.as_deref()) {
+    fn build_messages(
+        &self,
+        config: &AiConfig,
+        icons: &[AiIconInput],
+        memory_summary: Option<&str>,
+    ) -> Result<Vec<LlmMessage>, String> {
+        let messages = match build_agent_messages(config, icons, memory_summary) {
             Ok(messages) => messages,
             Err(error) => {
                 self.emit_detail(
@@ -127,10 +156,19 @@ impl IconOrganizerAgent {
             }
         };
         self.emit(AgentEventPhase::Reasoning, "正在规划整理策略。");
+        Ok(messages)
+    }
+
+    async fn request_model_response(
+        &self,
+        model_client: &LlmClient,
+        config: &AiConfig,
+        messages: Vec<LlmMessage>,
+    ) -> Result<LlmResponse, String> {
         self.emit(AgentEventPhase::Model, "正在请求模型生成整理草稿。");
         let model_response = match model_client
             .complete_json_observed(
-                &config,
+                config,
                 messages.clone(),
                 true,
                 &self.window,
@@ -149,7 +187,7 @@ impl IconOrganizerAgent {
                 );
                 match model_client
                     .complete_json_observed(
-                        &config,
+                        config,
                         messages,
                         false,
                         &self.window,
@@ -174,6 +212,11 @@ impl IconOrganizerAgent {
                 }
             }
         };
+        self.emit_model_response(&model_response);
+        Ok(model_response)
+    }
+
+    fn emit_model_response(&self, model_response: &LlmResponse) {
         self.emit_detail(
             AgentEventPhase::Model,
             "模型响应已返回。",
@@ -190,7 +233,13 @@ impl IconOrganizerAgent {
                     .usage(usage.to_agent_usage()),
             );
         }
+    }
 
+    fn validate_model_response(
+        &self,
+        content: &str,
+        icons: &[AiIconInput],
+    ) -> Result<AiClassifyResult, String> {
         self.emit_detail(
             AgentEventPhase::ToolCall,
             "正在校验模型返回的分组。",
@@ -201,7 +250,7 @@ impl IconOrganizerAgent {
             ),
             Some(self.validate_tool.name()),
         );
-        let payload = match ai::parse_model_payload(&model_response.content) {
+        let payload = match ai::parse_model_payload(content) {
             Ok(payload) => payload,
             Err(error) => {
                 self.emit_detail(
@@ -213,7 +262,7 @@ impl IconOrganizerAgent {
                 return Err(error);
             }
         };
-        let result = ai::sanitize_groups(payload, &icons);
+        let result = ai::sanitize_groups(payload, icons);
         let validation = ToolResponse::success(
             "已校验 AI 分组结果。",
             format!(
@@ -234,14 +283,23 @@ impl IconOrganizerAgent {
             format!("{} 个分组可预览。", result.groups.len()),
             None,
         );
+        Ok(result)
+    }
 
+    fn save_draft(
+        &self,
+        app_handle: &tauri::AppHandle,
+        config: &AiConfig,
+        result: &AiClassifyResult,
+        icons: &[AiIconInput],
+    ) {
         match memory::save_draft(
-            &app_handle,
+            app_handle,
             &self.run_id,
             &config.model,
             config.custom_prompt.as_deref(),
-            &result,
-            &icons,
+            result,
+            icons,
         ) {
             Ok(()) => self.emit(AgentEventPhase::Saved, "整理草稿已保存到本地上下文。"),
             Err(error) => self.emit_detail(
@@ -251,13 +309,6 @@ impl IconOrganizerAgent {
                 None,
             ),
         }
-
-        self.emit(AgentEventPhase::Done, "AI Agent 已完成整理草稿。");
-        Ok(AiAgentRunResult {
-            run_id: self.run_id,
-            groups: result.groups,
-            leftover: result.leftover,
-        })
     }
 
     fn validate_request(&self, config: &AiConfig) -> Result<(), String> {
