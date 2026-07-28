@@ -19,8 +19,10 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" vite.config.ts eslint.config.js",
     "rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
     "rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
+    "rust:clippy:release": "cargo clippy --manifest-path src-tauri/Cargo.toml --release --all-targets --all-features -- -D warnings",
     "rust:check": "cargo check --manifest-path src-tauri/Cargo.toml",
     "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "rust:test:release": "cargo test --manifest-path src-tauri/Cargo.toml --release",
     "rust:quality": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-rust.ps1"
   },
   "dependencies": {

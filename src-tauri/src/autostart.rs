@@ -1,6 +1,7 @@
 #[cfg(windows)]
 const WINDOWS_RUN_KEY_PATH: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 
+#[cfg(all(windows, debug_assertions))]
 fn has_debug_target_segment(value: &str) -> bool {
     let normalized = value.trim().to_ascii_lowercase().replace('/', "\\");
     normalized.contains("\\target\\debug\\")
@@ -31,8 +32,7 @@ pub fn get_registered_command(value_name: &str) -> Result<Option<String>, String
     }
 }
 
-#[cfg(windows)]
-#[cfg_attr(all(windows, debug_assertions), allow(dead_code))]
+#[cfg(all(windows, not(debug_assertions)))]
 pub fn is_enabled(value_name: &str) -> Result<bool, String> {
     Ok(get_registered_command(value_name)?
         .map(|value| !value.trim().is_empty())
@@ -73,6 +73,7 @@ pub fn set_enabled(_value_name: &str, _enabled: bool) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(all(windows, debug_assertions))]
 pub fn is_debug_launch_command(value: &str) -> bool {
     has_debug_target_segment(value)
 }

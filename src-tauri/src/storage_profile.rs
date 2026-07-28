@@ -1,9 +1,13 @@
 use std::path::{Path, PathBuf};
 
-use tauri::{path::BaseDirectory, Manager};
+#[cfg(debug_assertions)]
+use tauri::path::BaseDirectory;
+use tauri::Manager;
 
+#[cfg(debug_assertions)]
 const DEV_PROFILE_DIR_NAME: &str = "dev";
 const SETTINGS_STORE_FILE_NAME: &str = "settings.json";
+#[cfg(debug_assertions)]
 const APP_STATE_DB_FILE_NAME: &str = "app_state.db";
 
 #[cfg(debug_assertions)]
@@ -54,6 +58,7 @@ fn base_local_data_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String>
     Ok(base_dir)
 }
 
+#[cfg(debug_assertions)]
 fn app_data_path(app_handle: &tauri::AppHandle, path: impl AsRef<Path>) -> Result<PathBuf, String> {
     let resolved = app_handle
         .path()

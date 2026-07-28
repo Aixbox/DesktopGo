@@ -42,6 +42,14 @@ try {
     "--all-features",
     "--", "-D", "warnings"
   )
+  Invoke-QualityStep "cargo clippy (release)" "cargo" @(
+    "clippy",
+    "--manifest-path", $manifestPath,
+    "--release",
+    "--all-targets",
+    "--all-features",
+    "--", "-D", "warnings"
+  )
   Invoke-QualityStep "cargo check" "cargo" @(
     "check",
     "--manifest-path", $manifestPath
@@ -49,6 +57,11 @@ try {
   Invoke-QualityStep "cargo test" "cargo" @(
     "test",
     "--manifest-path", $manifestPath
+  )
+  Invoke-QualityStep "cargo test (release)" "cargo" @(
+    "test",
+    "--manifest-path", $manifestPath,
+    "--release"
   )
 
   $budgetArguments = @($budgetScript)

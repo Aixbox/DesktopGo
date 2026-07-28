@@ -297,8 +297,8 @@
 截至 2026-07-28，R-00 至 R-04 已完成，R-05 进入真实运行回归阶段；Rust 零告警门禁和全部规划模块化边界已经建立：
 
 - 仓库已提供 `rustfmt.toml`、`clippy.toml` 和统一的 `scripts/check-rust.ps1` 检查脚本。
-- `package.json` 已提供 rustfmt、Clippy、check、test 的分项命令和 `rust:quality` 聚合命令；GitHub Actions 已增加 Windows Rust 质量任务。
-- 首次 `cargo clippy --all-targets --all-features -- -D warnings` 扫描发现的 14 类告警已清零，未增加全局 Clippy 例外。
+- `package.json` 已提供 rustfmt、debug/release Clippy、check、debug/release test 的分项命令和 `rust:quality` 聚合命令；GitHub Actions 已增加 Windows Rust 质量任务。
+- debug/release 配置均执行 `cargo clippy --all-targets --all-features -- -D warnings`；首次扫描发现的 14 类告警和 release 配置发现的 5 个条件编译盲区均已清零，未增加全局 Clippy 例外。
 - `ai.rs` 与 `agent/llm.rs` 已收敛为 facade/编排入口，请求模型、端点策略、结果校验、HTTP operation、请求构建、SSE 解码和观测事件均已进入独立模块。
 - `everything/ipc.rs` 已收敛为跨平台 facade，SDK 动态绑定、回复窗口、查询会话和工作线程已进入独立模块；搜索调试日志也已从运行时编排中分离。
 - `icons/website.rs` 已收敛为 facade，候选策略、文档资源解析、HTTP、图像处理和异步发现流程已进入独立模块。
@@ -331,8 +331,8 @@
 #### R-00 实施结果
 
 - 新增 `rustfmt.toml` 与 `clippy.toml`，统一 edition、行宽以及复杂度和函数规模阈值配置。
-- 新增 `scripts/check-rust.ps1`，按顺序执行 rustfmt、Clippy、check、test 和变更文件预算检查；支持通过 `-BaseRef` 检查 CI 提交差异，并保留 `-All` 全仓债务盘点入口。
-- `package.json` 新增 `rust:fmt`、`rust:clippy`、`rust:check`、`rust:test` 和 `rust:quality`，本地与 CI 复用相同命令契约。
+- 新增 `scripts/check-rust.ps1`，按顺序执行 rustfmt、debug/release Clippy、check、debug/release test 和变更文件预算检查；支持通过 `-BaseRef` 检查 CI 提交差异，并保留 `-All` 全仓债务盘点入口。
+- `package.json` 新增 `rust:fmt`、`rust:clippy`、`rust:clippy:release`、`rust:check`、`rust:test`、`rust:test:release` 和 `rust:quality`，本地与 CI 复用相同命令契约。
 - 新增 `.github/workflows/ci.yml` 的 Windows Rust 质量任务，安装 rustfmt/Clippy 组件并缓存 Cargo 构建结果。
 - 清理首次扫描发现的 14 类 Clippy 告警：收紧 `PathBuf` 借用为 `Path`、派生 `Default`、移除冗余借用和返回、简化条件与 `Option` 处理，并将测试模块移到文件末尾。
 - `SearchErrorCode` 仅调整 Rust 内部变体名称，对外仍返回既有 `EverythingNotFound`、`EverythingSdkUnavailable`、`EverythingInitializing` 和 `EverythingIpcUnavailable` 字符串，未改变前端 IPC 错误契约。
@@ -391,7 +391,9 @@
 
 #### R-05 当前进度
 
-- 静态收尾已经完成：没有全局 Clippy 例外、没有新告警、没有超预算 Rust 文件，统一质量脚本和 CI 门禁保持通过。
+- release Clippy 首次补扫发现 5 个仅在 debug 配置使用的辅助项；现已通过精确的条件编译边界消除，并移除 `is_enabled` 的临时 `allow(dead_code)`，未改变启动或存储行为。
+- 统一质量脚本和 CI 现同时覆盖 debug/release Clippy 与测试；两套 Clippy 均为零告警，两套测试均为 42 passed / 0 failed。
+- 静态收尾已经完成：没有全局 Clippy 例外、没有新告警、没有超预算 Rust 文件，全仓 272 个源码文件预算扫描通过。
 - 根据项目进程所有权约束，本批未启动 DesktopGo、Tauri 或 Vite；R-05 仅剩 Windows 主窗口、设置窗口、托盘、全局快捷键、启动和退出流程的用户侧真实运行回归。
 
 ### 每批质量门禁
@@ -399,8 +401,10 @@
 ```powershell
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
+cargo clippy --manifest-path src-tauri/Cargo.toml --release --all-targets --all-features -- -D warnings
 cargo check --manifest-path src-tauri/Cargo.toml
 cargo test --manifest-path src-tauri/Cargo.toml
+cargo test --manifest-path src-tauri/Cargo.toml --release
 node .codex/skills/maintain-modular-code/scripts/check-changed-files.mjs
 ```
 
@@ -419,7 +423,7 @@ node .codex/skills/maintain-modular-code/scripts/check-changed-files.mjs
 
 ### D-003 完成标准
 
-- `cargo fmt --check`、`cargo clippy -- -D warnings`、`cargo check` 与 `cargo test` 均通过并进入 CI。
+- `cargo fmt --check`、debug/release `cargo clippy -- -D warnings`、`cargo check` 与 debug/release `cargo test` 均通过并进入 CI。
 - 9 个既有超预算 Rust 文件全部进入 500 行预算，且没有新增超预算模块。
 - `lib.rs` 和中央 commands 模块只负责装配、注册与导出，不再承载跨领域完整业务实现。
 - Everything、AI、网站图标和 Windows 图标目录具有清晰的 command、operation、domain 与 adapter 边界。
