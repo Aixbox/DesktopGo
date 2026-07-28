@@ -59,7 +59,7 @@ fn load_icon_library_snapshot(app_handle: &tauri::AppHandle) -> Result<IconSnaps
             icons.extend(snapshot.icons);
         }
     }
-    icons.sort_by(|left, right| left.display_order.cmp(&right.display_order));
+    icons.sort_by_key(|item| item.display_order);
     for (index, item) in icons.iter_mut().enumerate() {
         item.display_order = (index as u64).saturating_add(1);
     }
@@ -610,7 +610,7 @@ fn snapshot_to_ordered_desktop_icons(
         .iter()
         .filter(|item| !item.hidden)
         .collect::<Vec<_>>();
-    ordered_items.sort_by(|a, b| a.display_order.cmp(&b.display_order));
+    ordered_items.sort_by_key(|item| item.display_order);
 
     ordered_items
         .into_iter()
@@ -658,7 +658,7 @@ fn snapshot_to_ordered_icon_manager_items(
     };
 
     let mut ordered_items = snapshot.icons.iter().collect::<Vec<_>>();
-    ordered_items.sort_by(|a, b| a.display_order.cmp(&b.display_order));
+    ordered_items.sort_by_key(|item| item.display_order);
 
     ordered_items
         .into_iter()
