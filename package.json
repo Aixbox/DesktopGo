@@ -16,7 +16,12 @@
     "lint:strict": "eslint src vite.config.ts eslint.config.js --report-unused-disable-directives --max-warnings 0",
     "lint:fix": "eslint src vite.config.ts eslint.config.js --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" vite.config.ts eslint.config.js",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" vite.config.ts eslint.config.js"
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" vite.config.ts eslint.config.js",
+    "rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
+    "rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
+    "rust:check": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "rust:quality": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-rust.ps1"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -1,0 +1,4 @@
+# These thresholds mirror DesktopGo's review budgets when the corresponding
+# Clippy lints are enabled for a module.
+cognitive-complexity-threshold = 15
+too-many-lines-threshold = 80

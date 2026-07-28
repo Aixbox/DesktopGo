@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust-quality:
+    name: rust quality
+    runs-on: windows-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: setup rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: cache rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: run rust quality gates
+        shell: pwsh
+        env:
+          RUST_QUALITY_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          $arguments = @()
+          if ($env:RUST_QUALITY_BASE_REF -and $env:RUST_QUALITY_BASE_REF -notmatch '^0+$') {
+            $arguments += @('-BaseRef', $env:RUST_QUALITY_BASE_REF)
+          }
+          & .\scripts\check-rust.ps1 @arguments
