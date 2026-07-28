@@ -1,3 +1,4 @@
+mod debug_log;
 mod errors;
 mod installed;
 mod ipc;

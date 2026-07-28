@@ -294,24 +294,23 @@
 
 ### 当前基线
 
-截至 2026-07-28，R-00 与 R-01 已完成，Rust 零告警门禁和 AI/LLM 首批模块化边界已经建立：
+截至 2026-07-28，R-00 至 R-02 已完成，Rust 零告警门禁以及 AI/LLM、Everything 模块化边界已经建立：
 
 - 仓库已提供 `rustfmt.toml`、`clippy.toml` 和统一的 `scripts/check-rust.ps1` 检查脚本。
 - `package.json` 已提供 rustfmt、Clippy、check、test 的分项命令和 `rust:quality` 聚合命令；GitHub Actions 已增加 Windows Rust 质量任务。
 - 首次 `cargo clippy --all-targets --all-features -- -D warnings` 扫描发现的 14 类告警已清零，未增加全局 Clippy 例外。
 - `ai.rs` 与 `agent/llm.rs` 已收敛为 facade/编排入口，请求模型、端点策略、结果校验、HTTP operation、请求构建、SSE 解码和观测事件均已进入独立模块。
-- 当前文件预算脚本继续以 500 行作为手写 Rust 模块阈值，全量扫描仍有 7 个既有文件超出预算。
+- `everything/ipc.rs` 已收敛为跨平台 facade，SDK 动态绑定、回复窗口、查询会话和工作线程已进入独立模块；搜索调试日志也已从运行时编排中分离。
+- 当前文件预算脚本继续以 500 行作为手写 Rust 模块阈值，全量扫描仍有 5 个既有文件超出预算。
 - 文件行数预算属于模块化约束；Clippy 主要检查代码正确性与惯用写法，不能替代整个文件的规模门禁。
 
 | 文件                                                | 当前行数 | 主要风险                                                                | 目标边界                                                                        |
 | --------------------------------------------------- | -------: | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | `src-tauri/src/icons/website.rs`                    |     1885 | 网站图标发现、网络请求、HTML/CSS 解析、候选排序与图像处理集中在单一模块 | 按请求适配器、页面解析、候选策略、图像转换与缓存边界拆分                        |
 | `src-tauri/src/lib.rs`                              |     1547 | Tauri 初始化、状态装配、窗口事件、命令注册和业务实现混合                | 仅保留应用装配与命令注册，将窗口、托盘、生命周期和业务操作迁入独立模块          |
-| `src-tauri/src/everything/ipc.rs`                   |     1139 | Everything IPC 连接、查询协议、结果转换和错误处理聚合                   | 拆分连接会话、协议编解码、查询执行、结果映射和错误契约                          |
 | `src-tauri/src/icons/catalog_windows/operations.rs` |      752 | Windows 图标目录扫描、提取、转换和持久化操作集中                        | 拆分扫描、提取、图像规范化、目录写入和失败恢复                                  |
 | `src-tauri/src/icons/catalog_windows.rs`            |      724 | Windows 图标目录领域类型、查询、缓存和操作入口混合                      | 保留目录 facade，将缓存、查询策略和平台操作委派给子模块                         |
 | `src-tauri/src/commands.rs`                         |      550 | 多领域 Tauri 命令集中，容易继续形成中央命令文件                         | 按窗口、图标、布局、搜索和设置领域拆分命令模块，中央文件只负责统一导出          |
-| `src-tauri/src/everything/runtime.rs`               |      544 | 运行时启动、进程探测、路径解析、重试和状态转换集中                      | 拆分安装发现、进程生命周期、重试策略和运行态状态机                              |
 
 ### 治理原则
 
@@ -329,7 +328,7 @@
 | ---- | ------ | ----------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------- |
 | R-00 | 已完成 | Rust 静态检查基线       | 增加统一脚本与 CI 门禁，执行 rustfmt、Clippy、check、test 和文件预算检查，并清理首次扫描发现的 Clippy 告警。      | 可重复执行的 Rust 零告警质量门禁 |
 | R-01 | 已完成 | AI 与 LLM               | 拆分 `agent/llm.rs` 和 `ai.rs` 的请求模型、流式解析、工具编排、结果校验与运行记录边界。                           | 2 个模块进入 500 行预算          |
-| R-02 | 待开发 | Everything 集成         | 拆分 `everything/ipc.rs` 与 `everything/runtime.rs` 的协议、连接、查询、安装发现、进程生命周期和重试策略。        | 2 个模块进入 500 行预算          |
+| R-02 | 已完成 | Everything 集成         | 拆分 `everything/ipc.rs` 与 `everything/runtime.rs` 的协议、连接、查询、安装发现、进程生命周期和重试策略。        | 2 个模块进入 500 行预算          |
 | R-03 | 待开发 | 图标网站与 Windows 目录 | 拆分 `icons/website.rs`、`catalog_windows.rs` 和 `operations.rs` 的网络、解析、候选策略、扫描、提取与持久化边界。 | 3 个模块进入 500 行预算          |
 | R-04 | 待开发 | Tauri 入口与命令组织    | 将 `lib.rs` 和 `commands.rs` 收敛为装配与导出层，按窗口、图标、布局、搜索、设置和生命周期拆分命令及操作。         | 2 个中央模块进入 500 行预算      |
 | R-05 | 待开发 | 零告警与预算收尾        | 清理临时 Clippy 例外，执行全仓门禁与 Windows 真实运行回归，并在路线图记录最终文件规模。                           | 0 个 Rust 超预算文件、0 条新告警 |
@@ -358,6 +357,18 @@
 - 保持 `crate::ai::*` 和 `agent::llm::*` 的既有调用入口、序列化结构、错误文案与 Responses 降级策略兼容，没有修改前端 IPC 契约。
 - 新增 5 个 LLM 纯逻辑测试，覆盖严格 JSON 请求、普通聊天请求、LF/CRLF SSE 分帧、cached token 映射和 Responses 完成文本提取；AI 原有 8 个端点与分组策略测试随职责迁移。
 - R-01 完成后全量 Rust 测试为 41 passed / 0 failed，超预算 Rust 文件从 9 个降至 7 个。
+
+#### R-02 实施结果
+
+- `everything/ipc.rs` 从 1139 行降至 90 行，仅保留跨平台数据类型、Windows 子模块声明和稳定 facade；非 Windows 的既有错误入口保持不变。
+- 新增 `everything/ipc/api.rs` 314 行，集中负责 Everything SDK 动态符号绑定、排序协议映射、运行状态探测和运行次数更新。
+- 新增 `everything/ipc/reply_window.rs` 172 行，集中负责 Win32 消息窗口注册、查询回复状态和 SDK 查询启动/清理。
+- 新增 `everything/ipc/query.rs` 365 行，集中负责查询参数写入、结果提取、首屏缓存以及活动请求的完成、超时和取消语义。
+- 新增 `everything/ipc/worker.rs` 286 行，集中负责工作线程、命令通道、消息泵、连接探测、查询分发和关闭握手。
+- `everything/runtime.rs` 从 544 行降至 485 行；新增 `everything/debug_log.rs` 62 行，将日志轮转与文件写入从运行时状态编排和 IPC 适配器中分离。
+- 保持 `everything::*` 对外调用入口、搜索请求响应结构、错误字符串、超时值、首屏缓存策略和 Everything 启动流程兼容，没有修改前端 IPC 契约。
+- 新增 1 个纯协议测试，覆盖全部 27 个 `SearchSort` 变体到 Everything SDK 排序值的映射；聚合门禁实测为 42 passed / 0 failed。
+- R-02 完成后超预算 Rust 文件从 7 个降至 5 个，剩余文件均属于 R-03 与 R-04 范围。
 
 ### 每批质量门禁
 

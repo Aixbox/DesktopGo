@@ -1,14 +1,13 @@
-use std::fs::{self, OpenOptions};
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use once_cell::sync::Lazy;
 use serde::Serialize;
 
 use crate::layout_db;
 
+use super::debug_log::append as append_debug_log;
 use super::errors::{build_error, SearchErrorCode};
 use super::installed;
 use super::ipc;
@@ -23,9 +22,6 @@ const MAX_KEYWORD_LEN: usize = 256;
 
 const KEY_SEARCH_AUTO_START_RUNTIME: &str = "search.autoStartRuntime";
 const KEY_SEARCH_LAST_PROVIDER: &str = "search.lastProvider";
-const DEBUG_LOG_FILE_NAME: &str = "search-debug.log";
-const DEBUG_LOG_MAX_BYTES: u64 = 512 * 1024;
-const DEBUG_LOG_ROTATION_COUNT: usize = 3;
 
 #[derive(Default)]
 struct RuntimeState {
@@ -57,61 +53,6 @@ impl RuntimeState {
 }
 
 static RUNTIME_STATE: Lazy<Mutex<RuntimeState>> = Lazy::new(|| Mutex::new(RuntimeState::default()));
-
-fn rotate_debug_logs(base_dir: &Path) {
-    let log_path = base_dir.join(DEBUG_LOG_FILE_NAME);
-    let Ok(metadata) = fs::metadata(&log_path) else {
-        return;
-    };
-    if metadata.len() < DEBUG_LOG_MAX_BYTES {
-        return;
-    }
-
-    let oldest_backup = base_dir.join(format!(
-        "{}.{}",
-        DEBUG_LOG_FILE_NAME, DEBUG_LOG_ROTATION_COUNT
-    ));
-    let _ = fs::remove_file(&oldest_backup);
-
-    for index in (1..DEBUG_LOG_ROTATION_COUNT).rev() {
-        let src = base_dir.join(format!("{}.{}", DEBUG_LOG_FILE_NAME, index));
-        let dst = base_dir.join(format!("{}.{}", DEBUG_LOG_FILE_NAME, index + 1));
-        if src.exists() {
-            let _ = fs::remove_file(&dst);
-            let _ = fs::rename(&src, &dst);
-        }
-    }
-
-    let first_backup = base_dir.join(format!("{}.1", DEBUG_LOG_FILE_NAME));
-    let _ = fs::remove_file(&first_backup);
-    let _ = fs::rename(&log_path, first_backup);
-}
-
-pub(super) fn append_debug_log(app_handle: &tauri::AppHandle, message: impl AsRef<str>) {
-    let text = message.as_ref();
-    eprintln!("[search-debug] {}", text);
-
-    let base_dir = match crate::storage_profile::app_local_data_dir(app_handle) {
-        Ok(path) => path,
-        Err(_) => return,
-    };
-    if fs::create_dir_all(&base_dir).is_err() {
-        return;
-    }
-
-    rotate_debug_logs(&base_dir);
-
-    let log_path = base_dir.join(DEBUG_LOG_FILE_NAME);
-    let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_path) else {
-        return;
-    };
-
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|v| v.as_millis())
-        .unwrap_or_default();
-    let _ = writeln!(file, "[{}] {}", ts, text);
-}
 
 fn wait_for_ipc_ready(app_handle: &tauri::AppHandle, dll_path: &Path, timeout: Duration) -> bool {
     let started_at = Instant::now();
