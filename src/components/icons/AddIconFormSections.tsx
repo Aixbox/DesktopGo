@@ -35,7 +35,7 @@ const ICON_COLOR_LABELS: Record<IconColorId, string> = {
 }
 
 const ICON_PICKER_FOCUS_RING_CLASS_NAME =
-  'focus-visible:border-blue-500/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45'
+  'focus-visible:border-ring/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45'
 
 export type IconCropEditorTarget =
   | { kind: 'target'; source: string }
@@ -204,7 +204,7 @@ export function AddIconAppearanceFields({
                             'relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
                             ICON_PICKER_FOCUS_RING_CLASS_NAME,
                             selected
-                              ? 'border-blue-500/45 ring-2 ring-blue-500/45'
+                              ? 'border-ring/45 ring-2 ring-ring/45'
                               : 'border-border hover:border-foreground/30'
                           )}
                           style={
@@ -259,7 +259,7 @@ export function AddIconAppearanceFields({
                       'relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
                       ICON_PICKER_FOCUS_RING_CLASS_NAME,
                       selectedIconSource === 'target'
-                        ? 'border-blue-500/45 ring-2 ring-blue-500/45'
+                        ? 'border-ring/45 ring-2 ring-ring/45'
                         : 'border-border hover:border-foreground/30'
                     )}
                     style={
@@ -316,7 +316,7 @@ export function AddIconAppearanceFields({
                     'relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
                     ICON_PICKER_FOCUS_RING_CLASS_NAME,
                     selectedIconSource === 'text'
-                      ? 'border-blue-500/45 ring-2 ring-blue-500/45'
+                      ? 'border-ring/45 ring-2 ring-ring/45'
                       : 'border-border hover:border-foreground/30'
                   )}
                 >
@@ -362,7 +362,7 @@ export function AddIconAppearanceFields({
                       'relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
                       ICON_PICKER_FOCUS_RING_CLASS_NAME,
                       selectedIconSource === 'custom'
-                        ? 'border-blue-500/45 ring-2 ring-blue-500/45'
+                        ? 'border-ring/45 ring-2 ring-ring/45'
                         : 'border-border hover:border-foreground/30'
                     )}
                     style={

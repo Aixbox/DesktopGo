@@ -607,7 +607,7 @@ export function Launchpad() {
                       >
                         <span>{entry.label}</span>
                         {searchFilter === entry.value ? (
-                          <Check className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+                          <Check className="accent-foreground h-4 w-4" />
                         ) : null}
                       </button>
                     ))}
@@ -706,10 +706,10 @@ export function Launchpad() {
           {isAiOrganizeMode ? (
             <div
               data-ai-organize-toolbar
-              className="launchpad-glass-panel-strong absolute left-1/2 top-20 z-30 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-full border border-blue-500/20 px-3 py-2 text-sm text-foreground/90"
+              className="launchpad-glass-panel-strong absolute left-1/2 top-20 z-30 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-full border border-primary/20 px-3 py-2 text-sm text-foreground/90"
             >
               <span className="flex items-center gap-2 px-1.5 font-medium">
-                <Bot className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+                <Bot className="accent-foreground h-4 w-4" />
                 {translate('AI 整理模式')}
               </span>
               <span className="hidden text-xs text-muted-foreground md:inline">
@@ -733,7 +733,7 @@ export function Launchpad() {
                   aiOrganizePanelRef.current?.applyPreview()
                 }}
                 disabled={!aiOrganizeRunState.canApply || aiOrganizeRunState.applying}
-                className="rounded-full border border-blue-500/30 bg-blue-500/12 px-3 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-500/18 disabled:cursor-not-allowed disabled:opacity-45 dark:text-blue-200 dark:hover:bg-blue-500/25"
+                className="accent-tonal rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-primary/18 disabled:cursor-not-allowed disabled:opacity-45 dark:hover:bg-primary/25"
               >
                 {aiOrganizeRunState.applying ? translate('保存中...') : translate('保存预览')}
               </button>
@@ -782,7 +782,7 @@ export function Launchpad() {
 
           {marquee ? (
             <div
-              className="pointer-events-none fixed z-40 rounded-sm border border-blue-500/60 bg-blue-500/15 shadow-sm"
+              className="pointer-events-none fixed z-40 rounded-sm border border-primary/60 bg-primary/15 shadow-sm"
               style={{
                 left: Math.min(marquee.startX, marquee.currentX),
                 top: Math.min(marquee.startY, marquee.currentY),

@@ -145,7 +145,7 @@ function PreviewIconButton({
     <button
       type="button"
       aria-label={name}
-      className={`group flex items-center justify-center rounded-2xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 ${
+      className={`group flex items-center justify-center rounded-2xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 ${
         selectionMode ? 'cursor-pointer' : 'cursor-pointer active:scale-[0.97]'
       }`}
       style={{ width: `${size}px`, height: `${size}px` }}
@@ -445,7 +445,7 @@ function OuterFolderTileComponent({
             <button
               type="button"
               aria-label={folder.name}
-              className="flex max-w-full items-start justify-center overflow-hidden rounded-md border-none bg-transparent p-0 text-center text-[11px] font-medium leading-[13px] text-foreground shadow-none transition hover:text-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 active:bg-transparent"
+              className="flex max-w-full items-start justify-center overflow-hidden rounded-md border-none bg-transparent p-0 text-center text-[11px] font-medium leading-[13px] text-foreground shadow-none transition hover:text-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:bg-transparent"
               style={{
                 width: `${Math.min(footprintWidth, bodyWidth)}px`,
                 height: `${titleMetrics.height}px`,

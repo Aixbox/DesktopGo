@@ -102,7 +102,7 @@ export function ShortcutSearchResults({
               type="button"
               className={`group relative flex cursor-pointer flex-col items-center gap-2 rounded-md border-none p-3 shadow-none transition-colors duration-150 ${
                 selectedIndex === index
-                  ? 'bg-blue-500/12 ring-1 ring-blue-500/40 dark:bg-blue-400/18 dark:ring-blue-400/45'
+                  ? 'bg-primary/12 ring-1 ring-primary/40 dark:bg-primary/18 dark:ring-primary/45'
                   : 'bg-transparent hover:bg-accent/60 active:bg-accent'
               }`}
               style={{ width: config.containerWidth }}
@@ -114,7 +114,7 @@ export function ShortcutSearchResults({
               <ShortcutIcon icon={icon} size={config.imgSize} />
               <span
                 className={`text-center text-[11px] leading-tight ${
-                  selectedIndex === index ? 'text-blue-700 dark:text-blue-200' : 'text-foreground'
+                  selectedIndex === index ? 'accent-foreground' : 'text-foreground'
                 }`}
                 style={{
                   maxWidth: config.containerWidth - 10,

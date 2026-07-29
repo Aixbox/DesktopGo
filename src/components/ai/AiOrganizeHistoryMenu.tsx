@@ -72,7 +72,7 @@ export function AiOrganizeHistoryMenu({
                       key={session.id}
                       className={`group flex items-stretch rounded-md transition-colors ${
                         isActiveSession
-                          ? 'bg-blue-500/10 text-foreground'
+                          ? 'bg-primary/10 text-foreground'
                           : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                       }`}
                     >

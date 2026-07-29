@@ -342,9 +342,9 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
           aria-expanded={open}
           data-state={open ? 'open' : 'closed'}
           className={cn(
-            'flex h-9 w-full items-center justify-between gap-3 rounded-md border border-input bg-background px-3 py-2 text-sm transition-colors focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/20 disabled:pointer-events-none disabled:opacity-50',
+            'flex h-9 w-full items-center justify-between gap-3 rounded-md border border-input bg-background px-3 py-2 text-sm transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/20 disabled:pointer-events-none disabled:opacity-50',
             !hasValue && 'text-muted-foreground',
-            open && 'border-blue-500 ring-2 ring-blue-500/10',
+            open && 'border-ring ring-2 ring-ring/10',
             className
           )}
           onClick={event => {
@@ -462,7 +462,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
                             >
                               <span className="min-w-0 truncate">{option.label}</span>
                               <span className="ml-3 flex h-4 w-4 items-center justify-center">
-                                {selected ? <Check className="h-4 w-4 text-blue-500" /> : null}
+                                {selected ? <Check className="accent-foreground h-4 w-4" /> : null}
                               </span>
                             </button>
                           )

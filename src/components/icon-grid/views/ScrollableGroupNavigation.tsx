@@ -208,7 +208,7 @@ const GROUP_ICON_COMPONENTS: Record<ScrollGroupIcon, LucideIcon> = Object.fromEn
 function CustomGroupIcon({ icon }: { icon: ScrollGroupIcon }) {
   const Glyph = GROUP_ICON_COMPONENTS[icon]
   return (
-    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-500/10 text-blue-700 dark:bg-blue-400/12 dark:text-blue-200">
+    <span className="scroll-grid-custom-group-icon flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
       <Glyph className="h-3.5 w-3.5" />
     </span>
   )
@@ -220,7 +220,7 @@ function GroupPreviewGlyph({ item, compact = false }: { item: GridItem; compact?
 
   if (item.kind === 'folder') {
     return (
-      <span className="flex h-full w-full items-center justify-center text-blue-600 dark:text-blue-200">
+      <span className="accent-foreground flex h-full w-full items-center justify-center">
         <FolderIcon className={iconClassName} />
       </span>
     )
@@ -450,7 +450,7 @@ export function ScrollableGroupNavigation({
             data-no-window-drag="true"
             aria-label={translate('添加分组')}
             title={translate('添加分组')}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
             onClick={event => {
               event.stopPropagation()
               openGroupComposer()
@@ -511,7 +511,7 @@ export function ScrollableGroupNavigation({
                                 data-grid-mode-nav
                                 aria-current={active ? 'page' : undefined}
                                 className={[
-                                  'scroll-grid-group-button relative block h-full w-full min-w-0 max-w-full touch-none overflow-hidden rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45',
+                                  'scroll-grid-group-button relative block h-full w-full min-w-0 max-w-full touch-none overflow-hidden rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45',
                                   sections.length > 1
                                     ? 'cursor-grab active:cursor-grabbing'
                                     : 'cursor-default',
@@ -652,7 +652,7 @@ export function ScrollableGroupNavigation({
             aria-label={translate(sidebarCompact ? '展开侧栏' : '收起侧栏')}
             title={translate(sidebarCompact ? '展开侧栏' : '收起侧栏')}
             aria-pressed={sidebarCompact}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
             onClick={onToggleSidebarCompact}
           >
             {sidebarCompact ? (
@@ -696,7 +696,7 @@ export function ScrollableGroupNavigation({
                   <button
                     type="button"
                     aria-label={translate('关闭')}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
                     onClick={closeGroupComposer}
                   >
                     <X className="h-4 w-4" />
@@ -718,9 +718,9 @@ export function ScrollableGroupNavigation({
                           aria-label={translate(option.label)}
                           aria-pressed={selected}
                           title={translate(option.label)}
-                          className={`relative flex h-9 w-9 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 ${
+                          className={`relative flex h-9 w-9 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 ${
                             selected
-                              ? 'text-blue-700 dark:text-blue-200'
+                              ? 'accent-foreground'
                               : 'text-foreground/58 hover:bg-foreground/6 hover:text-foreground dark:hover:bg-white/8'
                           }`}
                           onClick={() => selectGroupIcon(option)}
@@ -732,7 +732,7 @@ export function ScrollableGroupNavigation({
                           {selected ? (
                             <span
                               aria-hidden="true"
-                              className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-blue-600 dark:bg-blue-300"
+                              className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-primary"
                             />
                           ) : null}
                         </button>
@@ -758,7 +758,7 @@ export function ScrollableGroupNavigation({
                 <div className="mt-5 flex justify-end gap-2">
                   <button
                     type="button"
-                    className="h-9 rounded-lg px-4 text-sm text-foreground/75 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+                    className="h-9 rounded-lg px-4 text-sm text-foreground/75 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
                     onClick={closeGroupComposer}
                   >
                     {translate('取消')}
@@ -766,7 +766,7 @@ export function ScrollableGroupNavigation({
                   <button
                     type="submit"
                     disabled={!groupName.trim()}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 disabled:pointer-events-none disabled:opacity-40 dark:bg-blue-500 dark:text-blue-950"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 disabled:pointer-events-none disabled:opacity-40"
                   >
                     <Check className="h-4 w-4" />
                     {translate(editingGroupIndex === null ? '创建' : '保存')}

@@ -2,6 +2,7 @@ import type { AppLanguage } from '@/types'
 import type { TranslationParams } from './i18n/context'
 import { getCurrentLanguage } from './i18n/language'
 import { EN_SEARCH_MESSAGES } from './i18n/searchMessages'
+import { EN_APPEARANCE_MESSAGES } from './i18n/appearanceMessages'
 
 export { useI18n } from './i18n/context'
 export { getCurrentLanguage, getIntlLocale } from './i18n/language'
@@ -25,6 +26,7 @@ const ZH_MESSAGES: Record<string, string> = {
 }
 
 const EN_MESSAGES: Record<string, string> = {
+  ...EN_APPEARANCE_MESSAGES,
   '\u6dfb\u52a0\u56fe\u6807': 'Add icons',
   '\u5bfc\u5165\u5931\u8d25\uff1a{error}': 'Import failed: {error}',
   '\u9009\u62e9\u6587\u4ef6\u5931\u8d25\uff1a{error}': 'Failed to choose files: {error}',

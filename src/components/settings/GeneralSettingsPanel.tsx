@@ -54,6 +54,7 @@ import {
   normalizeShortcutDraftText,
 } from './shortcut'
 import { setSkipReturnToMainOnClose, trackWindowPersistentSync } from './windowPersistentSync'
+import { AppearanceSettingsCards } from './AppearanceSettingsCards'
 
 const ICON_SIZE_OPTIONS: { label: string; value: IconSize }[] = [
   { label: '大图标', value: 'large' },
@@ -634,6 +635,8 @@ export function GeneralSettingsPanel() {
               {translate(selectedWindowStyleOption.description)}
             </p>
           </SettingCard>
+
+          <AppearanceSettingsCards onAppearanceChange={syncMainWindowAppearance} />
         </SettingGroup>
       </section>
 
@@ -796,7 +799,7 @@ export function GeneralSettingsPanel() {
                 </span>
               ) : null}
               {isRecordingShortcut ? (
-                <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-blue-600 dark:text-blue-300">
+                <span className="accent-tonal rounded-full border px-2.5 py-1">
                   {translate('录制中')}
                 </span>
               ) : null}
@@ -816,7 +819,7 @@ export function GeneralSettingsPanel() {
                 onBlur={handleShortcutInputBlur}
                 className={cn(
                   'font-medium',
-                  isRecordingShortcut && 'border-blue-500/60 ring-2 ring-blue-500/15'
+                  isRecordingShortcut && 'border-ring/60 ring-2 ring-ring/15'
                 )}
               />
 

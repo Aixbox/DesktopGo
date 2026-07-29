@@ -47,7 +47,7 @@ export function LaunchpadIconImportLayer({ controller }: LaunchpadIconImportLaye
             {isExternalDragActive ? (
               <div className="p-5 sm:p-6">
                 <div className="flex min-h-64 flex-col items-center justify-center rounded-lg border-2 border-dashed border-primary/45 bg-primary/[0.04] px-6 py-10 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <div className="accent-foreground flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
                     <Download className="h-5 w-5" />
                   </div>
                   <p className="mt-4 text-base font-semibold text-foreground">

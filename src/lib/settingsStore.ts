@@ -24,6 +24,7 @@ import {
   DEFAULT_LAUNCHPAD_OPEN_FOCUS_TARGET,
   isLaunchpadOpenFocusTarget,
 } from './launchpadOpenFocus'
+import { isLaunchpadBackgroundDataUri, normalizeThemeAccentColor } from './appearancePolicy'
 
 export const DEFAULT_LAUNCHPAD_SHORTCUT = 'Ctrl+Space'
 
@@ -35,6 +36,9 @@ type SettingKey =
   | 'titleLineCount'
   | 'launchpadGridViewMode'
   | 'themeMode'
+  | 'themeAccentColor'
+  | 'launchpadBackgroundImage'
+  | 'autoExtractThemeColor'
   | 'windowStyle'
   | 'language'
   | 'dockEnabled'
@@ -54,6 +58,9 @@ type SettingValueMap = {
   titleLineCount: TitleLineCount
   launchpadGridViewMode: LaunchpadGridViewMode
   themeMode: ThemeMode
+  themeAccentColor: string
+  launchpadBackgroundImage: string
+  autoExtractThemeColor: boolean
   windowStyle: WindowStyle
   language: AppLanguage
   dockEnabled: boolean
@@ -65,7 +72,7 @@ type SettingValueMap = {
   iconContextMenuMode: IconContextMenuMode
 }
 
-const SETTINGS_STORE_VERSION = 13
+const SETTINGS_STORE_VERSION = 14
 const SETTINGS_VERSION_KEY = 'settingsVersion'
 const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'iconSize',
@@ -75,6 +82,9 @@ const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'titleLineCount',
   'launchpadGridViewMode',
   'themeMode',
+  'themeAccentColor',
+  'launchpadBackgroundImage',
+  'autoExtractThemeColor',
   'windowStyle',
   'language',
   'dockEnabled',
@@ -94,6 +104,9 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   titleLineCount: 'two',
   launchpadGridViewMode: 'paged',
   themeMode: 'system',
+  themeAccentColor: '',
+  launchpadBackgroundImage: '',
+  autoExtractThemeColor: true,
   windowStyle: 'default',
   language: 'zh',
   dockEnabled: true,
@@ -137,6 +150,14 @@ const isLaunchpadGridViewMode = (value: unknown): value is LaunchpadGridViewMode
 const isThemeMode = (value: unknown): value is ThemeMode =>
   value === 'system' || value === 'dark' || value === 'light'
 
+const isThemeAccentColor = (value: unknown): value is string =>
+  typeof value === 'string' && (value === '' || normalizeThemeAccentColor(value) !== null)
+
+const isLaunchpadBackgroundImage = (value: unknown): value is string =>
+  typeof value === 'string' && (value === '' || isLaunchpadBackgroundDataUri(value))
+
+const isAutoExtractThemeColor = (value: unknown): value is boolean => typeof value === 'boolean'
+
 const isWindowStyle = (value: unknown): value is WindowStyle =>
   value === 'default' || value === 'nativeAcrylic'
 
@@ -162,6 +183,9 @@ const validators: {
   titleLineCount: isTitleLineCount,
   launchpadGridViewMode: isLaunchpadGridViewMode,
   themeMode: isThemeMode,
+  themeAccentColor: isThemeAccentColor,
+  launchpadBackgroundImage: isLaunchpadBackgroundImage,
+  autoExtractThemeColor: isAutoExtractThemeColor,
   windowStyle: isWindowStyle,
   language: isAppLanguage,
   dockEnabled: isDockEnabled,

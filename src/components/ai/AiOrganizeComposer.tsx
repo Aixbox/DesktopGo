@@ -63,7 +63,7 @@ export function AiOrganizeComposer({
   return (
     <>
       {queuedPrompts.length > 0 ? (
-        <div className="mb-2 flex items-center justify-between gap-2 rounded-md border border-blue-500/20 bg-blue-500/[0.08] px-2.5 py-1.5 text-xs text-blue-700 dark:text-blue-200">
+        <div className="accent-tonal mb-2 flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-xs">
           <span className="min-w-0 truncate">
             {translate('已排队 {count} 条：{prompt}', {
               count: queuedPrompts.length,
@@ -77,7 +77,7 @@ export function AiOrganizeComposer({
           <button
             type="button"
             onClick={clearQueuedPrompts}
-            className="shrink-0 rounded px-1.5 py-0.5 text-[11px] transition-colors hover:bg-blue-500/10"
+            className="shrink-0 rounded px-1.5 py-0.5 text-[11px] transition-colors hover:bg-primary/10"
           >
             {translate('清空')}
           </button>
@@ -103,7 +103,7 @@ export function AiOrganizeComposer({
         <div className="flex min-h-8 items-center justify-between gap-2 px-2 pb-1.5 pt-0">
           <div className="flex min-w-0 flex-1 items-center">
             {composerCommand ? (
-              <span className="inline-flex max-w-full shrink-0 items-center gap-1 rounded-md border border-blue-500/25 bg-blue-500/10 px-1.5 py-0 text-[11px] font-medium leading-5 text-blue-700 dark:text-blue-200">
+              <span className="accent-tonal inline-flex max-w-full shrink-0 items-center gap-1 rounded-md border px-1.5 py-0 text-[11px] font-medium leading-5">
                 {composerCommand.kind === 'edit' ? (
                   <Sparkles className="h-3 w-3 shrink-0" />
                 ) : (
@@ -115,7 +115,7 @@ export function AiOrganizeComposer({
                   onClick={() => setComposerCommand(null)}
                   aria-label={translate('移除指令')}
                   title={translate('移除指令')}
-                  className="-mr-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded text-blue-700/80 transition-colors hover:bg-blue-500/15 hover:text-blue-800 dark:text-blue-200"
+                  className="accent-foreground -mr-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded opacity-80 transition-colors hover:bg-primary/15 hover:opacity-100"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -150,7 +150,7 @@ export function AiOrganizeComposer({
               disabled={!canSend}
               aria-label={phase === 'loading' ? translate('加入队列') : translate('发送')}
               title={phase === 'loading' ? translate('加入队列') : translate('发送')}
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
             >
               {phase === 'loading' && !hasComposerText ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

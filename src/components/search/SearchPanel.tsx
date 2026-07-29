@@ -629,7 +629,7 @@ export function SearchPanel({
                         highlightedText={item.highlightedName}
                         fallbackText={item.name || item.path}
                         className="block truncate text-sm text-foreground"
-                        highlightClassName="font-medium text-blue-700 dark:text-blue-300"
+                        highlightClassName="accent-foreground font-medium"
                       />
                       <HighlightedText
                         highlightedText={item.highlightedPath}
@@ -663,7 +663,7 @@ export function SearchPanel({
             aria-valuemax={splitAriaMax}
             aria-valuenow={splitAriaNow}
             aria-keyshortcuts="ArrowLeft ArrowRight Home End"
-            className={`relative z-10 shrink-0 border-l border-r border-border/70 bg-background/30 transition hover:bg-accent/52 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/45 dark:bg-background/12 dark:hover:bg-accent/45 ${
+            className={`relative z-10 shrink-0 border-l border-r border-border/70 bg-background/30 transition hover:bg-accent/52 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 dark:bg-background/12 dark:hover:bg-accent/45 ${
               isResizingSplit ? 'bg-accent/70' : ''
             }`}
             style={{ width: SPLIT_DIVIDER_WIDTH, cursor: 'col-resize' }}

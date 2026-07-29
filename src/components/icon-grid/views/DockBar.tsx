@@ -716,7 +716,7 @@ export function DockBar({
                               <span
                                 className={`absolute right-0.5 top-0.5 z-10 flex h-4 w-4 items-center justify-center rounded-full border text-xs ${
                                   selectedSet.has(id)
-                                    ? 'border-blue-500 bg-blue-500 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950'
+                                    ? 'border-primary bg-primary text-primary-foreground'
                                     : 'border-border/70 bg-background/72 text-transparent shadow-sm dark:border-white/60 dark:bg-black/30'
                                 }`}
                               >
@@ -874,7 +874,7 @@ export function DockBar({
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={0}
-              className="group/dock-scrollbar pointer-events-auto absolute inset-x-0 bottom-0 h-4 touch-none rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+              className="group/dock-scrollbar pointer-events-auto absolute inset-x-0 bottom-0 h-4 touch-none rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
               onPointerDown={handleIndicatorTrackPointerDown}
               onKeyDown={handleIndicatorKeyDown}
               onClick={event => {

@@ -60,7 +60,7 @@ export function AiOrganizeSnapshotPreview({
     <div className="mt-2 w-[min(100%,390px)] rounded-md border border-border/80 bg-background/82 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
-          <FolderClosed className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
+          <FolderClosed className="accent-foreground h-4 w-4 shrink-0" />
           <span className="truncate">{translate('布局预览')}</span>
           <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
             {translate('第 {index} 版', { index: snapshotIndex + 1 })}
@@ -85,14 +85,14 @@ export function AiOrganizeSnapshotPreview({
                 onClick={() => void onInsertEditCommand(snapshot)}
                 disabled={previewDisabled}
                 title={translate('将此布局加入修改上下文')}
-                className="rounded-md border border-blue-500/25 bg-blue-500/10 px-2 py-1 text-[11px] text-blue-700 transition-colors hover:bg-blue-500/15 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-200"
+                className="accent-tonal rounded-md border px-2 py-1 text-[11px] transition-colors hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {translate('修改布局')}
               </button>
             </>
           ) : isEditingSnapshot ? (
             <>
-              <span className="rounded-md bg-blue-500/10 px-2 py-1 text-[11px] text-blue-700 dark:text-blue-200">
+              <span className="accent-foreground rounded-md bg-primary/10 px-2 py-1 text-[11px]">
                 {translate('修改中')}
               </span>
               <button
@@ -110,7 +110,7 @@ export function AiOrganizeSnapshotPreview({
               onClick={() => void onInsertEditCommand(snapshot)}
               disabled={previewDisabled}
               title={translate('将此布局加入修改上下文')}
-              className="rounded-md border border-blue-500/25 bg-blue-500/10 px-2 py-1 text-[11px] text-blue-700 transition-colors hover:bg-blue-500/15 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-200"
+              className="accent-tonal rounded-md border px-2 py-1 text-[11px] transition-colors hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {translate('修改布局')}
             </button>
@@ -127,7 +127,7 @@ export function AiOrganizeSnapshotPreview({
           {previewGroups.map(group => (
             <div key={group.id} className="rounded-md border border-border/75 bg-card/70 p-2.5">
               <div className="mb-2 flex items-center gap-2">
-                <FolderClosed className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
+                <FolderClosed className="accent-foreground h-4 w-4 shrink-0" />
                 {canEdit ? (
                   <Input
                     value={group.folderName}

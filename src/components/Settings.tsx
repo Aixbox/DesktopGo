@@ -76,7 +76,7 @@ function WindowControlButton({
       onPointerDown={event => event.stopPropagation()}
       onDoubleClick={event => event.stopPropagation()}
       onClick={onClick}
-      className={`flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-sm transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 ${
+      className={`flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-sm transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
         tone === 'danger'
           ? 'text-muted-foreground hover:bg-red-500/12 hover:text-red-500 dark:hover:text-red-300'
           : 'text-muted-foreground hover:bg-accent hover:text-foreground'

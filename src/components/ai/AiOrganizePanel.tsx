@@ -771,7 +771,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
         >
           <div className="relative flex items-center justify-between border-b border-border/80 px-4 py-3.5">
             <div className="flex min-w-0 items-center gap-2">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-blue-500/25 bg-blue-500/10 text-blue-600 dark:text-blue-300">
+              <div className="accent-tonal flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border">
                 <Bot className="h-4 w-4" />
               </div>
               <div className="min-w-0">
@@ -790,7 +790,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
                 onClick={() => setHistoryExpanded(expanded => !expanded)}
                 className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
                   historyExpanded
-                    ? 'bg-blue-500/10 text-blue-700 dark:text-blue-200'
+                    ? 'bg-primary/10 accent-foreground'
                     : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 }`}
               >
@@ -870,7 +870,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
                             <div
                               className={`rounded-lg border px-3 py-2 text-sm leading-5 ${
                                 isUser
-                                  ? 'border-blue-500/25 bg-blue-500/12 text-foreground'
+                                  ? 'border-primary/25 bg-primary/12 text-foreground'
                                   : failed
                                     ? 'border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-200'
                                     : 'border-border/80 bg-muted/35 text-foreground'
@@ -879,9 +879,9 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
                               <div className="flex items-start gap-2">
                                 {!isUser ? (
                                   running ? (
-                                    <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-blue-600 dark:text-blue-300" />
+                                    <Loader2 className="accent-foreground mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
                                   ) : (
-                                    <MessageSquareText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-300" />
+                                    <MessageSquareText className="accent-foreground mt-0.5 h-3.5 w-3.5 shrink-0" />
                                   )
                                 ) : null}
                                 <div className="min-w-0 flex-1">
@@ -932,7 +932,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
                   ) : (
                     <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
                       <div className="mb-2 flex items-center gap-2 text-foreground">
-                        <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+                        <Sparkles className="accent-foreground h-4 w-4" />
                         {translate('选择预设或输入要求开始整理')}
                       </div>
                       <p className="text-xs leading-5">

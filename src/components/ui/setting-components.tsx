@@ -65,17 +65,15 @@ export function SwitchButton({ checked, onChange, disabled = false }: SwitchButt
         onChange(!checked)
       }}
       className={`relative inline-flex h-7 w-12 shrink-0 rounded-full border transition-colors duration-200 ${
-        checked ? 'border-blue-500 bg-blue-500/90' : 'border-border bg-zinc-500/30'
+        checked ? 'border-primary bg-primary' : 'border-border bg-zinc-500/30'
       } ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} ${
-        disabled
-          ? ''
-          : 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/25'
+        disabled ? '' : 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35'
       }`}
     >
       <span
-        className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-          checked ? 'translate-x-6' : 'translate-x-1'
-        }`}
+        className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full transition-transform duration-200 ${
+          checked ? 'bg-primary-foreground' : 'bg-white'
+        } ${checked ? 'translate-x-6' : 'translate-x-1'}`}
       />
     </button>
   )
@@ -124,11 +122,11 @@ interface OptionButtonProps {
 export function OptionButton({ label, selected, onClick }: OptionButtonProps) {
   return (
     <button
+      type="button"
+      aria-pressed={selected}
       onClick={onClick}
       className={`shrink-0 whitespace-nowrap rounded-md border px-3 py-2 text-sm transition-all duration-150 cursor-pointer ${
-        selected
-          ? 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:border-blue-400/30 dark:bg-blue-400/12 dark:text-blue-200'
-          : 'border-input bg-background text-foreground hover:border-foreground/20 hover:bg-accent'
+        selected ? 'setting-option-selected' : 'setting-option-default'
       }`}
     >
       {label}
@@ -165,7 +163,7 @@ export function RangeControl({
         step={step}
         value={value}
         onChange={event => onChange(Number(event.currentTarget.value))}
-        className="h-2 min-w-0 flex-1 cursor-pointer accent-blue-600 dark:accent-blue-400"
+        className="setting-range h-2 min-w-0 flex-1 cursor-pointer"
       />
       <output className="w-14 shrink-0 rounded-md border border-border/80 bg-background px-2 py-1 text-center text-xs tabular-nums text-foreground">
         {valueLabel}

@@ -48,9 +48,7 @@ function MatcherToggleRow({ active, label, onClick }: MatcherToggleRowProps) {
       <span>{label}</span>
       <span
         className={`rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-[0.14em] ${
-          active
-            ? 'border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300'
-            : 'border-border/70 text-muted-foreground'
+          active ? 'accent-tonal' : 'border-border/70 text-muted-foreground'
         }`}
       >
         {active ? translate('开') : translate('关')}
@@ -198,7 +196,7 @@ export function SearchToolbar({
                       >
                         <span>{option.label}</span>
                         {sort === option.value ? (
-                          <Check className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+                          <Check className="accent-foreground h-4 w-4" />
                         ) : null}
                       </button>
                     ))}
@@ -241,7 +239,7 @@ export function SearchToolbar({
           <span className="relative z-10 flex items-center justify-center">
             <Settings2 className="h-4 w-4" />
             {hasActiveMatcher && (
-              <span className="absolute right-[-0.375rem] top-[-0.375rem] h-1.5 w-1.5 rounded-full bg-blue-500 shadow-[0_0_6px_rgba(59,130,246,0.4)] dark:shadow-[0_0_8px_rgba(96,165,250,0.5)]" />
+              <span className="accent-status-dot absolute right-[-0.375rem] top-[-0.375rem] h-1.5 w-1.5 rounded-full" />
             )}
           </span>
         </button>

@@ -247,7 +247,7 @@ export function FolderModalView({
                   <button
                     type="button"
                     aria-label={translate('重命名文件夹 {name}', { name: openFolder.name })}
-                    className="truncate rounded-md px-3 py-1 text-sm font-medium text-foreground/90 transition-colors hover:bg-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 dark:text-white/90 dark:hover:bg-white/10"
+                    className="truncate rounded-md px-3 py-1 text-sm font-medium text-foreground/90 transition-colors hover:bg-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 dark:text-white/90 dark:hover:bg-white/10"
                     style={{ maxWidth: '240px' }}
                     title={openFolder.name}
                     onClick={() => {
@@ -263,7 +263,7 @@ export function FolderModalView({
               <button
                 type="button"
                 aria-label={translate('关闭文件夹')}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-background/72 text-foreground/75 transition-colors hover:bg-background/92 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 dark:bg-white/15 dark:text-white/80 dark:hover:bg-white/25 dark:hover:text-white"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-background/72 text-foreground/75 transition-colors hover:bg-background/92 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 dark:bg-white/15 dark:text-white/80 dark:hover:bg-white/25 dark:hover:text-white"
                 onClick={e => {
                   e.stopPropagation()
                   onClose()

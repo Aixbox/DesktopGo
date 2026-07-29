@@ -20,6 +20,7 @@ import {
   type WindowPersistentSyncPayload,
 } from '@/lib/windowPersistent'
 import { applyWindowStyle, getSavedWindowStyle } from '@/lib/windowStyle'
+import { applySavedAppearance } from '@/lib/appearance'
 import { LAUNCHPAD_LAYOUT_RESET_EVENT } from '@/components/icon-grid/services/layoutStore'
 import { useToast } from '@/components/ui/toast'
 import { useIconStore } from '@/stores/iconStore'
@@ -107,6 +108,7 @@ export function useLaunchpadWindowController({
         getSavedWindowStyle(),
         getSetting('windowPersistent'),
         getSavedTheme(),
+        applySavedAppearance(),
       ])
       setWindowPersistentEnabled(persistentEnabled)
       applyTheme(savedTheme, savedWindowStyle)

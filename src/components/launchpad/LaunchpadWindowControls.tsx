@@ -29,9 +29,9 @@ function WindowControlButton({
         event.stopPropagation()
         onClick()
       }}
-      className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-transparent text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 ${
+      className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-transparent text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
         active
-          ? 'border-blue-500/25 bg-blue-500/12 text-blue-600 dark:text-blue-300'
+          ? 'accent-tonal'
           : tone === 'danger'
             ? 'text-muted-foreground hover:bg-red-500/12 hover:text-red-500 dark:hover:text-red-300'
             : 'text-muted-foreground hover:bg-accent hover:text-foreground'
@@ -83,9 +83,7 @@ export function LaunchpadWindowControls({
               label={alwaysOnTopEnabled ? translate('取消置顶') : translate('置顶窗口')}
               onClick={onToggleAlwaysOnTop}
             >
-              <Pin
-                className={`h-4 w-4 ${alwaysOnTopEnabled ? 'text-blue-500 dark:text-blue-300' : ''}`}
-              />
+              <Pin className={`h-4 w-4 ${alwaysOnTopEnabled ? 'accent-foreground' : ''}`} />
             </WindowControlButton>
           </div>
           <div className="launchpad-glass-panel-strong flex items-center gap-1 rounded-lg border border-border/80 px-1.5 py-1">

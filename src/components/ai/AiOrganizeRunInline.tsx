@@ -52,7 +52,7 @@ export function AiOrganizeRunInline({
         ) : status === 'success' ? (
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-300" />
         ) : (
-          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-blue-600 dark:text-blue-300" />
+          <Loader2 className="accent-foreground h-3.5 w-3.5 shrink-0 animate-spin" />
         )}
         <span className="font-medium text-foreground">{title}</span>
         {elapsedMs > 0 ? (
@@ -78,10 +78,10 @@ export function AiOrganizeRunInline({
               className="min-w-0 rounded-md bg-muted/45 px-2 py-1"
             >
               <div className="flex min-w-0 items-center gap-1.5">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500/70" />
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" />
                 <span className="truncate text-foreground/90">{getAgentEventLabel(event)}</span>
                 {event.toolName ? (
-                  <span className="shrink-0 rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-700 dark:text-blue-300">
+                  <span className="accent-foreground shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px]">
                     {event.toolName}
                   </span>
                 ) : null}
@@ -105,8 +105,8 @@ export function AiOrganizeRunInline({
         <div className="mb-1 flex items-center justify-between gap-2 text-[11px] font-medium text-muted-foreground">
           {translate('模型输出片段')}
           {isStreaming ? (
-            <span className="inline-flex items-center gap-1 text-[10px] font-normal text-blue-600 dark:text-blue-300">
-              <span className="h-1.5 w-1.5 rounded-full bg-blue-500 motion-safe:animate-pulse" />
+            <span className="accent-foreground inline-flex items-center gap-1 text-[10px] font-normal">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary motion-safe:animate-pulse" />
               {translate('接收中')}
             </span>
           ) : null}
@@ -130,12 +130,12 @@ export function AiOrganizeRunInline({
                   </motion.span>
                 ))}
               </AnimatePresence>
-              {isStreaming ? <span className="ml-0.5 text-blue-500">|</span> : null}
+              {isStreaming ? <span className="accent-foreground ml-0.5">|</span> : null}
             </pre>
           ) : isStreaming ? (
             <div className="flex min-h-10 items-center gap-2 text-muted-foreground">
               <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
-                <div className="h-full w-8 rounded-full bg-blue-500/70 motion-safe:animate-[ai-stream-wait_1.1s_cubic-bezier(0.22,1,0.36,1)_infinite]" />
+                <div className="h-full w-8 rounded-full bg-primary/70 motion-safe:animate-[ai-stream-wait_1.1s_cubic-bezier(0.22,1,0.36,1)_infinite]" />
               </div>
               <span>{translate('正在等待首段模型输出...')}</span>
             </div>

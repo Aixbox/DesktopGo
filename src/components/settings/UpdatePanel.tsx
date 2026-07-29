@@ -366,7 +366,7 @@ export function UpdatePanel() {
                 {installStage === 'finished' ? (
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
                 ) : (
-                  <LoaderCircle className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-blue-600 dark:text-blue-300" />
+                  <LoaderCircle className="accent-foreground mt-0.5 h-4 w-4 shrink-0 animate-spin" />
                 )}
                 <div className="w-full space-y-3">
                   <div className="space-y-1">
@@ -381,7 +381,7 @@ export function UpdatePanel() {
                   <div className="space-y-2">
                     <div className="h-2 overflow-hidden rounded-full bg-muted">
                       <div
-                        className={`h-full rounded-full bg-blue-600 transition-all duration-300 dark:bg-blue-400 ${
+                        className={`h-full rounded-full bg-primary transition-all duration-300 ${
                           progressPercent === null ? 'w-1/2 animate-pulse' : ''
                         }`}
                         style={
@@ -413,7 +413,7 @@ export function UpdatePanel() {
           {updateInfo ? (
             <div className="rounded-md border border-border/80 bg-card p-4">
               <div className="flex items-start gap-3">
-                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
+                <Sparkles className="accent-foreground mt-0.5 h-4 w-4 shrink-0" />
                 <div className="space-y-3">
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-foreground">

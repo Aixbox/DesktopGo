@@ -156,7 +156,7 @@ export const Icon = memo(function Icon({
           <span
             className={`absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full border text-xs ${
               selected
-                ? 'border-blue-500 bg-blue-500 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950'
+                ? 'border-primary bg-primary text-primary-foreground'
                 : 'border-border/70 bg-background/72 text-transparent shadow-sm dark:border-white/60 dark:bg-black/30'
             }`}
           >
@@ -193,7 +193,7 @@ export const Icon = memo(function Icon({
             onClick={event => event.stopPropagation()}
             onPointerDown={event => event.stopPropagation()}
             onContextMenu={event => event.stopPropagation()}
-            className="icon-label-input rounded-md border border-border/60 bg-background/95 px-1 py-[1px] text-[11px] leading-[13px] text-center text-foreground shadow-sm outline-none focus:border-blue-500 dark:border-white/30 dark:bg-black/60"
+            className="icon-label-input rounded-md border border-border/60 bg-background/95 px-1 py-[1px] text-[11px] leading-[13px] text-center text-foreground shadow-sm outline-none focus:border-ring dark:border-white/30 dark:bg-black/60"
             style={{
               maxWidth: config.containerWidth - 4,
               width: config.containerWidth - 4,

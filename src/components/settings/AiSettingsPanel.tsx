@@ -187,7 +187,7 @@ export function AiSettingsPanel() {
               onChange={e => updateField('customPrompt', e.target.value)}
               placeholder={translate('例如：把所有游戏单独归到「游戏」文件夹。')}
               rows={3}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-blue-500/25"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/25"
             />
           </div>
 
