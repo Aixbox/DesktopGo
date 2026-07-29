@@ -185,7 +185,7 @@ export function IconManagerPanel() {
             ? 'delete_icons'
             : 'hide_icons'
       const actionLabel =
-        mutation.type === 'unhide' ? '显示' : mutation.type === 'delete' ? '移出图标库' : '隐藏'
+        mutation.type === 'unhide' ? '显示' : mutation.type === 'delete' ? '删除' : '隐藏'
       const affected = await invoke<number>(command, { targets })
       const visibilityMutation =
         mutation.type === 'delete' ? null : { type: mutation.type, icon: mutation.icon }
@@ -327,11 +327,11 @@ export function IconManagerPanel() {
             confirmVariant: 'default' as const,
           }
         : {
-            title: translate('确认移出图标库'),
+            title: translate('确认删除'),
             desc: translate('将“{name}”移出图标库，不会删除原始程序、文件或文件夹。', {
               name: pendingMutation.icon.name,
             }),
-            confirmLabel: translate('移出图标库'),
+            confirmLabel: translate('删除'),
             confirmVariant: 'destructive' as const,
           }
     : null
@@ -570,7 +570,7 @@ export function IconManagerPanel() {
                     <div
                       className={cn(
                         'flex min-w-0 flex-wrap gap-2',
-                        viewMode === 'grid' ? 'mt-3' : 'flex-[1_1_12rem]'
+                        viewMode === 'grid' ? 'mt-3' : 'ml-auto max-w-full flex-none justify-end'
                       )}
                     >
                       <Button
@@ -580,7 +580,7 @@ export function IconManagerPanel() {
                           setPendingMutation({ type: icon.hidden ? 'unhide' : 'hide', icon })
                         }
                         disabled={mutating}
-                        className="min-w-0 flex-1 whitespace-normal"
+                        className={viewMode === 'grid' ? 'min-w-0 flex-1' : 'shrink-0'}
                       >
                         {icon.hidden ? translate('显示') : translate('隐藏')}
                       </Button>
@@ -589,9 +589,9 @@ export function IconManagerPanel() {
                         size="sm"
                         onClick={() => setPendingMutation({ type: 'delete', icon })}
                         disabled={mutating}
-                        className="min-w-0 flex-1 whitespace-normal"
+                        className={viewMode === 'grid' ? 'min-w-0 flex-1' : 'shrink-0'}
                       >
-                        {viewMode === 'grid' ? translate('移出') : translate('移出图标库')}
+                        {translate('删除')}
                       </Button>
                     </div>
                   </article>
