@@ -1,0 +1,23 @@
+﻿Everything
+
+Copyright (c) 2025 voidtools
+
+Los Permisos concedidos en lo adelante, libres de costo, permiten a cualquier persona que obtenga una copia de este software y archivos de documentación asociados (el "Software"), manejar el Software sin restricciones, incluyendo sin limitaciones los derechos de usar, copiar, modificar, compartir, publicar, distribuir, sublicenciar, y/o vender copias del Software, y permitir a quienes les ha sido suministrado el Software a hacerlo, sujetos a las siguientes condiciones::
+
+Los anteriores derechos de autor y este permiso SERÁN INCLUIDOS en todas las copias o porciones substanciales del Software.
+
+EL SOFTWARE ESTÁ PROVISTO "TAL COMO ESTÁ" SIN GARANTÍAS DE NINGÚN TIPO, EXPRESA O IMPLICADA, INCLUYENDO PERO NO LIMITADA A LAS GARANTÍAS DE COMERCIABILIDAD, IDONEIDAD PARA UN PROPÓSITO PARTICULAR Y NO INFRACCIÓN. EN NINGÚN CASO LOS AUTORES O AMPARADOS POR EL COPYRIGHT SERÁN RESPONSABLES POR NINGUNA RECLAMACIÓN, DAÑOS U OTRA RESPONSABILIDAD, YA SEA EN UNA ACCIÓN CONTRATO, AGRAVIO O DE OTRO TIPO, QUE SURJA DE O EN CONEXIÓN CON EL SOFTWARE O POR EL USO U OTRAS TRANSACCIONES CON EL SOFTWARE.
+
+Expresiones Regulares Compatibles con Perl
+
+Copyright (c) 1997-2012 Universidad de Cambridge
+
+La redistribución y uso en forma fuente y binaria, con o sin modificaciones, son permitidas siempre que se cumplan las siguientes condiciones:
+
+* Las redistribuciones del código fuente deben conservar el aviso de copyright arriba mencionado, esta lista de condiciones y el siguiente Aviso legal.
+
+* Las redistribuciones  en forma binaria deben reproducir el aviso de copyright arriba mencionado, esta lista de condiciones y el siguiente Aviso legal en la documentación y/o otros materiales provistos con la distribución.
+
+* Ni el nombre de la Universidad de Cambridge ni los nombres de sus colaboradores pueden ser utilizados para endosar o promover productos derivados de este software sin el previo permiso específico escrito.
+
+ESTE SOFTWARE ESTÁ PROVISTO POR LOS POSEEDORES DEL COPYRIGHT Y CONTRIBUIDORES "TAL COMO ESTÁ" Y CUALQUIER GARANTÍA EXPRESA O IMPLICADA, INCLUYENDO, PERO NO LIMITADA A, GARANTÍAS DE COMERCIABILIDAD IMPLICADAS E IDONEIDAD PARA UN PROPÓSITO PARTICULAR SERÁ NEGADA. EN NINGÚN CASO EL DUEÑO DEL COPYRIGHT O CONTRIBUIDORES SERÁN RESPONSABLES POR NINGÚN DAÑO DIRECTO, INDIRECTO, INCIDENTAL, ESPECIAL, EJEMPLAR, O DAÑOS CONSECUENTES (INCLUYENDO, PERO NO LIMITADO A, OBTENCIÓN DE BIENES SUSTITUTOS O SERVICIOS; PERDIDA DE USO, DATOS, O BENEFICIOS; O INTERRUPCIÓN DE NEGOCIOS) CAUSADOS EN CUALQUIER FORMA Y EN CUALQUIER TEORÍA DE RESPONSABILIDAD, SEA EN UNA ACCIÓN CONTRATO, ESTRICTA RESPONSABILIDAD, O AGRAVIO (INCLUYENDO NEGLIGENCIA O LO CONTRARIO) QUE SURJA DE CUALQUIER FORMA POR EL USO DE ESTE SOFTWARE, INCLUSO SIENDO ADVERTIDO DE LA POSIBILIDAD DE TAL DAÑO.

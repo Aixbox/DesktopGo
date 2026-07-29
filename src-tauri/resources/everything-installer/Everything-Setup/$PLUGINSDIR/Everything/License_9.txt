@@ -1,0 +1,23 @@
+﻿Everything
+
+Mualliflik huquqi © 2005-2018 Devid Karpenter
+
+Ushbu litsenziya bu dasturiy taʼminot va tegishli hujjatlarning nusxasini (bundan buyon matnda «Dasturiy taʼminot» deb nomlangan) olgan shaxslarga cheklovlarsiz, shu jumladan cheklanmagan tarzda foydalanish, nusxalash, oʻzgartirish, birlashtirish, tarqatish, tarqatish, sub-litsenziya va/yoki cheklanmagan huquqdan foydalangan holda dasturiy taʼminotdan bepul foydalanishga ruxsat beradi. Dastur nusxalarini, shuningdek ushbu dastur taʼminlangan shaxslarga quyidagi shartlarni hisobga olgan holda sotishi mumkin:
+
+Yuqoridagi mualliflik huquqi toʻgʻrisidagi bildirishnoma va ushbu shartlar ushbu dasturiy taʼminotining barcha nusxalarida yoki muhim qismlarida boʻlishi kerak.
+
+USHBU DASTUR SOTUVGA QOʻYILADIGAN KAFOLATLAR, MAʼLUM MAQSADGA MUVOFIQLIGI VA BUZILISHLARDAN OZODLIGI, SHU JUMLADAN, LEKIN ULAR BILAN CHEKLANMAGAN HOLDA, HAR QANDAY IFODA ETILGAN YOKI NAZARDA TUTILGAN HAR QANDAY KAFOLATSIZ «OʻZ BORICHA» TAQDIM ETILADI. HECH QANDAY HOLATDA MUALLIFLAR YOKI MUALLIFLIK HUQUQI EGALARI HAR QANDAY DAʼVOLAR UCHUN, ETKAZILGAN ZARAR YOKI BOSHQA DAʼVOLAR UCHUN, SHU JUMLADAN DASTURIY TAʼMINOTDAN FOYDALANISH YOKI DASTURIY TAʼMINOT BILAN BOSHQA HARAKATLAR NATIJASIDA YUZAGA KELGAN SHARTNOMA, HUQUQBUZARLIK YOKI BOSHQA HOLATLAR UCHUN JAVOBGAR BOʻLMAYDI.
+
+Perl bilan mos keladigan doimiy iboralar
+
+Mualliflik huquqi © 1997-2012 Kembrij universiteti
+
+Quyidagi shartlar bajarilgan taqdirda, modifikatsiyalangan yoki oʻzgartirilmagan holda qayta taqsimlash va yagona hamda ikkilik shakllarda foydalanishga ruxsat beriladi:
+
+* Manba kodini qayta taqsimlashda yuqoridagi mualliflik huquqi toʻgʻrisidagi bildirishnoma, ushbu shartlar roʻyxati va quyidagi ogohlantirish saqlanishi kerak.
+
+* Ikkilik shaklda qayta tarqatishda yuqoridagi mualliflik huquqi toʻgʻrisidagi bildirishnoma, ushbu shartlar roʻyxati va tarqatish bilan taʼminlangan hujjatlarda va/yoki boshqa materiallarda quyidagi ogohlantirish boʻlishi kerak.
+
+* Ushbu dasturiy taʼminotdan olingan mahsulotlarni oldindan yozma ruxsatisiz tasdiqlash yoki targʻib qilish uchun na Kembrij universiteti nomidan, na uning ishtirokchilarining ismlaridan foydalanilishi mumkin emas.
+
+USHBU DASTUR SOTUVGA QOʻYILADIGAN KAFOLATLAR, MAʼLUM MAQSADGA MUVOFIQLIGI VA BUZILISHLARDAN OZODLIGI, SHU JUMLADAN, LEKIN ULAR BILAN CHEKLANMAGAN HOLDA, HAR QANDAY IFODA ETILGAN YOKI NAZARDA TUTILGAN HAR QANDAY KAFOLATSIZ «OʻZ BORICHA» TAQDIM ETILADI. HECH QANDAY HOLATDA MUALLIFLAR YOKI MUALLIFLIK HUQUQI EGALARI HAR QANDAY DAʼVOLAR UCHUN, ETKAZILGAN ZARAR YOKI BOSHQA DAʼVOLAR UCHUN, SHU JUMLADAN DASTURIY TAʼMINOTDAN FOYDALANISH YOKI DASTURIY TAʼMINOT BILAN BOSHQA HARAKATLAR NATIJASIDA YUZAGA KELGAN SHARTNOMA, HUQUQBUZARLIK YOKI BOSHQA HOLATLAR UCHUN JAVOBGAR BOʻLMAYDI.

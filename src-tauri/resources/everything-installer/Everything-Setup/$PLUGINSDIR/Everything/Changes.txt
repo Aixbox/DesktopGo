@@ -1,0 +1,443 @@
+Friday, 20 June 2025: Version 1.4.1.1028
+	fixed a crash when getting help text from a context menu item that throws an exception.
+	updated localization.
+
+Friday, 23 May 2025: Version 1.4.1.1027
+	updated localization.
+	improved security against dll hijacking.
+
+Thursday, 1 August 2024: Version 1.4.1.1026
+	updated localization.
+
+Thursday, 1 August 2024: Version 1.4.1.1025
+	updated localization.
+
+Friday, 26 May 2023: Version 1.4.1.1024
+	fixed a security issue with the HTTP server.
+
+Wednesday, 10 May 2023: Version 1.4.1.1023
+	fixed a security issue with the HTTP server.
+	fixed an issue with empty EFU items.
+
+Monday, 10 October 2022: Version 1.4.1.1022
+	fixed a crash when loading a preview failed.
+
+Monday, 3 October 2022: Version 1.4.1.1021
+	fixed a security issue with using an insecure http connection to check for updates.
+	fixed an issue with preventing devices from being safely removed.
+
+Thursday, 8 September 2022: Version 1.4.1.1020
+	updated localization.
+	fixed a security issue with using an insecure http connection to open the download page.
+
+Wednesday, 17 August 2022: Version 1.4.1.1018
+	fixed an issue with the MSI installer and removing previous versions.
+
+Friday, 20 May 2022: Version 1.4.1.1017
+	updated localization.
+	fixed an issue with incrementing search history count when opening a bookmark.
+
+Friday, 17 December 2021: Version 1.4.1.1015
+	fixed an encoding issue with translations.
+
+Thursday, 16 December 2021: Version 1.4.1.1014
+	updated installer to protect against DLL hijacking.
+	updated installer to support ASLR.
+	fixed an issue with the ETP client requesting the wrong number of results.
+	fixed an issue with hotkey_user_notification_state.
+	added -rescan-all command line option.
+
+Thursday, 3 June 2021: Version 1.4.1.1009
+	fixed an issue with detecting NTFS volumes.
+
+Monday, 25 January 2021: Version 1.4.1.1005
+	fixed a security issue with loading urlmon.dll and imm32.dll.
+	fixed a 4-byte utf8 comparison issue.
+	fixed an issue with connecting to the Everything Service from some devices (eg: a ram drive).
+	fixed an issue with focus search on activate.
+	fixed an issue with excluding filenames with 4-byte UTF-8 characters.
+	fixed an issue with -focus-result command line options.
+	fixed an issue with \\.\c: service access
+	fixed an issue with db corruption from duplicated filenames.
+	fixed a corrupt db issue when re-scanning duplicated files.
+	fixed an issue with Ctrl + Tab.
+	fixed issues with starting a rename while there was a mouse capture.
+	fixed issues with the hide_on_close setting.
+	fixed an issue with processing command line options from multiple instances.
+	fixed an issue with copying results to the clipboard.
+	fixed an issue with using the wrong column index in LVM_GETCOLUMN.
+	fixed an issue with the es: url protocol.
+	fixed an issue with Everything holding onto volume handles after RegisterDeviceNotification fails.
+	fixed an issue with treating unmounted volumes as NTFS.
+	fixed another crash with unaligned memory access and some USB disk drivers.
+	fixed an issue when renaming a file or folder.
+	fixed a crash with unaligned memory access and some USB disk drivers.
+	fixed an issue with Everything not showing as an active window correctly.
+	fixed an issue with Windows 10 not giving Everything focus
+	fixed an issue with scheduled folder updates never occuring for network drives when waking from sleep.
+	fixed an issue when permanently deleting folders with really long filenames.
+	fixed an issue with gathering icons for files with paths longer than 260 characters.
+	fixed an issue with IPC query returning the incorrect total items.
+	fixed an issue with hidden windows staying hidden forever.
+	fixed an issue with rendering negative visible result items.
+	fixed an issue with saving column positions and widths.
+	fixed an issue with showing suggestions above the search box.
+	fixed an issue with context menus ignoring base keys.
+	fixed an issue with Everything resetting the sort after rebuilding the database.
+	fixed an issue with accessing offline volumes.
+	fixed an issue with comparing dc: to dm:
+	fixed an issue with attrib:d
+	fixed an issue with the ETP client skipping space prefixes in filenames.
+	added autofocus to the HTTP server search box.
+	added check to see if volumes are mounted before accessing.
+	added Lite version (which removes ETP/FTP/HTTP Servers and removes IPC)
+	added <meta name=\"robots\" content=\"noindex, nofollow\"> to http server
+	access denied dialog will now prompt to install the Everything Service.
+	start menu shortcut and Desktop shortcut now installed as "Everything"
+	compiled with /DYNAMICBASE
+	compiled with /NXCOMPAT
+	Installer now saves settings.
+	The installer now installs Start menu shortcuts and the Desktop shortcut for all users.
+	
+Friday, 18 February 2019: Version 1.4.1.935
+	fixed an issue with really long filenames
+	fixed an issue when adding or removing an "include only" exclude.
+	fixed an issue with missing changes to excluded files.
+	fixed a crash when gathering NTFS file information
+	fixed an issue with updating folder information
+	fixed a crash with ntdll.dll
+	fixed a crash when renaming a folder with excluded subfolders
+	fixed an issue with calculating folder children counts when using folder excludes
+	fixed an issue with Everything detecting renamed files
+	fixed an issue when restarting Everything would restart as administrator
+	fixed an icon overlay display issue
+	fixed an issue with detecting renamed files on ReFS volumes
+	fixed an issue with deleting or renaming ReFS folders
+	fixed an issue with loading shell extensions
+	fixed a crash when clearing search history
+	fixed a security issue when running a FTP server
+	fixed an issue preventing Everything from closing when pressing ESC
+	fixed an issue where Everything would lose the current sort after reindexing
+	fixed an issue when using invalid characters to rename a file
+	fixed a crash when rendering tall or wide images
+	fixed an issue when shutting down Everything would cause it to miss changes
+	fixed a memory alignment issue
+	fixed database corruption when renaming a folder when folder size indexing is enabled or when there is a folder exclude
+	fixed an issue with circular NTFS/ReFS folder parents
+	improved thread yielding
+	added .jpeg extension to the image information search functions
+	added support for cluster sizes larger than 64k
+	added preview_context ini setting
+
+Wednesday, 7 June 2017: Version 1.4.1.877
+	added option to index size, dates and attributes
+	added option to enable fast sorting of size, dates, attributes, path and extension
+	added thumbnail view
+	added preview pane
+	added REFS support
+	added advanced searching
+	added multi-file renaming
+	added content searching
+	added search history organizer
+	added show total size in status bar option
+	added single click open option
+	added full row select option
+	added perl compatible regex
+	added new search functions
+	added / search commands
+	added filter functions
+	added new Everything icon
+	improved folder deletion performance
+	improved indexing when using file and folder excludes
+	improved search term highlighting
+	improved database blocking
+	improved indexes updating
+	improved folder index monitoring
+	improved NTFS indexing
+	improved re-indexing performance when the existing indexes are up to date
+	improved IPC
+	fixed an issue causing Everything to hang onto a volume handle when trying to safely remove a device
+	fixed an issue with excludes being ignored when rebuilding the indexes
+	fixed a crash when renaming a folder that had subfolders that should be excluded
+	fixed an issue with sorting by date created ascending and date accessed ascending
+	fixed a crash when accessing file information cache
+	fixed an issue with ETP url links and special characters
+	fixed a focus issue with UAC prompts
+	fixed an issue when opening a file as admin
+	fixed a lock in the Everything service
+	fixed an issue with a race condition and initializing COM
+	fixed a hang when deleting a registry key
+	fixed an issue with very large sorts
+	fixed an issue with !parent:, !child: and !c:\path
+	fixed an issue with filter modifiers
+	fixed an issue with file:!
+	fixed an issue with indexing hidden or system folders/files
+	fixed an issue with previous navigation searches
+	fixed an issue when searching for a \path\
+	fixed a crash when cutting an item multiple times
+
+Wednesday, 6 August 2014: Version 1.3.4.686
+	added MIT license
+	added installer localization
+	added run as admin option
+	added wildcards anywhere option
+	added run date column/sort/search
+	added support for accessible MSAA
+	added etp connection history
+	added recent changes
+	added run history
+	added home page
+	added x64 build
+	added always ontop option
+	added %APPDATA% option
+	added Everything service option
+	added search history option
+	added the option to cancel locked queries after one second
+	added context menu customization
+	added tooltips for hidden items
+	added option to not compress database
+	added custom filters
+	added hotkey option to toggle search window
+	added filelists
+	added folder indexing
+	added optional diacritical mark matching
+	added bookmarks
+	added new search functions and macros
+	improved performance when renaming/deleting folders
+	improved ETP/FTP server
+	improved HTTP server
+	fixed an issue with the installer losing settings
+	fixed an issue with name sort order
+	fixed an issue with refocusing a window with a dialog
+	fixed an issue with very small integers stored in the Everything.ini
+	fixed a focus issue when performing a file operation
+	fixed a focus issue when opening a file
+	fixed a gdi leak when showing a context menu
+	fixed a crash when closing a window when a dialog was shown
+	fixed an issue preventing the column header from updating
+	fixed a bug when searching for subpaths
+	fixed a crash when closing the window while a drag drop operation was active
+	fixed an issue preventing Everything from gaining focus on startup
+	fixed an issue with focusing options pages
+	fixed an issue where a result would lose the run count when it was renamed
+	fixed an issue with the initial folder of a save as dialog
+	fixed a crash when adding an item to an empty database
+	fixed an issue monitoring fileinfo / icon cache
+	fixed a lock when canceling and restarting file information cache
+	fixed an issue with updating icons
+	fixed a crash when sorting folders by size
+	fixed a crash when update folders with an exclude folder
+	fixed an issue with preserving column positions
+	fixed a crash when using the tray icon while a dialog was shown
+	fixed an issue where a renamed file was not being removed if its new location does not exist
+	fixed an issue when a renamed file became hidden was not removed from the db
+	fixed an issue with middle mouse button scroll
+	fixed an issue with a renamed a folder being added to the wrong location
+	fixed an issue when renaming a folder shorter than 5 characters
+	fixed a memory leak when renaming a file
+	fixed an issue with jump to when sorting by size descending
+	fixed an issue when sorting by size
+	fixed a crash when request a file type
+	fixed a sort issue for unknown sizes
+	fixed a display issue for unthemed toolbars
+	fixed an issue with the everything filter after adding a new filter
+	fixed an issue with clearing the selection after opening a result
+	fixed an issue parsing |
+	fixed an issue with shortcuts using wrong working directory
+	fixed an issue that prevented the rename edit from being closed
+	fixed a memory leak when connecting to an ETP server
+	fixed a memory leak when sorting by type
+	fixed an issue with sorting corrupting the database
+	fixed an issue with processing events
+	fixed an issue with undesired access to a floppy drive
+	fixed an option page display issue when showing tooltips
+	fixed an issue with weighted case sensitive compares
+	fixed an issue with empty key lists
+	fixed a memory leak when showing a menu
+	fixed a memory leak when changing the filter bar font
+	fixed non-unicode clipboard issue with non-ansi locale
+	fixed a bug causing the db to block while typing a search
+	fixed a bug with context menus and opening sub menus
+	fixed wrong mutex name
+	fixed shift + esc hotkey
+	fixed a memory leak when using ext:
+	fixed an issue with path searching only matching the end of the path
+	fixed an issue preventing the database saving to disk when shutting down
+	fixed an issue when uninstalling localized start menu shortcuts
+	fixed a system beep when pressing alt back space
+	fixed a memory leak when creating a shell item
+	fixed an issue selecting the edit text when the main window did not have focus
+	fixed a crash when sorting a large number of results
+
+Friday, 13 March 2009: Version 1.2.1.371
+	added title customization
+	added NOT operator (!)
+	added special case wildcards
+	added authentication support for QTWeb
+	added the option to exclude hidden and system files
+	added a basic text export option
+	added search only mode for HTTP/FTP servers
+	added shortcut keys for search options
+	added special case wildcards
+	added utf8 support for the FTP server
+	added keyboard shortcut Ctrl + Enter to open path
+	added extension and type columns
+	added support for external file managers via the ini file
+	added exclude paths to etp/ftp/http servers
+	added unicode support
+	added multiple language support
+	added removable NTFS volume support
+	added exclude folder filter
+	added option to check media on removable volumes (floppy drives are disabled by default)
+	added custom icon support
+	added optional http server user name and password
+	added option to use FTP links for ETP connections
+	added option to choose which drives are included in the installer
+	added fullscreen mode (F11)
+	added portability
+	improved rendering performance
+	improved search parsing
+	improved multiple instances option
+	improved command line parsing
+	improved option window navigation with keyboard
+	improved tooltip help for some items
+	improved searching performance with wildcards by upto 5 times
+	improved searching performance by upto 30%
+	improved ETP/FTP/HTTP performance
+	improved text rendering output and performance
+	improved rendering performance when updating the UI due to a large amount of changes to the file system.
+	improved memory usage when database is unload by clearing icon and file info cache
+	improved volume management
+	improved sorting performance
+	improved ftp command LIST
+	fixed an issue with HTTP url parsing
+	fixed default icons for windows 7 beta
+	fixed user handle leak in context menus
+	fixed a problem with cut/copy/paste
+	fixed cut with files and folders in different folders
+	fixed start menus for Vista
+	fixed opening a folder that had the same name as an executable
+	fixed the FTP REST position
+	fixed unicode IPC queries
+	fixed sorting by descending size 
+	fixed characters being displayed incorrectly with the HTTP server 
+	fixed copying files and folders in different folders.
+	fixed drag drop shortcuts
+	fixed an issue when searching for wildcards with match path enabled
+	fixed delete for files and folders in different folders
+	fixed an issue with long file names
+	fixed the folder and file selection after sorting and changing search parameters
+	fixed folder and file renaming using invalid destination
+	fixed mouse wheel scrolling using the wrong number of lines to scroll
+	fixed icons for files with the extension lnk and url
+	fixed show shell context menus toggle in options window
+	fixed a problem with menus blocking after a search was started
+	fixed -filename command line option using the wrong path
+	fixed new windows inheriting old windows settings
+	fixed horizontal scroll bar using wrong width
+	fixed a gdi leak when closing a window
+	fixed the default large icon
+
+Monday, 29 September 2008: Version 1.1.4.301
+	added -search <text> command line option
+	added quick launch shortcut option to installer and options menu
+	added better support for corrupt ntfs drives
+	added wildcards
+	added regex
+	added highlighted search terms
+	added customizable text size
+	added support for Windows Vista SP1
+	added help index
+	added version information to everything.exe header
+	added version information to installer exe header
+	added descriptions to installer packages
+	added support for removable drives
+	added start menu shortcuts to options
+	added desktop shortcuts to options
+	added option to merge settings using Merge.c
+	added optional new window hotkey
+	added Everything IPC
+	added optional icon cache size
+	added database compression
+	added page up / page down from edit will now change focus to the list control
+	changed configuration file to Everything.ini
+	improved status of servers under the tool menu
+	improved about dialog
+	improved support for Windows 95/98
+	improved support for corrupt NTFS volumes
+	improved support for removable NTFS volumes
+	improved file info cache
+	improved icon cache
+	improved database loading speed
+	removed uxtheme dependency
+	removed annoying popups
+	removed all technical messages and moved them into ErrorLog.txt
+	fixed a bug that prevented hotkeys from being unregistered
+	fixed a bug that prevented the listview being drawn for the first time
+	fixed an issue when loading icon and file information cache of visible items when multiple windows were open
+	fixed an issue with loading visible icon and file information cache
+	fixed a problem where the listview was not getting drawn when shown
+	fixed USN Journal deletion
+	fixed a focus issue when opening Everything from a folder context menu
+	fixed a crash when opening a context menu on a compressed or encrypted file
+	fixed a bug with reading version.c
+	fixed a crash when rebuilding the database that had a query with a selection
+	fixed a handle leak when watching drives for changes
+	fixed a memory leak when refreshing icons and file information
+	fixed a memory leak when closing a context menu
+	
+Wednesday, 20 February 2008: Version 1.0.0.0
+	first official release
+	new home at http://www.voidtools.com
+	added mouse wheel support
+	added classes
+	added drag drop support
+	added about dialog
+	added ETP server
+	added HTTP server
+	added more options pages
+	added edit menu and keyboard shortcuts
+	added filters
+	added run in background option
+	added right click menus
+	added alternate row color
+	added jump to support
+	added rename support
+	added support for multiple instances
+	added file information columns
+	added keep selection after sort option
+	improved range selection
+	improved window positioning
+	improved initial search while database was loading
+	improved threading
+	improved event handling
+	improved rendering performance
+	improved database creation performance
+	improved sorting performance
+	fixed an issue with saving filters
+	fixed an issue when creating the database
+	fixed a non-blocking issue when executing a result
+	fixed a thread issue 
+	fixed an issue when monitoring changes after loading the database
+	fixed an issue that would show no results when the database was loading
+	fixed a dead lock when unloading the database
+	fixed a dead lock when updating the database
+	fixed an issue with processing updates after a database was rebuilt
+	fixed an issue with launching folders
+	fixed an issue where folders are seen as files
+	fixed a scroll bug
+	fixed a show window issue
+	fixed an issue with empty database not being saved
+	fixed a search issue
+	
+Wednesday, 7 March 2005: Version 0.102
+	First public release
+	added UI
+	added match case
+	added match whole word
+	added match path
+	improved database
+	
+Wednesday, 22 December 2004: Version 0.1
+	First build
+		

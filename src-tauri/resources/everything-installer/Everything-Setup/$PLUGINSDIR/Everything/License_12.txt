@@ -1,0 +1,23 @@
+﻿Everything
+
+Avtorske pravice (c) 2025 voidtools
+
+Dovoljenje se brezplačno podeli kateri koli osebi, ki pridobi kopijo tega programa in povezanih datotek dokumentacije ("Programa"), da brez omejitev obravnava program, vključno s pravicami do uporabe, kopiranja, spreminjanja, združevanja, objavljanja, distribuiranja, podlicenciranja in/ali prodaje kopije programa in dovoli osebam, ki jim je program dostavljen, da to storijo pod naslednjimi pogoji:
+
+Zgornje obvestilo o avtorskih pravicah in to obvestilo o dovoljenju bosta vključena v vse kopije ali bistvene dele programa.
+
+PROGRAM JE ZAGOTOVLJEN "KAKRŠEN JE", BREZ KAKRŠNEGA KOLI JAMSTVA, IZRECNEGA ALI NAKAZANEGA, VKLJUČNO, A NI OMEJENO NA JAMSTVO ZA PRODAJNOST, PRIMERNOST ZA DOLOČEN NAMEN IN NE NI NAMENJENA. ODGOVOREN ZA KAKRŠNO KOLI TERJATKO, ŠKODO ALI DRUGO ODGOVORNOST, BODI V POGODBENIH, ODŠKODNIH ALI DRUGIH, KI IZHAJAJO IZ, IZ ALI V POVEZAVI S PROGRAMOM ALI UPORABO ALI DRUGIM POSLOVANJEM V PROGRAMU.
+
+Perl-združljivi regularni izrazi
+
+Avtorske pravice (c) 1997-2012 Univerza v Cambridgeu
+
+Ponovna distribucija in uporaba v izvornih in dvojiških oblikah, s spremembami ali brez njih, sta dovoljeni pod pogojem, da so izpolnjeni naslednji pogoji:
+
+* Ponovne distribucije izvorne kode morajo ohraniti zgornje obvestilo o avtorskih pravicah, ta seznam pogojev in naslednjo izjavo o zavrnitvi odgovornosti.
+
+* Ponovne distribucije v dvojiški obliki morajo reproducirati zgornje obvestilo o avtorskih pravicah, ta seznam pogojev in naslednjo zavrnitev odgovornosti v dokumentaciji in/ali drugem gradivu, priloženem distribuciji.
+
+* Niti ime Univerze v Cambridgeu niti imena njenih sodelavcev se ne smejo uporabljati za potrditev ali promocijo izdelkov, ki izhajajo iz tega programa, brez posebnega predhodnega pisnega dovoljenja.
+
+TA PROGRAM ZAGOTAVLJAJO IMETNIKI AVTORSKIH PRAV IN SODELEVCI "KAKRŠEN JE" TER BREZ KAKRŠNEGA KOLI IZRECNEGA ALI NAKAZANEGA JAMSTVA, VKLJUČNO, A NI OMEJENO NA, IMPLICIRANA JAMSTVA O NESPOSOBNOSTI ZA TRGOVANJE,PRIMERNOST ZA DOLOČEN NAMEN, SO ZAVRNJENE. LASTNIK AVTORSKIH PRAVIC ALI SODELAVCI NISO ODGOVORNI ZA KAKRŠNE KOLI NEPOSREDNE, POSREDNE, NAKLJUČNE, POSEBNE, ZGLEDNE ALI POSLEDIČNE ŠKODE (VKLJUČNO, A NE OMEJENO NA), NABAVO NADOMESTNEGA BLAGA ALI STORITEV; IZGUBA ZARADI UPORABE, PODATKOV ALI DOBIČKA POVZROČENA NA KAKRŠNI KOLI TEORIJI ODGOVORNOSTI, ALI BO V POGODBI, STROGA ODGOVORNOST ALI ODŠKODNINA VKLJUČNO Z MALOMARNOSTJO ALI DRUGIM), KI NA KAKRŠEN KOLI NAČIN NASTANE Z UPORABO TEGA PROGRAMA, TUDI ČE JE SVETOVALA MOŽNOST TAKŠNE ŠKODE.

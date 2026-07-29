@@ -1,0 +1,21 @@
+﻿Everything
+
+Copyright (c) 2025 voidtools
+
+Lupa myönnetään täten maksutta kaikille henkilöille, jotka saavat kopion tästä ohjelmistosta ja siihen liittyvistä tiedostoista (
+Yllä oleva tekijänoikeusilmoitus ja tämä lupailmoitus on sisällytettävä ohjelmiston kaikkiin kopioihin tai olennaisiin osiin.
+
+OHJELMISTO TOIMITETAAN  
+Perl-yhteensopivat säännölliset lausekkeet
+
+Copyright (c) 1997-2012 University of Cambridge
+
+Uudelleenjako ja käyttö lähde- ja binäärimuodoissa sallitaan muutosten kanssa tai ilman, edellyttäen että seuraavat ehdot täyttyvät:
+
+* Lähdekoodin uudelleen jakamisen on säilytettävä yllä oleva tekijänoikeusilmoitus, tämä ehtojen luettelo ja seuraava vastuuvapauslauseke.
+
+* Binaarimuodossa olevien jakelujen on toistettava yllä oleva tekijänoikeusilmoitus, tämä ehtojen luettelo ja seuraava vastuuvapauslauseke asiakirjoissa ja/tai muissa jakelun mukana toimitettavissa materiaaleissa..
+
+* Cambridgen yliopiston nimeä tai sen tekijöiden nimiä ei saa käyttää tukemaan tai edistämään tästä ohjelmistosta johdettuja tuotteita ilman erityistä kirjallista ennakkolupaa.
+
+TÄMÄN OHJELMISTON TARJOAA TEKIJÄN OIKEUKSIEN HALTIJAT JA AVUSTAJAT  

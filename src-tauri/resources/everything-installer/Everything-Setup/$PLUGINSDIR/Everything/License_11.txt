@@ -1,0 +1,23 @@
+﻿Everything
+
+Copyright (C) 2025 voidtools
+
+A permissão é concedida, de forma gratuita, para qualquer pessoa que obtenha uma cópia deste software e arquivos de documentação associados (o "Software"), para lidar com o Software sem restrição, incluindo, sem limitação, os direitos de usar, copiar, modificar, mesclar, publicar, distribuir, sublicenciar e/ou vender cópias do Software, e permitir que as pessoas a quem o Software é fornecido a fazê-lo , observadas as seguintes condições:
+
+O aviso de copyright acima e este aviso de permissão devem ser incluídos em todas as cópias ou partes substanciais do Software.
+
+O SOFTWARE É FORNECIDO "TAL COMO ESTÁ" SEM GARANTIA DE QUALQUER TIPO, EXPRESSA OU IMPLÍCITA, INCLUINDO, SEM LIMITAÇÃO, AS GARANTIAS DE COMERCIALIZAÇÃO, ADEQUAÇÃO A UM DETERMINADO PROPÓSITO E NÃO VIOLAÇÃO. EM NENHUM CASO OS AUTORES OU DETENTORES SÃO RESPONSÁVEIS POR QUALQUER RECLAMAÇÃO, DANOS OU OUTRAS RESPONSABILIDADES, SEJA EM UMA AÇÃO DE CUMPRIMENTO DE CONTRATO OU DE OUTRA FORMA, DECORRENTES DE, OU EM CONEXÃO COM O SOFTWARE OU O USO OU OUTRA APLICAÇÃO DO SOFTWARE.
+
+Expressões Regulares Compatíveis com Perl
+
+Copyright (c) 1997-2012 Universidade de Cambridge
+
+A redistribuição e uso na forma de fonte binária, com ou sem modificação, é permitida desde que sejam cumpridas as seguintes condições:
+
+* Redistribuições do código fonte devem manter o aviso de direitos autorais acima, esta lista de condições e a seguinte isenção de responsabilidade.
+
+* Redistribuições na forma binária devem reproduzir o aviso de direitos autorais acima, esta lista de condições e a isenção de responsabilidade na documentação e/ou outros materiais  fornecidos com a distribuição.
+
+* Nem o nome da Universidade de Cambridge nem os nomes dos seus colaboradores podem ser usados para endossar ou promover produtos derivados deste software sem autorização prévia específica por escrito.
+
+O SOFTWARE É FORNECIDO PELOS TITULARES DO DIREITO AUTORAL E COLABORADORES "TAL COMO ESTÁ" E QUAISQUER GARANTIAS EXPRESSAS OU IMPLÍCITAS, INCLUINDO, MAS NÃO LIMITADO A, AS GARANTIAS IMPLÍCITAS DE COMERCIALIZAÇÃO E ADEQUAÇÃO A UM PROPÓSITO ESPECÍFICO SÃO REJEITADAS. EM NENHUMA CIRCUNSTÂNCIA O TÍTULAR DO DIREITO AUTORAL OU COLABORADORES SERÃO RESPONSÁVEIS POR QUAISQUER DANOS DIRETOS, INDIRETOS, INCIDENTAIS, ESPECIAIS, EXEMPLARES OU CONSEQÜENCIAIS (INCLUINDO, MAS NÃO SE LIMITANDO A, AQUISIÇÃO DE BENS OU SERVIÇOS SUBSTITUTOS; PERDA DE USO, DADOS OU LUCROS; OU INTERRUPÇÃO DE NEGÓCIOS) POR QUALQUER CAUSA E EM QUALQUER TEORIA DE RESPONSABILIDADE, SEJA POR CONTRATO, RESPONSABILIDADE ESTRITA OU DANO (INCLUINDO NEGLIGÊNCIA OU OUTROS) DECORRENTES DE QUALQUER FORMA DO USO DESTE SOFTWARE, MESMO QUE TENHAM SIDO ADVERTIDOS DA POSSIBILIDADE DE TAIS DANOS.

@@ -1,0 +1,23 @@
+﻿Everything
+
+Prawa autorskie (c) 2025 voidtools
+
+Zezwala się bezpłatnie, każdej osobie uzyskanie kopii tego oprogramowania i plików powiązanych dokumentacji (na "Oprogramowanie"), do obsługi Oprogramowania bez ograniczeń, w tym bez ograniczeń, prawa do używania, kopiowania, modyfikowania, scalania, publikowania, rozpowszechniania, sublicencjonowania i/lub sprzedaży kopii Oprogramowania oraz do umożliwienia osobom, do których oprogramowanie jest udostępnione , Z zastrzeżeniem następujących warunków:
+
+Powyższe powiadomienie o prawach autorskich oraz niniejsze powiadomienie o pozwoleniu zostaną uwzględnione we wszystkich kopiach lub znaczących częściach Oprogramowania.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Perl-Compatible Regular Expressions
+
+Prawa autorskie (c) 1997-2012 Uniwersytet Cambridge
+
+Redystrybucja i wykorzystanie w formie źródłowej i binarnej, z modyfikacją lub bez, są dozwolone, pod warunkiem spełnienia następujących warunków::
+
+* Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+* Redystrybucje w formie binarnej muszą odtworzyć powyższe informacje o prawach autorskich, niniejszą listę warunków i poniższe zastrzeżenie w dokumentacji i/lub innych materiałach dostarczonych z dystrybucją.
+
+* Ani nazwa Uniwersytetu w Cambridge, ani nazwy jego współpracowników nie mogą być wykorzystane do popierania lub promowania produktów pochodzących z tego oprogramowania bez uprzedniej pisemnej zgody.
+
+TE OPROGRAMOWANIE DOSTARCZANE JEST PRZEZ POSIADACZY PRAW AUTORSKICH ORAZ WSPÓŁAUTORÓW"JAKIE JEST" [Bing Translator > English to Polish]

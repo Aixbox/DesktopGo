@@ -1,0 +1,22 @@
+﻿Everything
+
+Copyright (c) 2025 voidtools
+
+Tilladelse gives hermed gratis til enhver person, der får en kopi af denne software og tilhørende dokumentationsfiler (
+Ovenstående copyright-meddelelse og denne tilladelsesmeddelelse skal være inkluderet i alle kopier eller væsentlige dele af softwaren.
+
+SOFTWAREN LEVERES "SOM DEN ER", UDEN GARANTI AF NOGEN ART, UDTRYKKELIG ELLER UNDERFORSTÅET, HERUNDER, MEN IKKE BEGRÆNSET TIL GARANTIERNE FOR SALGBARHED, EGNETHED TIL ET BESTEMT FORMÅL OG IKKE INGEN OVERTRÆDELSE. ANSVARLIG FOR EVENTUELLE KRAV, SKADER ELLER ANDEN ANSVAR, UANSETT I EN KONTRAKTHANDLING, TORT ELLER ANDEN MÅDE, OPSTÅENDE AF, UD AF ELLER I FORBINDELSE MED SOFTWAREN ELLER BRUG ELLER ANDRE HANDLINGER I SOFTWAREN.
+
+Perl-kompatible regulære udtryk
+
+Copyright (c) 1997-2012 University of Cambridge
+
+Omfordeling og brug i kilde- og binære former, med eller uden ændringer, er tilladt, forudsat at følgende betingelser er opfyldt:
+
+* Videredistribution af kildekode skal bevare ovenstående copyright-meddelelse, denne liste over betingelser og følgende ansvarsfraskrivelse.
+
+* Omdistributioner i binær form skal gengive ovenstående copyright-meddelelse, denne liste over betingelser og følgende ansvarsfraskrivelse i dokumentationen og/eller andet materiale, der følger med distributionen.
+
+* Hverken navnet på University of Cambridge eller navnene på dets bidragydere må bruges til at støtte eller promovere produkter afledt af denne software uden specifik forudgående skriftlig tilladelse.
+
+Denne software leveres af copyright-indehavere og bidragydere " SOM DEN ER  

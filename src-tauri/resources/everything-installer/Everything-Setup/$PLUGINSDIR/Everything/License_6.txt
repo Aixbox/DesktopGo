@@ -1,0 +1,23 @@
+﻿Everything
+
+Autorska prava (c) 2025 voidtools
+
+Ovime se daje dopuštenje, besplatno, svakoj osobi koja dobije kopiju ovog softvera i pridružene dokumentacijske datoteke ("Softver"), da raspolaže Softverom bez ograničenja, uključujući, bez ograničenja, prava korištenja, kopiranja, izmjene, spajanja, objavljivanja, distribucije, podlicenciranja i/ili prodaje kopija Softvera, te da se dopusti osobama kojima je Softver isporučen da to čine, pod sljedećim uvjetima:
+
+Gornja obavijest o autorskim pravima i ova obavijest o dopuštenju moraju biti uključene u sve kopije ili značajne dijelove Softvera.
+
+SOFTVER SE DAJE "KAKAV JEST", BEZ JAMSTVA BILO KOJE VRSTE, IZRIČITOG ILI IMPLICITNOG, UKLJUČUJUĆI, ALI NE OGRANIČAVAJUĆI SE NA JAMSTVA PRODAJNOSTI, PRIKLADNOSTI ZA ODREĐENU NAMJENU I NEPOVREDE PRAVA. NI U KOJEM SLUČAJU AUTORI ILI NOSITELJI AUTORSKIH PRAVA NEĆE BITI ODGOVORNI ZA BILO KAKAV ZAHTJEV, ŠTETU ILI DRUGU ODGOVORNOST, BILO U SKLADU S UGOVOROM, DELIKTOM ILI NA DRUGI NAČIN, KOJA PROIZLAZI IZ, ILI U VEZI SA SOFTVEROM ILI UPORABOM ILI DRUGIM POSLOVANJEM U SOFTVERU.
+
+Perl-kompatibilni regularni izrazi
+
+Autorska prava (c) 1997.-2012. Sveučilište u Cambridgeu
+
+Redistribucija i korištenje u izvornom i binarnom obliku, sa ili bez modifikacija, dopušteni su ako su ispunjeni sljedeći uvjeti:
+
+* Redistribucija izvornog koda mora zadržati gore navedenu obavijest o autorskim pravima, ovaj popis uvjeta i sljedeću izjavu o odricanju odgovornosti.
+
+* Redistribucija u binarnom obliku mora reproducirati gore navedenu obavijest o autorskim pravima, ovaj popis uvjeta i sljedeću izjavu o odricanju odgovornosti u dokumentaciji i/ili drugim materijalima koji se isporučuju s distribucijom.
+
+* Ni naziv Sveučilišta u Cambridgeu ni imena njegovih suradnika ne smiju se koristiti za promociju ili odobravanje proizvoda izvedenih iz ovog softvera bez prethodnog pismenog dopuštenja.
+
+OVAJ SOFTVER DAJU VLASNICI AUTORSKIH PRAVA I SURADNICI "KAKAV JEST" I ODRIČU SE SVA IZRIČITA ILI IMPLICITNA JAMSTVA, UKLJUČUJUĆI, ALI NE OGRANIČAVAJUĆI SE NA, IMPLICITNA JAMSTVA PRODAJNOSTI I PRIKLADNOSTI ZA ODREĐENU NAMJENU. NI U KOJEM SLUČAJU VLASNIK AUTORSKIH PRAVA ILI SURADNICI NEĆE BITI ODGOVORNI ZA BILO KAKVU IZRAVNU, NEIZRAVNU, SLUČAJNU, POSEBNU, PRIMJERANU ILI POSLJEDIČNU ŠTETU (UKLJUČUJUĆI, ALI NE OGRANIČAVAJUĆI SE NA, NABAVU ZAMJENSKE ROBE ILI USLUGA; GUBITAK MOGUĆNOSTI KORIŠTENJA, PODATAKA ILI DOBITI; ILI PREKID POSLOVANJA) BEZ OBZIRA NA UZROK I U BILO KOJOJ TEORIJI ODGOVORNOSTI, BILO DA SE RADI O UGOVORU, STROGOJ ODGOVORNOSTI ILI DELIKTU (UKLJUČUJUĆI NEMAR ILI DRUGO) KOJA NA BILO KOJI NAČIN PROIZLAZI IZ KORIŠTENJA OVOG SOFTVERA, ČAK I AKO JE OBAVIJEŠTEN O MOGUĆNOSTI TAKVE ŠTETE.

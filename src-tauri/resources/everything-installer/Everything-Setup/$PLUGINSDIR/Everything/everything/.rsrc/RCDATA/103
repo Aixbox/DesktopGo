@@ -1,0 +1,118 @@
+* {
+	padding: 0px;
+	margin: 0px;
+}
+
+body {
+	padding: 4px;
+}
+
+body, td, div {
+	font-family: Arial, sans-serif;
+	font-size: 12px;
+}
+
+td, tr, img {
+	border-width: 0px;
+	vertical-align:middle;
+}
+
+a {
+	text-decoration: none;
+}
+
+.indexof {
+	text-align: left;
+	font-weight: bold;
+	font-size: 125%;
+	margin-top: 32px;
+}
+
+.numresults {
+	text-align: left;
+	font-weight: bold;
+	font-size: 125%;
+	margin-top: 32px;
+}
+
+.updir {
+	text-align: left;
+	padding-top: 4px;
+}
+
+.nameheader, .folder, .file {
+	text-align: left;
+	padding: 2px 15px 2px 2px;
+	width: 100%;
+}
+
+.pathheader, .pathdata {
+	text-align: left;
+	padding: 2px 15px 2px 2px;
+	width: 0px;
+}
+
+.sizeheader, .sizedata {
+	padding: 2px 15px 2px 2px;
+	text-align: right;
+	width: 0px;
+}
+
+.modifiedheader, .modifieddata {
+	text-align: left;
+	padding: 2px;
+	width: 0px;
+}
+
+.sizeheader, .modifiedheader, .nameheader, .pathheader {
+	font-weight: bold;
+	padding-top: 32px;
+	padding-bottom: 2px;
+}
+
+.sizeheader a, .modifiedheader a, .nameheader a , .pathheader a {
+	color:#000;
+}
+
+tr.trdata1:hover, tr.trdata2:hover {
+	background-color: #eee;
+}
+
+.icon {
+	vertical-align:middle;
+	margin-right: 4px;
+}
+
+.updown {
+	margin-left: 4px;
+	vertical-align: middle;
+}
+
+.lineshadow {
+	background-color: #ccc;
+}
+
+.logo {
+	color:#666;
+	font-size:64px;
+}
+
+.searchbox {
+	font-size: 150%;
+	padding:2px;
+}
+
+.nobr {
+	white-space: nowrap;
+}
+
+.nav {
+	padding-left: 4px;
+	padding-right: 4px;
+}
+
+.prevnext {
+	font-weight: bold;
+	padding-left: 8px;
+	padding-right: 8px;
+}
