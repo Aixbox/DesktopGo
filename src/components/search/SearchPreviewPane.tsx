@@ -1,5 +1,6 @@
 import type { SearchHit, SearchPreview } from '@/lib/search/types'
 import { getIntlLocale, translate, useI18n } from '@/lib/i18n'
+import { OverlayScrollArea } from '@/components/ui/overlay-scroll-area'
 
 interface SearchPreviewPaneProps {
   item: SearchHit | null
@@ -54,7 +55,7 @@ export function SearchPreviewPane({
 
   const shellClassName = stacked
     ? 'flex h-[18rem] flex-col overflow-hidden border-t border-border/60 bg-background/40 dark:bg-background/12'
-    : 'flex h-full flex-col overflow-hidden border-l border-border/60 bg-background/40 dark:bg-background/12'
+    : 'flex h-full flex-col overflow-hidden bg-background/40 dark:bg-background/12'
 
   if (!item) {
     return (
@@ -73,7 +74,7 @@ export function SearchPreviewPane({
         <div className="mt-1 truncate text-xs text-muted-foreground">{item.path}</div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <OverlayScrollArea className="min-h-0 flex-1" viewportClassName="px-4 py-4">
         {loading ? (
           <div className="text-sm text-muted-foreground">{translate('正在加载预览...')}</div>
         ) : error ? (
@@ -162,7 +163,7 @@ export function SearchPreviewPane({
             </div>
           </div>
         )}
-      </div>
+      </OverlayScrollArea>
     </div>
   )
 }

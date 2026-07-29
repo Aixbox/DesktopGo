@@ -13,16 +13,18 @@ import { parseEverythingHighlightedText } from '@/lib/search/highlight'
 import type { SearchSource } from '@/lib/search/scope'
 import type { SearchHit, SearchPreview, SearchRuntimeState, SearchSort } from '@/lib/search/types'
 import type { DesktopIcon } from '@/types'
-import { File, Folder, RefreshCw } from 'lucide-react'
+import { File, Folder, GripVertical, RefreshCw } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
 import { SearchHistoryPanel } from './SearchHistoryPanel'
 import { SearchPreviewPane } from './SearchPreviewPane'
 import { SearchSourceTabs } from './SearchSourceTabs'
 import { SearchToolbar } from './SearchToolbar'
 import { ShortcutSearchResults } from './ShortcutSearchResults'
+import { SearchResultSectionHeader } from './SearchResultSectionHeader'
 import { Button } from '@/components/ui/button'
+import { OverlayScrollArea } from '@/components/ui/overlay-scroll-area'
 
-const ROW_HEIGHT = 68
+const ROW_HEIGHT = 60
 const OVERSCAN_ROWS = 6
 const MIN_LOAD_AHEAD_ROWS = 24
 const SCROLL_RANGE_DEBOUNCE_MS = 80
@@ -30,7 +32,7 @@ const EVERYTHING_BODY_HEIGHT = '56vh'
 const EVERYTHING_LIST_PANE_MIN_WIDTH = 220
 const EVERYTHING_LIST_CONTENT_MIN_WIDTH = 420
 const EVERYTHING_PREVIEW_MIN_WIDTH = 0
-const SPLIT_DIVIDER_WIDTH = 10
+const SPLIT_DIVIDER_WIDTH = 16
 const DEFAULT_LIST_PANE_RATIO = 0.58
 const PANEL_TRANSITION = {
   duration: 0.18,
@@ -545,14 +547,15 @@ export function SearchPanel({
       style={{ height: EVERYTHING_BODY_HEIGHT }}
     >
       <div
-        className="relative min-w-0"
+        className="relative h-full min-w-0"
         style={
           previewVisible && listPaneWidth !== null ? { width: listPaneWidth } : { width: '100%' }
         }
       >
-        <div
+        <OverlayScrollArea
           ref={viewportRef}
-          className="h-full overflow-auto"
+          scrollbars="both"
+          className="h-full"
           onScroll={e => {
             const nextScrollTop = e.currentTarget.scrollTop
             const nextViewportHeight = e.currentTarget.clientHeight
@@ -574,10 +577,10 @@ export function SearchPanel({
                 return (
                   <div
                     key={`placeholder-${index}`}
-                    className="absolute left-0 right-0 px-4 py-2"
+                    className="absolute left-0 right-0 py-1 pl-2"
                     style={{ top, height: ROW_HEIGHT }}
                   >
-                    <div className="flex h-full animate-pulse items-center gap-3 rounded-xl border border-border/50 bg-background/58 px-4 backdrop-blur-sm dark:bg-background/45">
+                    <div className="flex h-full animate-pulse items-center gap-3 rounded-md border border-border/50 bg-background/58 pl-2 pr-5 backdrop-blur-sm dark:bg-background/45">
                       <span className="h-8 w-8 rounded-md bg-foreground/10" />
                       <span className="min-w-0 flex-1">
                         <span className="mb-2 block h-3 w-1/3 rounded bg-foreground/10" />
@@ -591,12 +594,13 @@ export function SearchPanel({
               return (
                 <div
                   key={`${item.path}-${index}`}
-                  className="absolute left-0 right-0 px-0"
+                  className="absolute left-0 right-0 py-1 pl-2"
                   style={{ top, height: ROW_HEIGHT }}
                 >
                   <button
                     type="button"
-                    className={`flex h-full w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
+                    aria-current={selectedIndex === index ? 'true' : undefined}
+                    className={`flex h-full w-full items-center gap-3 rounded-md py-2 pl-2 pr-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 ${
                       selectedIndex === index
                         ? 'bg-primary/18 ring-1 ring-inset ring-primary/55 dark:bg-primary/24 dark:ring-primary/65'
                         : 'hover:bg-accent/55'
@@ -643,7 +647,7 @@ export function SearchPanel({
               )
             })}
           </div>
-        </div>
+        </OverlayScrollArea>
 
         {loadingMore ? (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-border/70 bg-background/78 px-4 py-2 text-xs text-muted-foreground backdrop-blur-md dark:bg-background/82">
@@ -663,8 +667,8 @@ export function SearchPanel({
             aria-valuemax={splitAriaMax}
             aria-valuenow={splitAriaNow}
             aria-keyshortcuts="ArrowLeft ArrowRight Home End"
-            className={`relative z-10 shrink-0 border-l border-r border-border/70 bg-background/30 transition hover:bg-accent/52 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 dark:bg-background/12 dark:hover:bg-accent/45 ${
-              isResizingSplit ? 'bg-accent/70' : ''
+            className={`group relative z-10 shrink-0 bg-transparent transition-colors hover:bg-foreground/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 ${
+              isResizingSplit ? 'bg-primary/8' : ''
             }`}
             style={{ width: SPLIT_DIVIDER_WIDTH, cursor: 'col-resize' }}
             onPointerDown={event => {
@@ -673,7 +677,8 @@ export function SearchPanel({
             }}
             onKeyDown={handleSplitKeyDown}
           >
-            <span className="absolute left-1/2 top-1/2 h-14 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground/20" />
+            <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/70" />
+            <GripVertical className="pointer-events-none absolute left-1/2 top-1/2 h-5 w-3 -translate-x-1/2 -translate-y-1/2 bg-background/80 text-muted-foreground/60 transition-colors group-hover:text-foreground/70 group-focus-visible:text-foreground/70" />
           </button>
 
           <div
@@ -761,10 +766,10 @@ export function SearchPanel({
       {includesEverything && !error && virtualCount > 0 ? (
         <>
           {isUnified ? (
-            <div className="flex items-center justify-between border-b border-border/70 px-4 py-2 text-xs text-muted-foreground">
-              <span className="font-medium">{translate('文件与文件夹')}</span>
-              <span>{totalResults > 0 ? totalResults : loadedCount}</span>
-            </div>
+            <SearchResultSectionHeader
+              title={translate('文件与文件夹')}
+              count={totalResults > 0 ? totalResults : loadedCount}
+            />
           ) : null}
           {isEverythingInitializing ? (
             <div className="border-b border-amber-500/20 bg-amber-500/8 px-4 py-2 text-sm text-amber-700 dark:text-amber-300">

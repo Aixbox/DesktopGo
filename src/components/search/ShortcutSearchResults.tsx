@@ -3,6 +3,7 @@ import { translate } from '@/lib/i18n'
 import { IconContextMenu } from '@/components/icons/IconContextMenu'
 import { useIconStore } from '@/stores/iconStore'
 import { ICON_SIZE_CONFIG, type DesktopIcon } from '@/types'
+import { SearchResultSectionHeader } from './SearchResultSectionHeader'
 
 interface ShortcutSearchResultsProps {
   icons: DesktopIcon[]
@@ -51,19 +52,15 @@ export function ShortcutSearchResults({
 
   if (mode === 'compact') {
     return (
-      <section className="shrink-0 border-b border-border/70 px-3 pb-3 pt-2">
-        <div className="mb-1.5 flex items-center justify-between px-1">
-          <h3 className="text-xs font-medium text-muted-foreground">
-            {translate(heading ?? '快捷入口')}
-          </h3>
-          <span className="text-[11px] text-muted-foreground/75">{icons.length}</span>
-        </div>
-        <div className="grid grid-cols-2 gap-1">
+      <section className="shrink-0 border-b border-border/70 pb-2">
+        <SearchResultSectionHeader title={translate(heading ?? '快捷入口')} count={icons.length} />
+        <div className="grid grid-cols-2 gap-1 px-2">
           {icons.map((icon, index) => (
             <IconContextMenu key={icon.id} icon={icon} onOpen={() => onActivate(icon)}>
               <button
                 type="button"
-                className={`flex h-12 min-w-0 items-center gap-2.5 rounded-md px-2.5 text-left transition-colors ${
+                aria-current={selectedIndex === index ? 'true' : undefined}
+                className={`flex h-12 min-w-0 items-center gap-2.5 rounded-md px-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 ${
                   selectedIndex === index
                     ? 'bg-primary/18 ring-1 ring-inset ring-primary/55 dark:bg-primary/24 dark:ring-primary/65'
                     : 'hover:bg-accent/55'
@@ -76,7 +73,7 @@ export function ShortcutSearchResults({
                 <ShortcutIcon icon={icon} size={30} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm text-foreground">{icon.name}</span>
-                  <span className="block truncate text-[11px] text-muted-foreground">
+                  <span className="block truncate text-xs text-muted-foreground">
                     {icon.target_path || icon.path}
                   </span>
                 </span>
@@ -100,7 +97,8 @@ export function ShortcutSearchResults({
           <IconContextMenu key={icon.id} icon={icon} onOpen={() => onActivate(icon)}>
             <button
               type="button"
-              className={`group relative flex cursor-pointer flex-col items-center gap-2 rounded-md border-none p-3 shadow-none transition-colors duration-150 ${
+              aria-current={selectedIndex === index ? 'true' : undefined}
+              className={`group relative flex cursor-pointer flex-col items-center gap-2 rounded-md border-none p-3 shadow-none ${
                 selectedIndex === index
                   ? 'bg-primary/12 ring-1 ring-primary/40 dark:bg-primary/18 dark:ring-primary/45'
                   : 'bg-transparent hover:bg-accent/60 active:bg-accent'
