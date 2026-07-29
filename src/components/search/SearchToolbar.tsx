@@ -134,7 +134,7 @@ export function SearchToolbar({
   }, [matcherMenuOpen, sortMenuOpen])
 
   return (
-    <div className="search-control-group inline-flex h-8 items-center gap-0.5 rounded-lg p-1">
+    <div className="search-control-group inline-flex h-10 items-center gap-0.5 rounded-lg p-1">
       {/* 1. 排序下拉按钮 */}
       <div className="relative h-full">
         <button

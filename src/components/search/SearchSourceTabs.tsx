@@ -18,7 +18,7 @@ export function SearchSourceTabs({ source, onChange }: SearchSourceTabsProps) {
   useI18n()
 
   return (
-    <div className="search-control-group inline-flex h-8 items-center gap-1 rounded-lg p-1">
+    <div className="search-control-group inline-flex h-10 items-center gap-1 rounded-lg p-1">
       {TABS.map(tab => {
         const isActive = source === tab.id
         const Icon = tab.icon
@@ -27,6 +27,7 @@ export function SearchSourceTabs({ source, onChange }: SearchSourceTabsProps) {
           <button
             key={tab.id}
             type="button"
+            aria-pressed={isActive}
             className={`relative inline-flex h-full items-center justify-center rounded-md px-3 text-xs font-medium transition-colors duration-200 ${
               isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             }`}
