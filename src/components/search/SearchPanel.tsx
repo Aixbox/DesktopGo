@@ -3,7 +3,6 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -465,18 +464,15 @@ export function SearchPanel({
     }
   }, [clearPendingRangeNotify])
 
-  const virtualRows = useMemo(() => {
-    if (!isEverything || endIndex < startIndex) return []
-
-    const rows: Array<{ index: number; item: SearchHit | null }> = []
+  const virtualRows: Array<{ index: number; item: SearchHit | null }> = []
+  if (isEverything && endIndex >= startIndex) {
     for (let index = startIndex; index <= endIndex; index += 1) {
-      rows.push({
+      virtualRows.push({
         index,
         item: getItemAt(index),
       })
     }
-    return rows
-  }, [endIndex, getItemAt, isEverything, startIndex])
+  }
 
   const showHistoryState = includesEverything && !hasCommittedQuery && !error && virtualCount === 0
   const panelTransition = prefersReducedMotion ? { duration: 0 } : PANEL_TRANSITION
