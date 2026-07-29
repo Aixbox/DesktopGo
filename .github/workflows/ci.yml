@@ -43,7 +43,7 @@ jobs:
         env:
           RUST_QUALITY_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          $arguments = @()
+          $qualityParameters = @{}
           $baseRef = $env:RUST_QUALITY_BASE_REF
           if ($baseRef -and $baseRef -notmatch '^0+$') {
             git rev-parse --verify --quiet "$baseRef^{commit}" | Out-Null
@@ -60,6 +60,6 @@ jobs:
               throw "Rust quality base commit $baseRef is unavailable after fetch."
             }
 
-            $arguments += @('-BaseRef', $baseRef)
+            $qualityParameters.BaseRef = $baseRef
           }
-          & .\scripts\check-rust.ps1 @arguments
+          & .\scripts\check-rust.ps1 @qualityParameters
