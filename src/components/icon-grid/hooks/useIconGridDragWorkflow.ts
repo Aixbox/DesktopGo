@@ -793,6 +793,10 @@ export function useIconGridDragWorkflow({
   }
 
   useEffect(() => {
+    armPointerControllerSession()
+  })
+
+  useEffect(() => {
     const cancelActiveInteractions = () => {
       const activeDrag = dragRef.current
       if (activeDrag) {

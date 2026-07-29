@@ -704,6 +704,10 @@ export function useScrollableIconGridDragWorkflow({
   }
 
   useEffect(() => {
+    armPointerControllerSession()
+  })
+
+  useEffect(() => {
     const cancelActiveInteractions = () => {
       const activeDrag = dragRef.current
       if (activeDrag) {
