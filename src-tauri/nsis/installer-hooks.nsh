@@ -2,12 +2,39 @@ Var EverythingDetected
 Var EverythingInstallerPath
 Var InstallEverythingCheckbox
 Var InstallEverythingCheckboxState
+Var PassiveInstallLanguage
+Var UnattendedArg
 
 !define MUI_UNICON "${__FILEDIR__}\..\icons\icon.ico"
 
+; 语言选择对话框由 tauri.conf.json 的 displayLanguageSelector 在 .onInit 中最先弹出。
+; 使用 LangString 让提示文案跟随系统语言，并强制列出安装包内置的全部语言，
+; 避免系统缺少某个 ANSI 代码页时隐藏对应选项（安装器本身是 Unicode 程序）。
+; ALWAYSSHOW 让每次交互运行安装包都重新选择语言，而不是复用注册表里的选择；
+; 自定义模板通过 NSIS_HOOK_SELECT_INSTALLER_LANGUAGE 区分被动更新，复用上次的
+; 安装语言但不显示对话框。静默安装由 MUI 自身跳过对话框；卸载器也直接读注册表。
+!define MUI_LANGDLL_ALWAYSSHOW
+!define MUI_LANGDLL_ALLLANGUAGES
+!define MUI_LANGDLL_WINDOWTITLE "$(languageSelectorTitle)"
+!define MUI_LANGDLL_INFO "$(languageSelectorText)"
+
 ; Override the default NSIS welcome copy so it doesn't tell users to close all apps.
 !define MUI_WELCOMEPAGE_TEXT "$(muiWelcomePageText)"
-Page custom PageEverythingInstall PageLeaveEverythingInstall
+
+!macro NSIS_HOOK_SELECT_INSTALLER_LANGUAGE
+  ${If} $PassiveMode = 1
+    ReadRegStr $PassiveInstallLanguage "${MUI_LANGDLL_REGISTRY_ROOT}" "${MUI_LANGDLL_REGISTRY_KEY}" "${MUI_LANGDLL_REGISTRY_VALUENAME}"
+    ${If} $PassiveInstallLanguage != ""
+      StrCpy $LANGUAGE $PassiveInstallLanguage
+    ${EndIf}
+  ${Else}
+    !insertmacro MUI_LANGDLL_DISPLAY
+  ${EndIf}
+!macroend
+
+!macro NSIS_HOOK_INSTALLER_PAGES
+  Page custom PageEverythingInstall PageLeaveEverythingInstall
+!macroend
 
 Function DetectEverythingInstalled
   StrCpy $EverythingDetected "0"
@@ -62,6 +89,16 @@ done:
 FunctionEnd
 
 Function PageEverythingInstall
+  ; 无人值守安装不显示该页面：静默模式（/S）本身不渲染任何页面，
+  ; 被动模式（/P）必须在这里显式跳过，否则安装会停在这一页等待用户点击。
+  ${If} ${Silent}
+    Abort
+  ${EndIf}
+  ${GetOptions} $CMDLINE "/P" $UnattendedArg
+  ${IfNot} ${Errors}
+    Abort
+  ${EndIf}
+
   Call DetectEverythingInstalled
 
   !insertmacro MUI_HEADER_TEXT "$(everythingPageTitle)" "$(everythingPageSubtitle)"

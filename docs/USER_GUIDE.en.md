@@ -15,13 +15,14 @@ Download links:
 
 Install steps:
 
-1. Download and run the latest installer.
-2. If Everything is not installed on your machine yet, keep the "Install Everything" option enabled.
-3. After installation, press `Ctrl+Space` to open DesktopGo.
+1. Download and run the latest installer. A single installer ships both Simplified Chinese and English resources.
+2. Every run of the installer starts with a language dialog. Pick "中文(简体)" or "English" and the rest of the wizard uses that language; cancelling the dialog exits without writing any files.
+3. If Everything is not installed on your machine yet, keep the "Install Everything" option enabled.
+4. After installation, press `Ctrl+Space` to open DesktopGo.
 
 Default values on first launch:
 
-- 🌐 Language: Simplified Chinese
+- 🌐 Language: Follows the language picked in the installer
 - 🎨 Theme mode: Follow system
 - 🧱 Icon size: Medium
 - 🪟 Window mode: Medium window

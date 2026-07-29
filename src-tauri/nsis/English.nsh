@@ -25,6 +25,8 @@ LangString webview2Downloading ${LANG_ENGLISH} "Downloading the WebView2 bootstr
 LangString webview2InstallError ${LANG_ENGLISH} "Error: WebView2 installation failed with exit code $1"
 LangString webview2InstallSuccess ${LANG_ENGLISH} "WebView2 installed successfully"
 LangString deleteAppData ${LANG_ENGLISH} "Delete app data"
+LangString languageSelectorTitle ${LANG_ENGLISH} "DesktopGo Installer Language"
+LangString languageSelectorText ${LANG_ENGLISH} "Select the language for the installation wizard."
 LangString muiWelcomePageText ${LANG_ENGLISH} "This wizard will guide you through the installation of $(^NameDA).$\r$\n$\r$\nBefore installing, we recommend closing related applications to avoid file conflicts and reduce the chance that a restart will be required after installation.$\r$\n$\r$\n$_CLICK"
 LangString everythingInstallerMissing ${LANG_ENGLISH} "The bundled Everything installer could not be found.$\r$\nSearch will remain unavailable until Everything is installed."
 LangString everythingPageTitle ${LANG_ENGLISH} "Search component"

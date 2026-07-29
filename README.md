@@ -46,9 +46,10 @@ DesktopGo 是一个使用 Tauri 2 + React 19 + Rust 构建的 Windows 桌面启�
 
 安装说明：
 
-1. 下载最新安装包并执行安装。
-2. 如果系统中还没有 Everything，保持安装器里的“安装 Everything”选项勾选。
-3. 安装完成后，使用默认快捷键 `Ctrl+Space` 呼出启动台。
+1. 下载最新安装包并执行安装，同一个安装包内已包含简体中文和英文安装资源。
+2. 每次运行安装包都会先弹出语言选择对话框，选择“中文(简体)”或“English”后，后续安装步骤、提示和首次启动的界面语言都会跟随该选择。
+3. 如果系统中还没有 Everything，保持安装器里的“安装 Everything”选项勾选。
+4. 安装完成后，使用默认快捷键 `Ctrl+Space` 呼出启动台。
 
 ## 🖼 截图预览
 
@@ -156,6 +157,7 @@ pnpm tauri dev
 - `pnpm tauri dev`：启动桌面开发环境
 - `pnpm build`：构建前端产物到 `dist/`
 - `pnpm tauri build`：构建桌面安装包
+- `pnpm build:installer`：只构建 NSIS 安装包（含简体中文与英文资源），本地构建不产出更新签名产物，因此不需要 `TAURI_SIGNING_PRIVATE_KEY`
 - `pnpm test`：运行当前仓库里的前端脚本测试
 - `pnpm lint`：执行 ESLint
 - `pnpm lint:fix`：自动修复可处理的 ESLint 问题

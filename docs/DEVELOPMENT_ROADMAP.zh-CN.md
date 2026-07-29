@@ -13,7 +13,7 @@
 
 | 编号  | 优先级 | 状态   | 事项                            | 目标                                                                                       |
 | ----- | ------ | ------ | ------------------------------- | ------------------------------------------------------------------------------------------ |
-| D-001 | P0     | 待开发 | 安装包启动时先选择语言          | 使用一个安装包承载简体中文和英文；启动安装包后首先选择语言，再进入对应语言的完整安装流程。 |
+| D-001 | P0     | 进行中 | 安装包启动时先选择语言          | 使用一个安装包承载简体中文和英文；启动安装包后首先选择语言，再进入对应语言的完整安装流程。 |
 | D-002 | P0     | 已完成 | ESLint 告警清零与超大文件模块化 | 普通与严格 ESLint 均恢复零告警；所有手写 TypeScript 模块已进入统一的 1000 行预算。         |
 | D-003 | P1     | 已完成 | Rust 静态检查与超大模块治理     | 建立 rustfmt、Clippy、check、test 门禁，并将 9 个超预算 Rust 模块分批拆回 500 行预算。     |
 
@@ -21,9 +21,14 @@
 
 ### 当前基线
 
-- 当前通过 `src-tauri/tauri.nsis.zh.conf.json` 和 `src-tauri/tauri.nsis.en.conf.json` 分别构建简体中文、英文安装包。
-- `scripts/build-installers.ps1` 会生成带 `zh-CN` 和 `en-US` 后缀的两个发布产物。
-- GitHub Actions 发布流程会分别上传这两个本地化安装包。
+截至 2026-07-29，单安装包语言选择的实现和静态验证已经完成，仅剩 Windows 真实运行回归待确认：
+
+- `src-tauri/tauri.conf.json` 的 NSIS 配置同时载入 `SimpChinese` 与 `English` 语言资源，并开启 `displayLanguageSelector`。
+- 语言选择对话框由 NSIS 模板在 `.onInit` 中弹出，位于欢迎页面和 Everything 自定义页面之前，且每次运行安装包都会重新询问。
+- 应用内更新保持 `installMode: "passive"`，保留 NSIS 原生安装进度窗口；语言对话框和 Everything 页面在无人值守场景不出现。
+- 已删除 `src-tauri/tauri.nsis.zh.conf.json`、`src-tauri/tauri.nsis.en.conf.json` 和 `scripts/build-installers.ps1`，不再生成带 `zh-CN`、`en-US` 后缀的双产物。
+- `pnpm build:installer` 只构建一个 NSIS 安装包；GitHub Actions 直接发布 `tauri-action` 生成的统一安装包和更新产物。
+- 本地安装包构建通过 `src-tauri/tauri.nsis.local.conf.json` 关闭 `createUpdaterArtifacts`，不需要配置签名私钥。
 
 ### 目标流程
 
@@ -43,29 +48,71 @@
 - 两种语言下均可正常完成安装、取消安装和卸载。
 - 安装包签名、应用内更新产物和 GitHub Releases 发布流程保持可用。
 
-### 预计影响范围
+### 实际影响范围
 
 - `src-tauri/tauri.conf.json`
-- `src-tauri/tauri.nsis.zh.conf.json`
-- `src-tauri/tauri.nsis.en.conf.json`
 - `src-tauri/nsis/installer-hooks.nsh`
 - `src-tauri/nsis/SimpChinese.nsh`
 - `src-tauri/nsis/English.nsh`
-- `scripts/build-installers.ps1`
+- `src-tauri/nsis/installer.nsi`
+- `src-tauri/nsis/installer.nsi.upstream`
+- `src-tauri/nsis/installer-template-source.json`
+- `src-tauri/nsis/README.md`
+- `scripts/sync-nsis-template.mjs`
+- `package.json`
 - `.github/workflows/release.yml`
+- 新增：`src-tauri/tauri.nsis.local.conf.json`（本地构建关闭更新签名产物）
+- 已删除：`src-tauri/tauri.nsis.zh.conf.json`、`src-tauri/tauri.nsis.en.conf.json`、`scripts/build-installers.ps1`
+- 文档：`README.md`、`docs/USER_GUIDE.zh-CN.md`、`docs/USER_GUIDE.en.md`
 
 ### 边界说明
 
-- 安装器语言与 DesktopGo 应用内界面语言暂时独立；除非后续另行设计，不因安装器语言自动修改应用语言设置。
+- 安装器语言只决定安装流程文案和首次启动的默认界面语言；应用内语言设置一旦保存就不再被安装器覆盖，覆盖安装和更新都不会改写用户已选语言。
 - 本事项只覆盖 Windows NSIS 安装包，不扩展到其他操作系统或安装格式。
+- 语言选择结果写入 `HKCU\Software\Aixbox\DesktopGo` 的 `Installer Language`。交互安装启用 `MUI_LANGDLL_ALWAYSSHOW`，每次重新询问；被动更新和卸载器直接复用该值，不弹窗。
+- 应用内更新使用 `installMode: "passive"`（`/P /R`）。自定义模板在 `.onInit` 已解析 `$PassiveMode` 后调用语言 hook，因此可以跳过对话框，同时保留 NSIS 原生进度窗口。
+- `installer.nsi.upstream` 是与 `@tauri-apps/cli` 2.10.0 对应的原始模板；`installer.nsi` 只能由 `scripts/sync-nsis-template.mjs` 生成。来源版本、URL 和 SHA-256 由 `installer-template-source.json` 固定，模板偏移会让构建立即失败。
+- Tauri 版本相关内容只存在于两份模板；DesktopGo 的语言策略和 Everything 页面实现仍在 `installer-hooks.nsh`。模板仅新增两个受脚本约束的 hook 调用点。
+- Everything 自定义页通过模板的页面 hook 声明在安装目录页之后，并继续在 `/P` 和 `/S` 下跳过。
+
+### D-001 实施结果
+
+- `src-tauri/tauri.conf.json` 的 `nsis.languages` 扩展为 `["SimpChinese", "English"]`，`customLanguageFiles` 同时指向两个自定义语言文件，并新增 `displayLanguageSelector: true`；`SimpChinese` 保持首位，作为系统语言不匹配时的回退语言。
+- `installer-hooks.nsh` 新增 `MUI_LANGDLL_ALWAYSSHOW`，让每次交互式运行安装包都重新选择语言；`MUI_UNGETLANGUAGE` 仍优先读取注册表，卸载器不会因此弹窗。
+- `installer-hooks.nsh` 新增 `MUI_LANGDLL_ALLLANGUAGES`，保证两个语言项在任何系统 ANSI 代码页下都会列出（安装器本身是 Unicode 程序，显示不受代码页限制）。
+- `installer-hooks.nsh` 通过 `MUI_LANGDLL_WINDOWTITLE` 与 `MUI_LANGDLL_INFO` 引用新的 `$(languageSelectorTitle)`、`$(languageSelectorText)`，对话框提示先按系统语言显示；语言列表使用 NSIS 内置的“中文(简体)”和“English”原生名称。
+- 自定义模板的 `NSIS_HOOK_SELECT_INSTALLER_LANGUAGE` 扩展点让交互安装调用 `MUI_LANGDLL_DISPLAY`，被动更新则读取注册表中的上次安装语言；首次手动以 `/P` 安装且没有历史值时使用系统默认语言。
+- 自定义模板的 `NSIS_HOOK_INSTALLER_PAGES` 扩展点将 Everything 页面放在安装目录页之后，项目页面声明不再因为 hook 文件的顶部 include 位置而提前到欢迎页之前。
+- `SimpChinese.nsh` 与 `English.nsh` 各新增 2 条语言选择对话框文案，安装器全部可见文案仍然只来自这两个语言文件。
+- 既有 `installLanguageCode` 语言字符串保持不变，`NSIS_HOOK_POSTINSTALL` 写入的 `.install_language` 标记会自动跟随用户选择，首次启动语言由 `src-tauri/src/tray.rs` 的既有逻辑消费。
+- 取消语言对话框时 MUI 在 `.onInit` 内 `Abort`，安装器直接退出，不写入文件、注册表和标记文件。
+- 双语言安装包不再需要按语言分别构建：`package.json` 的 `build:installer:zh`、`build:installer:en`、`build:installers` 合并为单个 `build:installer`，`release.yml` 移除本地化安装包的构建与上传步骤，改为直接使用 `tauri-action` 产出的统一安装包。
+- 原先的语言变体配置各自设置了 `createUpdaterArtifacts: false`，本地构建因此不需要签名私钥。合并后改由 `src-tauri/tauri.nsis.local.conf.json` 承担同一职责，避免 `pnpm build:installer` 在本地因缺少 `TAURI_SIGNING_PRIVATE_KEY` 而在打包成功后报错退出；发布流程仍使用主配置生成带签名的更新产物。
+- 安装包版本信息仍使用 `tauri.conf.json` 中的中文 `shortDescription`/`longDescription`；这是 EXE 文件属性，不属于安装流程可见文案。
+- `plugins.updater.windows.installMode` 保持 `passive`，应用内更新以 `/P /R` 安装：仅显示原生进度窗口，不显示语言和 Everything 页面，安装完成后自动重启应用。
+- `PageEverythingInstall` 增加无人值守跳过分支：静默模式直接返回，被动模式（`/P`）通过 `${GetOptions} $CMDLINE "/P"` 显式 `Abort`。此前该自定义页面没有被动模式守卫，`installMode: passive` 的更新会停在 Everything 页面等待用户点击。
+- `@tauri-apps/cli` 精确锁定为 `2.10.0`；`pnpm nsis:template:check` 校验 CLI 配置版本、上游模板哈希、允许的补丁锚点和生成结果，且由 `beforeBuildCommand` 覆盖本地构建与发布工作流。
 
 ## D-001 完成检查
 
-1. 更新事项状态和实际实现说明。
-2. 分别在简体中文和英文 Windows 环境验证安装流程。
-3. 检查安装、取消、覆盖安装、卸载和 Everything 可选安装流程。
-4. 验证本地构建脚本与 GitHub Actions 发布流程。
-5. 更新 README、用户指南和对应版本发布说明。
+1. 已完成：更新事项状态、实际实现说明和影响范围。
+2. 已完成：`pnpm build:installer`（release 配置）与 `pnpm tauri build --debug --bundles nsis --ci` 均以退出码 0 通过，makensis 编译双语言脚本并生成单个安装包；生成脚本已确认按 `SimpChinese`、`English` 顺序载入两套语言资源与两个自定义语言文件，`DISPLAYLANGUAGESELECTOR` 为 `true`，两条语言选择文案已合并进目标语言文件。
+3. 已完成：更新 `README.md`、`docs/USER_GUIDE.zh-CN.md` 和 `docs/USER_GUIDE.en.md` 的安装说明与首次启动语言描述。
+4. 待用户确认：在简体中文和英文 Windows 环境分别执行完整安装流程。
+5. 待用户确认：检查取消语言选择、取消安装、覆盖安装、卸载和 Everything 可选安装流程。
+6. 待用户确认：GitHub Actions 发布流程产出单个安装包、`.sig` 与 `latest.json`，并验证应用内更新只显示进度窗口、不弹出语言对话框和 Everything 页面、更新后自动重启。
+7. 待处理：在下一个版本的发布说明中记录安装包合并与语言选择变更。
+
+### D-001 手工回归范围
+
+- 在简体中文 Windows 上启动安装包，确认语言对话框是第一个界面，选择“中文(简体)”后欢迎页、许可协议、安装目录、Everything 页面、进度页、完成页和错误提示全部为中文。
+- 在英文 Windows 上重复上述流程并选择“English”，确认没有残留中文安装器文案。
+- 在语言对话框点击取消，确认安装器直接退出，未创建安装目录、注册表项、`.install_language` 和 `.show_on_launch` 标记。
+- 覆盖安装同版本与升级安装，确认语言对话框每次都会重新弹出，切换语言后维护页面、目录页面和完成页面的文案随之切换。
+- 分别在两种语言下完成卸载（含删除应用数据选项），确认卸载器直接使用上次安装语言、不弹出语言对话框。
+- 手动以 `/P` 运行安装包，确认只显示安装进度窗口，且语言对话框和 Everything 页面都不出现；以 `/S` 运行确认整个流程无界面且安装成功。
+- 未安装 Everything 时保持勾选并完成安装，确认 Everything 安装器被调用；取消勾选时确认提示文案语言正确。
+- 首次启动确认界面语言与安装语言一致；在应用内切换语言后重新执行覆盖安装，确认应用语言不被安装器改写。
 
 ## D-002：ESLint 告警清零与超大文件模块化
 

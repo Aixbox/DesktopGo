@@ -104,28 +104,3 @@ jobs:
           includeUpdaterJson: true
           assetNamePattern: "[name]_[version]_[arch][setup][ext]"
           retryAttempts: 3
-
-      - name: build localized installers
-        shell: pwsh
-        run: pnpm run build:installers
-
-      - name: upload localized installers
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          $version = "${{ steps.release_meta.outputs.version }}"
-          $files = @(
-            "src-tauri/target/release/bundle/nsis/DesktopGo_${version}_x64-setup-zh-CN.exe",
-            "src-tauri/target/release/bundle/nsis/DesktopGo_${version}_x64-setup-en-US.exe"
-          )
-
-          foreach ($file in $files) {
-            if (-not (Test-Path -LiteralPath $file)) {
-              throw "Release asset not found: $file"
-            }
-          }
-
-          $arguments = @('release', 'upload', "v$version") + $files + @('--clobber')
-          & gh @arguments

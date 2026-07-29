@@ -25,6 +25,8 @@ LangString webview2Downloading ${LANG_SIMPCHINESE} "正在下载 WebView2 引导
 LangString webview2InstallError ${LANG_SIMPCHINESE} "错误：安装 WebView2 失败，退出代码为 $1"
 LangString webview2InstallSuccess ${LANG_SIMPCHINESE} "WebView2 安装成功"
 LangString deleteAppData ${LANG_SIMPCHINESE} "删除应用数据"
+LangString languageSelectorTitle ${LANG_SIMPCHINESE} "DesktopGo 安装语言"
+LangString languageSelectorText ${LANG_SIMPCHINESE} "请选择安装向导使用的语言。"
 LangString muiWelcomePageText ${LANG_SIMPCHINESE} "此程序将引导你完成 $(^NameDA) 的安装。$\r$\n$\r$\n安装前，建议先关闭正在运行的相关程序，以避免文件被占用，并减少安装后需要重新启动计算机的可能性。$\r$\n$\r$\n$_CLICK"
 LangString everythingInstallerMissing ${LANG_SIMPCHINESE} "未找到随 DesktopGo 打包的 Everything 安装程序。$\r$\n搜索功能在安装 Everything 前不可用。"
 LangString everythingPageTitle ${LANG_SIMPCHINESE} "搜索组件"

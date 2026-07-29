@@ -79,7 +79,7 @@ importers:
         specifier: ^4.1.18
         version: 4.1.18
       '@tauri-apps/cli':
-        specifier: ^2
+        specifier: 2.10.0
         version: 2.10.0
       '@types/react':
         specifier: ^19.1.8

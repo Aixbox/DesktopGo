@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:installer:zh": "pnpm tauri build --bundles nsis --ci --config src-tauri/tauri.nsis.zh.conf.json",
-    "build:installer:en": "pnpm tauri build --bundles nsis --ci --config src-tauri/tauri.nsis.en.conf.json",
-    "build:installers": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-installers.ps1",
+    "build:installer": "pnpm tauri build --bundles nsis --ci --config src-tauri/tauri.nsis.local.conf.json",
+    "nsis:template:check": "node scripts/sync-nsis-template.mjs --check",
+    "nsis:template:sync": "node scripts/sync-nsis-template.mjs --write",
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "node --experimental-strip-types --import ./scripts/register-ts-test-loader.mjs --test",
@@ -51,7 +51,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@tailwindcss/postcss": "^4.1.18",
-    "@tauri-apps/cli": "^2",
+    "@tauri-apps/cli": "2.10.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@typescript-eslint/eslint-plugin": "^8.54.0",
