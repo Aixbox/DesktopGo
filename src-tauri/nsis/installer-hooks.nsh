@@ -18,6 +18,12 @@ Var UnattendedArg
 !define MUI_LANGDLL_WINDOWTITLE "$(languageSelectorTitle)"
 !define MUI_LANGDLL_INFO "$(languageSelectorText)"
 
+; MUI2 defaults to FitControl, which can stretch branding bitmaps independently on each axis.
+; Preserve the source aspect ratio at every Windows DPI setting instead.
+!define MUI_HEADERIMAGE_BITMAP_STRETCH AspectFitHeight
+!define MUI_HEADERIMAGE_UNBITMAP_STRETCH AspectFitHeight
+!define MUI_WELCOMEFINISHPAGE_BITMAP_STRETCH AspectFitHeight
+
 ; Override the default NSIS welcome copy so it doesn't tell users to close all apps.
 !define MUI_WELCOMEPAGE_TEXT "$(muiWelcomePageText)"
 

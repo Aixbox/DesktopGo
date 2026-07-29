@@ -27,3 +27,18 @@ generated output. Every Tauri build runs this check through `beforeBuildCommand`
    ordering before updating the patch definitions.
 5. Review the generated template diff, then run `pnpm nsis:template:check` and
    `pnpm build:installer`.
+
+## Branding bitmaps
+
+The header and welcome/finish sidebar use 3x-density BMP files so MUI2 can scale from a sharp
+source at common Windows DPI settings. Regenerate both assets from `icon-512.png` with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-nsis-branding.ps1
+```
+
+The script preserves the logical MUI2 aspect ratios (`150x57` and `164x314`); the committed
+bitmaps are `450x171` and `492x942`. `installer-hooks.nsh` selects `AspectFitHeight` instead of
+MUI2's default `FitControl`, preventing independent horizontal and vertical stretching. Keep
+these bitmaps free of text: NSIS scales the complete raster image, while native installer labels
+remain sharp and DPI-aware.
