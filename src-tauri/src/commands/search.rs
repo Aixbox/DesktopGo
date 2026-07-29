@@ -1,5 +1,8 @@
 use crate::everything::{self, SearchPage, SearchQuery, SearchRuntimeStatus};
 use crate::icons;
+use crate::native_search_list::{
+    self, NativeSearchBounds, NativeSearchListState, NativeSearchPalette,
+};
 use crate::search_preview::{self, SearchPreview};
 use serde::Serialize;
 
@@ -47,6 +50,54 @@ pub async fn get_search_result_icons(
     })
     .await
     .map_err(|error| format!("Failed to join search icon task: {error}"))
+}
+
+#[tauri::command]
+pub async fn prepare_native_search_list(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, NativeSearchListState>,
+    generation: u64,
+    query: SearchQuery,
+) -> Result<u32, String> {
+    state.begin_generation(generation)?;
+    let items = tauri::async_runtime::spawn_blocking(move || {
+        everything::get_complete_search_snapshot(&app_handle, query)
+    })
+    .await
+    .map_err(|error| format!("Failed to join native search snapshot task: {error}"))??;
+    let count = items.len().min(u32::MAX as usize) as u32;
+    if !state.commit_results(generation, items)? {
+        return Err("Native search snapshot was superseded".to_string());
+    }
+    Ok(count)
+}
+
+#[tauri::command]
+pub async fn show_native_search_list(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, NativeSearchListState>,
+    generation: u64,
+    bounds: NativeSearchBounds,
+    palette: NativeSearchPalette,
+) -> Result<(), String> {
+    native_search_list::show(window, state, generation, bounds, palette).await
+}
+
+#[tauri::command]
+pub async fn hide_native_search_list(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, NativeSearchListState>,
+) -> Result<(), String> {
+    native_search_list::hide(window, state).await
+}
+
+#[tauri::command]
+pub async fn select_native_search_list_item(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, NativeSearchListState>,
+    index: i32,
+) -> Result<(), String> {
+    native_search_list::select(window, state, index).await
 }
 
 #[tauri::command]

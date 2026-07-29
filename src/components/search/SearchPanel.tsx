@@ -10,7 +10,13 @@ import {
 import type { SearchHistoryEntry } from '@/lib/search/history'
 import { parseEverythingHighlightedText } from '@/lib/search/highlight'
 import type { SearchSource } from '@/lib/search/scope'
-import type { SearchHit, SearchPreview, SearchRuntimeState, SearchSort } from '@/lib/search/types'
+import type {
+  SearchHit,
+  SearchPreview,
+  SearchQuery,
+  SearchRuntimeState,
+  SearchSort,
+} from '@/lib/search/types'
 import type { DesktopIcon } from '@/types'
 import { File, Folder, GripVertical, RefreshCw } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
@@ -20,6 +26,7 @@ import { SearchSourceTabs } from './SearchSourceTabs'
 import { SearchToolbar } from './SearchToolbar'
 import { ShortcutSearchResults } from './ShortcutSearchResults'
 import { SearchResultSectionHeader } from './SearchResultSectionHeader'
+import { NativeSearchResults } from './NativeSearchResults'
 import { useSearchSeekRows } from './useSearchSeekRows'
 import { useVisibleSearchIcons } from './useVisibleSearchIcons'
 import { Button } from '@/components/ui/button'
@@ -55,6 +62,7 @@ interface SearchPanelProps {
   pageSize: number
   hasCommittedQuery: boolean
   getItemAt: (index: number) => SearchHit | null
+  activeQuery: SearchQuery | null
   selectedItem: SearchHit | null
   selectedIndex: number
   iconResults: DesktopIcon[]
@@ -81,7 +89,7 @@ interface SearchPanelProps {
   previewVisible: boolean
   onPreviewToggle: () => void
   onVisibleRangeChange: (startIndex: number, endIndex: number) => void
-  onSelect: (index: number) => void
+  onSelect: (index: number, item?: SearchHit) => void
   allowDoubleClickOpen: boolean
   onActivate: (item: SearchHit) => void
 }
@@ -129,6 +137,7 @@ export function SearchPanel({
   pageSize,
   hasCommittedQuery,
   getItemAt,
+  activeQuery,
   selectedItem,
   selectedIndex,
   iconResults,
@@ -555,99 +564,109 @@ export function SearchPanel({
           previewVisible && listPaneWidth !== null ? { width: listPaneWidth } : { width: '100%' }
         }
       >
-        <OverlayScrollArea
-          ref={viewportRef}
-          scrollbars="both"
-          className="h-full"
-          onScroll={e => {
-            retainCurrentRows()
-            const nextScrollTop = e.currentTarget.scrollTop
-            const nextViewportHeight = e.currentTarget.clientHeight
-            setScrollTop(nextScrollTop)
-            scheduleVisibleRange(nextScrollTop, nextViewportHeight)
-          }}
+        <NativeSearchResults
+          visible={visible && isEverything}
+          query={activeQuery}
+          totalResults={totalResults}
+          selectedIndex={selectedIndex}
+          allowDoubleClickOpen={allowDoubleClickOpen}
+          onSelect={onSelect}
+          onActivate={onActivate}
         >
-          <div
-            className="relative"
-            style={{
-              height: virtualCount * ROW_HEIGHT,
-              minWidth: EVERYTHING_LIST_CONTENT_MIN_WIDTH,
+          <OverlayScrollArea
+            ref={viewportRef}
+            scrollbars="both"
+            className="h-full"
+            onScroll={e => {
+              retainCurrentRows()
+              const nextScrollTop = e.currentTarget.scrollTop
+              const nextViewportHeight = e.currentTarget.clientHeight
+              setScrollTop(nextScrollTop)
+              scheduleVisibleRange(nextScrollTop, nextViewportHeight)
             }}
           >
-            {seekRows.map(({ index, item, retained }) => {
-              const top = index * ROW_HEIGHT
+            <div
+              className="relative"
+              style={{
+                height: virtualCount * ROW_HEIGHT,
+                minWidth: EVERYTHING_LIST_CONTENT_MIN_WIDTH,
+              }}
+            >
+              {seekRows.map(({ index, item, retained }) => {
+                const top = index * ROW_HEIGHT
 
-              if (!item) {
-                return null
-              }
+                if (!item) {
+                  return null
+                }
 
-              const iconBase64 = item.iconBase64 || visibleSearchIcons.get(item.path) || ''
+                const iconBase64 = item.iconBase64 || visibleSearchIcons.get(item.path) || ''
 
-              return (
-                <div
-                  key={`${retained ? 'retained' : item.path}-${index}`}
-                  className="absolute left-0 right-0 py-1 pl-2"
-                  style={{ top, height: ROW_HEIGHT }}
-                >
-                  <button
-                    type="button"
-                    aria-current={!retained && selectedIndex === index ? 'true' : undefined}
-                    aria-hidden={retained || undefined}
-                    disabled={retained}
-                    className={`flex h-full w-full items-center gap-3 rounded-md py-2 pl-2 pr-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 ${
-                      retained
-                        ? 'pointer-events-none'
-                        : selectedIndex === index
-                          ? 'bg-primary/18 ring-1 ring-inset ring-primary/55 dark:bg-primary/24 dark:ring-primary/65'
-                          : 'hover:bg-accent/55'
-                    }`}
-                    onMouseEnter={retained ? undefined : () => onSelect(index)}
-                    onDoubleClick={
-                      retained
-                        ? undefined
-                        : () => {
-                            if (allowDoubleClickOpen) {
-                              onActivate(item)
-                            }
-                          }
-                    }
-                    onClick={retained ? undefined : () => onSelect(index)}
+                return (
+                  <div
+                    key={`${retained ? 'retained' : item.path}-${index}`}
+                    className="absolute left-0 right-0 py-1 pl-2"
+                    style={{ top, height: ROW_HEIGHT }}
                   >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden">
-                      {iconBase64 ? (
-                        <img
-                          src={iconBase64}
-                          alt={item.name || item.path}
-                          className="h-7 w-7 object-contain"
-                          draggable={false}
-                        />
-                      ) : item.isFolder ? (
-                        <Folder className="h-4 w-4 text-muted-foreground" />
-                      ) : (
-                        <File className="h-4 w-4 text-muted-foreground" />
-                      )}
-                    </span>
+                    <button
+                      type="button"
+                      aria-current={!retained && selectedIndex === index ? 'true' : undefined}
+                      aria-hidden={retained || undefined}
+                      disabled={retained}
+                      className={`flex h-full w-full items-center gap-3 rounded-md py-2 pl-2 pr-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 ${
+                        retained
+                          ? 'pointer-events-none'
+                          : selectedIndex === index
+                            ? 'bg-primary/18 ring-1 ring-inset ring-primary/55 dark:bg-primary/24 dark:ring-primary/65'
+                            : 'hover:bg-accent/55'
+                      }`}
+                      onMouseEnter={retained ? undefined : () => onSelect(index, item)}
+                      onDoubleClick={
+                        retained
+                          ? undefined
+                          : () => {
+                              if (allowDoubleClickOpen) {
+                                onActivate(item)
+                              }
+                            }
+                      }
+                      onClick={retained ? undefined : () => onSelect(index, item)}
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden">
+                        {iconBase64 ? (
+                          <img
+                            src={iconBase64}
+                            alt={item.name || item.path}
+                            className="h-7 w-7 object-contain"
+                            draggable={false}
+                          />
+                        ) : item.isFolder ? (
+                          <Folder className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <File className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </span>
 
-                    <span className="min-w-0 flex-1">
-                      <HighlightedText
-                        highlightedText={item.highlightedName}
-                        fallbackText={item.name || item.path}
-                        className="block truncate text-sm text-foreground"
-                        highlightClassName="accent-foreground font-medium"
-                      />
-                      <HighlightedText
-                        highlightedText={item.highlightedPath}
-                        fallbackText={item.parent}
-                        className="block truncate text-xs text-muted-foreground"
-                        highlightClassName="font-medium text-foreground/85"
-                      />
-                    </span>
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        </OverlayScrollArea>
+                      <span className="min-w-0 flex-1">
+                        <HighlightedText
+                          highlightedText={item.highlightedName}
+                          fallbackText={item.name || item.path}
+                          className="block truncate text-sm text-foreground"
+                          highlightClassName="accent-foreground font-medium"
+                        />
+                        <HighlightedText
+                          highlightedText={item.highlightedPath}
+                          fallbackText={item.parent}
+                          className="block truncate text-xs text-muted-foreground"
+                          highlightClassName="font-medium text-foreground/85"
+                        />
+                      </span>
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </OverlayScrollArea>
+        </NativeSearchResults>
 
         {loadingMore ? (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-border/70 bg-background/78 px-4 py-2 text-xs text-muted-foreground backdrop-blur-md dark:bg-background/82">

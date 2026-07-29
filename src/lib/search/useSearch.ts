@@ -100,6 +100,8 @@ interface UseSearchResult {
   hasCommittedQuery: boolean
   loadedCount: number
   getItemAt: (index: number) => SearchHit | null
+  cacheItemAt: (index: number, item: SearchHit) => void
+  activeQuery: SearchQuery | null
   setVisibleRange: (startIndex: number, endIndex: number) => void
   requestRange: (startIndex: number, endIndex: number) => void
   loading: boolean
@@ -161,6 +163,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
   const [tookMs, setTookMs] = useState(0)
   const [totalResults, setTotalResults] = useState(0)
   const [selectedIndex, setSelectedIndex] = useState(-1)
+  const [activeQuery, setActiveQuery] = useState<SearchQuery | null>(null)
 
   const requestSeqRef = useRef(0)
   const rangeRequestTokenRef = useRef(0)
@@ -218,6 +221,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     setTookMs(0)
     setTotalResults(0)
     setSelectedIndex(-1)
+    setActiveQuery(null)
   }, [clearFlushTimer, invalidateRangeRequest, setPagesAndRef])
 
   const prepareSearchRefresh = useCallback(() => {
@@ -230,6 +234,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     setSearchPending(true)
     setError(null)
     setSelectedIndex(-1)
+    setActiveQuery(null)
   }, [clearFlushTimer, invalidateRangeRequest])
 
   const applySearchConfiguration = useCallback(
@@ -300,6 +305,11 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
           setRuntimeState(page.runtimeState)
           setTookMs(page.tookMs)
           setError(null)
+          setActiveQuery({
+            keyword: context.queryKeyword,
+            offset: 0,
+            ...context.queryOptions,
+          })
           setSelectedIndex(page.totalResults === 0 ? -1 : context.autoSelectFirst ? 0 : -1)
         })
         .catch(searchError => {
@@ -310,6 +320,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
           setProvider(null)
           setTookMs(0)
           setTotalResults(0)
+          setActiveQuery(null)
           setSelectedIndex(-1)
           const rawMessage = asErrorMessage(searchError)
           setRuntimeState(getSearchRuntimeStateFromError(rawMessage))
@@ -529,6 +540,9 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     },
     [settings.maxResultsPerPage]
   )
+  const cacheItemAt = useCallback((index: number, item: SearchHit) => {
+    if (index >= 0) displayedItemsRef.current.set(index, item)
+  }, [])
   useEffect(() => {
     void loadSearchSettings()
       .then(async loaded => {
@@ -800,6 +814,8 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
       hasCommittedQuery,
       loadedCount,
       getItemAt,
+      cacheItemAt,
+      activeQuery,
       setVisibleRange,
       requestRange,
       loading,
@@ -835,7 +851,9 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
       reloadSettings,
     }),
     [
+      activeQuery,
       applyHistoryEntry,
+      cacheItemAt,
       clear,
       clearHistory,
       error,
