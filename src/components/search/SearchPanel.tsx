@@ -598,7 +598,7 @@ export function SearchPanel({
                     type="button"
                     className={`flex h-full w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
                       selectedIndex === index
-                        ? 'bg-accent/85 ring-1 ring-border/70'
+                        ? 'bg-primary/18 ring-1 ring-inset ring-primary/55 dark:bg-primary/24 dark:ring-primary/65'
                         : 'hover:bg-accent/55'
                     }`}
                     onMouseEnter={() => onSelect(index)}

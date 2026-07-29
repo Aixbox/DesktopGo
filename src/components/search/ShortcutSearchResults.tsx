@@ -65,7 +65,7 @@ export function ShortcutSearchResults({
                 type="button"
                 className={`flex h-12 min-w-0 items-center gap-2.5 rounded-md px-2.5 text-left transition-colors ${
                   selectedIndex === index
-                    ? 'bg-accent/90 ring-1 ring-border/70'
+                    ? 'bg-primary/18 ring-1 ring-inset ring-primary/55 dark:bg-primary/24 dark:ring-primary/65'
                     : 'hover:bg-accent/55'
                 }`}
                 title={icon.name}

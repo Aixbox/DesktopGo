@@ -19,7 +19,11 @@ import { useSearchPreview } from '@/lib/search/useSearchPreview'
 import { useShortcutSearchResults } from '@/lib/search/useShortcutSearchResults'
 import { useSearchScopeChange } from '@/lib/search/useSearchScopeChange'
 import { SearchFloatingMenu } from '@/components/search/SearchFloatingMenu'
-import { handleSearchNavigation } from '@/components/search/searchNavigation'
+import {
+  getUnifiedSelectedShortcutIndex,
+  handleSearchNavigation,
+  shouldUseShortcutHorizontalNavigation,
+} from '@/components/search/searchNavigation'
 import { LaunchpadContextMenuContent } from '@/components/launchpad/LaunchpadContextMenuContent'
 import { LaunchpadIconImportLayer } from '@/components/launchpad/LaunchpadIconImportLayer'
 import { LaunchpadWindowControls } from '@/components/launchpad/LaunchpadWindowControls'
@@ -281,11 +285,13 @@ export function Launchpad() {
         : selectedIndex >= 0
           ? iconSearchResults.length + selectedIndex
           : -1
+  const unifiedSelectedShortcutIndex = getUnifiedSelectedShortcutIndex(
+    effectiveCombinedSelectedIndex,
+    iconSearchResults.length
+  )
 
   const selectedSearchItem =
-    searchSource === 'all' &&
-    effectiveCombinedSelectedIndex >= 0 &&
-    effectiveCombinedSelectedIndex < iconSearchResults.length
+    searchSource === 'all' && unifiedSelectedShortcutIndex >= 0
       ? null
       : searchSource !== 'icons' && selectedIndex >= 0
         ? getSearchItemAt(selectedIndex)
@@ -377,7 +383,11 @@ export function Launchpad() {
     [clearSearch, recordCurrentSearch, toast]
   )
 
-  const handleSearchNavigationKey = (key: string, preventDefault: () => void) => {
+  const handleSearchNavigationKey = (
+    key: string,
+    preventDefault: () => void,
+    allowHorizontalShortcutNavigation = true
+  ) => {
     handleSearchNavigation({
       key,
       preventDefault,
@@ -395,6 +405,7 @@ export function Launchpad() {
       combinedSelectedIndex: effectiveCombinedSelectedIndex,
       fileCount: searchTotalResults > 0 ? searchTotalResults : searchLoadedCount,
       selectCombinedIndex: selectUnifiedSearchIndex,
+      allowHorizontalShortcutNavigation,
       selectedFileIndex: selectedIndex,
       moveFileSelection: moveSelection,
       getFileAt: getSearchItemAt,
@@ -408,7 +419,15 @@ export function Launchpad() {
   }
 
   const handleSearchInputKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
-    handleSearchNavigationKey(e.key, () => e.preventDefault())
+    const allowHorizontalShortcutNavigation = shouldUseShortcutHorizontalNavigation({
+      key: e.key,
+      selectionStart: e.currentTarget.selectionStart,
+      selectionEnd: e.currentTarget.selectionEnd,
+      inputLength: e.currentTarget.value.length,
+      hasExplicitResultSelection: combinedSelectedIndex >= 0,
+      hasVisibleShortcutSelection: unifiedSelectedShortcutIndex >= 0,
+    })
+    handleSearchNavigationKey(e.key, () => e.preventDefault(), allowHorizontalShortcutNavigation)
   }
   const handleDocumentSearchNavigation = useEffectEvent(handleSearchNavigationKey)
 
@@ -637,16 +656,12 @@ export function Launchpad() {
                 getItemAt={getSearchItemAt}
                 selectedItem={selectedSearchItem}
                 selectedIndex={
-                  searchSource === 'all' &&
-                  effectiveCombinedSelectedIndex < iconSearchResults.length
-                    ? -1
-                    : selectedIndex
+                  searchSource === 'all' && unifiedSelectedShortcutIndex >= 0 ? -1 : selectedIndex
                 }
                 iconResults={iconSearchResults}
                 selectedIconIndex={
-                  searchSource === 'all' &&
-                  effectiveCombinedSelectedIndex < iconSearchResults.length
-                    ? effectiveCombinedSelectedIndex
+                  searchSource === 'all'
+                    ? unifiedSelectedShortcutIndex
                     : effectiveSelectedIconResultIndex
                 }
                 onSelectIcon={index => {
