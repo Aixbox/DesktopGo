@@ -118,6 +118,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '../../ui/context-menu'
+import { Input } from '../../ui/input'
 import type { ScrollGridSection } from './scrollableOuterGridTypes'
 
 const GROUP_ICON_OPTIONS: Array<{
@@ -744,12 +745,12 @@ export function ScrollableGroupNavigation({
                   <span className="mb-2 block text-xs font-medium text-foreground/80">
                     {translate('分组名称')}
                   </span>
-                  <input
+                  <Input
                     autoFocus
                     value={groupName}
                     maxLength={24}
                     placeholder={translate('填写分组名称')}
-                    className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/15"
+                    className="h-10 rounded-lg"
                     onChange={event => setGroupName(event.target.value)}
                   />
                 </label>
