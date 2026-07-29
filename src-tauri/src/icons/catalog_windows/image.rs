@@ -56,6 +56,18 @@ fn image_file_to_data_uri(path: &Path, icon_size: i32) -> Option<String> {
     ))
 }
 
+fn is_supported_image_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|value| value.to_str())
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "ico" | "tif" | "tiff"
+            )
+        })
+        .unwrap_or(false)
+}
+
 pub(in crate::icons) fn get_path_icon_base64_windows(path: &str, icon_size: i32) -> String {
     if is_special_shell_path(path) {
         return extract_special_shell_icon(path, icon_size).unwrap_or_default();
@@ -65,7 +77,7 @@ pub(in crate::icons) fn get_path_icon_base64_windows(path: &str, icon_size: i32)
     if !item_path.exists() {
         return String::new();
     }
-    if item_path.is_file() {
+    if item_path.is_file() && is_supported_image_file(&item_path) {
         if let Some(data_uri) = image_file_to_data_uri(&item_path, icon_size) {
             return data_uri;
         }
@@ -175,4 +187,25 @@ pub(super) fn build_custom_icon_path(
         return Err("Failed to extract an icon from the custom icon file".to_string());
     }
     Ok(icon)
+}
+
+#[cfg(test)]
+mod image_type_tests {
+    use std::path::Path;
+
+    use super::is_supported_image_file;
+
+    #[test]
+    fn recognizes_supported_image_extensions_case_insensitively() {
+        assert!(is_supported_image_file(Path::new("preview.PNG")));
+        assert!(is_supported_image_file(Path::new("preview.jpeg")));
+        assert!(is_supported_image_file(Path::new("preview.TIFF")));
+    }
+
+    #[test]
+    fn rejects_non_image_files_before_reading_them() {
+        assert!(!is_supported_image_file(Path::new("archive.zip")));
+        assert!(!is_supported_image_file(Path::new("program.exe")));
+        assert!(!is_supported_image_file(Path::new("README")));
+    }
 }

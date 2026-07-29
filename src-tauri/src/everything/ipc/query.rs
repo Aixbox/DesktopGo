@@ -6,19 +6,19 @@ use windows::Win32::Foundation::HWND;
 
 use super::api::{sort_to_sdk_value, to_wide_null_terminated, EverythingApi};
 use super::reply_window;
+use super::snapshot::{SearchResultSnapshot, SnapshotRange, SNAPSHOT_RESULT_LIMIT};
 use super::{SearchQuery, SearchResponse};
 use crate::everything::debug_log::append as append_debug_log;
 use crate::everything::models::SearchHit;
-use crate::icons;
 
 const EVERYTHING_REQUEST_FILE_NAME: u32 = 0x0000_0001;
 const EVERYTHING_REQUEST_PATH: u32 = 0x0000_0002;
 const EVERYTHING_REQUEST_HIGHLIGHTED_FILE_NAME: u32 = 0x0000_2000;
 const EVERYTHING_REQUEST_HIGHLIGHTED_PATH: u32 = 0x0000_4000;
-const SEARCH_RESULT_ICON_SIZE: i32 = 32;
 const REPLY_ID_COUNT: u32 = 1;
 const REPLY_ID_RANGE: u32 = 2;
 const REPLY_ID_PROBE: u32 = 3;
+const MAX_FIRST_PAGE_CACHE_ITEMS: usize = 200;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SearchRequestKind {
@@ -46,6 +46,11 @@ impl SearchRequestKind {
 pub(super) struct FirstPageCache {
     pub(super) query: SearchQuery,
     pub(super) response: SearchResponse,
+}
+
+pub(super) struct SearchResultCaches<'a> {
+    pub(super) first_page: &'a mut Option<FirstPageCache>,
+    pub(super) snapshot: &'a mut Option<SearchResultSnapshot>,
 }
 
 pub(super) enum ActiveRequest {
@@ -127,19 +132,25 @@ fn extract_result_text(pointer: *const u16) -> String {
 fn extract_search_results(
     api: &EverythingApi,
     app_handle: &tauri::AppHandle,
+    range: SnapshotRange,
 ) -> Result<SearchResponse, String> {
     let result_count = unsafe { (api.get_num_results)() };
     let total_results = unsafe { (api.get_tot_results)() };
+    let start_index = range.local_offset.min(result_count);
+    let end_index = start_index.saturating_add(range.limit).min(result_count);
     append_debug_log(
         app_handle,
         format!(
-            "ipc search: extracting {} results (total={})",
-            result_count, total_results
+            "ipc search: extracting {} results at local offset {} (snapshot={}, total={})",
+            end_index - start_index,
+            start_index,
+            result_count,
+            total_results
         ),
     );
     let extraction_started_at = Instant::now();
-    let mut items = Vec::with_capacity(result_count as usize);
-    for index in 0..result_count {
+    let mut items = Vec::with_capacity((end_index - start_index) as usize);
+    for index in start_index..end_index {
         let Some(path) = extract_path(api, index) else {
             continue;
         };
@@ -162,7 +173,7 @@ fn extract_search_results(
             .map(|value| value.to_string_lossy().to_string())
             .unwrap_or_default();
         items.push(SearchHit {
-            icon_base64: icons::get_path_icon_base64(&path, SEARCH_RESULT_ICON_SIZE),
+            icon_base64: String::new(),
             highlighted_name: extract_result_text(unsafe {
                 (api.get_result_highlighted_file_name_w)(index)
             }),
@@ -190,11 +201,19 @@ fn extract_search_results(
     })
 }
 
+pub(super) fn extract_snapshot_range(
+    api: &EverythingApi,
+    app_handle: &tauri::AppHandle,
+    range: SnapshotRange,
+) -> Result<SearchResponse, String> {
+    extract_search_results(api, app_handle, range)
+}
+
 pub(super) fn finish_active_request(
     api: &EverythingApi,
     app_handle: &tauri::AppHandle,
     active: &mut Option<ActiveRequest>,
-    first_page_cache: &mut Option<FirstPageCache>,
+    caches: &mut SearchResultCaches<'_>,
     timed_out: bool,
 ) {
     let Some(request) = active.take() else {
@@ -247,10 +266,27 @@ pub(super) fn finish_active_request(
                     app_handle,
                     format!("ipc search: reply received after {}ms", elapsed_ms),
                 );
-                let result = extract_search_results(api, app_handle);
+                let result_count = unsafe { (api.get_num_results)() };
+                let total_results = unsafe { (api.get_tot_results)() };
+                let result = extract_search_results(
+                    api,
+                    app_handle,
+                    SnapshotRange {
+                        local_offset: 0,
+                        limit: query.limit,
+                    },
+                );
                 if let Ok(response_payload) = result.as_ref() {
-                    if request_kind == SearchRequestKind::Count && query.offset == 0 {
-                        *first_page_cache = Some(FirstPageCache {
+                    *caches.snapshot = Some(SearchResultSnapshot::new(
+                        &query,
+                        result_count,
+                        total_results,
+                    ));
+                    if request_kind == SearchRequestKind::Count
+                        && query.offset == 0
+                        && response_payload.items.len() <= MAX_FIRST_PAGE_CACHE_ITEMS
+                    {
+                        *caches.first_page = Some(FirstPageCache {
                             query,
                             response: response_payload.clone(),
                         });
@@ -348,7 +384,7 @@ pub(super) fn start_search(
         );
         (api.set_sort)(sort_to_sdk_value(query.sort));
         (api.set_offset)(query.offset);
-        (api.set_max)(query.limit.max(1));
+        (api.set_max)(query.limit.max(SNAPSHOT_RESULT_LIMIT));
     }
 
     let reply_id = request_kind.reply_id();

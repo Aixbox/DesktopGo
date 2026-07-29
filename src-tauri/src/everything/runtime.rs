@@ -18,7 +18,7 @@ mod startup;
 
 pub use startup::start_search_runtime;
 
-const DEFAULT_SEARCH_LIMIT: u32 = 50;
+const DEFAULT_SEARCH_LIMIT: u32 = 200;
 const MAX_SEARCH_LIMIT: u32 = 200;
 const MAX_KEYWORD_LEN: usize = 256;
 

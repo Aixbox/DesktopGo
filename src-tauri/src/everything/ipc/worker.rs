@@ -11,8 +11,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use super::api::EverythingApi;
-use super::query::{self, ActiveRequest, FirstPageCache};
+use super::query::{self, ActiveRequest, FirstPageCache, SearchResultCaches};
 use super::reply_window;
+use super::snapshot::SearchResultSnapshot;
 use super::{SearchQuery, SearchResponse};
 use crate::everything::debug_log::append as append_debug_log;
 
@@ -39,6 +40,7 @@ struct IpcWorker {
     app_handle: tauri::AppHandle,
     active: Option<ActiveRequest>,
     first_page_cache: Option<FirstPageCache>,
+    result_snapshot: Option<SearchResultSnapshot>,
 }
 
 impl IpcWorker {
@@ -55,6 +57,7 @@ impl IpcWorker {
             app_handle,
             active: None,
             first_page_cache: None,
+            result_snapshot: None,
         }
     }
 
@@ -85,11 +88,24 @@ impl IpcWorker {
 
     fn dispatch_commands(&mut self) -> bool {
         while let Ok(command) = self.command_rx.try_recv() {
-            query::cancel_active_request(&self.app_handle, &mut self.active);
             match command {
-                WorkerCommand::Probe { response } => self.start_probe(response),
-                WorkerCommand::Search { query, response } => self.start_search(query, response),
+                WorkerCommand::Probe { response } => {
+                    query::cancel_active_request(&self.app_handle, &mut self.active);
+                    self.result_snapshot = None;
+                    self.start_probe(response);
+                }
+                WorkerCommand::Search {
+                    query: search_query,
+                    response,
+                } => {
+                    if self.reuse_result_snapshot(&search_query, &response) {
+                        continue;
+                    }
+                    query::cancel_active_request(&self.app_handle, &mut self.active);
+                    self.start_search(search_query, response);
+                }
                 WorkerCommand::Shutdown { response } => {
+                    query::cancel_active_request(&self.app_handle, &mut self.active);
                     append_debug_log(&self.app_handle, "ipc worker shutdown requested");
                     self.teardown();
                     let _ = response.send(());
@@ -127,6 +143,8 @@ impl IpcWorker {
             return;
         }
 
+        self.result_snapshot = None;
+
         match query::start_search(
             &self.api,
             self.reply_hwnd,
@@ -143,6 +161,31 @@ impl IpcWorker {
                 let _ = response.send(Err(error));
             }
         }
+    }
+
+    fn reuse_result_snapshot(
+        &mut self,
+        search_query: &SearchQuery,
+        response: &Sender<Result<SearchResponse, String>>,
+    ) -> bool {
+        let Some(range) = self
+            .result_snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.resolve_range(search_query))
+        else {
+            return false;
+        };
+
+        append_debug_log(
+            &self.app_handle,
+            format!(
+                "ipc search: reused SDK result snapshot offset={} limit={}",
+                search_query.offset, search_query.limit
+            ),
+        );
+        let result = query::extract_snapshot_range(&self.api, &self.app_handle, range);
+        let _ = response.send(result);
+        true
     }
 
     fn reuse_cached_first_page(
@@ -166,11 +209,15 @@ impl IpcWorker {
 
     fn finish_pending_request(&mut self) {
         if reply_window::is_completed() {
+            let mut caches = SearchResultCaches {
+                first_page: &mut self.first_page_cache,
+                snapshot: &mut self.result_snapshot,
+            };
             query::finish_active_request(
                 &self.api,
                 &self.app_handle,
                 &mut self.active,
-                &mut self.first_page_cache,
+                &mut caches,
                 false,
             );
             return;
@@ -180,11 +227,15 @@ impl IpcWorker {
             request.is_probe() && request.started_at().elapsed() >= request.timeout()
         });
         if probe_timed_out {
+            let mut caches = SearchResultCaches {
+                first_page: &mut self.first_page_cache,
+                snapshot: &mut self.result_snapshot,
+            };
             query::finish_active_request(
                 &self.api,
                 &self.app_handle,
                 &mut self.active,
-                &mut self.first_page_cache,
+                &mut caches,
                 probe_timed_out,
             );
         }

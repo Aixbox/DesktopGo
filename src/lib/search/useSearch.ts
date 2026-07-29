@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { searchFiles } from './api'
 import { buildSearchKeyword } from './filters'
 import { rankSearchPageItems } from './relevance'
+import { selectNextSearchOffset } from './rangeScheduling'
 import { clampSearchSelection, resolveCommittedKeyword } from './searchState'
 import {
   addSearchHistoryEntry,
@@ -363,15 +364,11 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
       })
       requestedOffsetsRef.current.clear()
 
-      let nextOffset: number | null = requestedOffsets[0] ?? null
-      if (nextOffset === null && visibleCandidates.length > 0) {
-        visibleCandidates.sort((left, right) => {
-          const leftDistance = Math.abs(left - visibleStartPage)
-          const rightDistance = Math.abs(right - visibleStartPage)
-          return leftDistance === rightDistance ? left - right : leftDistance - rightDistance
-        })
-        nextOffset = visibleCandidates[0]
-      }
+      const nextOffset = selectNextSearchOffset({
+        visibleCandidates,
+        requestedOffsets,
+        visibleStartPage,
+      })
       if (nextOffset === null) return
 
       const nextToken = rangeRequestTokenRef.current + 1

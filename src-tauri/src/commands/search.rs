@@ -1,5 +1,14 @@
 use crate::everything::{self, SearchPage, SearchQuery, SearchRuntimeStatus};
+use crate::icons;
 use crate::search_preview::{self, SearchPreview};
+use serde::Serialize;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResultIcon {
+    path: String,
+    icon_base64: String,
+}
 
 #[tauri::command]
 pub async fn start_search_runtime(
@@ -23,6 +32,21 @@ pub async fn search_files(
     tauri::async_runtime::spawn_blocking(move || everything::search_files(&app_handle, query))
         .await
         .map_err(|error| format!("Failed to join search_files task: {}", error))?
+}
+
+#[tauri::command]
+pub async fn get_search_result_icons(
+    paths: Vec<String>,
+    icon_size: i32,
+) -> Result<Vec<SearchResultIcon>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        icons::get_search_result_icons(&paths, icon_size)
+            .into_iter()
+            .map(|(path, icon_base64)| SearchResultIcon { path, icon_base64 })
+            .collect()
+    })
+    .await
+    .map_err(|error| format!("Failed to join search icon task: {error}"))
 }
 
 #[tauri::command]

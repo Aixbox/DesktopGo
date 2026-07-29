@@ -20,13 +20,14 @@ import { SearchSourceTabs } from './SearchSourceTabs'
 import { SearchToolbar } from './SearchToolbar'
 import { ShortcutSearchResults } from './ShortcutSearchResults'
 import { SearchResultSectionHeader } from './SearchResultSectionHeader'
+import { useSearchSeekRows } from './useSearchSeekRows'
+import { useVisibleSearchIcons } from './useVisibleSearchIcons'
 import { Button } from '@/components/ui/button'
 import { OverlayScrollArea } from '@/components/ui/overlay-scroll-area'
 
 const ROW_HEIGHT = 60
 const OVERSCAN_ROWS = 6
 const MIN_LOAD_AHEAD_ROWS = 24
-const SCROLL_RANGE_DEBOUNCE_MS = 80
 const EVERYTHING_BODY_HEIGHT = '56vh'
 const EVERYTHING_LIST_PANE_MIN_WIDTH = 220
 const EVERYTHING_LIST_CONTENT_MIN_WIDTH = 420
@@ -163,7 +164,7 @@ export function SearchPanel({
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const bodyContentRef = useRef<HTMLDivElement | null>(null)
   const splitContainerRef = useRef<HTMLDivElement | null>(null)
-  const rangeNotifyTimerRef = useRef<number | null>(null)
+  const rangeNotifyFrameRef = useRef<number | null>(null)
   const pendingVisibleRangeRef = useRef<{ scrollTop: number; viewportHeight: number } | null>(null)
   const [viewportHeight, setViewportHeight] = useState(0)
   const [scrollTop, setScrollTop] = useState(0)
@@ -228,9 +229,9 @@ export function SearchPanel({
   )
 
   const clearPendingRangeNotify = useCallback(() => {
-    if (rangeNotifyTimerRef.current !== null) {
-      window.clearTimeout(rangeNotifyTimerRef.current)
-      rangeNotifyTimerRef.current = null
+    if (rangeNotifyFrameRef.current !== null) {
+      window.cancelAnimationFrame(rangeNotifyFrameRef.current)
+      rangeNotifyFrameRef.current = null
     }
   }, [])
 
@@ -256,9 +257,9 @@ export function SearchPanel({
         return
       }
 
-      rangeNotifyTimerRef.current = window.setTimeout(() => {
+      rangeNotifyFrameRef.current = window.requestAnimationFrame(() => {
         flushPendingVisibleRange()
-      }, SCROLL_RANGE_DEBOUNCE_MS)
+      })
     },
     [clearPendingRangeNotify, flushPendingVisibleRange]
   )
@@ -473,6 +474,12 @@ export function SearchPanel({
       })
     }
   }
+  const seekCacheKey = [source, trimmedKeyword, matchPath, matchCase, regex, wholeWord, sort].join(
+    '\u0000'
+  )
+  const { seekRows, retainCurrentRows } = useSearchSeekRows(virtualRows, seekCacheKey)
+  const visibleIconPaths = seekRows.flatMap(({ item }) => (item ? [item.path] : []))
+  const visibleSearchIcons = useVisibleSearchIcons(visibleIconPaths, visible && isEverything)
 
   const showHistoryState = includesEverything && !hasCommittedQuery && !error && virtualCount === 0
   const panelTransition = prefersReducedMotion ? { duration: 0 } : PANEL_TRANSITION
@@ -553,6 +560,7 @@ export function SearchPanel({
           scrollbars="both"
           className="h-full"
           onScroll={e => {
+            retainCurrentRows()
             const nextScrollTop = e.currentTarget.scrollTop
             const nextViewportHeight = e.currentTarget.clientHeight
             setScrollTop(nextScrollTop)
@@ -566,53 +574,49 @@ export function SearchPanel({
               minWidth: EVERYTHING_LIST_CONTENT_MIN_WIDTH,
             }}
           >
-            {virtualRows.map(({ index, item }) => {
+            {seekRows.map(({ index, item, retained }) => {
               const top = index * ROW_HEIGHT
 
               if (!item) {
-                return (
-                  <div
-                    key={`placeholder-${index}`}
-                    className="absolute left-0 right-0 py-1 pl-2"
-                    style={{ top, height: ROW_HEIGHT }}
-                  >
-                    <div className="flex h-full animate-pulse items-center gap-3 rounded-md border border-border/50 bg-background/58 pl-2 pr-5 backdrop-blur-sm dark:bg-background/45">
-                      <span className="h-8 w-8 rounded-md bg-foreground/10" />
-                      <span className="min-w-0 flex-1">
-                        <span className="mb-2 block h-3 w-1/3 rounded bg-foreground/10" />
-                        <span className="block h-2.5 w-2/3 rounded bg-foreground/10" />
-                      </span>
-                    </div>
-                  </div>
-                )
+                return null
               }
+
+              const iconBase64 = item.iconBase64 || visibleSearchIcons.get(item.path) || ''
 
               return (
                 <div
-                  key={`${item.path}-${index}`}
+                  key={`${retained ? 'retained' : item.path}-${index}`}
                   className="absolute left-0 right-0 py-1 pl-2"
                   style={{ top, height: ROW_HEIGHT }}
                 >
                   <button
                     type="button"
-                    aria-current={selectedIndex === index ? 'true' : undefined}
+                    aria-current={!retained && selectedIndex === index ? 'true' : undefined}
+                    aria-hidden={retained || undefined}
+                    disabled={retained}
                     className={`flex h-full w-full items-center gap-3 rounded-md py-2 pl-2 pr-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 ${
-                      selectedIndex === index
-                        ? 'bg-primary/18 ring-1 ring-inset ring-primary/55 dark:bg-primary/24 dark:ring-primary/65'
-                        : 'hover:bg-accent/55'
+                      retained
+                        ? 'pointer-events-none'
+                        : selectedIndex === index
+                          ? 'bg-primary/18 ring-1 ring-inset ring-primary/55 dark:bg-primary/24 dark:ring-primary/65'
+                          : 'hover:bg-accent/55'
                     }`}
-                    onMouseEnter={() => onSelect(index)}
-                    onDoubleClick={() => {
-                      if (allowDoubleClickOpen) {
-                        onActivate(item)
-                      }
-                    }}
-                    onClick={() => onSelect(index)}
+                    onMouseEnter={retained ? undefined : () => onSelect(index)}
+                    onDoubleClick={
+                      retained
+                        ? undefined
+                        : () => {
+                            if (allowDoubleClickOpen) {
+                              onActivate(item)
+                            }
+                          }
+                    }
+                    onClick={retained ? undefined : () => onSelect(index)}
                   >
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden">
-                      {item.iconBase64 ? (
+                      {iconBase64 ? (
                         <img
-                          src={item.iconBase64}
+                          src={iconBase64}
                           alt={item.name || item.path}
                           className="h-7 w-7 object-contain"
                           draggable={false}

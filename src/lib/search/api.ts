@@ -1,7 +1,14 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { SearchPage, SearchPreview, SearchQuery, SearchRuntimeStatus } from './types'
+import type {
+  SearchPage,
+  SearchPreview,
+  SearchQuery,
+  SearchResultIcon,
+  SearchRuntimeStatus,
+} from './types'
 
 const SEARCH_RUNTIME_TIMEOUT_MS = 8_000
+const SEARCH_ICON_TIMEOUT_MS = 10_000
 
 const withTimeout = <T>(promise: Promise<T>, timeoutMs: number, message: string) =>
   new Promise<T>((resolve, reject) => {
@@ -31,6 +38,13 @@ export const startSearchRuntime = () =>
 export const getSearchRuntimeStatus = () => invoke<SearchRuntimeStatus>('get_search_runtime_status')
 
 export const searchFiles = (query: SearchQuery) => invoke<SearchPage>('search_files', { query })
+
+export const getSearchResultIcons = (paths: string[], iconSize = 32) =>
+  withTimeout(
+    invoke<SearchResultIcon[]>('get_search_result_icons', { paths, iconSize }),
+    SEARCH_ICON_TIMEOUT_MS,
+    'Search icon loading timed out.'
+  )
 
 export const getSearchPreview = (path: string) =>
   invoke<SearchPreview>('get_search_preview', { path })

@@ -2,6 +2,7 @@ use super::models::{
     CreateIconEntryInput, DesktopIcon, IconManagerItem, IconMutationTarget,
     ImportDroppedPathsResult, InvalidIconEntry, UpdateIconEntryInput,
 };
+use super::search_cache;
 
 #[cfg(windows)]
 use super::catalog_windows;
@@ -136,6 +137,10 @@ pub fn get_path_icon_base64(path: &str, icon_size: i32) -> String {
         let _ = icon_size;
         String::new()
     }
+}
+
+pub fn get_search_result_icons(paths: &[String], icon_size: i32) -> Vec<(String, String)> {
+    search_cache::get_search_result_icons(paths, icon_size)
 }
 
 pub fn get_custom_icon_source(path: &str) -> Result<String, String> {

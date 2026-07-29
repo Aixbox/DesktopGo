@@ -62,6 +62,11 @@ export interface SearchPage {
   tookMs: number
 }
 
+export interface SearchResultIcon {
+  path: string
+  iconBase64: string
+}
+
 export type SearchRuntimeState =
   | 'unknown'
   | 'installed_ready'

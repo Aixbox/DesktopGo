@@ -12,6 +12,9 @@ mod query;
 #[path = "ipc/reply_window.rs"]
 mod reply_window;
 #[cfg(windows)]
+#[path = "ipc/snapshot.rs"]
+mod snapshot;
+#[cfg(windows)]
 #[path = "ipc/worker.rs"]
 mod worker;
 
