@@ -29,3 +29,6 @@ build-script/
 helloagents/
 
 .codex/wetab-research/
+
+# Claude Code 本地个人配置（含本机绝对路径与个人权限规则，不入库）
+.claude/settings.local.json
