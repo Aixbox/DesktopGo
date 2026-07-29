@@ -44,7 +44,22 @@ jobs:
           RUST_QUALITY_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           $arguments = @()
-          if ($env:RUST_QUALITY_BASE_REF -and $env:RUST_QUALITY_BASE_REF -notmatch '^0+$') {
-            $arguments += @('-BaseRef', $env:RUST_QUALITY_BASE_REF)
+          $baseRef = $env:RUST_QUALITY_BASE_REF
+          if ($baseRef -and $baseRef -notmatch '^0+$') {
+            git rev-parse --verify --quiet "$baseRef^{commit}" | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "Fetching missing Rust quality base commit $baseRef."
+              git fetch --no-tags origin $baseRef
+              if ($LASTEXITCODE -ne 0) {
+                throw "Failed to fetch Rust quality base commit $baseRef."
+              }
+            }
+
+            git rev-parse --verify --quiet "$baseRef^{commit}" | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+              throw "Rust quality base commit $baseRef is unavailable after fetch."
+            }
+
+            $arguments += @('-BaseRef', $baseRef)
           }
           & .\scripts\check-rust.ps1 @arguments
