@@ -141,6 +141,7 @@ interface RangeControlProps {
   max: number
   step?: number
   valueLabel: string
+  disabled?: boolean
   onChange: (value: number) => void
 }
 
@@ -151,10 +152,11 @@ export function RangeControl({
   max,
   step = 1,
   valueLabel,
+  disabled = false,
   onChange,
 }: RangeControlProps) {
   return (
-    <div className="flex min-w-0 items-center gap-3">
+    <div className={`flex min-w-0 items-center gap-3 ${disabled ? 'opacity-50' : ''}`}>
       <input
         type="range"
         aria-label={label}
@@ -162,8 +164,9 @@ export function RangeControl({
         max={max}
         step={step}
         value={value}
+        disabled={disabled}
         onChange={event => onChange(Number(event.currentTarget.value))}
-        className="setting-range h-2 min-w-0 flex-1 cursor-pointer"
+        className="setting-range h-2 min-w-0 flex-1 cursor-pointer disabled:cursor-not-allowed"
       />
       <output className="w-14 shrink-0 rounded-md border border-border/80 bg-background px-2 py-1 text-center text-xs tabular-nums text-foreground">
         {valueLabel}
