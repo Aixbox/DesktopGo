@@ -1,6 +1,59 @@
 export const DEFAULT_THEME_ACCENT_COLOR = ''
 export const MAX_BACKGROUND_DATA_URI_LENGTH = 1_600_000
 
+/** 蒙版浓度：0 表示完全不遮挡背景图，100 表示接近纯色。 */
+export const BACKGROUND_OVERLAY_MIN = 0
+export const BACKGROUND_OVERLAY_MAX = 90
+export const DEFAULT_BACKGROUND_OVERLAY = 20
+
+/** 背景模糊强度百分比；100% 对应 BACKGROUND_BLUR_MAX_PX 的实际半径。 */
+export const BACKGROUND_BLUR_MIN = 0
+export const BACKGROUND_BLUR_MAX = 100
+export const DEFAULT_BACKGROUND_BLUR = 0
+export const BACKGROUND_BLUR_MAX_PX = 40
+
+function clampInteger(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback
+  return Math.min(max, Math.max(min, Math.round(value)))
+}
+
+export function clampBackgroundOverlay(value: number): number {
+  return clampInteger(
+    value,
+    BACKGROUND_OVERLAY_MIN,
+    BACKGROUND_OVERLAY_MAX,
+    DEFAULT_BACKGROUND_OVERLAY
+  )
+}
+
+export function clampBackgroundBlur(value: number): number {
+  return clampInteger(value, BACKGROUND_BLUR_MIN, BACKGROUND_BLUR_MAX, DEFAULT_BACKGROUND_BLUR)
+}
+
+/** 把百分比强度换算成渲染用的模糊半径（px）。 */
+export function backgroundBlurToPixels(value: number): number {
+  const ratio = clampBackgroundBlur(value) / BACKGROUND_BLUR_MAX
+  return Math.round(ratio * BACKGROUND_BLUR_MAX_PX * 10) / 10
+}
+
+export function isBackgroundOverlay(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= BACKGROUND_OVERLAY_MIN &&
+    value <= BACKGROUND_OVERLAY_MAX
+  )
+}
+
+export function isBackgroundBlur(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= BACKGROUND_BLUR_MIN &&
+    value <= BACKGROUND_BLUR_MAX
+  )
+}
+
 export const THEME_ACCENT_PRESETS = [
   '#2563eb',
   '#0f766e',

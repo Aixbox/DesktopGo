@@ -514,6 +514,8 @@ export function Launchpad() {
 
   return (
     <ContextMenu>
+      {/* 自定义背景图层：位于启动台之前，因此模糊只作用于图片本身 */}
+      <div className="launchpad-background-layer" aria-hidden="true" />
       <ContextMenuTrigger asChild>
         <div
           ref={launchpadSurfaceRef}

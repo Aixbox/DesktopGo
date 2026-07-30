@@ -23,4 +23,9 @@ export const EN_APPEARANCE_MESSAGES: Record<string, string> = {
   '背景已更新，并已应用从图片提取的主题色。':
     'The background was updated and its extracted accent color was applied.',
   '背景已更新。': 'The background was updated.',
+  蒙版浓度: 'Overlay strength',
+  背景模糊: 'Background blur',
+  '压在背景图上的一层底色，调低更清晰，调高图标文字更易读。':
+    'A tint layered over the background image. Lower keeps the image crisp; higher makes icon labels easier to read.',
+  '只模糊背景图，不影响图标和面板。': 'Blurs only the background image, not icons or panels.',
 }

@@ -1,5 +1,7 @@
 import { getSetting } from './settingsStore'
 import {
+  backgroundBlurToPixels,
+  clampBackgroundOverlay,
   deriveAccentPalette,
   extractAccentColorFromPixels,
   getAccentForegroundColor,
@@ -8,9 +10,19 @@ import {
 } from './appearancePolicy'
 
 export {
+  BACKGROUND_BLUR_MAX,
+  BACKGROUND_BLUR_MAX_PX,
+  BACKGROUND_BLUR_MIN,
+  BACKGROUND_OVERLAY_MAX,
+  BACKGROUND_OVERLAY_MIN,
+  DEFAULT_BACKGROUND_BLUR,
+  DEFAULT_BACKGROUND_OVERLAY,
   DEFAULT_THEME_ACCENT_COLOR,
   MAX_BACKGROUND_DATA_URI_LENGTH,
   THEME_ACCENT_PRESETS,
+  backgroundBlurToPixels,
+  clampBackgroundBlur,
+  clampBackgroundOverlay,
   deriveAccentPalette,
   extractAccentColorFromPixels,
   getAccentForegroundColor,
@@ -35,6 +47,10 @@ const APPEARANCE_CSS_VARIABLES = [
 export type AppearanceSettings = {
   accentColor: string
   backgroundImage: string
+  /** 背景蒙版浓度百分比，越大越接近纯色底。 */
+  backgroundOverlay: number
+  /** 背景模糊强度百分比，渲染时换算为模糊半径。 */
+  backgroundBlur: number
 }
 
 export type BackgroundImageErrorCode = 'format' | 'file-size' | 'decode' | 'output-size'
@@ -49,7 +65,12 @@ export class BackgroundImageError extends Error {
   }
 }
 
-export function applyAppearance({ accentColor, backgroundImage }: AppearanceSettings): void {
+export function applyAppearance({
+  accentColor,
+  backgroundImage,
+  backgroundOverlay,
+  backgroundBlur,
+}: AppearanceSettings): void {
   const root = document.documentElement
   const normalizedAccent = normalizeThemeAccentColor(accentColor)
 
@@ -71,20 +92,31 @@ export function applyAppearance({ accentColor, backgroundImage }: AppearanceSett
   }
 
   if (isLaunchpadBackgroundDataUri(backgroundImage)) {
+    const overlay = clampBackgroundOverlay(backgroundOverlay)
+    const blurPixels = backgroundBlurToPixels(backgroundBlur)
     root.style.setProperty('--launchpad-background-image', `url("${backgroundImage}")`)
+    root.style.setProperty('--launchpad-background-overlay', `${overlay / 100}`)
+    root.style.setProperty('--launchpad-background-blur', `${blurPixels}px`)
+    // 模糊会让图片边缘透出底色，向外扩张同等量级的绘制区域来补偿。
+    root.style.setProperty('--launchpad-background-bleed', `${-blurPixels * 2}px`)
     root.dataset.launchpadBackground = 'custom'
   } else {
     root.style.removeProperty('--launchpad-background-image')
+    root.style.removeProperty('--launchpad-background-overlay')
+    root.style.removeProperty('--launchpad-background-blur')
+    root.style.removeProperty('--launchpad-background-bleed')
     delete root.dataset.launchpadBackground
   }
 }
 
 export async function getSavedAppearance(): Promise<AppearanceSettings> {
-  const [accentColor, backgroundImage] = await Promise.all([
+  const [accentColor, backgroundImage, backgroundOverlay, backgroundBlur] = await Promise.all([
     getSetting('themeAccentColor'),
     getSetting('launchpadBackgroundImage'),
+    getSetting('launchpadBackgroundOverlay'),
+    getSetting('launchpadBackgroundBlur'),
   ])
-  return { accentColor, backgroundImage }
+  return { accentColor, backgroundImage, backgroundOverlay, backgroundBlur }
 }
 
 export async function applySavedAppearance(): Promise<AppearanceSettings> {

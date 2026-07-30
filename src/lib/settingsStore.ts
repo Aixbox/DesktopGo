@@ -24,7 +24,14 @@ import {
   DEFAULT_LAUNCHPAD_OPEN_FOCUS_TARGET,
   isLaunchpadOpenFocusTarget,
 } from './launchpadOpenFocus'
-import { isLaunchpadBackgroundDataUri, normalizeThemeAccentColor } from './appearancePolicy'
+import {
+  DEFAULT_BACKGROUND_BLUR,
+  DEFAULT_BACKGROUND_OVERLAY,
+  isBackgroundBlur,
+  isBackgroundOverlay,
+  isLaunchpadBackgroundDataUri,
+  normalizeThemeAccentColor,
+} from './appearancePolicy'
 
 export const DEFAULT_LAUNCHPAD_SHORTCUT = 'Ctrl+Space'
 
@@ -38,6 +45,8 @@ type SettingKey =
   | 'themeMode'
   | 'themeAccentColor'
   | 'launchpadBackgroundImage'
+  | 'launchpadBackgroundOverlay'
+  | 'launchpadBackgroundBlur'
   | 'autoExtractThemeColor'
   | 'windowStyle'
   | 'language'
@@ -60,6 +69,8 @@ type SettingValueMap = {
   themeMode: ThemeMode
   themeAccentColor: string
   launchpadBackgroundImage: string
+  launchpadBackgroundOverlay: number
+  launchpadBackgroundBlur: number
   autoExtractThemeColor: boolean
   windowStyle: WindowStyle
   language: AppLanguage
@@ -72,7 +83,7 @@ type SettingValueMap = {
   iconContextMenuMode: IconContextMenuMode
 }
 
-const SETTINGS_STORE_VERSION = 14
+const SETTINGS_STORE_VERSION = 15
 const SETTINGS_VERSION_KEY = 'settingsVersion'
 const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'iconSize',
@@ -84,6 +95,8 @@ const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'themeMode',
   'themeAccentColor',
   'launchpadBackgroundImage',
+  'launchpadBackgroundOverlay',
+  'launchpadBackgroundBlur',
   'autoExtractThemeColor',
   'windowStyle',
   'language',
@@ -106,6 +119,8 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   themeMode: 'system',
   themeAccentColor: '',
   launchpadBackgroundImage: '',
+  launchpadBackgroundOverlay: DEFAULT_BACKGROUND_OVERLAY,
+  launchpadBackgroundBlur: DEFAULT_BACKGROUND_BLUR,
   autoExtractThemeColor: true,
   windowStyle: 'default',
   language: 'zh',
@@ -185,6 +200,8 @@ const validators: {
   themeMode: isThemeMode,
   themeAccentColor: isThemeAccentColor,
   launchpadBackgroundImage: isLaunchpadBackgroundImage,
+  launchpadBackgroundOverlay: isBackgroundOverlay,
+  launchpadBackgroundBlur: isBackgroundBlur,
   autoExtractThemeColor: isAutoExtractThemeColor,
   windowStyle: isWindowStyle,
   language: isAppLanguage,

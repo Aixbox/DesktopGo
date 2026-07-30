@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { ImagePlus, LoaderCircle, RotateCcw, Trash2 } from 'lucide-react'
 import {
+  BACKGROUND_BLUR_MAX,
+  BACKGROUND_BLUR_MIN,
+  BACKGROUND_OVERLAY_MAX,
+  BACKGROUND_OVERLAY_MIN,
   BackgroundImageError,
+  DEFAULT_BACKGROUND_BLUR,
+  DEFAULT_BACKGROUND_OVERLAY,
   DEFAULT_THEME_ACCENT_COLOR,
   THEME_ACCENT_PRESETS,
   applyAppearance,
+  backgroundBlurToPixels,
   getSavedAppearance,
   normalizeThemeAccentColor,
   prepareLaunchpadBackground,
@@ -15,7 +22,7 @@ import { getSetting, setSetting } from '@/lib/settingsStore'
 import { translate } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { SettingCard, SwitchButton } from '@/components/ui/setting-components'
+import { RangeControl, SettingCard, SwitchButton } from '@/components/ui/setting-components'
 import { useToast } from '@/components/ui/toast'
 
 const BACKGROUND_ERROR_MESSAGES: Record<BackgroundImageErrorCode, string> = {
@@ -33,11 +40,23 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
   const [appearance, setAppearance] = useState<AppearanceSettings>({
     accentColor: DEFAULT_THEME_ACCENT_COLOR,
     backgroundImage: '',
+    backgroundOverlay: DEFAULT_BACKGROUND_OVERLAY,
+    backgroundBlur: DEFAULT_BACKGROUND_BLUR,
   })
   const [autoExtractThemeColor, setAutoExtractThemeColor] = useState(true)
   const [isProcessingBackground, setIsProcessingBackground] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const tuningCommitTimerRef = useRef<number | null>(null)
   const toast = useToast()
+
+  useEffect(
+    () => () => {
+      if (tuningCommitTimerRef.current !== null) {
+        window.clearTimeout(tuningCommitTimerRef.current)
+      }
+    },
+    []
+  )
 
   useEffect(() => {
     void Promise.all([getSavedAppearance(), getSetting('autoExtractThemeColor')])
@@ -118,6 +137,7 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
       const prepared = await prepareLaunchpadBackground(file)
       const previousAppearance = appearance
       const nextAppearance = {
+        ...appearance,
         backgroundImage: prepared.dataUri,
         accentColor:
           autoExtractThemeColor && prepared.accentColor
@@ -183,6 +203,52 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
       })
   }
 
+  // 滑杆会连续触发，本地即时预览、落盘与主窗同步做防抖。
+  const scheduleTuningCommit = (next: AppearanceSettings) => {
+    if (tuningCommitTimerRef.current !== null) window.clearTimeout(tuningCommitTimerRef.current)
+    tuningCommitTimerRef.current = window.setTimeout(() => {
+      tuningCommitTimerRef.current = null
+      void Promise.all([
+        setSetting('launchpadBackgroundOverlay', next.backgroundOverlay),
+        setSetting('launchpadBackgroundBlur', next.backgroundBlur),
+      ])
+        .then(syncMainWindow)
+        .catch(error => {
+          console.error('Failed to save launchpad background tuning:', error)
+          toast.error(translate('保存背景失败：{error}', { error: String(error) }), {
+            key: 'settings-background-tuning',
+            title: translate('自定义背景'),
+          })
+        })
+    }, 180)
+  }
+
+  const handleBackgroundOverlay = (value: number) => {
+    const nextAppearance = { ...appearance, backgroundOverlay: value }
+    applyLocally(nextAppearance)
+    scheduleTuningCommit(nextAppearance)
+  }
+
+  const handleBackgroundBlur = (value: number) => {
+    const nextAppearance = { ...appearance, backgroundBlur: value }
+    applyLocally(nextAppearance)
+    scheduleTuningCommit(nextAppearance)
+  }
+
+  const handleResetBackgroundTuning = () => {
+    const nextAppearance = {
+      ...appearance,
+      backgroundOverlay: DEFAULT_BACKGROUND_OVERLAY,
+      backgroundBlur: DEFAULT_BACKGROUND_BLUR,
+    }
+    applyLocally(nextAppearance)
+    scheduleTuningCommit(nextAppearance)
+  }
+
+  // 蒙版与模糊只作用于自定义背景，没有背景图时保留控件但禁用，避免布局跳动。
+  const isTuningDisabled = !appearance.backgroundImage || isProcessingBackground
+  const previewBlurPixels = backgroundBlurToPixels(appearance.backgroundBlur)
+
   return (
     <>
       <SettingCard
@@ -240,23 +306,34 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
         label={translate('自定义背景')}
         desc={translate('选择 JPG、PNG 或 WebP 图片，应用会压缩后保存在本机。')}
       >
-        <div
-          className="aspect-video w-full max-w-sm overflow-hidden rounded-md border border-border/80 bg-muted"
-          style={
-            appearance.backgroundImage
-              ? {
-                  backgroundImage: `linear-gradient(rgba(20, 24, 32, 0.18), rgba(20, 24, 32, 0.18)), url("${appearance.backgroundImage}")`,
+        <div className="relative aspect-video w-full max-w-sm overflow-hidden rounded-md border border-border/80 bg-muted">
+          {appearance.backgroundImage ? (
+            <>
+              <div
+                className="absolute inset-0"
+                style={{
+                  backgroundImage: `url("${appearance.backgroundImage}")`,
                   backgroundPosition: 'center',
                   backgroundSize: 'cover',
-                }
-              : undefined
-          }
-        >
-          {!appearance.backgroundImage ? (
+                  // 预览宽度远小于启动台，等比缩小模糊半径才能反映真实观感。
+                  filter: `blur(${previewBlurPixels / 4}px)`,
+                  transform: `scale(${1 + previewBlurPixels / 120})`,
+                }}
+              />
+              <div
+                className="absolute inset-0"
+                style={{
+                  backgroundColor: `rgb(var(--launchpad-background-scrim-rgb) / ${
+                    appearance.backgroundOverlay / 100
+                  })`,
+                }}
+              />
+            </>
+          ) : (
             <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
               {translate('当前使用默认背景')}
             </div>
-          ) : null}
+          )}
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -287,6 +364,56 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
             <Trash2 />
             {translate('移除背景')}
           </Button>
+        </div>
+
+        <div className="space-y-3 border-t border-border/70 pt-3">
+          <div className="space-y-1.5">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-sm font-medium text-foreground">{translate('蒙版浓度')}</p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={
+                  isTuningDisabled ||
+                  (appearance.backgroundOverlay === DEFAULT_BACKGROUND_OVERLAY &&
+                    appearance.backgroundBlur === DEFAULT_BACKGROUND_BLUR)
+                }
+                onClick={handleResetBackgroundTuning}
+              >
+                <RotateCcw />
+                {translate('恢复默认')}
+              </Button>
+            </div>
+            <p className="text-xs leading-5 text-muted-foreground">
+              {translate('压在背景图上的一层底色，调低更清晰，调高图标文字更易读。')}
+            </p>
+            <RangeControl
+              label={translate('蒙版浓度')}
+              value={appearance.backgroundOverlay}
+              min={BACKGROUND_OVERLAY_MIN}
+              max={BACKGROUND_OVERLAY_MAX}
+              valueLabel={`${appearance.backgroundOverlay}%`}
+              disabled={isTuningDisabled}
+              onChange={handleBackgroundOverlay}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium text-foreground">{translate('背景模糊')}</p>
+            <p className="text-xs leading-5 text-muted-foreground">
+              {translate('只模糊背景图，不影响图标和面板。')}
+            </p>
+            <RangeControl
+              label={translate('背景模糊')}
+              value={appearance.backgroundBlur}
+              min={BACKGROUND_BLUR_MIN}
+              max={BACKGROUND_BLUR_MAX}
+              valueLabel={`${appearance.backgroundBlur}%`}
+              disabled={isTuningDisabled}
+              onChange={handleBackgroundBlur}
+            />
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-4 border-t border-border/70 pt-3">

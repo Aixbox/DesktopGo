@@ -506,6 +506,10 @@ body,
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
   --edge-glow-color: rgba(0, 0, 0, 0.18);
+  /* 自定义背景蒙版底色；浓度由 --launchpad-background-overlay 控制。 */
+  --launchpad-background-scrim-rgb: 240 240 245;
+  --launchpad-background-label-shadow:
+    0 1px 2px rgba(255, 255, 255, 0.72), 0 0 6px rgba(255, 255, 255, 0.46);
 }
 
 .dark {
@@ -542,6 +546,8 @@ body,
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
   --edge-glow-color: rgba(255, 255, 255, 0.14);
+  --launchpad-background-scrim-rgb: 10 13 20;
+  --launchpad-background-label-shadow: 0 1px 2px rgba(0, 0, 0, 0.7), 0 0 6px rgba(0, 0, 0, 0.45);
 }
 
 .settings-shell {
@@ -715,21 +721,41 @@ textarea {
   -webkit-backdrop-filter: blur(8px) saturate(130%) brightness(0.96);
 }
 
-[data-launchpad-background='custom'] .launchpad-bg {
-  background-color: rgba(240, 240, 245, 0.72);
-  background-image:
-    linear-gradient(rgba(240, 240, 245, 0.46), rgba(240, 240, 245, 0.46)),
-    var(--launchpad-background-image);
+/*
+ * 自定义背景分两层绘制：
+ * - .launchpad-background-layer 是 .launchpad-bg 的前置兄弟节点，只承载图片与模糊，
+ *   因此模糊不会波及图标与面板；它先于启动台绘制，所以永远在内容之下。
+ * - .launchpad-bg 自身只画蒙版渐变，浓度由 --launchpad-background-overlay 控制。
+ */
+.launchpad-background-layer {
+  display: none;
+}
+
+[data-launchpad-background='custom'] .launchpad-background-layer {
+  position: fixed;
+  display: block;
+  inset: var(--launchpad-background-bleed, 0px);
+  background-image: var(--launchpad-background-image);
   background-position: center;
+  background-repeat: no-repeat;
   background-size: cover;
+  filter: blur(var(--launchpad-background-blur, 0px));
+  pointer-events: none;
+}
+
+[data-launchpad-background='custom'] .launchpad-bg {
+  background-color: transparent;
+  background-image: linear-gradient(
+    rgb(var(--launchpad-background-scrim-rgb) / var(--launchpad-background-overlay, 0.2)),
+    rgb(var(--launchpad-background-scrim-rgb) / var(--launchpad-background-overlay, 0.2))
+  );
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 
-.dark[data-launchpad-background='custom'] .launchpad-bg {
-  background-color: rgba(14, 17, 24, 0.72);
-  background-image:
-    linear-gradient(rgba(10, 13, 20, 0.5), rgba(10, 13, 20, 0.5)), var(--launchpad-background-image);
+/* 蒙版可能被调到很低，图标名称自带光晕来保证可读性。 */
+[data-launchpad-background='custom'] .icon-label {
+  text-shadow: var(--launchpad-background-label-shadow);
 }
 
 .window-style-native-mica .launchpad-glass-panel {
@@ -1178,7 +1204,12 @@ textarea {
 }
 
 @media (forced-colors: active) {
+  [data-launchpad-background='custom'] .launchpad-background-layer {
+    display: none;
+  }
+
   .launchpad-bg,
+  [data-launchpad-background='custom'] .launchpad-bg,
   .launchpad-glass-panel,
   .launchpad-glass-panel-strong,
   .search-panel-surface,
@@ -1216,7 +1247,8 @@ textarea {
     outline-offset: 2px;
   }
 
-  .icon-label {
+  .icon-label,
+  [data-launchpad-background='custom'] .icon-label {
     text-shadow: none;
   }
 }
