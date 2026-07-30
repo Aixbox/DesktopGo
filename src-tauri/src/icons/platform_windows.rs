@@ -1,4 +1,3 @@
-use base64::Engine;
 use std::path::{Path, PathBuf};
 
 pub(super) fn get_dpi_scale() -> f64 {
@@ -15,13 +14,22 @@ pub(super) fn get_dpi_scale() -> f64 {
 
 #[cfg(windows)]
 pub(super) fn is_special_shell_path(path: &str) -> bool {
-    let trimmed = path.trim();
-    trimmed.starts_with("::{") && trimmed.ends_with('}')
+    super::search_icon_plan::is_shell_namespace_path(path)
 }
 
 #[cfg(windows)]
 pub(super) fn extract_special_shell_icon(path: &str, icon_size: i32) -> Option<String> {
     unsafe { extract_shell_item_icon(path, icon_size) }
+}
+
+/// Thumbnail that Windows already holds in its thumbnail cache. `SIIGBF_INCACHEONLY`
+/// is what keeps this usable while scrolling: the shell never reads or decodes the
+/// file, it either has the picture ready or reports that it does not.
+#[cfg(windows)]
+pub(super) fn extract_cached_thumbnail(path: &str, icon_size: i32) -> Option<String> {
+    use windows::Win32::UI::Shell::{SIIGBF_INCACHEONLY, SIIGBF_THUMBNAILONLY};
+
+    unsafe { extract_shell_item_image(path, icon_size, SIIGBF_THUMBNAILONLY | SIIGBF_INCACHEONLY) }
 }
 
 #[cfg(windows)]
@@ -51,6 +59,17 @@ unsafe fn create_shell_item_from_path(path: &str) -> Option<windows::Win32::UI::
 
 #[cfg(windows)]
 unsafe fn extract_shell_item_icon(path: &str, size: i32) -> Option<String> {
+    use windows::Win32::UI::Shell::SIIGBF_ICONONLY;
+
+    unsafe { extract_shell_item_image(path, size, SIIGBF_ICONONLY) }
+}
+
+#[cfg(windows)]
+unsafe fn extract_shell_item_image(
+    path: &str,
+    size: i32,
+    flags: windows::Win32::UI::Shell::SIIGBF,
+) -> Option<String> {
     use windows::core::Interface;
     use windows::Win32::UI::Shell::*;
 
@@ -58,7 +77,7 @@ unsafe fn extract_shell_item_icon(path: &str, size: i32) -> Option<String> {
     let factory: IShellItemImageFactory = shell_item.cast().ok()?;
 
     let icon_size = windows::Win32::Foundation::SIZE { cx: size, cy: size };
-    let hbitmap = factory.GetImage(icon_size, SIIGBF_ICONONLY).ok()?;
+    let hbitmap = factory.GetImage(icon_size, flags).ok()?;
 
     hbitmap_to_base64(hbitmap)
 }
@@ -302,18 +321,10 @@ unsafe fn hbitmap_to_base64(hbitmap: windows::Win32::Graphics::Gdi::HBITMAP) -> 
     let pixel_count = (width * height) as usize;
     let slice = std::slice::from_raw_parts(bits as *const u8, pixel_count * 4);
 
-    let mut rgba = vec![0u8; pixel_count * 4];
-    for i in 0..pixel_count {
-        let o = i * 4;
-        rgba[o] = slice[o + 2];
-        rgba[o + 1] = slice[o + 1];
-        rgba[o + 2] = slice[o];
-        rgba[o + 3] = slice[o + 3];
-    }
-
-    if rgba.iter().skip(3).step_by(4).all(|&a| a == 0) {
-        for i in 0..pixel_count {
-            rgba[i * 4 + 3] = 255;
+    let mut rgba = crate::icons::image_data::bgra_to_rgba(slice);
+    if crate::icons::image_data::is_fully_transparent(&rgba) {
+        for pixel in rgba.chunks_exact_mut(4) {
+            pixel[3] = 255;
         }
     }
 
@@ -322,17 +333,7 @@ unsafe fn hbitmap_to_base64(hbitmap: windows::Win32::Graphics::Gdi::HBITMAP) -> 
     let _ = DeleteDC(hdc_mem);
     ReleaseDC(None, hdc_screen);
 
-    let mut png_buf = Vec::new();
-    {
-        use image::ImageEncoder;
-        let encoder = image::codecs::png::PngEncoder::new(&mut png_buf);
-        encoder
-            .write_image(&rgba, width, height, image::ExtendedColorType::Rgba8)
-            .ok()?;
-    }
-
-    let b64 = base64::engine::general_purpose::STANDARD.encode(&png_buf);
-    Some(format!("data:image/png;base64,{}", b64))
+    crate::icons::image_data::encode_rgba_png_data_uri(&rgba, width, height)
 }
 
 #[cfg(windows)]

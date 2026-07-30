@@ -605,3 +605,60 @@ DesktopGo 当前慢在自己的结果包装层：每次远距离跳转要重新�
 - WebView 异步范围读取偶尔落后一帧时，虚拟列表继续绘制上一帧有效行；这些保留行禁用点击、选择和打开，精确页返回后立即替换。
 
 这使 50,000 条以内的常见查询在首次结果返回后具备与 Everything 相同的关键滚动属性：拖动过程读取进程内结果状态，不再逐页等待外部 IPC。超过窗口的超大结果集仍会在跨窗口时产生一次 IPC，这是为限制 SDK 结果缓冲内存而保留的边界。
+
+## 16. Everything 的图标取法与第四阶段实施
+
+用户运行验证后确认，文本已经跟得上视口，但左侧图标大量停留在占位线框上。重新针对图标路径做静态分析，得到的证据比第 8 节更具体。
+
+### 16.1 直接证据
+
+对 `everything.exe` 做 ASCII/UTF-16 字符串与导入表提取，图标相关证据集中在三处：
+
+| 证据                                                             | 位置                     | 含义                                                       |
+| ---------------------------------------------------------------- | ------------------------ | ---------------------------------------------------------- |
+| `SHGetFileInfoW`                                                 | SHELL32 导入表           | 唯一的 Shell 图标查询入口，没有 `ExtractIcon` 系列导入     |
+| `ImageList_DrawEx`、`ImageList_GetIconSize`                      | COMCTL32 导入表（仅两项） | 图标直接从系统共享图像列表绘制，不逐个文件生成位图         |
+| `SHGetFileInfo exception %08x`                                   | 调试字符串               | `SHGetFileInfoW` 是被单独包裹异常处理的独立步骤            |
+| `add ext icon %s`                                                | 调试字符串               | **按扩展名登记图标**，不是按文件路径                       |
+| `icon_shell_extensions`、`load_icon_priority`、`cached icons only %d` | 配置键                   | 图标线程优先级、shell 扩展开关、仅使用缓存图标三个可调项   |
+| `fixed an issue with gathering icons for files with paths longer than 260 characters` | Changes.txt:79 | 长路径取图标曾是缺陷，说明图标查询确实以路径为输入并需要专门处理 |
+| `added optional icon cache size`、`improved icon cache`          | Changes.txt:360/370      | 图标缓存容量可配置，且被专门优化过                         |
+
+结论：Everything 没有为每一行生成一张图片。它用 `SHGetFileInfoW` + `SHGFI_SYSICONINDEX` 拿到系统共享图像列表中的**槽位下标**，然后用 `ImageList_DrawEx` 直接画那个槽位。昂贵的成本单位不是"每个文件"，而是"每个不同的图标"；而 `add ext icon %s` 表明绝大多数普通文件共用同一个按扩展名登记的图标。
+
+### 16.2 DesktopGo 的差距
+
+对照修改前的代码，同一批可见行要做的事完全不同：`get_path_icon_base64_windows` 对每个路径先 `exists()`，再 `SHCreateItemFromParsingName` + `IShellItemImageFactory::GetImage`，然后 GDI 取位图、转 RGBA、PNG 编码、Base64 编码。128 行不同扩展名的普通文件就是 128 次完整的 COM + 编码流程，而 Everything 只需要为其中出现过的扩展名各做一次。
+
+更关键的是三处会让占位图标**永久留下**的行为：
+
+- `exists()` 早退：Everything 索引里已删除的文件、超过 260 字符的长路径、无读取权限的目录，全部直接返回空串——而 Shell 关联表本来能给出图标。
+- 空结果进缓存：Rust 与前端都把空串当作有效结果写入，此后该路径在整个进程生命周期内不再重试。
+- 超时污染：10 秒超时后前端同样写入空串；快速拖动时每帧都可能发出一批 64 路径请求，堆积后极易超时。
+
+### 16.3 第四阶段实施
+
+按 Everything 的成本模型重建图标管线：
+
+- 新增 `icons/shell_icon_windows.rs`：`SHGetFileInfoW` + `SHGFI_SYSICONINDEX` 取共享图像列表槽位，`SHGetImageList` + `IImageList::GetIcon` 渲染该槽位；按请求尺寸选择 `SHIL_SMALL/LARGE/EXTRALARGE/JUMBO`，避免自己重采样。
+- 新增 `icons/search_icon_plan.rs`：把路径归类为 shell 命名空间项、缩略图、按扩展名共享、按路径独占四种来源。可执行文件、快捷方式、`.url`、`.ico`、文件夹按路径缓存；其余普通文件按扩展名缓存，对应 `add ext icon %s`。
+- 重写 `icons/search_cache.rs`：三级有界 LRU——图标身份 → 槽位下标（4096）、槽位 → PNG（256）、无法用共享列表描述的项 → PNG（256）。**任何失败都不写入缓存**，因此下一次可见行扫描会重试。
+- 普通文件的关联查询改用 `file.<ext>` 这样的合成短名，配合 `SHGFI_USEFILEATTRIBUTES`：不读磁盘、不触发第三方图标处理器，也顺带绕开 `MAX_PATH`（Changes.txt:79 记录的正是同一类问题）。
+- 图片改用 `SIIGBF_THUMBNAILONLY | SIIGBF_INCACHEONLY`：只在 Windows 缩略图缓存已有图片时使用，取不到就退回扩展名图标，滚动过程中不再解码整张图片。
+- `is_folder` 由前端从 Everything 结果携带过来，Rust 侧不再 `is_dir()` 探测磁盘。
+- 前端 `visibleIconRequests.ts` 承载纯策略（选批、合并、重试计数），`useVisibleSearchIcons.ts` 只做调度：每动画帧一批、单批在飞、失败不入缓存、每行最多 3 次尝试、滚出视口即重置计数。
+- 列表图标尺寸从 32 提升到 48，匹配 28 CSS 像素在 125%/150% 缩放下的实际需求。
+
+同机实测（`SystemRoot` 混合样本，debug 构建）：
+
+| 场景                             | 修改前            | 修改后    |
+| -------------------------------- | ----------------- | --------- |
+| 9 条混合样本（首次）             | —                 | 92.9 ms   |
+| 同一批重复请求（全缓存命中）     | —                 | 1.3 ms    |
+| 40 个互不相同的扩展名            | —                 | 60.9 ms   |
+| 128 行同扩展名（`.txt`）         | 128 次完整提取    | 0.32 ms   |
+| 超过 260 字符的路径              | 返回空串          | 2418 字节 |
+| 无读取权限目录下的文件           | 返回空串          | 3778 字节 |
+| 不存在的文件                     | 返回空串          | 750 字节  |
+
+128 行同扩展名从"每行一次 COM + PNG 编码"变成一次查询加一次渲染，这正是 `add ext icon %s` 所描述的成本结构。

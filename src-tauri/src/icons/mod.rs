@@ -5,7 +5,10 @@ mod models;
 #[cfg(windows)]
 mod platform_windows;
 mod search_cache;
+mod search_icon_plan;
 mod service;
+#[cfg(windows)]
+mod shell_icon_windows;
 mod website;
 
 pub use models::{CreateIconEntryInput, IconMutationTarget, UpdateIconEntryInput};

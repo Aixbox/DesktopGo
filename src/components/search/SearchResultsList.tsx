@@ -8,6 +8,7 @@ import { SearchResultSelectionHighlight } from './SearchResultSelectionHighlight
 import { useSearchScrollSelection } from './useSearchScrollSelection'
 import { useStableSearchEvent } from './useStableSearchEvent'
 import { useVisibleSearchIcons } from './useVisibleSearchIcons'
+import { toIconCacheKey } from './visibleIconRequests'
 
 const ROW_HEIGHT = 60
 const OVERSCAN_ROWS = 16
@@ -234,8 +235,10 @@ export function SearchResultsList({
       virtualRows.push({ index, item: getItemAt(index) })
     }
   }
-  const visibleIconPaths = virtualRows.flatMap(({ item }) => (item ? [item.path] : []))
-  const visibleSearchIcons = useVisibleSearchIcons(visibleIconPaths, visible)
+  const visibleIconRequests = virtualRows.flatMap(({ item }) =>
+    item ? [{ path: item.path, isFolder: item.isFolder }] : []
+  )
+  const visibleSearchIcons = useVisibleSearchIcons(visibleIconRequests, visible)
 
   return (
     <div className="relative h-full min-w-0">
@@ -287,7 +290,9 @@ export function SearchResultsList({
                 item={item}
                 top={top}
                 height={ROW_HEIGHT}
-                iconBase64={item.iconBase64 || visibleSearchIcons.get(item.path) || ''}
+                iconBase64={
+                  item.iconBase64 || visibleSearchIcons.get(toIconCacheKey(item.path)) || ''
+                }
                 selected={selectedIndex === index}
                 allowDoubleClickOpen={allowDoubleClickOpen}
                 onSelect={handleResultSelect}

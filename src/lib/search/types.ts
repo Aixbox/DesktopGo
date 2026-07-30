@@ -62,6 +62,12 @@ export interface SearchPage {
   tookMs: number
 }
 
+/** One visible row asking for its icon. `isFolder` comes from the search result. */
+export interface SearchIconRequest {
+  path: string
+  isFolder: boolean
+}
+
 export interface SearchResultIcon {
   path: string
   iconBase64: string

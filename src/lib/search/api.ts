@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import type {
   SearchHit,
+  SearchIconRequest,
   SearchPage,
   SearchPreview,
   SearchQuery,
@@ -43,9 +44,9 @@ export const searchFiles = (query: SearchQuery) => invoke<SearchPage>('search_fi
 export const getCompleteSearchSnapshot = (query: SearchQuery) =>
   invoke<SearchHit[]>('get_complete_search_snapshot', { query })
 
-export const getSearchResultIcons = (paths: string[], iconSize = 32) =>
+export const getSearchResultIcons = (requests: SearchIconRequest[], iconSize = 48) =>
   withTimeout(
-    invoke<SearchResultIcon[]>('get_search_result_icons', { paths, iconSize }),
+    invoke<SearchResultIcon[]>('get_search_result_icons', { requests, iconSize }),
     SEARCH_ICON_TIMEOUT_MS,
     'Search icon loading timed out.'
   )

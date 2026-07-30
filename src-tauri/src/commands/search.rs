@@ -1,13 +1,23 @@
 use crate::everything::{self, SearchPage, SearchQuery, SearchRuntimeStatus};
 use crate::icons;
 use crate::search_preview::{self, SearchPreview};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResultIcon {
     path: String,
     icon_base64: String,
+}
+
+/// One visible row. `is_folder` is carried from the search result so the icon
+/// pipeline never has to stat the path again.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchIconRequest {
+    path: String,
+    #[serde(default)]
+    is_folder: bool,
 }
 
 #[tauri::command]
@@ -48,11 +58,15 @@ pub async fn get_complete_search_snapshot(
 
 #[tauri::command]
 pub async fn get_search_result_icons(
-    paths: Vec<String>,
+    requests: Vec<SearchIconRequest>,
     icon_size: i32,
 ) -> Result<Vec<SearchResultIcon>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        icons::get_search_result_icons(&paths, icon_size)
+        let requests: Vec<(String, bool)> = requests
+            .into_iter()
+            .map(|request| (request.path, request.is_folder))
+            .collect();
+        icons::get_search_result_icons(&requests, icon_size)
             .into_iter()
             .map(|(path, icon_base64)| SearchResultIcon { path, icon_base64 })
             .collect()

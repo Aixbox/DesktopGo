@@ -139,8 +139,11 @@ pub fn get_path_icon_base64(path: &str, icon_size: i32) -> String {
     }
 }
 
-pub fn get_search_result_icons(paths: &[String], icon_size: i32) -> Vec<(String, String)> {
-    search_cache::get_search_result_icons(paths, icon_size)
+pub fn get_search_result_icons(
+    requests: &[(String, bool)],
+    icon_size: i32,
+) -> Vec<(String, String)> {
+    search_cache::get_search_result_icons(requests, icon_size)
 }
 
 pub fn get_custom_icon_source(path: &str) -> Result<String, String> {
