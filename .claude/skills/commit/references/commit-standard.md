@@ -108,16 +108,37 @@ chore(search,tauri): 修改多个文件
 Use a subject-only message for a small, obvious atomic change. Add a body when reviewers need context about motivation, constraints, behavior, or migration.
 
 - Leave exactly one blank line between the header and body.
+- Write the body as a Markdown bullet list. Every body line must start with `- `, one point per line. Never write the body as prose paragraphs.
+- Wrap a long bullet by indenting the continuation line with two spaces.
 - Explain why the change is needed and the important behavioral effect. Do not narrate every changed file.
 - Keep non-code body lines at 100 Unicode characters or fewer when practical.
 - Put issue references in footers, such as `Closes: #123` or `Refs: #123`.
+
+`scripts/validate-commit-message.mjs` enforces the bullet-list body. Blank lines, footers, and fenced code blocks are the only exceptions.
+
+Good:
+
+```text
+fix(launchpad): 修复背景图上图标名称看不清
+
+- 蒙版浓度可调低后，主题前景色的名称在壁纸上时深时浅
+- 改用白字加紧凑深色投影，与系统桌面图标一致
+```
+
+Bad — body written as a paragraph:
+
+```text
+fix(launchpad): 修复背景图上图标名称看不清
+
+蒙版浓度可调低后，主题前景色的名称在壁纸上时深时浅，改用白字加紧凑深色投影。
+```
 
 For a breaking change, use both `!` in the header and a `BREAKING CHANGE:` footer:
 
 ```text
 feat(config)!: 调整快捷入口配置结构
 
-将旧版扁平配置迁移为按工作区分组的结构。
+- 将旧版扁平配置迁移为按工作区分组的结构
 
 BREAKING CHANGE: 现有配置需要在首次启动时迁移到 workspaceGroups。
 Refs: #123

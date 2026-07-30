@@ -9,7 +9,8 @@ Create safe, reviewable Git commits that follow the repository's Conventional Co
 
 ## Required standard
 
-Read [references/commit-standard.md](references/commit-standard.md) before planning commits or composing messages. Apply it to every commit created by this skill.
+- Read [references/commit-standard.md](references/commit-standard.md) before planning commits or composing messages.
+- Apply it to every commit created by this skill.
 
 ## Workflow
 
@@ -43,6 +44,7 @@ Read [references/commit-standard.md](references/commit-standard.md) before plann
 ### 5. Compose and validate the message
 
 - Derive `type`, `scope`, subject, body, and footers from the staged diff, not only from the user's wording.
+- Write the body as a Markdown bullet list — every body line starts with `- `, one point per line. Never use prose paragraphs; the validator rejects them.
 - For a subject-only message, run:
 
   ```text
@@ -74,4 +76,7 @@ Read [references/commit-standard.md](references/commit-standard.md) before plann
 
 ## Final report
 
-Report each commit hash and subject, the files or logical group included, validation commands and results, and whether a push occurred.
+- Report each commit hash and subject.
+- Report the files or logical group included in each commit.
+- Report the validation commands run and their results.
+- State whether a push occurred.
