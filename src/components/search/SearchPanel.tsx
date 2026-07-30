@@ -54,6 +54,7 @@ interface SearchPanelProps {
   selectedIconIndex: number
   onSelectIcon: (index: number) => void
   onActivateIcon: (icon: DesktopIcon) => void
+  onShortcutColumnCountChange: (columnCount: number) => void
   matchPath: boolean
   onMatchPathChange: (value: boolean) => void
   matchCase: boolean
@@ -101,6 +102,7 @@ export function SearchPanel({
   selectedIconIndex,
   onSelectIcon,
   onActivateIcon,
+  onShortcutColumnCountChange,
   matchPath,
   onMatchPathChange,
   matchCase,
@@ -431,6 +433,7 @@ export function SearchPanel({
             onSelect={onSelectIcon}
             onActivate={onActivateIcon}
             mode="grid"
+            onColumnCountChange={onShortcutColumnCountChange}
           />
         ) : (
           <div className="px-4 py-3 text-sm text-muted-foreground">{iconEmptyText}</div>

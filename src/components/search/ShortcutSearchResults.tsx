@@ -1,9 +1,12 @@
+import { useEffect, useRef } from 'react'
 import { AppWindow, Folder } from 'lucide-react'
 import { translate } from '@/lib/i18n'
 import { IconContextMenu } from '@/components/icons/IconContextMenu'
 import { useIconStore } from '@/stores/iconStore'
 import { ICON_SIZE_CONFIG, type DesktopIcon } from '@/types'
 import { SearchResultSectionHeader } from './SearchResultSectionHeader'
+import { SHORTCUT_GRID_COLUMN_GAP, resolveShortcutGridColumnCount } from './shortcutGridLayout'
+import { useStableSearchEvent } from './useStableSearchEvent'
 
 interface ShortcutSearchResultsProps {
   icons: DesktopIcon[]
@@ -12,6 +15,7 @@ interface ShortcutSearchResultsProps {
   onActivate: (icon: DesktopIcon) => void
   mode: 'compact' | 'grid'
   heading?: string
+  onColumnCountChange?: (columnCount: number) => void
 }
 
 function ShortcutIcon({ icon, size }: { icon: DesktopIcon; size: number }) {
@@ -43,10 +47,49 @@ export function ShortcutSearchResults({
   onActivate,
   mode,
   heading,
+  onColumnCountChange,
 }: ShortcutSearchResultsProps) {
   const { iconSize, titleLineCount } = useIconStore()
   const config = ICON_SIZE_CONFIG[iconSize]
   const singleLineTitle = titleLineCount === 'one'
+  const gridRef = useRef<HTMLDivElement | null>(null)
+  const isGridMode = mode === 'grid'
+  const hasIcons = icons.length > 0
+  const tileWidth = config.containerWidth
+  const reportColumnCount = useStableSearchEvent((columnCount: number) => {
+    onColumnCountChange?.(columnCount)
+  })
+
+  useEffect(() => {
+    if (!isGridMode || !hasIcons) return
+
+    const element = gridRef.current
+    if (!element) return
+
+    const syncColumnCount = () => {
+      reportColumnCount(
+        resolveShortcutGridColumnCount({ availableWidth: element.clientWidth, tileWidth })
+      )
+    }
+
+    syncColumnCount()
+
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(syncColumnCount)
+    resizeObserver?.observe(element)
+
+    return () => {
+      resizeObserver?.disconnect()
+    }
+  }, [hasIcons, isGridMode, reportColumnCount, tileWidth])
+
+  useEffect(() => {
+    if (!isGridMode || selectedIndex < 0) return
+
+    gridRef.current
+      ?.querySelector<HTMLElement>(`[data-shortcut-index="${selectedIndex}"]`)
+      ?.scrollIntoView({ block: 'nearest' })
+  }, [isGridMode, selectedIndex])
 
   if (icons.length === 0) return null
 
@@ -88,15 +131,18 @@ export function ShortcutSearchResults({
   return (
     <div className="max-h-[56vh] overflow-auto px-4 py-4">
       <div
-        className="grid justify-start gap-x-4 gap-y-5"
+        ref={gridRef}
+        className="grid justify-start gap-y-5"
         style={{
-          gridTemplateColumns: `repeat(auto-fill, ${config.containerWidth}px)`,
+          columnGap: SHORTCUT_GRID_COLUMN_GAP,
+          gridTemplateColumns: `repeat(auto-fill, ${tileWidth}px)`,
         }}
       >
         {icons.map((icon, index) => (
           <IconContextMenu key={icon.id} icon={icon} onOpen={() => onActivate(icon)}>
             <button
               type="button"
+              data-shortcut-index={index}
               aria-current={selectedIndex === index ? 'true' : undefined}
               className={`group relative flex cursor-pointer flex-col items-center gap-2 rounded-md border-none p-3 shadow-none ${
                 selectedIndex === index

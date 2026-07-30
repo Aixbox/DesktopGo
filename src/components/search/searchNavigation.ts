@@ -21,6 +21,7 @@ export interface SearchNavigationOptions {
   fileCount: number
   selectCombinedIndex: (index: number) => void
   allowHorizontalShortcutNavigation: boolean
+  shortcutColumnCount: number
   selectedFileIndex: number
   moveFileSelection: (delta: number) => void
   getFileAt: (index: number) => SearchHit | null
@@ -33,6 +34,49 @@ export interface SearchNavigationOptions {
 }
 
 const UNIFIED_SHORTCUT_COLUMN_COUNT = 2
+
+export type GridArrowKey = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight'
+
+export function isGridArrowKey(key: string): key is GridArrowKey {
+  return key === 'ArrowUp' || key === 'ArrowDown' || key === 'ArrowLeft' || key === 'ArrowRight'
+}
+
+/**
+ * 在固定列数的网格内移动选中项。
+ *
+ * 水平方向在行首/行尾停住，垂直方向越出网格时返回 `null`，由调用方决定
+ * 是继续停在原处还是移交给相邻的结果区域。
+ */
+export function resolveGridArrowIndex({
+  key,
+  index,
+  itemCount,
+  columnCount,
+}: {
+  key: GridArrowKey
+  index: number
+  itemCount: number
+  columnCount: number
+}): number | null {
+  if (itemCount <= 0) return null
+  if (index < 0 || index >= itemCount) return 0
+
+  const columns = Math.max(1, columnCount)
+  const column = index % columns
+
+  if (key === 'ArrowLeft') return column === 0 ? index : index - 1
+  if (key === 'ArrowRight') {
+    const nextIndex = index + 1
+    return column === columns - 1 || nextIndex >= itemCount ? index : nextIndex
+  }
+  if (key === 'ArrowDown') {
+    const nextRowIndex = index + columns
+    return nextRowIndex < itemCount ? nextRowIndex : null
+  }
+
+  const previousRowIndex = index - columns
+  return previousRowIndex >= 0 ? previousRowIndex : null
+}
 
 export function getUnifiedSelectedShortcutIndex(selectedIndex: number, shortcutCount: number) {
   return selectedIndex >= 0 && selectedIndex < shortcutCount ? selectedIndex : -1
@@ -67,7 +111,7 @@ function resolveUnifiedArrowIndex({
   iconCount,
   fileCount,
 }: {
-  key: 'ArrowDown' | 'ArrowUp' | 'ArrowLeft' | 'ArrowRight'
+  key: GridArrowKey
   selectedIndex: number
   iconCount: number
   fileCount: number
@@ -88,22 +132,14 @@ function resolveUnifiedArrowIndex({
     return Math.min(resultCount - 1, currentIndex + 1)
   }
 
-  const column = currentIndex % UNIFIED_SHORTCUT_COLUMN_COUNT
-  if (key === 'ArrowLeft') return column === 0 ? currentIndex : currentIndex - 1
-  if (key === 'ArrowRight') {
-    const nextIndex = currentIndex + 1
-    return column === UNIFIED_SHORTCUT_COLUMN_COUNT - 1 || nextIndex >= iconCount
-      ? currentIndex
-      : nextIndex
-  }
-  if (key === 'ArrowDown') {
-    const nextRowIndex = currentIndex + UNIFIED_SHORTCUT_COLUMN_COUNT
-    if (nextRowIndex < iconCount) return nextRowIndex
-    return fileCount > 0 ? iconCount : currentIndex
-  }
-
-  const previousRowIndex = currentIndex - UNIFIED_SHORTCUT_COLUMN_COUNT
-  if (previousRowIndex >= 0) return previousRowIndex
+  const gridIndex = resolveGridArrowIndex({
+    key,
+    index: currentIndex,
+    itemCount: iconCount,
+    columnCount: UNIFIED_SHORTCUT_COLUMN_COUNT,
+  })
+  if (gridIndex !== null) return gridIndex
+  if (key === 'ArrowDown') return fileCount > 0 ? iconCount : currentIndex
   return currentIndex
 }
 
@@ -162,14 +198,20 @@ function handleUnifiedNavigation(options: SearchNavigationOptions): boolean {
 
 function handleShortcutNavigation(options: SearchNavigationOptions): boolean {
   const { key, preventDefault, iconResults } = options
-  if (key === 'ArrowDown' || key === 'ArrowUp') {
+  if (isGridArrowKey(key)) {
+    const horizontalArrow = key === 'ArrowLeft' || key === 'ArrowRight'
+    if (horizontalArrow && !options.allowHorizontalShortcutNavigation) return false
+
     preventDefault()
     if (iconResults.length === 0) return true
-    const delta = key === 'ArrowDown' ? 1 : -1
-    options.setSelectedIconIndex(current => {
-      const safeCurrent = current < 0 ? 0 : current
-      return (safeCurrent + delta + iconResults.length) % iconResults.length
+
+    const nextIndex = resolveGridArrowIndex({
+      key,
+      index: options.selectedIconIndex,
+      itemCount: iconResults.length,
+      columnCount: options.shortcutColumnCount,
     })
+    options.setSelectedIconIndex(nextIndex ?? Math.max(options.selectedIconIndex, 0))
     return true
   }
 

@@ -1,6 +1,7 @@
 import {
   getUnifiedSelectedShortcutIndex,
   handleSearchNavigation,
+  resolveGridArrowIndex,
   shouldUseShortcutHorizontalNavigation,
 } from './searchNavigation.ts'
 
@@ -34,6 +35,7 @@ const createOptions = overrides => {
       fileCount: 2,
       selectCombinedIndex: index => calls.push(`select:${index}`),
       allowHorizontalShortcutNavigation: true,
+      shortcutColumnCount: 2,
       selectedFileIndex: 0,
       moveFileSelection: delta => calls.push(`move:${delta}`),
       getFileAt: index => ({ path: `file-${index}` }),
@@ -205,6 +207,102 @@ assertEqual(
   openShortcut.calls,
   ['prevent', 'icon:shortcut-3'],
   'enter should open the selected shortcut'
+)
+
+const gridMove = overrides =>
+  resolveGridArrowIndex({ key: 'ArrowRight', index: 0, itemCount: 12, columnCount: 5, ...overrides })
+
+assertEqual(gridMove({ index: 6 }), 7, 'right should move to the next cell in the row')
+assertEqual(gridMove({ index: 4 }), 4, 'right should stop at the end of a row')
+assertEqual(gridMove({ key: 'ArrowLeft', index: 6 }), 5, 'left should move to the previous cell')
+assertEqual(
+  gridMove({ key: 'ArrowLeft', index: 5 }),
+  5,
+  'left should stop at the beginning of a row'
+)
+assertEqual(gridMove({ key: 'ArrowDown', index: 3 }), 8, 'down should move a full row')
+assertEqual(
+  gridMove({ key: 'ArrowDown', index: 8 }),
+  null,
+  'down should report leaving the grid past the last row'
+)
+assertEqual(gridMove({ key: 'ArrowUp', index: 7 }), 2, 'up should move a full row')
+assertEqual(
+  gridMove({ key: 'ArrowUp', index: 2 }),
+  null,
+  'up should report leaving the grid above the first row'
+)
+assertEqual(
+  gridMove({ key: 'ArrowDown', index: 11 }),
+  null,
+  'down should report leaving the grid from a partial last row'
+)
+assertEqual(gridMove({ index: -1 }), 0, 'the first arrow press should select the first cell')
+assertEqual(
+  gridMove({ index: 0, itemCount: 0 }),
+  null,
+  'an empty grid should not resolve a selection'
+)
+assertEqual(
+  gridMove({ key: 'ArrowDown', index: 3, columnCount: 0 }),
+  4,
+  'a not yet measured grid should fall back to single column moves'
+)
+
+const createShortcutSourceOptions = overrides => {
+  const selections = []
+  const created = createOptions({
+    source: 'icons',
+    iconResults: shortcuts,
+    shortcutColumnCount: 4,
+    selectedIconIndex: 1,
+    setSelectedIconIndex: index => selections.push(index),
+    ...overrides,
+  })
+  return { ...created, selections }
+}
+
+const shortcutRight = createShortcutSourceOptions({ key: 'ArrowRight' })
+handleSearchNavigation(shortcutRight.options)
+assertEqual(shortcutRight.calls, ['prevent'], 'right should be handled inside the shortcut grid')
+assertEqual(shortcutRight.selections, [2], 'right should select the next shortcut in the row')
+
+const shortcutLeft = createShortcutSourceOptions({ key: 'ArrowLeft', selectedIconIndex: 4 })
+handleSearchNavigation(shortcutLeft.options)
+assertEqual(shortcutLeft.selections, [4], 'left should stop at the first column of the row')
+
+const shortcutDown = createShortcutSourceOptions({ key: 'ArrowDown' })
+handleSearchNavigation(shortcutDown.options)
+assertEqual(shortcutDown.selections, [5], 'down should move a full shortcut row')
+
+const shortcutDownAtLastRow = createShortcutSourceOptions({
+  key: 'ArrowDown',
+  selectedIconIndex: 5,
+})
+handleSearchNavigation(shortcutDownAtLastRow.options)
+assertEqual(shortcutDownAtLastRow.selections, [5], 'down should stay on the last shortcut row')
+
+const shortcutUp = createShortcutSourceOptions({ key: 'ArrowUp', selectedIconIndex: 5 })
+handleSearchNavigation(shortcutUp.options)
+assertEqual(shortcutUp.selections, [1], 'up should move a full shortcut row')
+
+const shortcutCaretEditing = createShortcutSourceOptions({
+  key: 'ArrowLeft',
+  allowHorizontalShortcutNavigation: false,
+})
+handleSearchNavigation(shortcutCaretEditing.options)
+assertEqual(
+  [shortcutCaretEditing.calls, shortcutCaretEditing.selections],
+  [[], []],
+  'horizontal arrows should keep editing the input before grid navigation is entered'
+)
+
+const shortcutEnter = createShortcutSourceOptions({ key: 'Enter', selectedIconIndex: 3 })
+handleSearchNavigation(shortcutEnter.options)
+assertEqual(
+  shortcutEnter.calls,
+  ['prevent', 'icon:shortcut-3'],
+  'enter should open the selected shortcut in the shortcut source'
 )
 
 console.log('统一搜索键盘导航测试通过')

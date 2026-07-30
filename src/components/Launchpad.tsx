@@ -152,6 +152,7 @@ export function Launchpad() {
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false)
   const [selectedIconResultIndex, setSelectedIconResultIndex] = useState(-1)
   const [combinedSelectedIndex, setCombinedSelectedIndex] = useState(-1)
+  const [shortcutGridColumnCount, setShortcutGridColumnCount] = useState(1)
   const [layoutResetToken, setLayoutResetToken] = useState(0)
   const openSearchPanel = useCallback(() => {
     setSearchPanelLoaded(true)
@@ -406,6 +407,7 @@ export function Launchpad() {
       fileCount: searchTotalResults > 0 ? searchTotalResults : searchLoadedCount,
       selectCombinedIndex: selectUnifiedSearchIndex,
       allowHorizontalShortcutNavigation,
+      shortcutColumnCount: shortcutGridColumnCount,
       selectedFileIndex: selectedIndex,
       moveFileSelection: moveSelection,
       getFileAt: getSearchItemAt,
@@ -419,13 +421,18 @@ export function Launchpad() {
   }
 
   const handleSearchInputKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    const isShortcutOnlySource = searchSource === 'icons'
     const allowHorizontalShortcutNavigation = shouldUseShortcutHorizontalNavigation({
       key: e.key,
       selectionStart: e.currentTarget.selectionStart,
       selectionEnd: e.currentTarget.selectionEnd,
       inputLength: e.currentTarget.value.length,
-      hasExplicitResultSelection: combinedSelectedIndex >= 0,
-      hasVisibleShortcutSelection: unifiedSelectedShortcutIndex >= 0,
+      hasExplicitResultSelection: isShortcutOnlySource
+        ? selectedIconResultIndex >= 0
+        : combinedSelectedIndex >= 0,
+      hasVisibleShortcutSelection: isShortcutOnlySource
+        ? effectiveSelectedIconResultIndex >= 0
+        : unifiedSelectedShortcutIndex >= 0,
     })
     handleSearchNavigationKey(e.key, () => e.preventDefault(), allowHorizontalShortcutNavigation)
   }
@@ -674,6 +681,7 @@ export function Launchpad() {
                 onActivateIcon={icon => {
                   void launchIconItem(icon)
                 }}
+                onShortcutColumnCountChange={setShortcutGridColumnCount}
                 matchPath={searchMatchPath}
                 onMatchPathChange={setSearchMatchPath}
                 matchCase={searchMatchCase}
