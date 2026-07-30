@@ -45,15 +45,6 @@ pub fn search(
 }
 
 #[cfg(windows)]
-pub fn complete_snapshot(
-    dll_path: &Path,
-    query: &SearchQuery,
-    app_handle: &tauri::AppHandle,
-) -> Result<SearchResponse, String> {
-    worker::complete_snapshot(dll_path, query, app_handle)
-}
-
-#[cfg(windows)]
 pub fn inspect_runtime(
     dll_path: &Path,
     app_handle: &tauri::AppHandle,
@@ -78,15 +69,6 @@ pub fn probe_connection(_dll_path: &Path, _app_handle: &tauri::AppHandle) -> Res
 
 #[cfg(not(windows))]
 pub fn search(
-    _dll_path: &Path,
-    _query: &SearchQuery,
-    _app_handle: &tauri::AppHandle,
-) -> Result<SearchResponse, String> {
-    Err("Everything search is only supported on Windows".to_string())
-}
-
-#[cfg(not(windows))]
-pub fn complete_snapshot(
     _dll_path: &Path,
     _query: &SearchQuery,
     _app_handle: &tauri::AppHandle,

@@ -74,20 +74,6 @@ impl SearchResultSnapshot {
             limit: requested_end - query.offset,
         })
     }
-
-    pub(super) fn resolve_complete(&self, query: &SearchQuery) -> Option<SnapshotRange> {
-        if self.offset != 0
-            || self.key != SearchSnapshotKey::from(query)
-            || self.result_count < self.total_results
-        {
-            return None;
-        }
-
-        Some(SnapshotRange {
-            local_offset: 0,
-            limit: self.result_count,
-        })
-    }
 }
 
 #[cfg(test)]
@@ -133,20 +119,5 @@ mod tests {
         let snapshot = SearchResultSnapshot::new(&query("report", 0, 200), 10_000, 10_000);
 
         assert_eq!(snapshot.resolve_range(&query("photo", 200, 200)), None);
-    }
-
-    #[test]
-    fn resolves_only_complete_snapshots_for_native_lists() {
-        let complete = SearchResultSnapshot::new(&query("report", 0, 200), 10_000, 10_000);
-        let partial = SearchResultSnapshot::new(&query("report", 0, 200), 10_000, 20_000);
-
-        assert_eq!(
-            complete.resolve_complete(&query("report", 0, 200)),
-            Some(SnapshotRange {
-                local_offset: 0,
-                limit: 10_000,
-            })
-        );
-        assert_eq!(partial.resolve_complete(&query("report", 0, 200)), None);
     }
 }

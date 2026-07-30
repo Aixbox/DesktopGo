@@ -25,10 +25,6 @@ enum WorkerCommand {
         query: SearchQuery,
         response: Sender<Result<SearchResponse, String>>,
     },
-    CompleteSnapshot {
-        query: SearchQuery,
-        response: Sender<Result<SearchResponse, String>>,
-    },
     Shutdown {
         response: Sender<()>,
     },
@@ -108,10 +104,6 @@ impl IpcWorker {
                     query::cancel_active_request(&self.app_handle, &mut self.active);
                     self.start_search(search_query, response);
                 }
-                WorkerCommand::CompleteSnapshot {
-                    query: search_query,
-                    response,
-                } => self.read_complete_snapshot(&search_query, &response),
                 WorkerCommand::Shutdown { response } => {
                     query::cancel_active_request(&self.app_handle, &mut self.active);
                     append_debug_log(&self.app_handle, "ipc worker shutdown requested");
@@ -194,23 +186,6 @@ impl IpcWorker {
         let result = query::extract_snapshot_range(&self.api, &self.app_handle, range);
         let _ = response.send(result);
         true
-    }
-
-    fn read_complete_snapshot(
-        &self,
-        search_query: &SearchQuery,
-        response: &Sender<Result<SearchResponse, String>>,
-    ) {
-        let result = self
-            .result_snapshot
-            .as_ref()
-            .and_then(|snapshot| snapshot.resolve_complete(search_query))
-            .ok_or_else(|| {
-                "NativeSearchSnapshotUnavailable: the current SDK result snapshot is incomplete"
-                    .to_string()
-            })
-            .and_then(|range| query::extract_snapshot_range(&self.api, &self.app_handle, range));
-        let _ = response.send(result);
     }
 
     fn reuse_cached_first_page(
@@ -396,29 +371,6 @@ pub(super) fn search(
         Ok(result) => result,
         Err(RecvTimeoutError::Timeout) => {
             Err("Everything query timed out while waiting for reply".to_string())
-        }
-        Err(RecvTimeoutError::Disconnected) => Err("Everything IPC worker stopped".to_string()),
-    }
-}
-
-pub(super) fn complete_snapshot(
-    dll_path: &Path,
-    query: &SearchQuery,
-    app_handle: &tauri::AppHandle,
-) -> Result<SearchResponse, String> {
-    let sender = ensure_worker(dll_path, app_handle)?;
-    let (response_tx, response_rx) = mpsc::channel();
-    sender
-        .send(WorkerCommand::CompleteSnapshot {
-            query: query.clone(),
-            response: response_tx,
-        })
-        .map_err(|_| "Everything IPC worker is unavailable".to_string())?;
-
-    match response_rx.recv_timeout(Duration::from_secs(8)) {
-        Ok(result) => result,
-        Err(RecvTimeoutError::Timeout) => {
-            Err("Everything result snapshot extraction timed out".to_string())
         }
         Err(RecvTimeoutError::Disconnected) => Err("Everything IPC worker stopped".to_string()),
     }

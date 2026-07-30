@@ -110,8 +110,6 @@ export function Launchpad() {
     hasCommittedQuery,
     loadedCount: searchLoadedCount,
     getItemAt: getSearchItemAt,
-    cacheItemAt: cacheSearchItemAt,
-    activeQuery: searchActiveQuery,
     setVisibleRange: setSearchVisibleRange,
     requestRange: requestSearchRange,
     loading: searchLoading,
@@ -656,7 +654,6 @@ export function Launchpad() {
                 pageSize={searchSettings.maxResultsPerPage}
                 hasCommittedQuery={hasCommittedQuery}
                 getItemAt={getSearchItemAt}
-                activeQuery={searchActiveQuery}
                 selectedItem={selectedSearchItem}
                 selectedIndex={
                   searchSource === 'all' && unifiedSelectedShortcutIndex >= 0 ? -1 : selectedIndex
@@ -706,8 +703,7 @@ export function Launchpad() {
                   setIsSearchPreviewVisible(visible => !visible)
                 }}
                 onVisibleRangeChange={setSearchVisibleRange}
-                onSelect={(index, item) => {
-                  if (item) cacheSearchItemAt(index, item)
+                onSelect={index => {
                   if (searchSource === 'all') {
                     selectUnifiedFileIndex(index)
                   } else {

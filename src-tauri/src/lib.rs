@@ -8,7 +8,6 @@ mod everything;
 mod icons;
 mod launchpad_shortcut;
 mod layout_db;
-mod native_search_list;
 mod search_preview;
 mod shell_context_menu;
 mod startup;
@@ -28,14 +27,12 @@ use commands::{
     get_custom_icon_source, get_drag_preview_icon, get_icon_edit_source, get_icon_manager_items,
     get_icons, get_launch_on_startup_enabled, get_layout_payload, get_layout_payloads,
     get_main_window_always_on_top_enabled, get_search_preview, get_search_result_icons,
-    get_search_runtime_status, get_updater_configuration_status, hide_icons,
-    hide_native_search_list, import_dropped_paths, install_app_update, launch_app,
-    notify_main_window_ready, optimize_icon_image, prepare_native_search_list,
-    record_search_result_run, scan_invalid_icons, search_files, select_native_search_list_item,
-    set_layout_payload, set_layout_payloads, set_main_window_always_on_top_enabled,
-    set_window_mode, show_native_search_list, show_shell_context_menu, start_search_runtime,
-    sync_window_persistent_state, toggle_window, unhide_icons, update_icon_entry,
-    update_launch_on_startup_enabled, update_launchpad_shortcut,
+    get_search_runtime_status, get_updater_configuration_status, hide_icons, import_dropped_paths,
+    install_app_update, launch_app, notify_main_window_ready, optimize_icon_image,
+    record_search_result_run, scan_invalid_icons, search_files, set_layout_payload,
+    set_layout_payloads, set_main_window_always_on_top_enabled, set_window_mode,
+    show_shell_context_menu, start_search_runtime, sync_window_persistent_state, toggle_window,
+    unhide_icons, update_icon_entry, update_launch_on_startup_enabled, update_launchpad_shortcut,
 };
 use std::sync::atomic::Ordering;
 use tauri::{Manager, RunEvent};
@@ -88,7 +85,6 @@ pub fn run() {
         .manage(updater::PendingUpdate::default())
         .manage(MainWindowState::default())
         .manage(launchpad_shortcut::LaunchpadShortcutState::default())
-        .manage(native_search_list::NativeSearchListState::default())
         .manage(TrayState::default());
 
     #[cfg(desktop)]
@@ -122,10 +118,6 @@ pub fn run() {
             get_search_runtime_status,
             search_files,
             get_search_result_icons,
-            prepare_native_search_list,
-            show_native_search_list,
-            hide_native_search_list,
-            select_native_search_list_item,
             get_search_preview,
             record_search_result_run,
             notify_main_window_ready,

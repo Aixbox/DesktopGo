@@ -11,7 +11,7 @@ use super::debug_log::append as append_debug_log;
 use super::errors::{build_error, SearchErrorCode};
 use super::ipc;
 use super::models::{
-    SearchHit, SearchPage, SearchProvider, SearchQuery, SearchRuntimeState, SearchRuntimeStatus,
+    SearchPage, SearchProvider, SearchQuery, SearchRuntimeState, SearchRuntimeStatus,
 };
 
 mod startup;
@@ -256,27 +256,6 @@ pub fn search_files(
         runtime_state: status.state,
         took_ms,
     })
-}
-
-pub fn get_complete_search_snapshot(
-    app_handle: &tauri::AppHandle,
-    mut query: SearchQuery,
-) -> Result<Vec<SearchHit>, String> {
-    query.keyword = query.keyword.trim().to_string();
-    query.offset = 0;
-    query.limit = query.limit.clamp(1, MAX_SEARCH_LIMIT);
-    let _ = start_search_runtime(app_handle)?;
-    let dll_path = {
-        let guard = RUNTIME_STATE
-            .lock()
-            .map_err(|_| "Failed to lock search runtime state".to_string())?;
-        guard
-            .dll_path
-            .clone()
-            .ok_or_else(|| "Everything DLL path is not initialized".to_string())?
-    };
-
-    ipc::complete_snapshot(&dll_path, &query, app_handle).map(|response| response.items)
 }
 
 pub fn record_search_result_run(app_handle: &tauri::AppHandle, path: &str) -> Result<(), String> {
