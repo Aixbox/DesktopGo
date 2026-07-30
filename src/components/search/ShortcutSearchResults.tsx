@@ -88,9 +88,9 @@ export function ShortcutSearchResults({
   return (
     <div className="max-h-[56vh] overflow-auto px-4 py-4">
       <div
-        className="grid justify-center gap-x-4 gap-y-5"
+        className="grid justify-start gap-x-4 gap-y-5"
         style={{
-          gridTemplateColumns: `repeat(auto-fit, minmax(${config.containerWidth}px, ${config.containerWidth}px))`,
+          gridTemplateColumns: `repeat(auto-fill, ${config.containerWidth}px)`,
         }}
       >
         {icons.map((icon, index) => (
