@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import type {
+  SearchHit,
   SearchPage,
   SearchPreview,
   SearchQuery,
@@ -38,6 +39,9 @@ export const startSearchRuntime = () =>
 export const getSearchRuntimeStatus = () => invoke<SearchRuntimeStatus>('get_search_runtime_status')
 
 export const searchFiles = (query: SearchQuery) => invoke<SearchPage>('search_files', { query })
+
+export const getCompleteSearchSnapshot = (query: SearchQuery) =>
+  invoke<SearchHit[]>('get_complete_search_snapshot', { query })
 
 export const getSearchResultIcons = (paths: string[], iconSize = 32) =>
   withTimeout(

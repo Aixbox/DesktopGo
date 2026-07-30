@@ -35,6 +35,18 @@ pub async fn search_files(
 }
 
 #[tauri::command]
+pub async fn get_complete_search_snapshot(
+    app_handle: tauri::AppHandle,
+    query: SearchQuery,
+) -> Result<Vec<crate::everything::SearchHit>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        everything::get_complete_search_snapshot(&app_handle, query)
+    })
+    .await
+    .map_err(|error| format!("Failed to join complete search snapshot task: {error}"))?
+}
+
+#[tauri::command]
 pub async fn get_search_result_icons(
     paths: Vec<String>,
     icon_size: i32,

@@ -94,18 +94,18 @@ impl ActiveRequest {
     }
 }
 
-fn extract_path(api: &EverythingApi, index: u32) -> Option<String> {
-    let mut buffer = vec![0u16; 32_768];
+fn extract_path(api: &EverythingApi, index: u32, buffer: &mut [u16]) -> Option<String> {
     let copied = unsafe {
         (api.get_result_full_path_name_w)(index, buffer.as_mut_ptr(), buffer.len() as u32)
     };
     if copied == 0 {
         return None;
     }
-    let end = buffer
+    let copied_len = copied.min(buffer.len() as u32) as usize;
+    let end = buffer[..copied_len]
         .iter()
         .position(|ch| *ch == 0)
-        .unwrap_or(copied.min(buffer.len() as u32) as usize);
+        .unwrap_or(copied_len);
     if end == 0 {
         return None;
     }
@@ -150,8 +150,9 @@ fn extract_search_results(
     );
     let extraction_started_at = Instant::now();
     let mut items = Vec::with_capacity((end_index - start_index) as usize);
+    let mut path_buffer = vec![0u16; 32_768];
     for index in start_index..end_index {
-        let Some(path) = extract_path(api, index) else {
+        let Some(path) = extract_path(api, index, &mut path_buffer) else {
             continue;
         };
         let path_buf = PathBuf::from(&path);

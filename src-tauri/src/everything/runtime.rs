@@ -11,7 +11,7 @@ use super::debug_log::append as append_debug_log;
 use super::errors::{build_error, SearchErrorCode};
 use super::ipc;
 use super::models::{
-    SearchPage, SearchProvider, SearchQuery, SearchRuntimeState, SearchRuntimeStatus,
+    SearchHit, SearchPage, SearchProvider, SearchQuery, SearchRuntimeState, SearchRuntimeStatus,
 };
 
 mod startup;
@@ -20,6 +20,8 @@ pub use startup::start_search_runtime;
 
 const DEFAULT_SEARCH_LIMIT: u32 = 200;
 const MAX_SEARCH_LIMIT: u32 = 200;
+// Keep complete React snapshots bounded; larger result sets retain paged access.
+const MAX_COMPLETE_SEARCH_RESULTS: u32 = 100_000;
 const MAX_KEYWORD_LEN: usize = 256;
 
 const KEY_SEARCH_AUTO_START_RUNTIME: &str = "search.autoStartRuntime";
@@ -256,6 +258,27 @@ pub fn search_files(
         runtime_state: status.state,
         took_ms,
     })
+}
+
+pub fn get_complete_search_snapshot(
+    app_handle: &tauri::AppHandle,
+    mut query: SearchQuery,
+) -> Result<Vec<SearchHit>, String> {
+    query.keyword = query.keyword.trim().to_string();
+    query.offset = 0;
+    query.limit = query.limit.clamp(1, MAX_COMPLETE_SEARCH_RESULTS);
+    let _ = start_search_runtime(app_handle)?;
+    let dll_path = {
+        let guard = RUNTIME_STATE
+            .lock()
+            .map_err(|_| "Failed to lock search runtime state".to_string())?;
+        guard
+            .dll_path
+            .clone()
+            .ok_or_else(|| "Everything DLL path is not initialized".to_string())?
+    };
+
+    ipc::complete_snapshot(&dll_path, &query, app_handle).map(|response| response.items)
 }
 
 pub fn record_search_result_run(app_handle: &tauri::AppHandle, path: &str) -> Result<(), String> {

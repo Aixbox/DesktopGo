@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { searchFiles } from './api'
+import { getCompleteSearchSnapshot, searchFiles } from './api'
 import { buildSearchKeyword } from './filters'
 import { rankSearchPageItems } from './relevance'
 import { selectNextSearchOffset } from './rangeScheduling'
 import { clampSearchSelection, resolveCommittedKeyword } from './searchState'
+import {
+  countCachedSearchResults,
+  getCachedSearchResult,
+  resolveCompleteSearchSnapshot,
+  type SearchPageCache,
+} from './resultCache'
 import {
   addSearchHistoryEntry,
   clearSearchHistory,
@@ -69,8 +75,6 @@ const isSearchBusyError = (error: unknown) => asErrorMessage(error).startsWith(S
 
 const getBusyRetryDelay = (attempt: number) =>
   Math.min(SEARCH_BUSY_RETRY_BASE_MS * (attempt + 1), SEARCH_BUSY_RETRY_MAX_MS)
-
-type PageCache = Record<number, SearchHit[]>
 
 interface SearchContext {
   seq: number
@@ -151,7 +155,8 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
   const [sort, setSortState] = useState<SearchSort>(DEFAULT_SEARCH_SETTINGS.sortBy)
   const [history, setHistory] = useState<SearchHistoryEntry[]>([])
 
-  const [pages, setPages] = useState<PageCache>({})
+  const [pages, setPages] = useState<SearchPageCache>({})
+  const [completeItems, setCompleteItems] = useState<SearchHit[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [searchPending, setSearchPending] = useState(false)
@@ -165,17 +170,17 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
   const requestSeqRef = useRef(0)
   const rangeRequestTokenRef = useRef(0)
   const activeQueryRef = useRef<SearchContext | null>(null)
-  const pagesRef = useRef<PageCache>({})
+  const pagesRef = useRef<SearchPageCache>({})
+  const completeItemsRef = useRef<SearchHit[] | null>(null)
   const totalResultsRef = useRef(0)
-  const displayedItemsRef = useRef(new Map<number, SearchHit>())
   const visibleRangeRef = useRef<VisibleRange>({ start: 0, end: -1 })
   const requestedOffsetsRef = useRef(new Set<number>())
   const flushTimerRef = useRef<number | null>(null)
   const rangeRequestRef = useRef<RangeRequest | null>(null)
 
   const loadedCount = useMemo(
-    () => Object.values(pages).reduce((sum, page) => sum + page.length, 0),
-    [pages]
+    () => completeItems?.length ?? countCachedSearchResults(pages),
+    [completeItems, pages]
   )
   const committedKeyword = resolveCommittedKeyword({
     keyword,
@@ -183,9 +188,14 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     liveOnType: settings.liveOnType,
   })
 
-  const setPagesAndRef = useCallback((nextPages: PageCache) => {
+  const setPagesAndRef = useCallback((nextPages: SearchPageCache) => {
     pagesRef.current = nextPages
     setPages(nextPages)
+  }, [])
+
+  const setCompleteItemsAndRef = useCallback((items: SearchHit[] | null) => {
+    completeItemsRef.current = items
+    setCompleteItems(items)
   }, [])
 
   const clearFlushTimer = useCallback(() => {
@@ -207,7 +217,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     activeQueryRef.current = null
     requestedOffsetsRef.current.clear()
     visibleRangeRef.current = { start: 0, end: -1 }
-    displayedItemsRef.current.clear()
+    setCompleteItemsAndRef(null)
     totalResultsRef.current = 0
     setPagesAndRef({})
     setLoading(false)
@@ -218,19 +228,22 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     setTookMs(0)
     setTotalResults(0)
     setSelectedIndex(-1)
-  }, [clearFlushTimer, invalidateRangeRequest, setPagesAndRef])
+  }, [clearFlushTimer, invalidateRangeRequest, setCompleteItemsAndRef, setPagesAndRef])
 
   const prepareSearchRefresh = useCallback(() => {
     clearFlushTimer()
     invalidateRangeRequest()
     requestedOffsetsRef.current.clear()
     visibleRangeRef.current = { start: 0, end: -1 }
-    displayedItemsRef.current.clear()
+    setCompleteItemsAndRef(null)
+    setPagesAndRef({})
+    totalResultsRef.current = 0
+    setTotalResults(0)
     setLoading(true)
     setSearchPending(true)
     setError(null)
     setSelectedIndex(-1)
-  }, [clearFlushTimer, invalidateRangeRequest])
+  }, [clearFlushTimer, invalidateRangeRequest, setCompleteItemsAndRef, setPagesAndRef])
 
   const applySearchConfiguration = useCallback(
     (loaded: SearchSettings, nextFilter: SearchDefaultFilter) => {
@@ -291,9 +304,37 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     (context: SearchContext) => {
       setLoading(true)
       void executeSearchWithRetry(context, 0)
-        .then(page => {
+        .then(async page => {
           if (!isContextActive(context)) return
-          setPagesAndRef({ 0: rankSearchPageItems(page.items, context) })
+
+          let exactItems = resolveCompleteSearchSnapshot(page.items, page.totalResults)
+          if (!exactItems && page.totalResults > 0) {
+            try {
+              const snapshotItems = await getCompleteSearchSnapshot({
+                keyword: context.queryKeyword,
+                offset: 0,
+                limit: page.totalResults,
+                matchPath: context.queryOptions.matchPath,
+                matchCase: context.queryOptions.matchCase,
+                regex: context.queryOptions.regex,
+                wholeWord: context.queryOptions.wholeWord,
+                sort: context.queryOptions.sort,
+              })
+              if (!isContextActive(context)) return
+              exactItems = resolveCompleteSearchSnapshot(snapshotItems, page.totalResults)
+            } catch {
+              // Very large result sets fall back to sparse range loading.
+            }
+          }
+
+          if (!isContextActive(context)) return
+          if (exactItems) {
+            setCompleteItemsAndRef(rankSearchPageItems(exactItems, context))
+            setPagesAndRef({})
+          } else {
+            setCompleteItemsAndRef(null)
+            setPagesAndRef({ 0: rankSearchPageItems(page.items, context) })
+          }
           totalResultsRef.current = page.totalResults
           setTotalResults(page.totalResults)
           setProvider(page.provider)
@@ -321,7 +362,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
           setSearchPending(false)
         })
     },
-    [executeSearchWithRetry, isContextActive, setPagesAndRef]
+    [executeSearchWithRetry, isContextActive, setCompleteItemsAndRef, setPagesAndRef]
   )
 
   const flushRequestedOffsets = useCallback(async () => {
@@ -329,7 +370,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
 
     while (true) {
       const context = activeQueryRef.current
-      if (!context || loading || rangeRequestRef.current) return
+      if (!context || completeItemsRef.current || loading || rangeRequestRef.current) return
 
       const pageSize = context.queryOptions.limit
       const visibleStartPage =
@@ -437,7 +478,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
   const scheduleOffsetRequest = useCallback(
     (offset: number) => {
       const context = activeQueryRef.current
-      if (!context || loading) return
+      if (!context || completeItemsRef.current || loading) return
 
       const pageSize = context.queryOptions.limit
       const normalizedOffset = Math.max(0, Math.floor(offset / pageSize) * pageSize)
@@ -470,7 +511,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
   const requestRange = useCallback(
     (startIndex: number, endIndex: number) => {
       const context = activeQueryRef.current
-      if (!context || endIndex < startIndex) return
+      if (!context || completeItemsRef.current || endIndex < startIndex) return
 
       const pageSize = context.queryOptions.limit
       const safeStart = Math.max(0, startIndex)
@@ -497,7 +538,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
       }
 
       const context = activeQueryRef.current
-      if (!context || loading || endIndex < safeStart) {
+      if (!context || completeItemsRef.current || loading || endIndex < safeStart) {
         return
       }
 
@@ -510,23 +551,13 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
   )
 
   const getItemAt = useCallback(
-    (index: number): SearchHit | null => {
-      if (index < 0) {
-        return null
-      }
-
-      const pageSize = activeQueryRef.current?.queryOptions.limit ?? settings.maxResultsPerPage
-      const pageOffset = Math.floor(index / pageSize) * pageSize
-      const page = pagesRef.current[pageOffset]
-      const pageItem = page?.[index - pageOffset] ?? null
-
-      if (pageItem) {
-        displayedItemsRef.current.set(index, pageItem)
-        return pageItem
-      }
-
-      return displayedItemsRef.current.get(index) ?? null
-    },
+    (index: number): SearchHit | null =>
+      getCachedSearchResult({
+        index,
+        completeItems: completeItemsRef.current,
+        pages: pagesRef.current,
+        pageSize: activeQueryRef.current?.queryOptions.limit ?? settings.maxResultsPerPage,
+      }),
     [settings.maxResultsPerPage]
   )
   useEffect(() => {
