@@ -1,0 +1,4 @@
+interface:
+  display_name: "Commit Changes"
+  short_description: "Create validated atomic Conventional Commits"
+  default_prompt: "Use $commit to split current changes into atomic commits, validate each message, and commit them safely."

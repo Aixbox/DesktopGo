@@ -3,12 +3,9 @@ import { flushSync } from 'react-dom'
 import type { SearchHit } from '@/lib/search/types'
 import { translate } from '@/lib/i18n'
 import { OverlayScrollArea } from '@/components/ui/overlay-scroll-area'
-import {
-  SearchResultPlaceholder,
-  SearchResultRow,
-  SearchResultSelectionHighlight,
-} from './SearchResultRow'
-import { getSearchScrollAnchorIndex } from './searchScrollSelection'
+import { SearchResultPlaceholder, SearchResultRow } from './SearchResultRow'
+import { SearchResultSelectionHighlight } from './SearchResultSelectionHighlight'
+import { useSearchScrollSelection } from './useSearchScrollSelection'
 import { useStableSearchEvent } from './useStableSearchEvent'
 import { useVisibleSearchIcons } from './useVisibleSearchIcons'
 
@@ -52,42 +49,21 @@ export function SearchResultsList({
   const scrollTopRef = useRef(0)
   const [viewportHeight, setViewportHeight] = useState(0)
   const [scrollTop, setScrollTop] = useState(0)
-  const scrollEndTimerRef = useRef<number | null>(null)
-  const scrollingRef = useRef(false)
-  const selectedIndexRef = useRef(selectedIndex)
-  const skipSelectedItemScrollRef = useRef(false)
-  const suppressScrollAnchorRef = useRef(false)
-  const suppressScrollAnchorFrameRef = useRef<number | null>(null)
-  const handleResultSelect = useStableSearchEvent(onSelect)
-  const handleResultActivate = useStableSearchEvent(onActivate)
-  const markScrolling = useCallback(() => {
-    scrollingRef.current = true
-    if (scrollEndTimerRef.current !== null) {
-      window.clearTimeout(scrollEndTimerRef.current)
-    }
-    scrollEndTimerRef.current = window.setTimeout(() => {
-      scrollingRef.current = false
-      scrollEndTimerRef.current = null
-    }, 120)
-  }, [])
-  const handleResultHover = useStableSearchEvent((index: number) => {
-    if (!scrollingRef.current) onSelect(index)
-  })
-  useLayoutEffect(() => {
-    selectedIndexRef.current = selectedIndex
-  }, [selectedIndex])
-
-  const suppressScrollAnchor = useCallback(() => {
-    suppressScrollAnchorRef.current = true
-    if (suppressScrollAnchorFrameRef.current !== null) {
-      window.cancelAnimationFrame(suppressScrollAnchorFrameRef.current)
-    }
-    suppressScrollAnchorFrameRef.current = window.requestAnimationFrame(() => {
-      suppressScrollAnchorRef.current = false
-      suppressScrollAnchorFrameRef.current = null
-    })
-  }, [])
   const virtualCount = totalResults > 0 ? totalResults : loadedCount
+  const handleResultActivate = useStableSearchEvent(onActivate)
+  const {
+    handleSelect: handleResultSelect,
+    handleHover: handleResultHover,
+    markScrollActivity,
+    beginProgrammaticScroll,
+    consumeSelectionScrollSkip,
+  } = useSearchScrollSelection({
+    viewportRef,
+    rowHeight: ROW_HEIGHT,
+    resultCount: virtualCount,
+    selectedIndex,
+    onSelect,
+  })
   const loadAheadRows = Math.max(MIN_LOAD_AHEAD_ROWS, pageSize)
   const visibleRowCount = Math.ceil(viewportHeight / ROW_HEIGHT) + OVERSCAN_ROWS * 2
   const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN_ROWS)
@@ -188,10 +164,7 @@ export function SearchResultsList({
   useEffect(() => {
     if (!visible || selectedIndex < 0) return
 
-    if (skipSelectedItemScrollRef.current) {
-      skipSelectedItemScrollRef.current = false
-      return
-    }
+    if (consumeSelectionScrollSkip()) return
 
     const element = viewportRef.current
     if (!element) return
@@ -202,25 +175,33 @@ export function SearchResultsList({
     const viewportBottom = viewportTop + element.clientHeight
 
     if (rowTop < viewportTop) {
-      suppressScrollAnchor()
+      beginProgrammaticScroll()
       element.scrollTop = rowTop
       syncViewportMetrics()
     } else if (rowBottom > viewportBottom) {
-      suppressScrollAnchor()
+      beginProgrammaticScroll()
       element.scrollTop = rowBottom - element.clientHeight
       syncViewportMetrics()
     }
-  }, [selectedIndex, suppressScrollAnchor, syncViewportMetrics, visible])
+  }, [
+    beginProgrammaticScroll,
+    consumeSelectionScrollSkip,
+    selectedIndex,
+    syncViewportMetrics,
+    visible,
+  ])
 
   useEffect(() => {
     if (!loading || loadingMore) return
     const element = viewportRef.current
     if (!element) return
 
-    suppressScrollAnchor()
-    element.scrollTop = 0
+    if (element.scrollTop !== 0) {
+      beginProgrammaticScroll()
+      element.scrollTop = 0
+    }
     syncViewportMetrics()
-  }, [loading, loadingMore, suppressScrollAnchor, syncViewportMetrics])
+  }, [beginProgrammaticScroll, loading, loadingMore, syncViewportMetrics])
 
   useEffect(() => {
     if (!visible || viewportHeight <= 0) return
@@ -243,12 +224,6 @@ export function SearchResultsList({
     () => () => {
       pendingVisibleRangeRef.current = null
       clearPendingRangeNotify()
-      if (scrollEndTimerRef.current !== null) {
-        window.clearTimeout(scrollEndTimerRef.current)
-      }
-      if (suppressScrollAnchorFrameRef.current !== null) {
-        window.cancelAnimationFrame(suppressScrollAnchorFrameRef.current)
-      }
     },
     [clearPendingRangeNotify]
   )
@@ -268,36 +243,15 @@ export function SearchResultsList({
         ref={viewportRef}
         scrollbars="both"
         className="h-full"
-        onWheel={markScrolling}
+        onWheel={markScrollActivity}
         onScroll={event => {
-          markScrolling()
+          markScrollActivity()
           const nextScrollTop = event.currentTarget.scrollTop
           const nextViewportHeight = event.currentTarget.clientHeight
-          const previousScrollTop = scrollTopRef.current
-          const direction =
-            nextScrollTop > previousScrollTop ? 1 : nextScrollTop < previousScrollTop ? -1 : 0
-          const anchorIndex = suppressScrollAnchorRef.current
-            ? -1
-            : getSearchScrollAnchorIndex({
-                direction,
-                scrollTop: nextScrollTop,
-                viewportHeight: nextViewportHeight,
-                rowHeight: ROW_HEIGHT,
-                resultCount: virtualCount,
-              })
-          const scrollChanged = previousScrollTop !== nextScrollTop
-          scrollTopRef.current = nextScrollTop
-          flushSync(() => {
-            if (scrollChanged) {
-              setScrollTop(nextScrollTop)
-            }
-
-            if (anchorIndex >= 0 && anchorIndex !== selectedIndexRef.current) {
-              skipSelectedItemScrollRef.current = true
-              selectedIndexRef.current = anchorIndex
-              handleResultSelect(anchorIndex)
-            }
-          })
+          if (scrollTopRef.current !== nextScrollTop) {
+            scrollTopRef.current = nextScrollTop
+            flushSync(() => setScrollTop(nextScrollTop))
+          }
           scheduleVisibleRange(nextScrollTop, nextViewportHeight)
         }}
       >
@@ -306,7 +260,12 @@ export function SearchResultsList({
           style={{ height: virtualCount * ROW_HEIGHT, minWidth: LIST_CONTENT_MIN_WIDTH }}
         >
           {selectedIndex >= 0 && selectedIndex < virtualCount ? (
-            <SearchResultSelectionHighlight index={selectedIndex} height={ROW_HEIGHT} />
+            <SearchResultSelectionHighlight
+              index={selectedIndex}
+              rowHeight={ROW_HEIGHT}
+              scrollTop={scrollTop}
+              viewportHeight={viewportHeight}
+            />
           ) : null}
 
           {virtualRows.map(({ index, item }) => {
