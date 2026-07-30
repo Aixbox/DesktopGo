@@ -1,7 +1,11 @@
-import { memo } from 'react'
+import { memo, useLayoutEffect, useRef } from 'react'
 import { File, Folder } from 'lucide-react'
 import { parseEverythingHighlightedText } from '@/lib/search/highlight'
 import type { SearchHit } from '@/lib/search/types'
+
+const MAX_ANIMATED_SELECTION_ROWS = 4
+const SELECTION_ANIMATION_DURATION_MS = 100
+const SELECTION_ANIMATION_EASING = 'cubic-bezier(0.25, 1, 0.5, 1)'
 
 function HighlightedText({
   highlightedText,
@@ -39,6 +43,7 @@ interface SearchResultRowProps {
   selected: boolean
   allowDoubleClickOpen: boolean
   onSelect: (index: number) => void
+  onHover: (index: number) => void
   onActivate: (item: SearchHit) => void
 }
 
@@ -51,6 +56,7 @@ export const SearchResultRow = memo(function SearchResultRow({
   selected,
   allowDoubleClickOpen,
   onSelect,
+  onHover,
   onActivate,
 }: SearchResultRowProps) {
   return (
@@ -65,12 +71,10 @@ export const SearchResultRow = memo(function SearchResultRow({
       <button
         type="button"
         aria-current={selected ? 'true' : undefined}
-        className={`flex h-full w-full items-center gap-3 rounded-md py-2 pl-4 pr-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 ${
-          selected
-            ? 'bg-primary/18 ring-1 ring-inset ring-primary/55 dark:bg-primary/24 dark:ring-primary/65'
-            : 'hover:bg-accent/55'
+        className={`relative z-10 flex h-full w-full items-center gap-3 rounded-md py-2 pl-4 pr-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 ${
+          selected ? '' : 'hover:bg-accent/55'
         }`}
-        onMouseEnter={() => onSelect(index)}
+        onMouseEnter={() => onHover(index)}
         onDoubleClick={() => {
           if (allowDoubleClickOpen) onActivate(item)
         }}
@@ -113,6 +117,60 @@ export const SearchResultRow = memo(function SearchResultRow({
     </div>
   )
 })
+
+export function SearchResultSelectionHighlight({
+  index,
+  height,
+}: {
+  index: number
+  height: number
+}) {
+  const elementRef = useRef<HTMLDivElement | null>(null)
+  const previousIndexRef = useRef(index)
+
+  useLayoutEffect(() => {
+    const element = elementRef.current
+    const previousIndex = previousIndexRef.current
+    previousIndexRef.current = index
+    if (!element || previousIndex === index || typeof element.animate !== 'function') return
+
+    const runningAnimations = element.getAnimations()
+    const fromTransform =
+      runningAnimations.length > 0
+        ? window.getComputedStyle(element).transform
+        : `translate3d(0, ${previousIndex * height}px, 0)`
+    runningAnimations.forEach(animation => animation.cancel())
+
+    const distance = Math.abs(index - previousIndex)
+    const reducedMotion =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reducedMotion || distance > MAX_ANIMATED_SELECTION_ROWS) return
+
+    element.animate(
+      [{ transform: fromTransform }, { transform: `translate3d(0, ${index * height}px, 0)` }],
+      {
+        duration: SELECTION_ANIMATION_DURATION_MS,
+        easing: SELECTION_ANIMATION_EASING,
+      }
+    )
+  }, [height, index])
+
+  return (
+    <div
+      ref={elementRef}
+      aria-hidden="true"
+      className="pointer-events-none absolute left-0 right-0 z-0 py-1"
+      style={{
+        height,
+        transform: `translate3d(0, ${index * height}px, 0)`,
+        contain: 'layout paint style',
+      }}
+    >
+      <div className="h-full w-full rounded-md bg-primary/18 ring-1 ring-inset ring-primary/55 dark:bg-primary/24 dark:ring-primary/65" />
+    </div>
+  )
+}
 
 export function SearchResultPlaceholder({ top, height }: { top: number; height: number }) {
   return (

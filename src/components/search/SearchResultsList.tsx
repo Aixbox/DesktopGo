@@ -3,7 +3,12 @@ import { flushSync } from 'react-dom'
 import type { SearchHit } from '@/lib/search/types'
 import { translate } from '@/lib/i18n'
 import { OverlayScrollArea } from '@/components/ui/overlay-scroll-area'
-import { SearchResultPlaceholder, SearchResultRow } from './SearchResultRow'
+import {
+  SearchResultPlaceholder,
+  SearchResultRow,
+  SearchResultSelectionHighlight,
+} from './SearchResultRow'
+import { getSearchScrollAnchorIndex } from './searchScrollSelection'
 import { useStableSearchEvent } from './useStableSearchEvent'
 import { useVisibleSearchIcons } from './useVisibleSearchIcons'
 
@@ -47,8 +52,41 @@ export function SearchResultsList({
   const scrollTopRef = useRef(0)
   const [viewportHeight, setViewportHeight] = useState(0)
   const [scrollTop, setScrollTop] = useState(0)
+  const scrollEndTimerRef = useRef<number | null>(null)
+  const scrollingRef = useRef(false)
+  const selectedIndexRef = useRef(selectedIndex)
+  const skipSelectedItemScrollRef = useRef(false)
+  const suppressScrollAnchorRef = useRef(false)
+  const suppressScrollAnchorFrameRef = useRef<number | null>(null)
   const handleResultSelect = useStableSearchEvent(onSelect)
   const handleResultActivate = useStableSearchEvent(onActivate)
+  const markScrolling = useCallback(() => {
+    scrollingRef.current = true
+    if (scrollEndTimerRef.current !== null) {
+      window.clearTimeout(scrollEndTimerRef.current)
+    }
+    scrollEndTimerRef.current = window.setTimeout(() => {
+      scrollingRef.current = false
+      scrollEndTimerRef.current = null
+    }, 120)
+  }, [])
+  const handleResultHover = useStableSearchEvent((index: number) => {
+    if (!scrollingRef.current) onSelect(index)
+  })
+  useLayoutEffect(() => {
+    selectedIndexRef.current = selectedIndex
+  }, [selectedIndex])
+
+  const suppressScrollAnchor = useCallback(() => {
+    suppressScrollAnchorRef.current = true
+    if (suppressScrollAnchorFrameRef.current !== null) {
+      window.cancelAnimationFrame(suppressScrollAnchorFrameRef.current)
+    }
+    suppressScrollAnchorFrameRef.current = window.requestAnimationFrame(() => {
+      suppressScrollAnchorRef.current = false
+      suppressScrollAnchorFrameRef.current = null
+    })
+  }, [])
   const virtualCount = totalResults > 0 ? totalResults : loadedCount
   const loadAheadRows = Math.max(MIN_LOAD_AHEAD_ROWS, pageSize)
   const visibleRowCount = Math.ceil(viewportHeight / ROW_HEIGHT) + OVERSCAN_ROWS * 2
@@ -150,6 +188,11 @@ export function SearchResultsList({
   useEffect(() => {
     if (!visible || selectedIndex < 0) return
 
+    if (skipSelectedItemScrollRef.current) {
+      skipSelectedItemScrollRef.current = false
+      return
+    }
+
     const element = viewportRef.current
     if (!element) return
 
@@ -159,22 +202,25 @@ export function SearchResultsList({
     const viewportBottom = viewportTop + element.clientHeight
 
     if (rowTop < viewportTop) {
+      suppressScrollAnchor()
       element.scrollTop = rowTop
       syncViewportMetrics()
     } else if (rowBottom > viewportBottom) {
+      suppressScrollAnchor()
       element.scrollTop = rowBottom - element.clientHeight
       syncViewportMetrics()
     }
-  }, [selectedIndex, syncViewportMetrics, visible])
+  }, [selectedIndex, suppressScrollAnchor, syncViewportMetrics, visible])
 
   useEffect(() => {
     if (!loading || loadingMore) return
     const element = viewportRef.current
     if (!element) return
 
+    suppressScrollAnchor()
     element.scrollTop = 0
     syncViewportMetrics()
-  }, [loading, loadingMore, syncViewportMetrics])
+  }, [loading, loadingMore, suppressScrollAnchor, syncViewportMetrics])
 
   useEffect(() => {
     if (!visible || viewportHeight <= 0) return
@@ -197,6 +243,12 @@ export function SearchResultsList({
     () => () => {
       pendingVisibleRangeRef.current = null
       clearPendingRangeNotify()
+      if (scrollEndTimerRef.current !== null) {
+        window.clearTimeout(scrollEndTimerRef.current)
+      }
+      if (suppressScrollAnchorFrameRef.current !== null) {
+        window.cancelAnimationFrame(suppressScrollAnchorFrameRef.current)
+      }
     },
     [clearPendingRangeNotify]
   )
@@ -216,20 +268,47 @@ export function SearchResultsList({
         ref={viewportRef}
         scrollbars="both"
         className="h-full"
+        onWheel={markScrolling}
         onScroll={event => {
+          markScrolling()
           const nextScrollTop = event.currentTarget.scrollTop
           const nextViewportHeight = event.currentTarget.clientHeight
-          if (scrollTopRef.current !== nextScrollTop) {
-            scrollTopRef.current = nextScrollTop
-            flushSync(() => setScrollTop(nextScrollTop))
-          }
+          const previousScrollTop = scrollTopRef.current
+          const direction =
+            nextScrollTop > previousScrollTop ? 1 : nextScrollTop < previousScrollTop ? -1 : 0
+          const anchorIndex = suppressScrollAnchorRef.current
+            ? -1
+            : getSearchScrollAnchorIndex({
+                direction,
+                scrollTop: nextScrollTop,
+                viewportHeight: nextViewportHeight,
+                rowHeight: ROW_HEIGHT,
+                resultCount: virtualCount,
+              })
+          const scrollChanged = previousScrollTop !== nextScrollTop
+          scrollTopRef.current = nextScrollTop
+          flushSync(() => {
+            if (scrollChanged) {
+              setScrollTop(nextScrollTop)
+            }
+
+            if (anchorIndex >= 0 && anchorIndex !== selectedIndexRef.current) {
+              skipSelectedItemScrollRef.current = true
+              selectedIndexRef.current = anchorIndex
+              handleResultSelect(anchorIndex)
+            }
+          })
           scheduleVisibleRange(nextScrollTop, nextViewportHeight)
         }}
       >
         <div
-          className="relative"
+          className="relative isolate"
           style={{ height: virtualCount * ROW_HEIGHT, minWidth: LIST_CONTENT_MIN_WIDTH }}
         >
+          {selectedIndex >= 0 && selectedIndex < virtualCount ? (
+            <SearchResultSelectionHighlight index={selectedIndex} height={ROW_HEIGHT} />
+          ) : null}
+
           {virtualRows.map(({ index, item }) => {
             const top = index * ROW_HEIGHT
             if (!item) {
@@ -253,6 +332,7 @@ export function SearchResultsList({
                 selected={selectedIndex === index}
                 allowDoubleClickOpen={allowDoubleClickOpen}
                 onSelect={handleResultSelect}
+                onHover={handleResultHover}
                 onActivate={handleResultActivate}
               />
             )
