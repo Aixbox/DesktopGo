@@ -247,7 +247,7 @@ export function FolderModalView({
                   <button
                     type="button"
                     aria-label={translate('重命名文件夹 {name}', { name: openFolder.name })}
-                    className="truncate rounded-md px-3 py-1 text-sm font-medium text-foreground/90 transition-colors hover:bg-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 dark:text-white/90 dark:hover:bg-white/10"
+                    className="launchpad-wallpaper-text truncate rounded-md px-3 py-1 text-sm font-medium text-foreground/90 transition-colors hover:bg-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 dark:text-white/90 dark:hover:bg-white/10"
                     style={{ maxWidth: '240px' }}
                     title={openFolder.name}
                     onClick={() => {

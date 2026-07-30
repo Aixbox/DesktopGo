@@ -508,8 +508,6 @@ body,
   --edge-glow-color: rgba(0, 0, 0, 0.18);
   /* 自定义背景蒙版底色；浓度由 --launchpad-background-overlay 控制。 */
   --launchpad-background-scrim-rgb: 240 240 245;
-  --launchpad-background-label-shadow:
-    0 1px 2px rgba(255, 255, 255, 0.72), 0 0 6px rgba(255, 255, 255, 0.46);
 }
 
 .dark {
@@ -547,7 +545,6 @@ body,
   --sidebar-ring: oklch(0.556 0 0);
   --edge-glow-color: rgba(255, 255, 255, 0.14);
   --launchpad-background-scrim-rgb: 10 13 20;
-  --launchpad-background-label-shadow: 0 1px 2px rgba(0, 0, 0, 0.7), 0 0 6px rgba(0, 0, 0, 0.45);
 }
 
 .settings-shell {
@@ -753,9 +750,34 @@ textarea {
   -webkit-backdrop-filter: none;
 }
 
-/* 蒙版可能被调到很低，图标名称自带光晕来保证可读性。 */
-[data-launchpad-background='custom'] .icon-label {
-  text-shadow: var(--launchpad-background-label-shadow);
+/*
+ * 蒙版可以调到很低，直接压在壁纸上的文字不能再依赖主题前景色。改用系统桌面图标的
+ * 处理：统一白字 + 紧凑深色投影。深色投影读起来是「深度」而不是「发光」，因此在
+ * 浅色壁纸上也不会像反色光晕那样抢视线。
+ *
+ * .icon-label 是图标名称；.launchpad-wallpaper-text 供其他同样落在壁纸上的文字
+ * 复用（文件夹标题、空态与加载提示等）。落在玻璃面板里、或自带底色与悬停填充的
+ * 元素不要加这个类，否则白字会糊在浅色填充上。
+ */
+[data-launchpad-background='custom'] .icon-label,
+[data-launchpad-background='custom'] .launchpad-wallpaper-text {
+  color: #fff;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.75),
+    0 0 3px rgba(0, 0, 0, 0.45);
+}
+
+/* 文件夹标题是壁纸上唯一的可点击文字，悬停不能再用浅色 accent 底衬白字。 */
+[data-launchpad-background='custom']
+  [data-folder-modal='true']
+  button.launchpad-wallpaper-text:hover {
+  background-color: rgb(255 255 255 / 0.18);
+}
+
+/* 文件夹弹层里的名称落在浅色玻璃面板上，仍用主题前景色。 */
+[data-launchpad-background='custom'] .launchpad-glass-panel-strong .icon-label {
+  color: var(--foreground);
+  text-shadow: none;
 }
 
 .window-style-native-mica .launchpad-glass-panel {
@@ -1247,8 +1269,13 @@ textarea {
     outline-offset: 2px;
   }
 
-  .icon-label,
-  [data-launchpad-background='custom'] .icon-label {
+  .icon-label {
+    text-shadow: none;
+  }
+
+  [data-launchpad-background='custom'] .icon-label,
+  [data-launchpad-background='custom'] .launchpad-wallpaper-text {
+    color: CanvasText;
     text-shadow: none;
   }
 }

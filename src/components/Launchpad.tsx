@@ -820,7 +820,9 @@ export function Launchpad() {
           {loading ? (
             <div className="flex items-center gap-3">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/40 border-t-foreground" />
-              <span className="text-lg text-foreground/70">{translate('Loading...')}</span>
+              <span className="launchpad-wallpaper-text text-lg text-foreground/70">
+                {translate('Loading...')}
+              </span>
             </div>
           ) : iconLoadError && icons.length === 0 ? (
             <div
@@ -828,11 +830,11 @@ export function Launchpad() {
               className="flex max-w-md flex-col items-center gap-3 px-6 text-center"
             >
               <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">
+                <p className="launchpad-wallpaper-text text-sm font-medium text-foreground">
                   {translate('图标库加载失败，请重试。')}
                 </p>
                 <p
-                  className="break-words text-xs leading-5 text-muted-foreground"
+                  className="launchpad-wallpaper-text break-words text-xs leading-5 text-muted-foreground"
                   title={iconLoadError}
                 >
                   {translate('现有布局不会被修改。')}
@@ -846,10 +848,10 @@ export function Launchpad() {
           ) : icons.length === 0 ? (
             <div className="flex max-w-md flex-col items-center gap-3 px-6 text-center">
               <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">
+                <p className="launchpad-wallpaper-text text-sm font-medium text-foreground">
                   {translate('No desktop shortcuts found')}
                 </p>
-                <p className="text-xs leading-5 text-muted-foreground">
+                <p className="launchpad-wallpaper-text text-xs leading-5 text-muted-foreground">
                   {translate('添加应用、快捷方式或网页，开始创建你的启动台。')}
                 </p>
               </div>
@@ -863,7 +865,9 @@ export function Launchpad() {
               fallback={
                 <div className="flex items-center gap-3">
                   <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/40 border-t-foreground" />
-                  <span className="text-lg text-foreground/70">{translate('Loading...')}</span>
+                  <span className="launchpad-wallpaper-text text-lg text-foreground/70">
+                    {translate('Loading...')}
+                  </span>
                 </div>
               }
             >
@@ -880,7 +884,9 @@ export function Launchpad() {
           ) : (
             <Suspense
               fallback={
-                <span className="text-sm text-foreground/70">{translate('Loading...')}</span>
+                <span className="launchpad-wallpaper-text text-sm text-foreground/70">
+                  {translate('Loading...')}
+                </span>
               }
             >
               <IconGrid
