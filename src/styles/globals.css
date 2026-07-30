@@ -949,6 +949,82 @@ textarea {
   background: color-mix(in oklch, var(--background) 68%, transparent);
 }
 
+/* 搜索结果预览区底色：与结果列表区分深浅层次 */
+.search-preview-surface {
+  background: color-mix(in oklch, var(--background) 40%, transparent);
+}
+
+.dark .search-preview-surface {
+  background: color-mix(in oklch, var(--background) 12%, transparent);
+}
+
+/* 结果列表与预览区之间的拖动分隔条：凹槽导轨，两侧对称，不归属任何一侧 */
+.search-split-divider {
+  --search-split-line: color-mix(in oklch, var(--foreground) 13%, transparent);
+  --search-split-track: color-mix(in oklch, var(--foreground) 5%, transparent);
+  --search-split-grip: color-mix(in oklch, var(--foreground) 30%, transparent);
+  border-left: 1px solid var(--search-split-line);
+  border-right: 1px solid var(--search-split-line);
+  background: var(--search-split-track);
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.dark .search-split-divider {
+  --search-split-line: color-mix(in oklch, var(--foreground) 17%, transparent);
+  --search-split-track: rgba(0, 0, 0, 0.16);
+  --search-split-grip: color-mix(in oklch, var(--foreground) 34%, transparent);
+}
+
+.search-split-divider:hover {
+  --search-split-track: color-mix(
+    in oklch,
+    var(--appearance-accent, var(--primary)) 12%,
+    transparent
+  );
+  --search-split-line: color-mix(
+    in oklch,
+    var(--appearance-accent, var(--primary)) 30%,
+    transparent
+  );
+  --search-split-grip: color-mix(
+    in oklch,
+    var(--appearance-accent, var(--primary)) 62%,
+    transparent
+  );
+}
+
+.search-split-divider[data-resizing='true'] {
+  --search-split-track: color-mix(
+    in oklch,
+    var(--appearance-accent, var(--primary)) 18%,
+    transparent
+  );
+  --search-split-line: color-mix(
+    in oklch,
+    var(--appearance-accent, var(--primary)) 46%,
+    transparent
+  );
+  --search-split-grip: var(--appearance-accent, var(--primary));
+}
+
+.search-split-divider-grip {
+  width: 3px;
+  height: 1.75rem;
+  border-radius: 999px;
+  background: var(--search-split-grip);
+  transition:
+    background-color 140ms ease,
+    height 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.search-split-divider:hover .search-split-divider-grip,
+.search-split-divider:focus-visible .search-split-divider-grip,
+.search-split-divider[data-resizing='true'] .search-split-divider-grip {
+  height: 2.75rem;
+}
+
 .dark.window-style-native-acrylic .launchpad-glass-panel,
 .dark.window-style-native-mica .launchpad-glass-panel {
   border: 1px solid rgba(255, 255, 255, 0.09);
@@ -1114,6 +1190,21 @@ textarea {
     box-shadow: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+  }
+
+  .search-preview-surface {
+    background: Canvas;
+  }
+
+  .search-split-divider {
+    background: Canvas;
+    border-left: 1px solid ButtonText;
+    border-right: 1px solid ButtonText;
+    box-shadow: none;
+  }
+
+  .search-split-divider-grip {
+    background: ButtonText;
   }
 
   button:focus-visible,

@@ -54,13 +54,13 @@ export function SearchPreviewPane({
   useI18n()
 
   const shellClassName = stacked
-    ? 'flex h-[18rem] flex-col overflow-hidden border-t border-border/60 bg-background/40 dark:bg-background/12'
-    : 'flex h-full flex-col overflow-hidden bg-background/40 dark:bg-background/12'
+    ? 'search-preview-surface flex h-[18rem] flex-col overflow-hidden border-t border-border/60'
+    : 'search-preview-surface flex h-full flex-col overflow-hidden'
 
   if (!item) {
     return (
       <div
-        className={`${stacked ? 'h-36 border-t border-border/60 bg-background/40 dark:bg-background/12' : 'h-full bg-background/40 dark:bg-background/12'} flex items-center justify-center px-6 text-center text-sm text-muted-foreground`}
+        className={`search-preview-surface ${stacked ? 'h-36 border-t border-border/60' : 'h-full'} flex items-center justify-center px-6 text-center text-sm text-muted-foreground`}
       >
         {translate('选择一个结果后，可在这里查看预览。')}
       </div>

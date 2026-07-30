@@ -11,7 +11,7 @@ import type { SearchHistoryEntry } from '@/lib/search/history'
 import type { SearchSource } from '@/lib/search/scope'
 import type { SearchHit, SearchPreview, SearchRuntimeState, SearchSort } from '@/lib/search/types'
 import type { DesktopIcon } from '@/types'
-import { GripVertical, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
 import { SearchHistoryPanel } from './SearchHistoryPanel'
 import { SearchPreviewPane } from './SearchPreviewPane'
@@ -360,9 +360,8 @@ export function SearchPanel({
             aria-valuemax={splitAriaMax}
             aria-valuenow={splitAriaNow}
             aria-keyshortcuts="ArrowLeft ArrowRight Home End"
-            className={`group relative z-10 shrink-0 bg-transparent transition-colors hover:bg-foreground/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 ${
-              isResizingSplit ? 'bg-primary/8' : ''
-            }`}
+            data-resizing={isResizingSplit ? 'true' : undefined}
+            className="search-split-divider relative z-10 flex shrink-0 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45"
             style={{ width: SPLIT_DIVIDER_WIDTH, cursor: 'col-resize' }}
             onPointerDown={event => {
               event.preventDefault()
@@ -370,8 +369,7 @@ export function SearchPanel({
             }}
             onKeyDown={handleSplitKeyDown}
           >
-            <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/70" />
-            <GripVertical className="pointer-events-none absolute left-1/2 top-1/2 h-5 w-3 -translate-x-1/2 -translate-y-1/2 bg-background/80 text-muted-foreground/60 transition-colors group-hover:text-foreground/70 group-focus-visible:text-foreground/70" />
+            <span aria-hidden="true" className="search-split-divider-grip pointer-events-none" />
           </button>
 
           <div
