@@ -3,9 +3,13 @@ import test from 'node:test'
 import {
   buildIconRequestSignature,
   mergeLoadedIcons,
+  mergeTypeIcons,
   recordIconAttempts,
   selectIconRequests,
+  selectIconTypeKeys,
   toIconCacheKey,
+  toIconTypeKey,
+  toIconTypeRequest,
 } from './visibleIconRequests.ts'
 
 const request = (path, isFolder = false) => ({ path, isFolder })
@@ -140,4 +144,84 @@ test('attempts accumulate for visible rows and reset once a row scrolls away', (
     visibleKeys: new Set(['c:\\b.txt']),
   })
   assert.equal(scrolledAway.has('c:\\a.txt'), false)
+})
+
+test('rows collapse onto one type key per extension, and one for folders', () => {
+  assert.equal(toIconTypeKey('C:\\demo\\Report.PDF', false), 'ext:pdf')
+  assert.equal(toIconTypeKey('C:\\demo\\notes.txt', false), 'ext:txt')
+  assert.equal(toIconTypeKey('C:\\demo\\archive.tar.gz', false), 'ext:gz')
+  assert.equal(toIconTypeKey('C:\\demo\\hosts', false), 'ext:')
+  assert.equal(toIconTypeKey('C:\\demo\\.gitignore', false), 'ext:')
+  assert.equal(toIconTypeKey('C:\\Users\\demo\\Downloads', true), 'folder')
+})
+
+test('a type key asks the shell about a synthetic name, never a real path', () => {
+  assert.deepEqual(toIconTypeRequest('ext:pdf'), {
+    path: 'desktopgo-icon-file.pdf',
+    isFolder: false,
+  })
+  assert.deepEqual(toIconTypeRequest('ext:'), { path: 'desktopgo-icon-file', isFolder: false })
+  assert.deepEqual(toIconTypeRequest('folder'), { path: 'desktopgo-icon-folder', isFolder: true })
+})
+
+test('a folder and an extensionless file never share one synthetic path', () => {
+  // Rust deduplicates a batch by path alone, so a shared stem would cross-assign.
+  assert.notEqual(toIconTypeRequest('folder').path, toIconTypeRequest('ext:').path)
+})
+
+test('type selection deduplicates rows and skips resolved or in-flight types', () => {
+  const selected = selectIconTypeKeys({
+    requests: [
+      { path: 'C:\\a.txt', isFolder: false },
+      { path: 'C:\\b.txt', isFolder: false },
+      { path: 'C:\\c.pdf', isFolder: false },
+      { path: 'C:\\tool.exe', isFolder: false },
+      { path: 'C:\\dir', isFolder: true },
+    ],
+    typeIcons: new Map([['ext:pdf', 'icon-pdf']]),
+    pendingTypeKeys: new Set(['ext:exe']),
+    batchLimit: 10,
+  })
+
+  assert.deepEqual(selected, ['ext:txt', 'folder'])
+})
+
+test('type selection respects the batch limit', () => {
+  const selected = selectIconTypeKeys({
+    requests: [
+      { path: 'C:\\a.txt', isFolder: false },
+      { path: 'C:\\b.pdf', isFolder: false },
+    ],
+    typeIcons: new Map(),
+    pendingTypeKeys: new Set(),
+    batchLimit: 1,
+  })
+
+  assert.deepEqual(selected, ['ext:txt'])
+})
+
+test('resolved type icons are paired back to the key that asked for them', () => {
+  const merged = mergeTypeIcons({
+    typeIcons: new Map([['ext:pdf', 'icon-pdf']]),
+    requestedTypeKeys: ['ext:txt', 'folder'],
+    loaded: [
+      { path: 'desktopgo-icon-file.txt', iconBase64: 'icon-txt' },
+      { path: 'desktopgo-icon-folder', iconBase64: 'icon-folder' },
+    ],
+  })
+
+  assert.equal(merged.get('ext:txt'), 'icon-txt')
+  assert.equal(merged.get('folder'), 'icon-folder')
+  assert.equal(merged.get('ext:pdf'), 'icon-pdf')
+})
+
+test('a type batch that produced nothing keeps the same map instance', () => {
+  const typeIcons = new Map([['ext:pdf', 'icon-pdf']])
+  const merged = mergeTypeIcons({
+    typeIcons,
+    requestedTypeKeys: ['ext:txt'],
+    loaded: [{ path: 'desktopgo-icon-file.txt', iconBase64: '' }],
+  })
+
+  assert.equal(merged, typeIcons)
 })

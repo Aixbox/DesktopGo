@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
-import type { SearchHit } from '@/lib/search/types'
+import type { SearchHit, SearchIconRequest } from '@/lib/search/types'
 import { translate } from '@/lib/i18n'
 import { OverlayScrollArea } from '@/components/ui/overlay-scroll-area'
 import { SearchResultPlaceholder, SearchResultRow } from './SearchResultRow'
@@ -8,12 +8,17 @@ import { SearchResultSelectionHighlight } from './SearchResultSelectionHighlight
 import { useSearchScrollSelection } from './useSearchScrollSelection'
 import { useStableSearchEvent } from './useStableSearchEvent'
 import { useVisibleSearchIcons } from './useVisibleSearchIcons'
-import { toIconCacheKey } from './visibleIconRequests'
 
 const ROW_HEIGHT = 60
 const OVERSCAN_ROWS = 16
 const MIN_LOAD_AHEAD_ROWS = 24
 const LIST_CONTENT_MIN_WIDTH = 420
+/**
+ * Icons are resolved for rows beyond the ones being rendered, so a row that
+ * scrolls in already has its icon instead of starting the round trip on the
+ * frame it first appears.
+ */
+const ICON_PREFETCH_ROWS = 24
 
 interface SearchResultsListProps {
   visible: boolean
@@ -235,10 +240,16 @@ export function SearchResultsList({
       virtualRows.push({ index, item: getItemAt(index) })
     }
   }
-  const visibleIconRequests = virtualRows.flatMap(({ item }) =>
-    item ? [{ path: item.path, isFolder: item.isFolder }] : []
-  )
-  const visibleSearchIcons = useVisibleSearchIcons(visibleIconRequests, visible)
+  const iconRequests: SearchIconRequest[] = []
+  if (endIndex >= startIndex) {
+    const iconStartIndex = Math.max(0, startIndex - ICON_PREFETCH_ROWS)
+    const iconEndIndex = Math.min(virtualCount - 1, endIndex + ICON_PREFETCH_ROWS)
+    for (let index = iconStartIndex; index <= iconEndIndex; index += 1) {
+      const item = getItemAt(index)
+      if (item) iconRequests.push({ path: item.path, isFolder: item.isFolder })
+    }
+  }
+  const resolveSearchIcon = useVisibleSearchIcons(iconRequests, visible)
 
   return (
     <div className="relative h-full min-w-0">
@@ -290,9 +301,7 @@ export function SearchResultsList({
                 item={item}
                 top={top}
                 height={ROW_HEIGHT}
-                iconBase64={
-                  item.iconBase64 || visibleSearchIcons.get(toIconCacheKey(item.path)) || ''
-                }
+                iconBase64={item.iconBase64 || resolveSearchIcon(item.path, item.isFolder)}
                 selected={selectedIndex === index}
                 allowDoubleClickOpen={allowDoubleClickOpen}
                 onSelect={handleResultSelect}

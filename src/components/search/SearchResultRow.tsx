@@ -1,5 +1,4 @@
 import { memo } from 'react'
-import { File, Folder } from 'lucide-react'
 import { parseEverythingHighlightedText } from '@/lib/search/highlight'
 import type { SearchHit } from '@/lib/search/types'
 
@@ -80,6 +79,11 @@ export const SearchResultRow = memo(function SearchResultRow({
           key={item.path}
           className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden"
         >
+          {/*
+            Rows only ever show a real shell icon: the file's own icon when it is
+            known, otherwise the icon its type resolved to. The empty box is the
+            state before any icon exists at all, so it must not look like one.
+          */}
           {iconBase64 ? (
             <img
               key={item.path}
@@ -88,10 +92,8 @@ export const SearchResultRow = memo(function SearchResultRow({
               className="h-7 w-7 object-contain"
               draggable={false}
             />
-          ) : item.isFolder ? (
-            <Folder className="h-4 w-4 text-muted-foreground" />
           ) : (
-            <File className="h-4 w-4 text-muted-foreground" />
+            <span aria-hidden="true" className="h-7 w-7 rounded bg-muted/45" />
           )}
         </span>
 
