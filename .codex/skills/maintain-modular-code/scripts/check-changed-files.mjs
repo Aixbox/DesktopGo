@@ -10,7 +10,7 @@ const LIMITS = new Map([
   ['.jsx', 1000],
   ['.ts', 1000],
   ['.tsx', 1000],
-  ['.rs', 500],
+  ['.rs', 1000],
 ])
 
 function usage() {

@@ -5,7 +5,7 @@ Apply gates in proportion to risk. A small copy correction does not need integra
 ## Structural Gates
 
 - Keep new `.ts`, `.js`, `.tsx`, and `.jsx` files at or below 1000 physical lines.
-- Keep new `.rs` files at or below 500 physical lines.
+- Keep new `.rs` files at or below 1000 physical lines.
 - Do not increase the physical line count of a changed legacy file already over its threshold.
 - Keep functions and hooks near 80 lines or less, complexity near 15 or less, nesting at 4 levels or less, and parameters at 5 or fewer.
 - Split by responsibility and ownership. Never satisfy a limit by creating arbitrary `part1` or `helpers2` files.

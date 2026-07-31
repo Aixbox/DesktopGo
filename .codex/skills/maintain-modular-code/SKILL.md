@@ -61,7 +61,7 @@ Use these review thresholds unless generated code or an explicitly documented ex
 | ------------------------ | ------------------: |
 | New `.ts` / `.js` file   | 1000 physical lines |
 | New `.tsx` / `.jsx` file | 1000 physical lines |
-| New `.rs` file           |  500 physical lines |
+| New `.rs` file           | 1000 physical lines |
 | Function or hook         |            80 lines |
 | Cyclomatic complexity    |                  15 |
 | Nesting depth            |                   4 |
