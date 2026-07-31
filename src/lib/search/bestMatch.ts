@@ -1,6 +1,7 @@
 import type { DesktopIcon } from '@/types'
 import type { SearchHit } from './types'
 import { scoreBestFuzzyMatch } from './fuzzyScore'
+import { collectLauncherIdentities, normalizeLauncherPath } from './launcherIdentity'
 import {
   DEFAULT_SEARCH_PRIORITY_RULES,
   resolveSearchPriority,
@@ -116,6 +117,30 @@ export interface CollectBestMatchesOptions {
   limit: number
   usage?: ShortcutUsageState
   priorityRules?: SearchPriorityRules
+  /**
+   * 归一化路径 → `.lnk` 目标，来自高优先级目录表（`useLauncherCatalog`）。
+   * Everything 的命中本身不带目标路径，靠这张表补齐后才能和启动台图标、
+   * 程序本体互相认亲。表里没有的条目退化成只按自身路径去重。
+   */
+  shortcutTargets?: ReadonlyMap<string, string>
+}
+
+const identitiesFor = (
+  item: BestMatchItem,
+  shortcutTargets: ReadonlyMap<string, string> | undefined
+): string[] => {
+  if (item.kind === 'shortcut') {
+    return collectLauncherIdentities({
+      path: item.icon.path,
+      name: item.icon.name,
+      targetPath: item.icon.target_path,
+    })
+  }
+  return collectLauncherIdentities({
+    path: item.hit.path,
+    name: item.hit.name,
+    targetPath: shortcutTargets?.get(normalizeLauncherPath(item.hit.path)),
+  })
 }
 
 /**
@@ -129,6 +154,7 @@ export function collectBestMatches({
   limit,
   usage,
   priorityRules = DEFAULT_SEARCH_PRIORITY_RULES,
+  shortcutTargets,
 }: CollectBestMatchesOptions): BestMatchItem[] {
   const normalizedKeyword = keyword.trim().toLocaleLowerCase()
   if (!normalizedKeyword || limit <= 0) return []
@@ -143,15 +169,15 @@ export function collectBestMatches({
     if (result) scored.push(result)
   })
 
-  const seen = new Set<string>()
+  const claimed = new Set<string>()
   return scored
     .sort((left, right) => right.score - left.score || left.order - right.order)
     .filter(entry => {
-      // 同一个快捷方式既在启动台里、又被 Everything 命中时只保留一条。
-      const identity = entry.item.kind === 'shortcut' ? entry.item.icon.path : entry.item.hit.path
-      const normalized = identity.replace(/\\/g, '/').toLocaleLowerCase()
-      if (seen.has(normalized)) return false
-      seen.add(normalized)
+      // 同一个程序可能同时以本体、启动台图标、开始菜单/桌面快捷方式的身份出现，
+      // 只保留分数最高的那一条（判定规则见 launcherIdentity.ts）。
+      const identities = identitiesFor(entry.item, shortcutTargets)
+      if (identities.some(identity => claimed.has(identity))) return false
+      identities.forEach(identity => claimed.add(identity))
       return true
     })
     .slice(0, limit)

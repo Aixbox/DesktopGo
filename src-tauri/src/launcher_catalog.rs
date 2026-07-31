@@ -9,8 +9,10 @@
 //! `only_search_in_paths`（见 docs/LISTARY_BINARY_ANALYSIS.zh-CN.md 第 4 节）。
 //!
 //! 目录内容随时可能变化，所以这里不做任何缓存：每次调用都重新枚举，
-//! 由前端决定在一次面板会话内复用。
+//! 由前端决定在一次面板会话内复用。`.lnk` 的目标解析是唯一的例外
+//! （见 `crate::shortcut_target`），它按修改时间缓存，重复枚举不必重复走 COM。
 
+use crate::shortcut_target::resolve_shortcut_target;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
@@ -25,6 +27,17 @@ pub struct LauncherCatalogEntry {
     parent: String,
     is_file: bool,
     is_folder: bool,
+    /// `.lnk` 解析出的目标路径，其它条目为空串。前端靠它把「程序本体」和
+    /// 「指向它的快捷方式」判成同一条（见 src/lib/search/launcherIdentity.ts）。
+    target_path: String,
+}
+
+impl LauncherCatalogEntry {
+    /// 只给搜索调试日志用：统计一次枚举里有多少 `.lnk` 的目标解析成功，
+    /// 「最佳匹配里为什么还有重复」不开 DevTools 也能定位。
+    pub fn has_shortcut_target(&self) -> bool {
+        !self.target_path.is_empty()
+    }
 }
 
 struct CatalogRoot {
@@ -47,6 +60,12 @@ fn push_entry(entries: &mut Vec<LauncherCatalogEntry>, path: &Path, is_folder: b
             .unwrap_or_default(),
         is_file: !is_folder,
         is_folder,
+        // 目录不可能是快捷方式，连扩展名判断都省掉。
+        target_path: if is_folder {
+            String::new()
+        } else {
+            resolve_shortcut_target(path).unwrap_or_default()
+        },
     });
 }
 
@@ -146,6 +165,11 @@ mod tests {
         walk_root(&root, 1, &mut shallow);
         assert!(shallow.iter().any(|entry| entry.name == "top.txt"));
         assert!(!shallow.iter().any(|entry| entry.name == "deep.txt"));
+        // 非快捷方式条目不带目标路径。
+        assert!(shallow
+            .iter()
+            .filter(|entry| entry.name == "top.txt")
+            .all(|entry| entry.target_path.is_empty()));
 
         let mut deep = Vec::new();
         walk_root(&root, 3, &mut deep);

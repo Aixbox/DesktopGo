@@ -25,7 +25,8 @@ const toShortcutItem = (icon: DesktopIcon): BestMatchItem => ({
  * 2. 高优先级目录的完整条目表（`useLauncherCatalog`），绕开 Everything 的字面子串
  *    限制，所以 `vscode` 能命中 `Visual Studio Code`
  *
- * 两类都按同一套分数与启动台图标混排，同路径去重时保留分数更高的那条。
+ * 两类都按同一套分数与启动台图标混排，去重时保留分数更高的那条：同一条路径、
+ * 以及「程序本体 + 指向它的同名快捷方式」都只留一条（见 launcherIdentity.ts）。
  */
 export function useShortcutSearchResults(
   icons: DesktopIcon[],
@@ -36,7 +37,7 @@ export function useShortcutSearchResults(
 ) {
   const { state: usage, recordLaunch } = useShortcutUsage()
   const isUnified = source === 'all'
-  const catalogHits = useLauncherCatalog(panelOpen && isUnified)
+  const { hits: catalogHits, shortcutTargets } = useLauncherCatalog(panelOpen && isUnified)
 
   const results = useMemo<BestMatchItem[]>(() => {
     if (!searchSourceIncludesIcons(source)) return []
@@ -48,10 +49,11 @@ export function useShortcutSearchResults(
         keyword,
         limit: UNIFIED_BEST_MATCH_LIMIT,
         usage,
+        shortcutTargets,
       })
     }
     return searchDesktopIcons(icons, keyword, ICON_SEARCH_LIMIT, usage).map(toShortcutItem)
-  }, [catalogHits, fileHits, icons, isUnified, keyword, source, usage])
+  }, [catalogHits, fileHits, icons, isUnified, keyword, shortcutTargets, source, usage])
 
   return { results, recordLaunch }
 }

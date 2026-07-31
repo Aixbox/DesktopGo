@@ -11,6 +11,7 @@ mod launchpad_shortcut;
 mod layout_db;
 mod search_preview;
 mod shell_context_menu;
+mod shortcut_target;
 mod startup;
 mod storage_profile;
 mod tray;

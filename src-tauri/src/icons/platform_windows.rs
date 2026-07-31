@@ -83,7 +83,7 @@ unsafe fn extract_shell_item_image(
 }
 
 #[cfg(windows)]
-pub(super) fn resolve_lnk(lnk_path: &Path) -> Option<String> {
+pub(crate) fn resolve_lnk(lnk_path: &Path) -> Option<String> {
     use windows::core::Interface;
     use windows::core::PCWSTR;
     use windows::Win32::System::Com::*;

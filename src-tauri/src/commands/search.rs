@@ -67,9 +67,17 @@ pub async fn get_launcher_catalog(
         .await
         .map_err(|error| format!("Failed to join launcher catalog task: {error}"))?;
     // 走搜索调试日志，这样「最佳匹配为什么没出现某一项」可以不开 DevTools 就定位。
+    // 目标解析数一并记下：合并「程序 + 它的快捷方式」全靠它，为 0 就说明去重失效了。
+    let resolved = entries
+        .iter()
+        .filter(|entry| entry.has_shortcut_target())
+        .count();
     everything::log_search_debug(
         &app_handle,
-        format!("launcher catalog: collected {} entries", entries.len()),
+        format!(
+            "launcher catalog: collected {} entries, {resolved} shortcut targets resolved",
+            entries.len()
+        ),
     );
     Ok(entries)
 }

@@ -74,6 +74,8 @@ export interface LauncherCatalogEntry {
   parent: string
   isFile: boolean
   isFolder: boolean
+  /** `.lnk` 解析出的目标路径；非快捷方式条目为空串。用于最佳匹配去重。 */
+  targetPath: string
 }
 
 /** One visible row asking for its icon. `isFolder` comes from the search result. */

@@ -1,4 +1,5 @@
 import { collectBestMatches } from './bestMatch.ts'
+import { normalizeLauncherPath } from './launcherIdentity.ts'
 
 const icon = (id, name, targetPath = `C:/Apps/${name}.exe`) => ({
   id,
@@ -173,6 +174,107 @@ const dedupedAcrossSources = collectBestMatches({
 assert(
   dedupedAcrossSources.length === 1 && dedupedAcrossSources[0].hit.runCount === 12,
   '同路径跨来源去重时应保留带运行次数的那条'
+)
+
+// 「程序本体 + 指向它的快捷方式」去重 ------------------------------------------
+
+const DESKTOP = 'C:/Users/me/Desktop'
+
+/** 目标表的键必须是归一化后的路径，和最佳匹配内部的查表方式保持一致。 */
+const targets = pairs =>
+  new Map(pairs.map(([path, target]) => [normalizeLauncherPath(path), target]))
+
+// 启动台图标与开始菜单里指向同一个程序的同名快捷方式只留一条
+const curatedVsStartMenu = collectBestMatches({
+  icons: [
+    {
+      id: 'vs',
+      name: 'Visual Studio Code',
+      path: `${DESKTOP}/Visual Studio Code.lnk`,
+      target_path: 'C:/Editors/Code.exe',
+      icon_base64: '',
+      item_type: 'shortcut',
+    },
+  ],
+  fileHits: [hit('Visual Studio Code.lnk', `${START_MENU}/Visual Studio Code.lnk`)],
+  keyword: 'vscode',
+  limit: 6,
+  shortcutTargets: targets([
+    [`${START_MENU}/Visual Studio Code.lnk`, 'C:\\Editors\\Code.exe'],
+  ]),
+})
+assert(
+  curatedVsStartMenu.length === 1 && curatedVsStartMenu[0].kind === 'shortcut',
+  `指向同一个程序的同名快捷方式应合并成一条，实际 ${curatedVsStartMenu.length} 条`
+)
+
+// 程序本体与桌面上指向它的快捷方式只留一条
+const exeVsShortcut = collectBestMatches({
+  icons: [],
+  fileHits: [hit('Foo.exe', `${DESKTOP}/Foo.exe`), hit('Foo.lnk', `${DESKTOP}/Foo.lnk`)],
+  keyword: 'foo',
+  limit: 6,
+  shortcutTargets: targets([[`${DESKTOP}/Foo.lnk`, `${DESKTOP}/Foo.exe`]]),
+})
+assert(exeVsShortcut.length === 1, `程序本体与它的快捷方式应合并，实际 ${exeVsShortcut.length} 条`)
+
+// Windows 自动加的「- 快捷方式」后缀不应妨碍认亲
+const suffixedShortcut = collectBestMatches({
+  icons: [],
+  fileHits: [
+    hit('Bar.exe', `${DESKTOP}/Bar.exe`),
+    hit('Bar.exe - 快捷方式.lnk', `${DESKTOP}/Bar.exe - 快捷方式.lnk`),
+  ],
+  keyword: 'bar',
+  limit: 6,
+  shortcutTargets: targets([[`${DESKTOP}/Bar.exe - 快捷方式.lnk`, `${DESKTOP}/Bar.exe`]]),
+})
+assert(
+  suffixedShortcut.length === 1,
+  `「- 快捷方式」后缀的快捷方式应与本体合并，实际 ${suffixedShortcut.length} 条`
+)
+
+// 不同位置的同名文件夹不是一回事，不能合并
+const sameNameFolders = collectBestMatches({
+  icons: [],
+  fileHits: [catalogHit('Tools', `${START_MENU}/Tools`), catalogHit('Tools', `${DESKTOP}/Tools`)],
+  keyword: 'tools',
+  limit: 6,
+})
+assert(sameNameFolders.length === 2, `同名文件夹应各留一条，实际 ${sameNameFolders.length} 条`)
+
+// 目标相同但名字不同的两个入口（都指向 cmd.exe）不能合并
+const promptEntries = collectBestMatches({
+  icons: [],
+  fileHits: [
+    hit('Command Prompt.lnk', `${START_MENU}/Command Prompt.lnk`),
+    hit('Developer Command Prompt.lnk', `${START_MENU}/Developer Command Prompt.lnk`),
+  ],
+  keyword: 'prompt',
+  limit: 6,
+  shortcutTargets: targets([
+    [`${START_MENU}/Command Prompt.lnk`, 'C:/Windows/System32/cmd.exe'],
+    [`${START_MENU}/Developer Command Prompt.lnk`, 'C:/Windows/System32/cmd.exe'],
+  ]),
+})
+assert(
+  promptEntries.length === 2,
+  `同目标但不同名的入口应各留一条，实际 ${promptEntries.length} 条`
+)
+
+// 目标解析不出来时退化成按路径去重，不应误伤
+const unresolvedTargets = collectBestMatches({
+  icons: [],
+  fileHits: [
+    hit('Baz.lnk', `${START_MENU}/Baz.lnk`),
+    hit('Baz.lnk', `${DESKTOP}/Baz.lnk`),
+  ],
+  keyword: 'baz',
+  limit: 6,
+})
+assert(
+  unresolvedTargets.length === 2,
+  `目标未知的同名快捷方式应保守保留，实际 ${unresolvedTargets.length} 条`
 )
 
 console.log('最佳匹配合并排序测试通过')
