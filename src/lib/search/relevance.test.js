@@ -36,4 +36,28 @@ assertEqual(
   'path matches should rank before unrelated results when path matching is enabled'
 )
 
+assertEqual(
+  rankSearchHits([hit('a-very-long-unrelated-name'), hit('-flavor'), hit('notes')], 'vs', {
+    matchPath: false,
+  }),
+  ['a-very-long-unrelated-name', '-flavor', 'notes'],
+  'unmatched results should keep the provider order instead of promoting the shortest name'
+)
+
+assertEqual(
+  rankSearchHits([hit('unrelated'), hit('vs code'), hit('my vs'), hit('-flavor')], 'vs', {
+    matchPath: false,
+  }),
+  ['vs code', 'my vs', 'unrelated', '-flavor'],
+  'unmatched results should stay behind every real match'
+)
+
+assertEqual(
+  rankSearchHits([hit('settings backup'), hit('settings tool'), hit('settings')], 'settings', {
+    matchPath: false,
+  }),
+  ['settings', 'settings tool', 'settings backup'],
+  'shorter names should still win among results that did match'
+)
+
 console.log('文件结果相关性排序测试通过')

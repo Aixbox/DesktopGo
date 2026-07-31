@@ -2,6 +2,9 @@ import type { SearchHit, SearchSort } from './types'
 
 const normalize = (value: string): string => value.trim().toLocaleLowerCase()
 
+/** No part of the hit matched the keyword, so it carries no relevance signal. */
+const UNMATCHED_RANK = 4
+
 const getRelevanceRank = (item: SearchHit, keyword: string, matchPath: boolean): number => {
   const name = normalize(item.name)
   const path = normalize(item.path)
@@ -10,7 +13,7 @@ const getRelevanceRank = (item: SearchHit, keyword: string, matchPath: boolean):
   if (name.startsWith(keyword)) return 1
   if (name.includes(keyword)) return 2
   if (matchPath && path.includes(keyword)) return 3
-  return 4
+  return UNMATCHED_RANK
 }
 
 export function rankSearchHits(
@@ -29,6 +32,11 @@ export function rankSearchHits(
     }))
     .sort((left, right) => {
       if (left.rank !== right.rank) return left.rank - right.rank
+      // Shorter names are closer matches — but only once something actually
+      // matched. Applying that to unmatched hits would promote whichever one
+      // happens to have the shortest name to the top of the list, which reads
+      // as a ranking decision and hides the fact that nothing matched at all.
+      if (left.rank === UNMATCHED_RANK) return left.index - right.index
       if (left.item.name.length !== right.item.name.length) {
         return left.item.name.length - right.item.name.length
       }
