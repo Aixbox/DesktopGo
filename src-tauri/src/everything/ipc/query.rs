@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
@@ -15,10 +16,38 @@ const EVERYTHING_REQUEST_FILE_NAME: u32 = 0x0000_0001;
 const EVERYTHING_REQUEST_PATH: u32 = 0x0000_0002;
 const EVERYTHING_REQUEST_HIGHLIGHTED_FILE_NAME: u32 = 0x0000_2000;
 const EVERYTHING_REQUEST_HIGHLIGHTED_PATH: u32 = 0x0000_4000;
-const REPLY_ID_COUNT: u32 = 1;
-const REPLY_ID_RANGE: u32 = 2;
-const REPLY_ID_PROBE: u32 = 3;
 const MAX_FIRST_PAGE_CACHE_ITEMS: usize = 200;
+
+/// Everything only echoes the reply id back to us, so a reply carries no other
+/// evidence of which query produced it. Reusing one id per request kind made a
+/// superseded query's reply indistinguishable from the current one: it would be
+/// accepted into the SDK result buffer and then handed to whichever request was
+/// active, so typing "v" then "vs" could answer "vs" with the results for "v".
+/// Every query therefore mints a fresh id, with the request kind kept in the low
+/// bits so the debug log still tells the three request shapes apart.
+const REPLY_ID_KIND_BITS: u32 = 2;
+const REPLY_ID_KIND_MASK: u32 = (1 << REPLY_ID_KIND_BITS) - 1;
+const REPLY_ID_KIND_PROBE: u32 = 1;
+const REPLY_ID_KIND_COUNT: u32 = 2;
+const REPLY_ID_KIND_RANGE: u32 = 3;
+
+/// Sequence shared by every query this process issues. It only has to outlive
+/// the replies still in flight, so wrapping after 2^30 queries is harmless.
+static REPLY_ID_SEQUENCE: AtomicU32 = AtomicU32::new(0);
+
+fn build_reply_id(sequence: u32, kind_tag: u32) -> u32 {
+    (sequence << REPLY_ID_KIND_BITS) | kind_tag
+}
+
+/// Kind tags start at 1, so a minted id is never 0 — the SDK's default reply id.
+fn next_reply_id(kind_tag: u32) -> u32 {
+    let sequence = REPLY_ID_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    build_reply_id(sequence, kind_tag)
+}
+
+fn reply_id_kind_tag(reply_id: u32) -> u32 {
+    reply_id & REPLY_ID_KIND_MASK
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SearchRequestKind {
@@ -27,10 +56,10 @@ pub(super) enum SearchRequestKind {
 }
 
 impl SearchRequestKind {
-    fn reply_id(self) -> u32 {
+    fn kind_tag(self) -> u32 {
         match self {
-            Self::Count => REPLY_ID_COUNT,
-            Self::Range => REPLY_ID_RANGE,
+            Self::Count => REPLY_ID_KIND_COUNT,
+            Self::Range => REPLY_ID_KIND_RANGE,
         }
     }
 
@@ -210,6 +239,104 @@ pub(super) fn extract_snapshot_range(
     extract_search_results(api, app_handle, range)
 }
 
+fn reply_timeout_error() -> String {
+    "Everything query timed out while waiting for reply".to_string()
+}
+
+fn finish_probe_request(
+    app_handle: &tauri::AppHandle,
+    elapsed_ms: u128,
+    timed_out: bool,
+    response: &Sender<Result<(), String>>,
+) {
+    if timed_out {
+        append_debug_log(
+            app_handle,
+            format!(
+                "ipc probe: timed out after {}ms waiting for reply",
+                elapsed_ms
+            ),
+        );
+        let _ = response.send(Err(reply_timeout_error()));
+        return;
+    }
+
+    append_debug_log(
+        app_handle,
+        format!("ipc probe: reply received after {}ms", elapsed_ms),
+    );
+    let _ = response.send(Ok(()));
+}
+
+/// The `ActiveRequest::Search` payload plus how its reply landed, kept together
+/// so finishing a search stays inside the argument budget.
+struct CompletedSearch {
+    query: SearchQuery,
+    request_kind: SearchRequestKind,
+    response: Sender<Result<SearchResponse, String>>,
+    elapsed_ms: u128,
+    timed_out: bool,
+}
+
+fn finish_search_request(
+    api: &EverythingApi,
+    app_handle: &tauri::AppHandle,
+    caches: &mut SearchResultCaches<'_>,
+    search: CompletedSearch,
+) {
+    let CompletedSearch {
+        query,
+        request_kind,
+        response,
+        elapsed_ms,
+        timed_out,
+    } = search;
+
+    if timed_out {
+        append_debug_log(
+            app_handle,
+            format!(
+                "ipc search: timed out after {}ms waiting for reply",
+                elapsed_ms
+            ),
+        );
+        let _ = response.send(Err(reply_timeout_error()));
+        return;
+    }
+
+    append_debug_log(
+        app_handle,
+        format!("ipc search: reply received after {}ms", elapsed_ms),
+    );
+    let result_count = unsafe { (api.get_num_results)() };
+    let total_results = unsafe { (api.get_tot_results)() };
+    let result = extract_search_results(
+        api,
+        app_handle,
+        SnapshotRange {
+            local_offset: 0,
+            limit: query.limit,
+        },
+    );
+    if let Ok(response_payload) = result.as_ref() {
+        *caches.snapshot = Some(SearchResultSnapshot::new(
+            &query,
+            result_count,
+            total_results,
+        ));
+        if request_kind == SearchRequestKind::Count
+            && query.offset == 0
+            && response_payload.items.len() <= MAX_FIRST_PAGE_CACHE_ITEMS
+        {
+            *caches.first_page = Some(FirstPageCache {
+                query,
+                response: response_payload.clone(),
+            });
+        }
+    }
+    let _ = response.send(result);
+}
+
 pub(super) fn finish_active_request(
     api: &EverythingApi,
     app_handle: &tauri::AppHandle,
@@ -218,6 +345,9 @@ pub(super) fn finish_active_request(
     timed_out: bool,
 ) {
     let Some(request) = active.take() else {
+        // A completed reply with no owner would otherwise keep `is_completed()`
+        // true and be consumed by whichever request starts next.
+        reply_window::clear_state();
         return;
     };
 
@@ -226,78 +356,34 @@ pub(super) fn finish_active_request(
     reply_window::clear_state();
     match request {
         ActiveRequest::Probe { response, .. } => {
-            if timed_out {
-                append_debug_log(
-                    app_handle,
-                    format!(
-                        "ipc probe: timed out after {}ms waiting for reply",
-                        elapsed_ms
-                    ),
-                );
-                let _ = response.send(Err(
-                    "Everything query timed out while waiting for reply".to_string()
-                ));
-            } else {
-                append_debug_log(
-                    app_handle,
-                    format!("ipc probe: reply received after {}ms", elapsed_ms),
-                );
-                let _ = response.send(Ok(()));
-            }
+            finish_probe_request(app_handle, elapsed_ms, timed_out, &response);
         }
         ActiveRequest::Search {
             query,
             request_kind,
             response,
             ..
-        } => {
-            if timed_out {
-                append_debug_log(
-                    app_handle,
-                    format!(
-                        "ipc search: timed out after {}ms waiting for reply",
-                        elapsed_ms
-                    ),
-                );
-                let _ = response.send(Err(
-                    "Everything query timed out while waiting for reply".to_string()
-                ));
-            } else {
-                append_debug_log(
-                    app_handle,
-                    format!("ipc search: reply received after {}ms", elapsed_ms),
-                );
-                let result_count = unsafe { (api.get_num_results)() };
-                let total_results = unsafe { (api.get_tot_results)() };
-                let result = extract_search_results(
-                    api,
-                    app_handle,
-                    SnapshotRange {
-                        local_offset: 0,
-                        limit: query.limit,
-                    },
-                );
-                if let Ok(response_payload) = result.as_ref() {
-                    *caches.snapshot = Some(SearchResultSnapshot::new(
-                        &query,
-                        result_count,
-                        total_results,
-                    ));
-                    if request_kind == SearchRequestKind::Count
-                        && query.offset == 0
-                        && response_payload.items.len() <= MAX_FIRST_PAGE_CACHE_ITEMS
-                    {
-                        *caches.first_page = Some(FirstPageCache {
-                            query,
-                            response: response_payload.clone(),
-                        });
-                    }
-                }
-                let _ = response.send(result);
-            }
-        }
+        } => finish_search_request(
+            api,
+            app_handle,
+            caches,
+            CompletedSearch {
+                query,
+                request_kind,
+                response,
+                elapsed_ms,
+                timed_out,
+            },
+        ),
     }
-    append_debug_log(app_handle, format!("ipc request {} finished", reply_id));
+    append_debug_log(
+        app_handle,
+        format!(
+            "ipc request {} (kind_tag={}) finished",
+            reply_id,
+            reply_id_kind_tag(reply_id)
+        ),
+    );
 }
 
 pub(super) fn cancel_active_request(
@@ -349,10 +435,10 @@ pub(super) fn start_probe(
         (api.set_max)(1);
     }
 
-    let started_at =
-        reply_window::begin_query(api, reply_hwnd, REPLY_ID_PROBE, app_handle, "probe")?;
+    let reply_id = next_reply_id(REPLY_ID_KIND_PROBE);
+    let started_at = reply_window::begin_query(api, reply_hwnd, reply_id, app_handle, "probe")?;
     Ok(ActiveRequest::Probe {
-        reply_id: REPLY_ID_PROBE,
+        reply_id,
         started_at,
         timeout: Duration::from_secs(3),
         response,
@@ -388,7 +474,7 @@ pub(super) fn start_search(
         (api.set_max)(query.limit.max(SNAPSHOT_RESULT_LIMIT));
     }
 
-    let reply_id = request_kind.reply_id();
+    let reply_id = next_reply_id(request_kind.kind_tag());
     let started_at =
         reply_window::begin_query(api, reply_hwnd, reply_id, app_handle, request_kind.reason())?;
     Ok(ActiveRequest::Search {
@@ -399,4 +485,62 @@ pub(super) fn start_search(
         request_kind,
         response,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_query_mints_a_distinct_reply_id() {
+        let first = next_reply_id(SearchRequestKind::Count.kind_tag());
+        let superseding = next_reply_id(SearchRequestKind::Count.kind_tag());
+        let paging = next_reply_id(SearchRequestKind::Range.kind_tag());
+        let probe = next_reply_id(REPLY_ID_KIND_PROBE);
+
+        assert_ne!(
+            first, superseding,
+            "a superseded query must not share the reply id of the query replacing it"
+        );
+        assert_ne!(superseding, paging);
+        assert_ne!(paging, probe);
+    }
+
+    #[test]
+    fn reply_ids_keep_the_request_kind_and_never_use_the_sdk_default() {
+        let cases = [
+            (REPLY_ID_KIND_PROBE, "probe"),
+            (REPLY_ID_KIND_COUNT, "count"),
+            (REPLY_ID_KIND_RANGE, "range"),
+        ];
+
+        for (kind_tag, label) in cases {
+            let reply_id = next_reply_id(kind_tag);
+            assert_eq!(reply_id_kind_tag(reply_id), kind_tag, "kind: {label}");
+            assert_ne!(reply_id, 0, "reply id 0 is the SDK default: {label}");
+        }
+    }
+
+    #[test]
+    fn the_first_sequence_value_still_produces_a_usable_reply_id() {
+        assert_eq!(
+            reply_id_kind_tag(build_reply_id(0, REPLY_ID_KIND_COUNT)),
+            REPLY_ID_KIND_COUNT
+        );
+        assert_ne!(build_reply_id(0, REPLY_ID_KIND_PROBE), 0);
+        assert_ne!(
+            build_reply_id(0, REPLY_ID_KIND_COUNT),
+            build_reply_id(1, REPLY_ID_KIND_COUNT)
+        );
+    }
+
+    #[test]
+    fn request_kinds_map_to_distinct_tags() {
+        assert_ne!(
+            SearchRequestKind::Count.kind_tag(),
+            SearchRequestKind::Range.kind_tag()
+        );
+        assert_ne!(SearchRequestKind::Count.kind_tag(), REPLY_ID_KIND_PROBE);
+        assert_ne!(SearchRequestKind::Range.kind_tag(), REPLY_ID_KIND_PROBE);
+    }
 }

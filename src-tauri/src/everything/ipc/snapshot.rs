@@ -31,6 +31,15 @@ pub(super) struct SnapshotRange {
     pub(super) limit: u32,
 }
 
+/// Describes the result set currently sitting in the Everything SDK's own
+/// buffer, so a page or a complete read can be served without re-querying.
+///
+/// It deliberately holds no items: reads go straight to the live SDK buffer.
+/// That is only sound because the worker clears the snapshot before starting
+/// any new query, and a query's results can only enter the buffer through a
+/// reply whose id matches the query still in flight. Keep both of those
+/// invariants intact — losing either makes the snapshot describe one search
+/// while the buffer holds another.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct SearchResultSnapshot {
     key: SearchSnapshotKey,

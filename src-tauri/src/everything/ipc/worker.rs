@@ -212,6 +212,9 @@ impl IpcWorker {
         }
 
         if search_query.limit > SNAPSHOT_RESULT_LIMIT {
+            // Overwriting `active` would drop the pending request's sender and
+            // strand its caller on a disconnected channel.
+            query::cancel_active_request(&self.app_handle, &mut self.active);
             self.start_search(search_query.clone(), response.clone());
             return;
         }
