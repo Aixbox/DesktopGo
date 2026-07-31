@@ -43,6 +43,9 @@ export const EN_SEARCH_MESSAGES: Record<string, string> = {
   '保存最近一次使用的筛选器，并在下次启动时恢复。':
     'Save the last used filter and restore it on the next launch.',
   快捷入口排序: 'Shortcut ranking',
+  最佳匹配: 'Best matches',
+  打开所在文件夹: 'Open containing folder',
+  复制路径: 'Copy path',
   使用启动记录优化排序: 'Use launch history to improve ranking',
   '记录从搜索结果打开快捷入口的次数和最近启动时间；数据仅保存在本机。':
     'Record launch counts and recent launch times for shortcuts opened from search results. Data stays on this device.',

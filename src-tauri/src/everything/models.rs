@@ -84,6 +84,10 @@ pub struct SearchHit {
     pub icon_base64: String,
     pub highlighted_name: String,
     pub highlighted_path: String,
+    /// How often Everything has seen this path launched. Feeds the relevance
+    /// score so frequently used files surface first; 0 when the running
+    /// Everything build does not expose run counts.
+    pub run_count: u32,
 }
 
 #[derive(Debug, Clone, Serialize)]

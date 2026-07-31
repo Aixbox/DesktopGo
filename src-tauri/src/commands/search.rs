@@ -1,5 +1,6 @@
 use crate::everything::{self, SearchPage, SearchQuery, SearchRuntimeStatus};
 use crate::icons;
+use crate::launcher_catalog::{self, LauncherCatalogEntry};
 use crate::search_preview::{self, SearchPreview};
 use serde::{Deserialize, Serialize};
 
@@ -54,6 +55,23 @@ pub async fn get_complete_search_snapshot(
     })
     .await
     .map_err(|error| format!("Failed to join complete search snapshot task: {error}"))?
+}
+
+/// 高优先级目录（开始菜单、桌面、快速启动）的完整条目表。每次调用都重新枚举，
+/// 目录内容变化立即反映。
+#[tauri::command]
+pub async fn get_launcher_catalog(
+    app_handle: tauri::AppHandle,
+) -> Result<Vec<LauncherCatalogEntry>, String> {
+    let entries = tauri::async_runtime::spawn_blocking(launcher_catalog::collect_launcher_catalog)
+        .await
+        .map_err(|error| format!("Failed to join launcher catalog task: {error}"))?;
+    // 走搜索调试日志，这样「最佳匹配为什么没出现某一项」可以不开 DevTools 就定位。
+    everything::log_search_debug(
+        &app_handle,
+        format!("launcher catalog: collected {} entries", entries.len()),
+    );
+    Ok(entries)
 }
 
 #[tauri::command]

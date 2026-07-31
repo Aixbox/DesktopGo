@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import type {
+  LauncherCatalogEntry,
   SearchHit,
   SearchIconRequest,
   SearchPage,
@@ -43,6 +44,8 @@ export const searchFiles = (query: SearchQuery) => invoke<SearchPage>('search_fi
 
 export const getCompleteSearchSnapshot = (query: SearchQuery) =>
   invoke<SearchHit[]>('get_complete_search_snapshot', { query })
+
+export const getLauncherCatalog = () => invoke<LauncherCatalogEntry[]>('get_launcher_catalog')
 
 export const getSearchResultIcons = (requests: SearchIconRequest[], iconSize = 48) =>
   withTimeout(

@@ -50,6 +50,7 @@ pub(super) type GetResultFullPathNameW = unsafe extern "system" fn(u32, *mut u16
 pub(super) type GetResultHighlightedTextW = unsafe extern "system" fn(u32) -> *const u16;
 pub(super) type IsFolderResult = unsafe extern "system" fn(u32) -> i32;
 pub(super) type IsFileResult = unsafe extern "system" fn(u32) -> i32;
+pub(super) type GetResultRunCount = unsafe extern "system" fn(u32) -> u32;
 pub(super) type GetVersion = unsafe extern "system" fn() -> u32;
 pub(super) type GetBoolStatus = unsafe extern "system" fn() -> i32;
 pub(super) type GetLastError = unsafe extern "system" fn() -> u32;
@@ -78,6 +79,9 @@ pub(super) struct EverythingApi {
     pub(super) get_result_highlighted_path_w: GetResultHighlightedTextW,
     pub(super) is_folder_result: Option<IsFolderResult>,
     pub(super) is_file_result: Option<IsFileResult>,
+    /// Everything's own launch history. Absent on older DLLs, in which case
+    /// every hit scores as never launched.
+    pub(super) get_result_run_count: Option<GetResultRunCount>,
     pub(super) get_major_version: GetVersion,
     pub(super) is_db_loaded: GetBoolStatus,
     pub(super) get_last_error: GetLastError,
@@ -121,6 +125,7 @@ impl EverythingApi {
                 )?,
                 is_folder_result: load_symbol_optional(&lib, b"Everything_IsFolderResult\0"),
                 is_file_result: load_symbol_optional(&lib, b"Everything_IsFileResult\0"),
+                get_result_run_count: load_symbol_optional(&lib, b"Everything_GetResultRunCount\0"),
                 get_major_version: load_symbol(&lib, b"Everything_GetMajorVersion\0")?,
                 is_db_loaded: load_symbol(&lib, b"Everything_IsDBLoaded\0")?,
                 get_last_error: load_symbol(&lib, b"Everything_GetLastError\0")?,

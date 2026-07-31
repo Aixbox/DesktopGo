@@ -70,6 +70,11 @@ const asErrorMessage = (error: unknown) => {
 const SEARCH_BUSY_PREFIX = 'EverythingBusy'
 const SEARCH_BUSY_RETRY_BASE_MS = 250
 const SEARCH_BUSY_RETRY_MAX_MS = 1_000
+const mergeHighPriorityHits = (current: SearchHit[], incoming: SearchHit[]): SearchHit[] => {
+  const seen = new Set(current.map(hit => hit.path))
+  const added = incoming.filter(hit => !seen.has(hit.path))
+  return added.length === 0 ? current : [...current, ...added]
+}
 
 const isSearchBusyError = (error: unknown) => asErrorMessage(error).startsWith(SEARCH_BUSY_PREFIX)
 
@@ -103,6 +108,8 @@ interface UseSearchResult {
   searchPending: boolean
   hasCommittedQuery: boolean
   loadedCount: number
+  /** 已加载结果的头部若干条，供「最佳匹配」挑选高优先级候选。 */
+  bestMatchCandidates: SearchHit[]
   getItemAt: (index: number) => SearchHit | null
   setVisibleRange: (startIndex: number, endIndex: number) => void
   requestRange: (startIndex: number, endIndex: number) => void
@@ -182,6 +189,12 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     () => completeItems?.length ?? countCachedSearchResults(pages),
     [completeItems, pages]
   )
+
+  /**
+   * 「最佳匹配」的文件候选：当前已加载结果里**全部**高优先级命中，不截断。
+   * 由相关性排序在打分时顺带收集（优先级本来就要为每条结果算一次）。
+   */
+  const [bestMatchCandidates, setHighPriorityHits] = useState<SearchHit[]>([])
   const committedKeyword = resolveCommittedKeyword({
     keyword,
     submittedKeyword,
@@ -220,6 +233,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     setCompleteItemsAndRef(null)
     totalResultsRef.current = 0
     setPagesAndRef({})
+    setHighPriorityHits([])
     setLoading(false)
     setSearchPending(false)
     setError(null)
@@ -237,6 +251,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
     visibleRangeRef.current = { start: 0, end: -1 }
     setCompleteItemsAndRef(null)
     setPagesAndRef({})
+    setHighPriorityHits([])
     totalResultsRef.current = 0
     setTotalResults(0)
     setLoading(true)
@@ -329,11 +344,15 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
 
           if (!isContextActive(context)) return
           if (exactItems) {
-            setCompleteItemsAndRef(rankSearchPageItems(exactItems, context))
+            const ranked = rankSearchPageItems(exactItems, context)
+            setCompleteItemsAndRef(ranked.items)
             setPagesAndRef({})
+            setHighPriorityHits(ranked.highPriorityItems)
           } else {
+            const ranked = rankSearchPageItems(page.items, context)
             setCompleteItemsAndRef(null)
-            setPagesAndRef({ 0: rankSearchPageItems(page.items, context) })
+            setPagesAndRef({ 0: ranked.items })
+            setHighPriorityHits(ranked.highPriorityItems)
           }
           totalResultsRef.current = page.totalResults
           setTotalResults(page.totalResults)
@@ -431,10 +450,15 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
           return
         }
 
+        const ranked = rankSearchPageItems(page.items, context)
         setPagesAndRef({
           ...pagesRef.current,
-          [nextOffset]: rankSearchPageItems(page.items, context),
+          [nextOffset]: ranked.items,
         })
+        // 后续分页里新出现的高优先级命中并入候选池，去重后保持先到先得。
+        if (ranked.highPriorityItems.length > 0) {
+          setHighPriorityHits(current => mergeHighPriorityHits(current, ranked.highPriorityItems))
+        }
         totalResultsRef.current = page.totalResults
         setTotalResults(page.totalResults)
         setSelectedIndex(current => clampSearchSelection(current, page.totalResults))
@@ -830,6 +854,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
       searchPending,
       hasCommittedQuery,
       loadedCount,
+      bestMatchCandidates,
       getItemAt,
       setVisibleRange,
       requestRange,
@@ -876,6 +901,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
       history,
       isKeywordCommitted,
       keyword,
+      bestMatchCandidates,
       loadedCount,
       loading,
       loadingMore,

@@ -34,6 +34,7 @@ import { useSearch } from '@/lib/search/useSearch'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { useToast } from '@/components/ui/toast'
 import { useIconStore } from '@/stores/iconStore'
+import type { BestMatchItem } from '@/lib/search/bestMatch'
 import type { DesktopIcon } from '@/types'
 import type { AiOrganizePanelHandle, AiOrganizePanelRunState } from './ai/AiOrganizePanel'
 import { Button } from './ui/button'
@@ -109,6 +110,7 @@ export function Launchpad() {
     searchPending,
     hasCommittedQuery,
     loadedCount: searchLoadedCount,
+    bestMatchCandidates: searchBestMatchCandidates,
     getItemAt: getSearchItemAt,
     setVisibleRange: setSearchVisibleRange,
     requestRange: requestSearchRange,
@@ -226,7 +228,13 @@ export function Launchpad() {
   }, [language])
   const hasSearchKeyword = keyword.trim().length > 0
   const { results: iconSearchResults, recordLaunch: recordShortcutLaunch } =
-    useShortcutSearchResults(icons, keyword, searchSource)
+    useShortcutSearchResults(
+      icons,
+      keyword,
+      searchSource,
+      searchBestMatchCandidates,
+      isSearchPanelOpen
+    )
   const isSearchPanelVisible = isSearchPanelOpen
   const surfaceInteractions = useLaunchpadSurfaceInteractions({
     selectionMode,
@@ -384,6 +392,21 @@ export function Launchpad() {
     [clearSearch, recordCurrentSearch, toast]
   )
 
+  /**
+   * 「最佳匹配」里两类条目共用一套激活入口：启动台图标走 `launchIconItem`
+   * （记使用频率），Everything 的文件命中走 `launchSearchItem`（记运行次数）。
+   */
+  const activateBestMatch = useCallback(
+    async (item: BestMatchItem) => {
+      if (item.kind === 'shortcut') {
+        await launchIconItem(item.icon)
+        return
+      }
+      await launchSearchItem(item.hit.path)
+    },
+    [launchIconItem, launchSearchItem]
+  )
+
   const handleSearchNavigationKey = (
     key: string,
     preventDefault: () => void,
@@ -402,7 +425,7 @@ export function Launchpad() {
       iconResults: iconSearchResults,
       selectedIconIndex: effectiveSelectedIconResultIndex,
       setSelectedIconIndex: setSelectedIconResultIndex,
-      activateIcon: icon => void launchIconItem(icon),
+      activateIcon: item => void activateBestMatch(item),
       combinedSelectedIndex: effectiveCombinedSelectedIndex,
       fileCount: searchTotalResults > 0 ? searchTotalResults : searchLoadedCount,
       selectCombinedIndex: selectUnifiedSearchIndex,
@@ -680,8 +703,8 @@ export function Launchpad() {
                     setSelectedIconResultIndex(index)
                   }
                 }}
-                onActivateIcon={icon => {
-                  void launchIconItem(icon)
+                onActivateIcon={item => {
+                  void activateBestMatch(item)
                 }}
                 onShortcutColumnCountChange={setShortcutGridColumnCount}
                 matchPath={searchMatchPath}

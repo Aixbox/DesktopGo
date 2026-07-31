@@ -14,6 +14,7 @@ use crate::everything::models::SearchHit;
 
 const EVERYTHING_REQUEST_FILE_NAME: u32 = 0x0000_0001;
 const EVERYTHING_REQUEST_PATH: u32 = 0x0000_0002;
+const EVERYTHING_REQUEST_RUN_COUNT: u32 = 0x0000_0400;
 const EVERYTHING_REQUEST_HIGHLIGHTED_FILE_NAME: u32 = 0x0000_2000;
 const EVERYTHING_REQUEST_HIGHLIGHTED_PATH: u32 = 0x0000_4000;
 const MAX_FIRST_PAGE_CACHE_ITEMS: usize = 200;
@@ -210,6 +211,10 @@ fn extract_search_results(
             highlighted_path: extract_result_text(unsafe {
                 (api.get_result_highlighted_path_w)(index)
             }),
+            run_count: api
+                .get_result_run_count
+                .map(|func| unsafe { func(index) })
+                .unwrap_or(0),
             path,
             name,
             parent,
@@ -466,6 +471,7 @@ pub(super) fn start_search(
         (api.set_request_flags)(
             EVERYTHING_REQUEST_FILE_NAME
                 | EVERYTHING_REQUEST_PATH
+                | EVERYTHING_REQUEST_RUN_COUNT
                 | EVERYTHING_REQUEST_HIGHLIGHTED_FILE_NAME
                 | EVERYTHING_REQUEST_HIGHLIGHTED_PATH,
         );

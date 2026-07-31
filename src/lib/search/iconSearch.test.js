@@ -91,6 +91,54 @@ assert(
   'usage should not outrank a more relevant shortcut'
 )
 
+// 词首缩写：目标路径里没有字面的 "VS Code"，只能靠 fzf 式子序列打分捞回来
+const abbreviationOnly = searchDesktopIcons(
+  [
+    { id: 'notepad', name: 'Notepad++', path: 'C:/npp.lnk', target_path: 'C:/npp/notepad++.exe' },
+    {
+      id: 'vscode',
+      name: 'Visual Studio Code',
+      path: 'C:/Users/me/Desktop/Visual Studio Code.lnk',
+      target_path: 'C:/Editors/CodeApp/editor.exe',
+    },
+  ],
+  'vscode',
+  3
+)
+assert(
+  abbreviationOnly[0]?.name === 'Visual Studio Code',
+  '词首缩写 vscode 应命中 Visual Studio Code，即使路径里没有字面 VS Code'
+)
+assert(
+  !abbreviationOnly.some(icon => icon.id === 'notepad'),
+  '不含关键词字符的快捷方式不应被子序列匹配捞进来'
+)
+
+const ideaResults = searchDesktopIcons(
+  [{ id: 'idea', name: 'IntelliJ IDEA', path: '', target_path: '' }],
+  'idea',
+  3
+)
+assert(ideaResults[0]?.name === 'IntelliJ IDEA', 'idea 应命中 IntelliJ IDEA')
+
+const everythingResults = searchDesktopIcons(
+  [{ id: 'et', name: 'Everything', path: '', target_path: '' }],
+  'et',
+  3
+)
+assert(everythingResults[0]?.name === 'Everything', 'et 应子序列命中 Everything')
+
+// 完全不含关键词字符的候选必须被排除，不能因为「子序列很宽松」就全部召回
+const noise = searchDesktopIcons(
+  [
+    { id: 'zebra', name: 'Zebra Tool', path: '', target_path: '' },
+    { id: 'gimp', name: 'GIMP', path: '', target_path: '' },
+  ],
+  'vscode',
+  3
+)
+assert(noise.length === 0, '一个字符都对不上的快捷方式不应被召回')
+
 assert(searchDesktopIcons(icons, '', 3).length === 0, 'empty keywords should return no results')
 assert(searchDesktopIcons(icons, 'settings', 1).length === 1, 'limit should cap shortcut results')
 

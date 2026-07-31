@@ -49,6 +49,8 @@ export interface SearchHit {
   iconBase64: string
   highlightedName: string
   highlightedPath: string
+  /** Everything's own launch count for this path; 0 when unavailable. */
+  runCount: number
 }
 
 export interface SearchPage {
@@ -60,6 +62,18 @@ export interface SearchPage {
   provider: SearchProvider
   runtimeState: SearchRuntimeState
   tookMs: number
+}
+
+/**
+ * 高优先级目录（开始菜单、桌面、快速启动）里的一条条目。
+ * 由 Rust 侧直接枚举目录得到，不经过 Everything，所以不受字面子串匹配的限制。
+ */
+export interface LauncherCatalogEntry {
+  path: string
+  name: string
+  parent: string
+  isFile: boolean
+  isFolder: boolean
 }
 
 /** One visible row asking for its icon. `isFolder` comes from the search result. */

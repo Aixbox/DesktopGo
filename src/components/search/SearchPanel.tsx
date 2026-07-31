@@ -10,7 +10,7 @@ import {
 import type { SearchHistoryEntry } from '@/lib/search/history'
 import type { SearchSource } from '@/lib/search/scope'
 import type { SearchHit, SearchPreview, SearchRuntimeState, SearchSort } from '@/lib/search/types'
-import type { DesktopIcon } from '@/types'
+import type { BestMatchItem } from '@/lib/search/bestMatch'
 import { RefreshCw } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
 import { SearchHistoryPanel } from './SearchHistoryPanel'
@@ -50,10 +50,10 @@ interface SearchPanelProps {
   getItemAt: (index: number) => SearchHit | null
   selectedItem: SearchHit | null
   selectedIndex: number
-  iconResults: DesktopIcon[]
+  iconResults: BestMatchItem[]
   selectedIconIndex: number
   onSelectIcon: (index: number) => void
-  onActivateIcon: (icon: DesktopIcon) => void
+  onActivateIcon: (item: BestMatchItem) => void
   onShortcutColumnCountChange: (columnCount: number) => void
   matchPath: boolean
   onMatchPathChange: (value: boolean) => void
@@ -428,7 +428,7 @@ export function SearchPanel({
       {source === 'icons' ? (
         trimmedKeyword && iconResults.length > 0 ? (
           <ShortcutSearchResults
-            icons={iconResults}
+            items={iconResults}
             selectedIndex={selectedIconIndex}
             onSelect={onSelectIcon}
             onActivate={onActivateIcon}
@@ -442,12 +442,12 @@ export function SearchPanel({
 
       {isUnified && trimmedKeyword && iconResults.length > 0 ? (
         <ShortcutSearchResults
-          icons={iconResults}
+          items={iconResults}
           selectedIndex={selectedIconIndex}
           onSelect={onSelectIcon}
           onActivate={onActivateIcon}
           mode="compact"
-          heading="最佳快捷入口"
+          heading="最佳匹配"
         />
       ) : null}
 

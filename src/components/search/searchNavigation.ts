@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react'
 import type { SearchSource } from '@/lib/search/scope'
+import type { BestMatchItem } from '@/lib/search/bestMatch'
 import type { SearchHit } from '@/lib/search/types'
-import type { DesktopIcon } from '@/types'
 
 export interface SearchNavigationOptions {
   key: string
@@ -13,10 +13,10 @@ export interface SearchNavigationOptions {
   closePanel: () => void
   closeLaunchpad: () => void
   clearSearch: () => void
-  iconResults: DesktopIcon[]
+  iconResults: BestMatchItem[]
   selectedIconIndex: number
   setSelectedIconIndex: Dispatch<SetStateAction<number>>
-  activateIcon: (icon: DesktopIcon) => void
+  activateIcon: (item: BestMatchItem) => void
   combinedSelectedIndex: number
   fileCount: number
   selectCombinedIndex: (index: number) => void
