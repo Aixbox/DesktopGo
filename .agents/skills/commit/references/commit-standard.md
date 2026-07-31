@@ -123,12 +123,19 @@ BREAKING CHANGE: 现有配置需要在首次启动时迁移到 workspaceGroups�
 Refs: #123
 ```
 
-## 7. Pre-commit quality gate
+## 7. Commit gate
 
 Before each commit:
 
-1. Confirm the staged diff is one atomic group.
-2. Run repository-required checks and `git diff --check`.
-3. Validate the final message with `scripts/validate-commit-message.mjs`.
-4. Commit without bypassing hooks.
-5. Verify the created commit subject and staged file set.
+1. Before the first commit, run the three parallel preflight commands defined in `SKILL.md` once for
+   the complete change set. Require the frontend build, Rust check, and 1000-line budget check to
+   pass within the shared 180-second limit.
+2. Confirm the staged diff is one atomic group.
+3. Confirm the planned subject accurately describes that staged group.
+4. Validate the final message with `scripts/validate-commit-message.mjs`.
+5. Commit without bypassing hooks.
+6. Verify the created commit subject and staged file set.
+
+Implementation review and the full development validation suite remain outside this skill. Do not
+expand the preflight with tests, standalone lint or typecheck, clippy, release builds, formatting
+checks, or `git diff --check`; those checks belong to the preceding development work.

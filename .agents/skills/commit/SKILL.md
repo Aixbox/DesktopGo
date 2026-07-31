@@ -1,11 +1,11 @@
 ---
 name: commit
-description: Review the Git working tree, split changes into atomic commits, create validated Conventional Commit messages using repository scopes and Chinese subjects, commit safely, and optionally push when explicitly requested. Use when the user asks to commit, submit, or push code, or invokes $commit.
+description: Inspect Git changes, run a bounded runnable-project and 1000-line preflight, split changes into atomic commits, write validated Conventional Commit messages using repository scopes and Chinese subjects, create the commits, and optionally push when explicitly requested. Use when the user asks to commit, submit, or push code, or invokes $commit. This skill does not review implementation correctness or run the full development validation suite.
 ---
 
 # Commit Changes
 
-Create safe, reviewable Git commits that follow the repository's Conventional Commits profile. Preserve unrelated work and make each commit independently understandable and revertible.
+Create accurate, atomic Git commits that follow the repository's Conventional Commits profile. Preserve unrelated work and make each commit independently understandable and revertible.
 
 ## Required standard
 
@@ -16,9 +16,10 @@ Read [references/commit-standard.md](references/commit-standard.md) before plann
 ### 1. Inspect
 
 - Run `git status --short`, `git branch --show-current`, `git diff --stat`, `git diff`, and `git diff --cached`.
-- Inspect relevant untracked files before including them. Read applicable `AGENTS.md` files and project validation commands.
+- Inspect relevant untracked files before including them. Read applicable `AGENTS.md` files.
 - Check recent subjects with `git log -20 --pretty=format:"%s"` to reuse established scopes without copying legacy formatting mistakes.
 - Stop if there are no changes, unresolved conflicts, an in-progress merge/rebase that the user did not ask to finish, or a detached HEAD.
+- Read diffs only to identify each change's purpose, ownership, dependencies, and suitable commit message. Do not perform a code review or judge implementation correctness.
 
 ### 2. Plan atomic commits
 
@@ -28,17 +29,31 @@ Read [references/commit-standard.md](references/commit-standard.md) before plann
 - If multiple clean groups exist and the user did not require one commit, create multiple commits in dependency order.
 - Ask only when ownership is ambiguous or splitting would require editing user changes. Never reset, clean, stash, discard, or rewrite unrelated work.
 
-### 3. Validate changes
+### 3. Run the bounded preflight once
 
-- Run the smallest relevant lint, typecheck, test, or build commands required by repository guidance.
-- Run `git diff --check` before staging.
-- Stop before committing when validation fails. Report the command and useful error context; do not bypass hooks or weaken tests.
+- Run the preflight once for the complete working-tree change set, before staging the first group. Do not repeat it for every atomic commit.
+- Start these commands in parallel from the repository root:
+
+  ```text
+  pnpm build
+  pnpm rust:check
+  node .codex/skills/maintain-modular-code/scripts/check-changed-files.mjs
+  ```
+
+- Treat successful `pnpm build` and `pnpm rust:check` as the bounded evidence that the frontend and Tauri backend remain buildable. Do not start the long-lived `pnpm dev` or `pnpm tauri dev` processes.
+- The changed-files script enforces the 1000-line limit for changed and untracked `.js`, `.jsx`, `.ts`, `.tsx`, and `.rs` files. Existing oversized files may shrink but must not grow.
+- Cap the entire parallel preflight at 180 seconds. On timeout, stop the commands and report the timeout; do not keep the user waiting or silently continue to commit.
+- If sandbox process restrictions cause `spawn EPERM`, retry the affected command once with the required execution permission while keeping the same 180-second overall deadline. Do not retry other failures.
+- Stop before staging when any command fails. Report the command and concise error context.
+- Do not run tests, standalone lint or typecheck, clippy, release builds, formatting checks, `git diff --check`, or independent code review. Do not edit source files to fix or improve the implementation.
+- Commit-message validation remains required because it verifies the deliverable of this workflow.
 
 ### 4. Stage one group
 
 - Stage explicit paths only. Never use `git add .`, `git add -A`, or another broad staging command.
 - Inspect `git diff --cached --stat` and `git diff --cached` after staging.
-- Confirm the staged diff contains exactly one planned group and contains no secrets, credentials, environment files, unrelated edits, or accidental generated output.
+- Confirm the staged diff contains exactly one planned group and matches the purpose expressed by the planned commit message.
+- Do not use the staged-diff inspection as an implementation review or validation step.
 
 ### 5. Compose and validate the message
 
@@ -74,4 +89,4 @@ Read [references/commit-standard.md](references/commit-standard.md) before plann
 
 ## Final report
 
-Report each commit hash and subject, the files or logical group included, validation commands and results, and whether a push occurred.
+Report each commit hash and subject, the files or logical group included, the three preflight results and elapsed time, and whether a push occurred. State that full development validation and implementation review were intentionally not run by this skill.
