@@ -244,12 +244,16 @@ export function ShortcutSearchResults({
                 <ShortcutIcon icon={item.icon} size={config.imgSize} />
                 <HighlightedText
                   segments={buildFuzzyHighlightSegments(item.name, keyword)}
-                  className={`text-center text-[11px] leading-tight ${
+                  className={`text-center text-[11px] leading-[15px] ${
                     selectedIndex === index ? 'accent-foreground' : 'text-foreground'
                   }`}
                   highlightClassName="accent-foreground font-medium"
                   style={{
-                    maxWidth: config.containerWidth - 10,
+                    // 标题不受磁贴左右 padding 限制，和 hover 背景保持同宽。
+                    width: config.containerWidth,
+                    maxWidth: config.containerWidth,
+                    marginInline: -12,
+                    flexShrink: 0,
                     display: singleLineTitle ? 'block' : '-webkit-box',
                     WebkitLineClamp: singleLineTitle ? 1 : 2,
                     WebkitBoxOrient: singleLineTitle ? undefined : 'vertical',

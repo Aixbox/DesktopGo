@@ -54,7 +54,8 @@ export const ICON_GRID_LAYOUT_ROW_HEIGHT = {
 } as const
 export const ICON_GRID_TILE_PADDING_Y = 4
 export const ICON_GRID_TITLE_GAP = 4
-export const ICON_GRID_TITLE_LINE_HEIGHT = 13
+// 给 g、p、q、y 等下行字母留出裁剪余量。
+export const ICON_GRID_TITLE_LINE_HEIGHT = 15
 export const ICON_GRID_TITLE_MAX_LINES = 2
 export const ICON_GRID_TITLE_HEIGHT = ICON_GRID_TITLE_LINE_HEIGHT * ICON_GRID_TITLE_MAX_LINES
 

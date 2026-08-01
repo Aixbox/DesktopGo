@@ -1,6 +1,7 @@
 import type { DesktopIcon } from '../types'
 import {
   getIconGridRowHeight,
+  getIconGridTitleMetrics,
   ICON_GRID_TILE_PADDING_Y,
   ICON_GRID_TITLE_GAP,
   ICON_SIZE_CONFIG,
@@ -49,6 +50,7 @@ export const Icon = memo(function Icon({
   const config = ICON_SIZE_CONFIG[iconSize]
   const tileHeight = getIconGridRowHeight(iconSize)
   const isSingleLineTitle = titleLineCount === 'one'
+  const titleMetrics = getIconGridTitleMetrics(titleLineCount)
   const displayName = customName ?? icon.name
 
   const [isRenaming, setIsRenaming] = useState(false)
@@ -203,12 +205,16 @@ export const Icon = memo(function Icon({
           />
         ) : (
           <span
-            className="icon-label text-[11px] text-center leading-[13px] text-foreground drop-shadow-md"
+            className="icon-label text-[11px] text-center leading-[15px] text-foreground drop-shadow-md"
             style={{
-              maxWidth: config.containerWidth - 10,
-              height: isSingleLineTitle ? 13 : 26,
+              // 标题不受磁贴左右 padding 限制，和 hover 背景保持同宽。
+              width: config.containerWidth,
+              maxWidth: config.containerWidth,
+              marginInline: -12,
+              flexShrink: 0,
+              height: titleMetrics.height,
               display: isSingleLineTitle ? 'block' : '-webkit-box',
-              WebkitLineClamp: isSingleLineTitle ? 1 : 2,
+              WebkitLineClamp: titleMetrics.lineClamp,
               WebkitBoxOrient: isSingleLineTitle ? undefined : 'vertical',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
