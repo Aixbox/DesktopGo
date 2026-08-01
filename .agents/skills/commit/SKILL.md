@@ -32,7 +32,8 @@ Read [references/commit-standard.md](references/commit-standard.md) before plann
 ### 3. Run the bounded preflight once
 
 - Run the preflight once for the complete working-tree change set, before staging the first group. Do not repeat it for every atomic commit.
-- Start these commands in parallel from the repository root:
+- Record one absolute deadline 180 seconds after the preflight begins, then start these commands in
+  parallel from the repository root:
 
   ```text
   pnpm build
@@ -42,9 +43,19 @@ Read [references/commit-standard.md](references/commit-standard.md) before plann
 
 - Treat successful `pnpm build` and `pnpm rust:check` as the bounded evidence that the frontend and Tauri backend remain buildable. Do not start the long-lived `pnpm dev` or `pnpm tauri dev` processes.
 - The changed-files script enforces the 1000-line limit for changed and untracked `.js`, `.jsx`, `.ts`, `.tsx`, and `.rs` files. Existing oversized files may shrink but must not grow.
-- Cap the entire parallel preflight at 180 seconds. On timeout, stop the commands and report the timeout; do not keep the user waiting or silently continue to commit.
-- If sandbox process restrictions cause `spawn EPERM`, retry the affected command once with the required execution permission while keeping the same 180-second overall deadline. Do not retry other failures.
-- Stop before staging when any command fails. Report the command and concise error context.
+- Keep each command's task and result independently. Await every launched command with all-settled
+  semantics, such as per-command catches or `Promise.allSettled`; never use fail-fast aggregation on
+  raw tool calls because one rejection must not discard or orphan the other command results.
+- Cap the entire parallel preflight at the shared deadline. Give every initial call and retry only the
+  remaining time. On timeout, stop every still-running command and report the timeout; do not keep the
+  user waiting or silently continue to commit.
+- If a result specifically shows that sandbox process creation failed with `spawn` or `spawnSync` and
+  `EPERM`, immediately retry only that affected command once with the required execution permission
+  while the other initial commands continue. Do not retry any other failure or restart a successful
+  command. Do not start the retry after the shared deadline.
+- Preserve and inspect the three named final results after all launched calls and allowed retries have
+  settled. Stop before staging when any command fails, times out, or lacks a final result. Report the
+  command and concise error context.
 - Do not run tests, standalone lint or typecheck, clippy, release builds, formatting checks, `git diff --check`, or independent code review. Do not edit source files to fix or improve the implementation.
 - Commit-message validation remains required because it verifies the deliverable of this workflow.
 
