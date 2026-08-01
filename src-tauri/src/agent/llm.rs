@@ -6,13 +6,14 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
-use crate::ai::{self, AiConfig, DEFAULT_REQUEST_TIMEOUT_SECS};
+use crate::ai::{self, AiCompatibleProtocol, AiConfig, AiProvider, DEFAULT_REQUEST_TIMEOUT_SECS};
 
 use observation::{
-    emit_observed_error, emit_observed_fallback, emit_observed_request, emit_observed_response,
-    LlmObservation,
+    emit_observed_error, emit_observed_request, emit_observed_response, LlmObservation,
 };
-use request::{build_chat_completions_request, build_responses_request};
+use request::{
+    build_anthropic_messages_request, build_chat_completions_request, build_responses_request,
+};
 use stream::{read_sse_stream, LlmUsage, StreamAccumulator};
 
 #[derive(Debug, Clone, Serialize)]
@@ -32,13 +33,15 @@ impl LlmMessage {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum LlmProvider {
-    OpenAiCompatible,
+    OpenAi,
+    Anthropic,
 }
 
 impl LlmProvider {
     pub(crate) fn label(self) -> &'static str {
         match self {
-            Self::OpenAiCompatible => "openai-compatible",
+            Self::OpenAi => "openai",
+            Self::Anthropic => "anthropic",
         }
     }
 }
@@ -47,6 +50,7 @@ impl LlmProvider {
 enum ApiSurface {
     Responses,
     ChatCompletions,
+    AnthropicMessages,
 }
 
 impl ApiSurface {
@@ -54,6 +58,7 @@ impl ApiSurface {
         match self {
             Self::Responses => "responses",
             Self::ChatCompletions => "chat-completions",
+            Self::AnthropicMessages => "anthropic-messages",
         }
     }
 
@@ -61,6 +66,7 @@ impl ApiSurface {
         match self {
             Self::Responses => ai::normalize_responses_url(base_url),
             Self::ChatCompletions => ai::normalize_chat_completions_url(base_url),
+            Self::AnthropicMessages => ai::normalize_anthropic_messages_url(base_url),
         }
     }
 }
@@ -104,9 +110,12 @@ struct StreamingAttempt<'a, 'b> {
 }
 
 impl LlmClient {
-    pub(crate) fn from_config(_config: &AiConfig) -> Self {
+    pub(crate) fn from_config(config: &AiConfig) -> Self {
         Self {
-            provider: LlmProvider::OpenAiCompatible,
+            provider: match config.provider {
+                AiProvider::OpenAi => LlmProvider::OpenAi,
+                AiProvider::Anthropic => LlmProvider::Anthropic,
+            },
         }
     }
 
@@ -146,57 +155,17 @@ impl LlmClient {
                 emit_observed_error(observation.as_ref(), &started_at, &message);
                 message
             })?;
-        if !should_try_responses_first(&config.base_url) {
-            return self
-                .complete_streaming_request(
-                    &client,
-                    StreamingRequestInput(config, messages, strict_json),
-                    StreamingAttempt {
-                        surface: ApiSurface::ChatCompletions,
-                        observation: observation.as_ref(),
-                        started_at,
-                    },
-                )
-                .await;
-        }
-
-        match self
-            .complete_streaming_request(
-                &client,
-                StreamingRequestInput(config, messages, strict_json),
-                StreamingAttempt {
-                    surface: ApiSurface::Responses,
-                    observation: observation.as_ref(),
-                    started_at,
-                },
-            )
-            .await
-        {
-            Ok(response) => Ok(response),
-            Err(responses_error) => {
-                emit_observed_fallback(
-                    observation.as_ref(),
-                    "Responses API 流式请求失败，正在降级为 Chat Completions 流式请求。",
-                    &responses_error,
-                );
-
-                self.complete_streaming_request(
-                    &client,
-                    StreamingRequestInput(config, messages, strict_json),
-                    StreamingAttempt {
-                        surface: ApiSurface::ChatCompletions,
-                        observation: observation.as_ref(),
-                        started_at,
-                    },
-                )
-                .await
-                .map_err(|chat_error| {
-                    format!(
-                        "Responses API 流式请求失败：{responses_error}；Chat Completions 流式请求失败：{chat_error}"
-                    )
-                })
-            }
-        }
+        let surface = api_surface_for(self.provider, config.compatible_protocol);
+        self.complete_streaming_request(
+            &client,
+            StreamingRequestInput(config, messages, strict_json),
+            StreamingAttempt {
+                surface,
+                observation: observation.as_ref(),
+                started_at,
+            },
+        )
+        .await
     }
 
     async fn complete_streaming_request(
@@ -217,20 +186,24 @@ impl LlmClient {
             ApiSurface::ChatCompletions => {
                 build_chat_completions_request(config, messages, strict_json)
             }
+            ApiSurface::AnthropicMessages => build_anthropic_messages_request(config, messages),
         };
 
         emit_observed_request(observation, surface, strict_json, &endpoint);
-        let response = client
-            .post(&endpoint)
-            .bearer_auth(config.api_key.trim())
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|error| {
-                let message = format!("请求模型失败：{error}");
-                emit_observed_error(observation, &started_at, &message);
-                message
-            })?;
+        let request = client.post(&endpoint).json(&request_body);
+        let request = match surface {
+            ApiSurface::AnthropicMessages => request
+                .header("x-api-key", config.api_key.trim())
+                .header("anthropic-version", "2023-06-01"),
+            ApiSurface::Responses | ApiSurface::ChatCompletions => {
+                request.bearer_auth(config.api_key.trim())
+            }
+        };
+        let response = request.send().await.map_err(|error| {
+            let message = format!("请求模型失败：{error}");
+            emit_observed_error(observation, &started_at, &message);
+            message
+        })?;
 
         let status = response.status();
         if !status.is_success() {
@@ -272,8 +245,14 @@ impl LlmClient {
     }
 }
 
-fn should_try_responses_first(base_url: &str) -> bool {
-    base_url.to_ascii_lowercase().contains("api.openai.com")
+fn api_surface_for(provider: LlmProvider, protocol: AiCompatibleProtocol) -> ApiSurface {
+    match provider {
+        LlmProvider::OpenAi => match protocol {
+            AiCompatibleProtocol::Responses => ApiSurface::Responses,
+            AiCompatibleProtocol::ChatCompletions => ApiSurface::ChatCompletions,
+        },
+        LlmProvider::Anthropic => ApiSurface::AnthropicMessages,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -282,4 +261,28 @@ pub(crate) struct LlmResponse {
     pub(crate) adapter_label: String,
     pub(crate) latency_ms: u64,
     pub(crate) usage: Option<LlmUsage>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn openai_chat_completions_protocol_selects_chat_surface_for_agent() {
+        let config: AiConfig = serde_json::from_value(serde_json::json!({
+            "provider": "openai",
+            "base_url": "https://gateway.example/v1",
+            "api_key": "secret",
+            "model": "gateway-model",
+            "compatible_protocol": "chat-completions"
+        }))
+        .unwrap();
+        let client = LlmClient::from_config(&config);
+
+        assert_eq!(client.provider().label(), "openai");
+        assert_eq!(
+            api_surface_for(client.provider(), config.compatible_protocol).label(),
+            "chat-completions"
+        );
+    }
 }

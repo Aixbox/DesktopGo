@@ -1,15 +1,17 @@
 mod endpoint;
-mod models;
+pub(crate) mod models;
 mod operation;
 mod policy;
+mod stream;
 
 pub use models::{
-    AiChatMessageInput, AiChatResult, AiClassifyResult, AiConfig, AiGroup, AiIconInput,
+    AiChatMessageInput, AiChatResult, AiClassifyResult, AiCompatibleProtocol, AiConfig, AiGroup,
+    AiIconInput, AiProvider,
 };
 
 pub(crate) use endpoint::{
-    normalize_chat_completions_url, normalize_responses_url, validate_base_url,
-    DEFAULT_REQUEST_TIMEOUT_SECS,
+    normalize_anthropic_messages_url, normalize_chat_completions_url, normalize_responses_url,
+    validate_base_url, DEFAULT_REQUEST_TIMEOUT_SECS,
 };
 pub(crate) use policy::{build_system_prompt, parse_model_payload, sanitize_groups};
 

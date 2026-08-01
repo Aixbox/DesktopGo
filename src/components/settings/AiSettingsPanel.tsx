@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { translate, useI18n } from '@/lib/i18n'
 import {
+  AI_COMPATIBLE_PROTOCOLS,
+  AI_PROVIDERS,
+  AI_REASONING_EFFORTS,
   DEFAULT_AI_CONFIG,
+  getDefaultAiBaseUrl,
   isAiConfigReady,
   loadAiConfig,
   saveAiConfig,
@@ -10,6 +14,7 @@ import {
 } from '@/lib/aiConfigStore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { SettingCard } from '@/components/ui/setting-components'
 import { useToast } from '@/components/ui/toast'
 import { ShieldCheck } from 'lucide-react'
@@ -41,6 +46,17 @@ export function AiSettingsPanel() {
 
   const updateField = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => {
     setConfig(current => ({ ...current, [key]: value }))
+  }
+
+  const updateProvider = (provider: AiConfig['provider']) => {
+    setConfig(current => ({
+      ...current,
+      provider,
+      baseUrl:
+        current.baseUrl.trim() === getDefaultAiBaseUrl(current.provider)
+          ? getDefaultAiBaseUrl(provider)
+          : current.baseUrl,
+    }))
   }
 
   const handleSave = async () => {
@@ -79,27 +95,17 @@ export function AiSettingsPanel() {
     }
     setTesting(true)
     try {
-      await invoke('ai_classify_icons', {
+      await invoke('ai_chat', {
         config: {
+          provider: config.provider,
           base_url: config.baseUrl.trim(),
           api_key: config.apiKey.trim(),
           model: config.model.trim(),
           custom_prompt: config.customPrompt,
+          compatible_protocol: config.compatibleProtocol,
+          reasoning_effort: config.reasoningEffort,
         },
-        icons: [
-          {
-            key: 'test:1',
-            name: 'Google Chrome',
-            target_leaf: 'chrome.exe',
-            item_type: 'shortcut',
-          },
-          {
-            key: 'test:2',
-            name: 'Microsoft Edge',
-            target_leaf: 'msedge.exe',
-            item_type: 'shortcut',
-          },
-        ],
+        messages: [{ role: 'user', content: '请简短回复：连接成功' }],
       })
       toast.success(translate('连接成功，AI 配置可用。'), {
         key: 'settings-ai',
@@ -125,7 +131,7 @@ export function AiSettingsPanel() {
         <h2 className="text-lg font-semibold">{translate('AI 助手')}</h2>
         <p className="text-sm text-muted-foreground">
           {translate(
-            '配置一个兼容 OpenAI 接口的模型，之后可在启动台右键菜单使用「AI 智能整理」，让 AI 按用途把图标归类到文件夹。'
+            '配置 OpenAI 或 Anthropic Claude；OpenAI 的 Base URL 支持官方服务或兼容网关，之后可在启动台右键菜单使用「AI 智能整理」，让 AI 按用途把图标归类到文件夹。'
           )}
         </p>
       </div>
@@ -133,10 +139,22 @@ export function AiSettingsPanel() {
       <SettingCard
         label={translate('模型接入配置')}
         desc={translate(
-          '支持任意兼容 OpenAI Chat Completions 的服务，例如 OpenAI、DeepSeek、Moonshot 或本地 Ollama。'
+          'OpenAI 的 Base URL 可填写官方服务或兼容网关，协议按网关能力选择 Responses API 或 Chat Completions；Anthropic Claude 使用 Messages 流式接口。'
         )}
       >
         <div className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground/80">{translate('服务商')}</label>
+            <Select
+              value={config.provider}
+              onValueChange={value => updateProvider(value as AiConfig['provider'])}
+              options={AI_PROVIDERS.map(value => ({
+                value,
+                label: translate(value === 'openai' ? 'OpenAI' : 'Anthropic Claude'),
+              }))}
+            />
+          </div>
+
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-foreground/80">
               {translate('接口地址（Base URL）')}
@@ -144,7 +162,11 @@ export function AiSettingsPanel() {
             <Input
               value={config.baseUrl}
               onChange={e => updateField('baseUrl', e.target.value)}
-              placeholder="https://api.openai.com/v1"
+              placeholder={
+                config.provider === 'anthropic'
+                  ? 'https://api.anthropic.com'
+                  : 'https://api.openai.com/v1'
+              }
               spellCheck={false}
               autoCorrect="off"
               autoCapitalize="off"
@@ -162,6 +184,54 @@ export function AiSettingsPanel() {
               autoCorrect="off"
               autoCapitalize="off"
             />
+          </div>
+
+          {config.provider === 'openai' ? (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground/80">
+                {translate('OpenAI 请求协议')}
+              </label>
+              <Select
+                value={config.compatibleProtocol}
+                onValueChange={value =>
+                  updateField('compatibleProtocol', value as AiConfig['compatibleProtocol'])
+                }
+                options={AI_COMPATIBLE_PROTOCOLS.map(value => ({
+                  value,
+                  label:
+                    value === 'responses'
+                      ? 'Responses API (Streaming)'
+                      : 'Chat Completions (Streaming)',
+                }))}
+              />
+            </div>
+          ) : null}
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground/80">
+              {translate('思考程度')}
+            </label>
+            <Select
+              value={config.reasoningEffort}
+              onValueChange={value =>
+                updateField('reasoningEffort', value as AiConfig['reasoningEffort'])
+              }
+              options={AI_REASONING_EFFORTS.map(value => ({
+                value,
+                label: translate(
+                  value === 'none'
+                    ? '不启用'
+                    : value === 'low'
+                      ? '低'
+                      : value === 'medium'
+                        ? '中'
+                        : '高'
+                ),
+              }))}
+            />
+            <p className="text-xs leading-5 text-muted-foreground">
+              {translate('仅在模型支持思考能力时启用；接口不支持会返回明确错误。')}
+            </p>
           </div>
 
           <div className="space-y-1.5">

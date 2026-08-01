@@ -98,10 +98,13 @@ export interface AiAgentEvent {
 }
 
 export const buildAiConfigPayload = (config: AiConfig, customPromptOverride?: string) => ({
+  provider: config.provider,
   base_url: config.baseUrl,
   api_key: config.apiKey,
   model: config.model,
   custom_prompt: customPromptOverride ?? config.customPrompt,
+  compatible_protocol: config.compatibleProtocol,
+  reasoning_effort: config.reasoningEffort,
 })
 
 export const toEditableGroups = (aiGroups: AiGroup[]): EditableAiGroup[] =>

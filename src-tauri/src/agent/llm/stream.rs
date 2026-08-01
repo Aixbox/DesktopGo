@@ -33,7 +33,7 @@ pub(super) async fn read_sse_stream(
     accumulator: &mut StreamAccumulator,
 ) -> Result<(), String> {
     let mut stream = response.bytes_stream();
-    let mut buffer = String::new();
+    let mut buffer = Vec::new();
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|error| {
@@ -41,23 +41,32 @@ pub(super) async fn read_sse_stream(
             emit_observed_error(observation, started_at, &message);
             message
         })?;
-        buffer.push_str(&String::from_utf8_lossy(&chunk));
+        buffer.extend_from_slice(&chunk);
         while let Some((frame_end, separator_len)) = find_sse_frame_end(&buffer) {
-            let frame = buffer[..frame_end].to_string();
+            let frame = String::from_utf8(buffer[..frame_end].to_vec()).map_err(|error| {
+                let message = format!("解析 {} SSE UTF-8 响应失败：{error}", surface.label());
+                emit_observed_error(observation, started_at, &message);
+                message
+            })?;
             buffer.drain(..frame_end + separator_len);
             handle_sse_frame(&frame, surface, observation, started_at, accumulator)?;
         }
     }
 
-    if !buffer.trim().is_empty() {
-        handle_sse_frame(&buffer, surface, observation, started_at, accumulator)?;
+    if !buffer.is_empty() {
+        let frame = String::from_utf8(buffer).map_err(|error| {
+            let message = format!("解析 {} SSE UTF-8 响应失败：{error}", surface.label());
+            emit_observed_error(observation, started_at, &message);
+            message
+        })?;
+        handle_sse_frame(&frame, surface, observation, started_at, accumulator)?;
     }
     Ok(())
 }
 
-fn find_sse_frame_end(buffer: &str) -> Option<(usize, usize)> {
-    let lf = buffer.find("\n\n").map(|index| (index, 2));
-    let crlf = buffer.find("\r\n\r\n").map(|index| (index, 4));
+fn find_sse_frame_end(buffer: &[u8]) -> Option<(usize, usize)> {
+    let lf = find_bytes(buffer, b"\n\n").map(|index| (index, 2));
+    let crlf = find_bytes(buffer, b"\r\n\r\n").map(|index| (index, 4));
     match (lf, crlf) {
         (Some(left), Some(right)) => Some(if left.0 < right.0 { left } else { right }),
         (Some(index), None) | (None, Some(index)) => Some(index),
@@ -110,7 +119,44 @@ fn handle_sse_frame(
         ApiSurface::ChatCompletions => {
             handle_chat_completions_event(&payload, observation, started_at, accumulator)
         }
+        ApiSurface::AnthropicMessages => handle_anthropic_messages_event(
+            event_type,
+            &payload,
+            observation,
+            started_at,
+            accumulator,
+        ),
     }
+}
+
+fn find_bytes(buffer: &[u8], needle: &[u8]) -> Option<usize> {
+    buffer
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+fn handle_anthropic_messages_event(
+    event_type: &str,
+    payload: &Value,
+    observation: Option<&LlmObservation<'_>>,
+    started_at: &Instant,
+    accumulator: &mut StreamAccumulator,
+) -> Result<(), String> {
+    match event_type {
+        "content_block_delta" => {
+            if let Some(delta) = payload.pointer("/delta/text").and_then(Value::as_str) {
+                push_stream_delta(delta, observation, accumulator);
+            }
+        }
+        "error" => {
+            let message = extract_error_message(payload)
+                .unwrap_or_else(|| "Anthropic Messages 返回失败事件。".to_string());
+            emit_observed_error(observation, started_at, &message);
+            return Err(message);
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn handle_responses_event(
@@ -353,8 +399,8 @@ mod tests {
 
     #[test]
     fn finds_lf_and_crlf_frame_boundaries() {
-        assert_eq!(find_sse_frame_end("data: a\n\ndata: b"), Some((7, 2)));
-        assert_eq!(find_sse_frame_end("data: a\r\n\r\ndata: b"), Some((7, 4)));
+        assert_eq!(find_sse_frame_end(b"data: a\n\ndata: b"), Some((7, 2)));
+        assert_eq!(find_sse_frame_end(b"data: a\r\n\r\ndata: b"), Some((7, 4)));
     }
 
     #[test]
@@ -388,5 +434,19 @@ mod tests {
             extract_responses_completed_text(&payload).as_deref(),
             Some("hello world")
         );
+    }
+
+    #[test]
+    fn extracts_anthropic_text_delta() {
+        let mut accumulator = StreamAccumulator::new();
+        handle_anthropic_messages_event(
+            "content_block_delta",
+            &json!({ "delta": { "text": "你好" } }),
+            None,
+            &Instant::now(),
+            &mut accumulator,
+        )
+        .unwrap();
+        assert_eq!(accumulator.content, "你好");
     }
 }

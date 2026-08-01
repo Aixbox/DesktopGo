@@ -99,19 +99,6 @@ pub(super) fn emit_observed_response(
     }
 }
 
-pub(super) fn emit_observed_fallback(
-    observation: Option<&LlmObservation<'_>>,
-    message: &str,
-    detail: &str,
-) {
-    if let Some(observation) = observation {
-        emit_agent_event(
-            observation.window,
-            AgentEvent::new(observation.run_id, AgentEventPhase::Fallback, message).detail(detail),
-        );
-    }
-}
-
 pub(super) fn emit_observed_error(
     observation: Option<&LlmObservation<'_>>,
     started_at: &Instant,

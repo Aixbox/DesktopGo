@@ -791,8 +791,6 @@ const EN_MESSAGES: Record<string, string> = {
     'Strict JSON request failed; retrying without response_format.',
   '严格 JSON 流式请求失败，正在使用宽松 JSON 流式请求重试。':
     'Strict JSON streaming request failed; retrying with relaxed JSON streaming.',
-  'Responses API 流式请求失败，正在降级为 Chat Completions 流式请求。':
-    'Responses API streaming failed; falling back to Chat Completions streaming.',
   'AI 配置校验失败。': 'AI configuration validation failed.',
   '读取 AI 上下文失败。': 'Failed to load AI context.',
   '构建 AI 请求内容失败。': 'Failed to build the AI request payload.',
@@ -926,11 +924,21 @@ const EN_MESSAGES: Record<string, string> = {
   '没有可应用的分组。': 'No groups available to apply.',
   '已应用 AI 整理：新建 {count} 个分组文件夹。':
     'AI organization applied: {count} group folder(s) created.',
-  '配置一个兼容 OpenAI 接口的模型，之后可在启动台右键菜单使用「AI 智能整理」，让 AI 按用途把图标归类到文件夹。':
-    'Configure an OpenAI-compatible model, then use "AI Smart Organize" from the launchpad right-click menu to let AI sort icons into folders by purpose.',
+  '配置 OpenAI 或 Anthropic Claude；OpenAI 的 Base URL 支持官方服务或兼容网关，之后可在启动台右键菜单使用「AI 智能整理」，让 AI 按用途把图标归类到文件夹。':
+    'Configure OpenAI or Anthropic Claude. OpenAI Base URL supports the official service or a compatible gateway; then use "AI Smart Organize" from the launchpad right-click menu to let AI sort icons into folders by purpose.',
   模型接入配置: 'Model connection',
-  '支持任意兼容 OpenAI Chat Completions 的服务，例如 OpenAI、DeepSeek、Moonshot 或本地 Ollama。':
-    'Works with any OpenAI Chat Completions-compatible service such as OpenAI, DeepSeek, Moonshot, or local Ollama.',
+  'OpenAI 的 Base URL 可填写官方服务或兼容网关，协议按网关能力选择 Responses API 或 Chat Completions；Anthropic Claude 使用 Messages 流式接口。':
+    'OpenAI Base URL accepts the official service or a compatible gateway. Choose Responses API or Chat Completions according to the gateway capabilities; Anthropic Claude uses the streaming Messages API.',
+  服务商: 'Provider',
+  'Anthropic Claude': 'Anthropic Claude',
+  'OpenAI 请求协议': 'OpenAI request protocol',
+  思考程度: 'Reasoning effort',
+  不启用: 'Off',
+  低: 'Low',
+  中: 'Medium',
+  高: 'High',
+  '仅在模型支持思考能力时启用；接口不支持会返回明确错误。':
+    'Enable only for models that support reasoning. Unsupported APIs return an explicit error.',
   '接口地址（Base URL）': 'Endpoint (Base URL)',
   模型名称: 'Model name',
   '自定义分类提示词（可选）': 'Custom classification prompt (optional)',
