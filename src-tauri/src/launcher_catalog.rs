@@ -34,7 +34,7 @@ const MAX_FOLDERS: usize = 16;
 /// 「不跟随符号链接/junction」挡住，这个常量挡的是病态深的普通目录树。
 const ABSOLUTE_MAX_DEPTH: usize = 32;
 
-/// 「其它类型」哨兵，和前端 `catalogFileTypes.ts` 的 `CATALOG_ANY_EXTENSION` 一致：
+/// 「全部」哨兵，和前端 `catalogFileTypes.ts` 的 `CATALOG_ANY_EXTENSION` 一致：
 /// 出现在清单里就表示不按扩展名过滤。
 const ANY_EXTENSION: &str = "*";
 
@@ -451,11 +451,11 @@ mod tests {
         assert!(!names(&programs).contains(&"top.txt"), "未勾选的类型不该收");
         assert!(!names(&programs).contains(&"plugin.dll"), "dll 不在清单里");
 
-        // 「其它类型」哨兵 = 不过滤。
+        // 「全部」哨兵 = 不过滤。
         let everything = collect_launcher_catalog(config(vec![folder(&root, 2, true)], &["*"]));
         assert!(
             names(&everything).contains(&"plugin.dll"),
-            "勾了其它类型就全收"
+            "勾了全部就全收"
         );
 
         // 点号与大小写都应被容忍。

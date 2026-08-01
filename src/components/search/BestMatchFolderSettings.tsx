@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FolderPlus, RefreshCw, RotateCcw } from 'lucide-react'
+import { FolderPlus, Images, RefreshCw, RotateCcw } from 'lucide-react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { Button } from '@/components/ui/button'
 import { SettingCard, SettingGroup } from '@/components/ui/setting-components'
 import { useToast } from '@/components/ui/toast'
 import { translate } from '@/lib/i18n'
-import { getLauncherCatalog } from '@/lib/search/api'
+import { getBestMatchIconLibraryCount, getLauncherCatalog } from '@/lib/search/api'
 import {
   DEFAULT_CATALOG_DEPTH,
   MAX_CATALOG_FOLDERS,
@@ -30,6 +30,12 @@ interface ScanResult {
   truncated: boolean
 }
 
+interface IconLibraryResult {
+  scanToken: number
+  count: number | null
+  failed: boolean
+}
+
 interface BestMatchFolderSettingsProps {
   config: BestMatchFolderConfig
   /** 由设置面板负责持久化与提示，这里只负责产出下一份配置。 */
@@ -48,6 +54,7 @@ export function BestMatchFolderSettings({ config, onChange }: BestMatchFolderSet
   const [result, setResult] = useState<ScanResult | null>(null)
   const [scanToken, setScanToken] = useState(0)
   const [restoring, setRestoring] = useState(false)
+  const [iconLibraryResult, setIconLibraryResult] = useState<IconLibraryResult | null>(null)
   // 配置（或「重新扫描」）变了就意味着手上这份结果过期了，扫描态由此推导，
   // 不必在 effect 里同步 setState。
   const scanKey = useMemo(() => `${scanToken}:${JSON.stringify(config)}`, [config, scanToken])
@@ -86,6 +93,26 @@ export function BestMatchFolderSettings({ config, onChange }: BestMatchFolderSet
       cancelled = true
     }
   }, [scanKey, toast])
+
+  useEffect(() => {
+    let cancelled = false
+    void getBestMatchIconLibraryCount()
+      .then(count => {
+        if (!cancelled) {
+          setIconLibraryResult({ scanToken, count, failed: false })
+        }
+      })
+      .catch(error => {
+        console.error('Failed to load icon library for best match settings:', error)
+        if (!cancelled) setIconLibraryResult({ scanToken, count: null, failed: true })
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [scanToken])
+
+  const iconLibraryLoading = iconLibraryResult?.scanToken !== scanToken
 
   const rootFor = useCallback(
     (path: string) => {
@@ -171,6 +198,25 @@ export function BestMatchFolderSettings({ config, onChange }: BestMatchFolderSet
           '「最佳匹配」会整体读取这些目录，因此 vscode 这类词首缩写也能命中 Visual Studio Code；它们里的内容在下方结果列表里也会靠前。开始菜单、桌面、快速启动只是预设，可以改路径、改层数、停用或删除。'
         )}
       >
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 py-3 first:pt-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <Images className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">{translate('图标库')}</p>
+              <p className="text-xs leading-5 text-muted-foreground">
+                {translate('图标库中的入口会始终参与最佳匹配，不受目录或文件类型筛选影响。')}
+              </p>
+            </div>
+          </div>
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+            {iconLibraryLoading
+              ? translate('正在读取图标库...')
+              : iconLibraryResult?.failed
+                ? translate('读取图标库失败')
+                : translate('图标库共 {count} 项。', { count: iconLibraryResult?.count ?? 0 })}
+          </span>
+        </div>
+
         {config.folders.length === 0 ? (
           <p className="text-xs text-muted-foreground">
             {translate('清单是空的，最佳匹配现在只会用启动台里的图标。')}
@@ -218,7 +264,7 @@ export function BestMatchFolderSettings({ config, onChange }: BestMatchFolderSet
       <SettingCard
         label={translate('收录的文件类型')}
         desc={translate(
-          '只有勾上的类型才会进最佳匹配。默认是「点了会打开东西」的那些；勾上「其它类型」就不再按扩展名过滤。'
+          '只有勾上的类型才会进最佳匹配。默认是「点了会打开东西」的那些；勾上「全部」就会收录所有文件类型。'
         )}
       >
         <CatalogFileTypeFilter

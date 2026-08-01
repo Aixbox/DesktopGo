@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import type { DesktopIcon } from '@/types'
 import type { BestMatchFolderConfig } from './bestMatchFolders'
 import type {
   DefaultLauncherFolder,
@@ -59,6 +60,13 @@ export const getLauncherCatalog = (config: LauncherCatalogConfigPayload) =>
 /** 预设目录（开始菜单、桌面、快速启动的真实路径），只返回存在的那些。 */
 export const getDefaultLauncherFolders = () =>
   invoke<DefaultLauncherFolder[]>('get_default_launcher_folders')
+
+/**
+ * 启动台图标是最佳匹配的固定来源。设置页只需要条目数，不应直接耦合图标 IPC
+ * 的完整返回结构。
+ */
+export const getBestMatchIconLibraryCount = () =>
+  invoke<DesktopIcon[]>('get_icons', { iconSize: 32 }).then(icons => icons.length)
 
 export const getSearchResultIcons = (requests: SearchIconRequest[], iconSize = 48) =>
   withTimeout(

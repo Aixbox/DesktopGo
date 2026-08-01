@@ -77,6 +77,11 @@ export const EN_SEARCH_MESSAGES: Record<string, string> = {
     'If search is unavailable, reinstall DesktopGo and enable the Everything install option.',
   未知大小: 'Unknown size',
   最佳匹配目录: 'Best match folders',
+  '图标库中的入口会始终参与最佳匹配，不受目录或文件类型筛选影响。':
+    'Entries in the icon library always participate in best matches and are not affected by folder or file type filters.',
+  '正在读取图标库...': 'Loading icon library...',
+  读取图标库失败: 'Could not load icon library',
+  '图标库共 {count} 项。': '{count} entries in the icon library.',
   目录清单: 'Folder list',
   '「最佳匹配」会整体读取这些目录，因此 vscode 这类词首缩写也能命中 Visual Studio Code；它们里的内容在下方结果列表里也会靠前。开始菜单、桌面、快速启动只是预设，可以改路径、改层数、停用或删除。':
     'Best match reads these folders in full, which is why an abbreviation like vscode can match Visual Studio Code; their contents also rank higher in the result list below. Start menu, desktop and quick launch are only presets — edit the path, change the depth, disable or delete any of them.',
@@ -92,8 +97,8 @@ export const EN_SEARCH_MESSAGES: Record<string, string> = {
   不限层数: 'Unlimited',
   '{depth} 层': '{depth} levels',
   收录的文件类型: 'File types collected',
-  '只有勾上的类型才会进最佳匹配。默认是「点了会打开东西」的那些；勾上「其它类型」就不再按扩展名过滤。':
-    'Only the selected types reach best match. The defaults are the things you actually launch; selecting "Other types" stops extension filtering entirely.',
+  '只有勾上的类型才会进最佳匹配。默认是「点了会打开东西」的那些；勾上「全部」就会收录所有文件类型。':
+    'Only the selected types reach best match. The defaults are the things you actually launch; selecting "All" collects every file type.',
   程序与快捷方式: 'Programs and shortcuts',
   脚本与命令: 'Scripts and commands',
   文档: 'Documents',
@@ -102,7 +107,7 @@ export const EN_SEARCH_MESSAGES: Record<string, string> = {
   音视频: 'Audio and video',
   压缩包与镜像: 'Archives and images',
   代码与配置: 'Code and config',
-  其它类型: 'Other types',
+  '已收录全部文件类型。': 'All file types are collected.',
   '没有勾选任何文件类型，只会收录文件夹。':
     'No file types selected, so only folders are collected.',
   同时收录文件夹: 'Collect folders too',

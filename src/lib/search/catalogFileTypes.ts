@@ -4,7 +4,7 @@
  * 最佳匹配是启动器，默认只收「点了会打开东西」的类型：程序、快捷方式、脚本，
  * 再加上常见文档（桌面上放的 pdf、Word 也常是要打开的目标）。图片、音视频、
  * 压缩包、代码文件默认不收 —— 它们数量大、又几乎不是「启动」的对象，收进来
- * 只会把最佳匹配挤满；需要时在设置里勾上即可，或者直接勾「其它类型」不再过滤。
+ * 只会把最佳匹配挤满；需要时在设置里勾上即可，或者直接勾「全部」不再过滤。
  *
  * 按**组**勾选而不是逐个扩展名勾：一屏塞几百个复选框没人会用，而分组正好对应
  * 用户心里的分类。存储仍然是扁平的扩展名清单，这样 Rust 侧只做一次集合判断。
@@ -63,7 +63,7 @@ export const CATALOG_FILE_TYPE_GROUPS: CatalogFileTypeGroup[] = [
   },
   {
     key: 'any',
-    label: '其它类型',
+    label: '全部',
     extensions: [CATALOG_ANY_EXTENSION],
   },
 ]
@@ -122,6 +122,6 @@ export const toggleCatalogFileTypeGroup = (
   )
 }
 
-/** 勾了「其它类型」就等于不过滤，Rust 侧据此跳过扩展名判断。 */
+/** 勾了「全部」就等于不过滤，Rust 侧据此跳过扩展名判断。 */
 export const allowsAnyCatalogExtension = (extensions: readonly string[]): boolean =>
   extensions.includes(CATALOG_ANY_EXTENSION)

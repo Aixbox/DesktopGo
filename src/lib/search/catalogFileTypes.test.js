@@ -19,7 +19,7 @@ const group = key => {
   return found
 }
 
-// 默认勾选：程序、脚本、文档、表格，不含图片/音视频/压缩/代码/其它
+// 默认勾选：程序、脚本、文档、表格，不含图片/音视频/压缩/代码/全部
 assert(DEFAULT_CATALOG_EXTENSIONS.includes('exe'), '默认应收录 exe')
 assert(DEFAULT_CATALOG_EXTENSIONS.includes('lnk'), '默认应收录 lnk')
 assert(DEFAULT_CATALOG_EXTENSIONS.includes('pdf'), '默认应收录常见文档')
@@ -29,7 +29,7 @@ assert(!DEFAULT_CATALOG_EXTENSIONS.includes('mp4'), '默认不该收录音视频
 assert(!DEFAULT_CATALOG_EXTENSIONS.includes('ts'), '默认不该收录代码文件')
 assert(
   !allowsAnyCatalogExtension(DEFAULT_CATALOG_EXTENSIONS),
-  '默认应该是过滤状态，而不是「其它类型」全收'
+  '默认应该是过滤状态，而不是「全部」全收'
 )
 
 // 单个扩展名归一化
@@ -46,7 +46,7 @@ assert(
 )
 assert(
   normalizeCatalogExtensions([CATALOG_ANY_EXTENSION]).join(',') === CATALOG_ANY_EXTENSION,
-  '「其它类型」哨兵应被保留'
+  '「全部」哨兵应被保留'
 )
 
 // 组勾选判定
@@ -82,12 +82,13 @@ assert(
   `输出顺序应按分组定义，实际 ${shuffled}`
 )
 
-// 「其它类型」= 不过滤
+// 「全部」= 不过滤
+assert(group('any').label === '全部', '全量收录选项应显示为「全部」')
 const anyType = toggleCatalogFileTypeGroup([], group('any'), true)
-assert(allowsAnyCatalogExtension(anyType), '勾上「其它类型」应表示不过滤')
+assert(allowsAnyCatalogExtension(anyType), '勾上「全部」应表示不过滤')
 assert(
   !allowsAnyCatalogExtension(toggleCatalogFileTypeGroup(anyType, group('any'), false)),
-  '取消「其它类型」应恢复过滤'
+  '取消「全部」应恢复过滤'
 )
 
 console.log('最佳匹配文件类型筛选测试通过')

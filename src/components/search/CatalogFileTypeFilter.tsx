@@ -1,6 +1,7 @@
 import { SwitchButton } from '@/components/ui/setting-components'
 import { translate } from '@/lib/i18n'
 import {
+  allowsAnyCatalogExtension,
   CATALOG_FILE_TYPE_GROUPS,
   isCatalogFileTypeGroupSelected,
   toggleCatalogFileTypeGroup,
@@ -52,6 +53,7 @@ export function CatalogFileTypeFilter({
   onIncludeFoldersChange,
 }: CatalogFileTypeFilterProps) {
   const selectedExtensions = extensions.filter(extension => extension !== '*')
+  const collectsAllFileTypes = allowsAnyCatalogExtension(extensions)
 
   return (
     <div className="space-y-3">
@@ -72,9 +74,11 @@ export function CatalogFileTypeFilter({
       </div>
 
       <p className="break-words font-mono text-xs leading-5 text-muted-foreground">
-        {selectedExtensions.length === 0
-          ? translate('没有勾选任何文件类型，只会收录文件夹。')
-          : selectedExtensions.map(extension => `.${extension}`).join('  ')}
+        {collectsAllFileTypes
+          ? translate('已收录全部文件类型。')
+          : selectedExtensions.length === 0
+            ? translate('没有勾选任何文件类型，只会收录文件夹。')
+            : selectedExtensions.map(extension => `.${extension}`).join('  ')}
       </p>
 
       <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-3">
