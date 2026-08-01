@@ -77,6 +77,7 @@ export const EN_SEARCH_MESSAGES: Record<string, string> = {
     'If search is unavailable, reinstall DesktopGo and enable the Everything install option.',
   未知大小: 'Unknown size',
   最佳匹配目录: 'Best match folders',
+  管理图标库: 'Manage icon library',
   '图标库中的入口会始终参与最佳匹配，不受目录或文件类型筛选影响。':
     'Entries in the icon library always participate in best matches and are not affected by folder or file type filters.',
   '正在读取图标库...': 'Loading icon library...',

@@ -90,6 +90,7 @@ function WindowControlButton({
 export function Settings() {
   const { language } = useI18n()
   const [activeNav, setActiveNav] = useState<NavItem>('settings')
+  const openIconManager = useCallback(() => setActiveNav('iconManager'), [])
   const [isMaximized, setIsMaximized] = useState(false)
   const isClosingRef = useRef(false)
   const shouldReturnToMainOnClose = useMemo(() => {
@@ -280,7 +281,9 @@ export function Settings() {
         <main className="settings-content-surface settings-main-scroll min-h-0 flex-1 overflow-y-auto rounded-tl-xl border-l border-t border-border/80 bg-background px-6 py-6 xl:px-8">
           <div className={cn('mx-auto w-full', NAV_CONTENT_WIDTH[activeNav])}>
             {activeNav === 'settings' && <GeneralSettingsPanel />}
-            {activeNav === 'search' && <SearchSettingsPanel />}
+            {activeNav === 'search' && (
+              <SearchSettingsPanel onOpenIconLibrary={openIconManager} />
+            )}
             {activeNav === 'iconManager' && <IconManagerPanel />}
             {activeNav === 'ai' && <AiSettingsPanel />}
             {activeNav === 'update' && <UpdatePanel />}

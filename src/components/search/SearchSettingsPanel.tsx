@@ -18,7 +18,11 @@ import { translate, useI18n } from '@/lib/i18n'
 import { BestMatchFolderSettings } from './BestMatchFolderSettings'
 import { ShortcutUsageSettings } from './ShortcutUsageSettings'
 
-export function SearchSettingsPanel() {
+interface SearchSettingsPanelProps {
+  onOpenIconLibrary: () => void
+}
+
+export function SearchSettingsPanel({ onOpenIconLibrary }: SearchSettingsPanelProps) {
   useI18n()
   const [settings, setSettings] = useState<SearchSettings>(DEFAULT_SEARCH_SETTINGS)
   const [loading, setLoading] = useState(true)
@@ -233,6 +237,7 @@ export function SearchSettingsPanel() {
           <BestMatchFolderSettings
             config={settings.bestMatchFolders}
             onChange={next => void updateSetting('bestMatchFolders', next)}
+            onOpenIconLibrary={onOpenIconLibrary}
           />
 
           <SettingGroup title={translate('匹配与筛选')}>

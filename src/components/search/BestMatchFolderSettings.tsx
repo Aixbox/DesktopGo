@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FolderPlus, Images, RefreshCw, RotateCcw } from 'lucide-react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { SettingCard, SettingGroup } from '@/components/ui/setting-components'
 import { useToast } from '@/components/ui/toast'
 import { translate } from '@/lib/i18n'
@@ -40,6 +41,7 @@ interface BestMatchFolderSettingsProps {
   config: BestMatchFolderConfig
   /** 由设置面板负责持久化与提示，这里只负责产出下一份配置。 */
   onChange: (next: BestMatchFolderConfig) => void
+  onOpenIconLibrary: () => void
 }
 
 /**
@@ -49,7 +51,11 @@ interface BestMatchFolderSettingsProps {
  * 改层数、停用或删除。页面上的路径、层数、条目数来自和搜索完全相同的那条命令、
  * 同一份配置，所以显示的就是搜索真正会用的东西，不会出现两套说法。
  */
-export function BestMatchFolderSettings({ config, onChange }: BestMatchFolderSettingsProps) {
+export function BestMatchFolderSettings({
+  config,
+  onChange,
+  onOpenIconLibrary,
+}: BestMatchFolderSettingsProps) {
   const toast = useToast()
   const [result, setResult] = useState<ScanResult | null>(null)
   const [scanToken, setScanToken] = useState(0)
@@ -198,23 +204,39 @@ export function BestMatchFolderSettings({ config, onChange }: BestMatchFolderSet
           '「最佳匹配」会整体读取这些目录，因此 vscode 这类词首缩写也能命中 Visual Studio Code；它们里的内容在下方结果列表里也会靠前。开始菜单、桌面、快速启动只是预设，可以改路径、改层数、停用或删除。'
         )}
       >
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 py-3 first:pt-0">
-          <div className="flex min-w-0 items-center gap-2">
-            <Images className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">{translate('图标库')}</p>
-              <p className="text-xs leading-5 text-muted-foreground">
-                {translate('图标库中的入口会始终参与最佳匹配，不受目录或文件类型筛选影响。')}
-              </p>
+        <div className="space-y-2 border-b border-border/60 py-3 first:pt-0">
+          <div className="flex flex-nowrap items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <Images className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <Input
+                value={translate('图标库')}
+                readOnly
+                aria-label={translate('图标库')}
+                className="min-w-0 flex-1 text-sm"
+              />
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onOpenIconLibrary}
+              className="shrink-0"
+            >
+              {translate('管理图标库')}
+            </Button>
           </div>
-          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-            {iconLibraryLoading
-              ? translate('正在读取图标库...')
-              : iconLibraryResult?.failed
-                ? translate('读取图标库失败')
-                : translate('图标库共 {count} 项。', { count: iconLibraryResult?.count ?? 0 })}
-          </span>
+          <div className="text-xs tabular-nums text-muted-foreground">
+            <span>
+              {iconLibraryLoading
+                ? translate('正在读取图标库...')
+                : iconLibraryResult?.failed
+                  ? translate('读取图标库失败')
+                  : translate('图标库共 {count} 项。', { count: iconLibraryResult?.count ?? 0 })}
+            </span>
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {translate('图标库中的入口会始终参与最佳匹配，不受目录或文件类型筛选影响。')}
+          </p>
         </div>
 
         {config.folders.length === 0 ? (
