@@ -74,45 +74,53 @@ export function CatalogFolderRow({
 
   return (
     <div className="space-y-2 py-3 first:pt-0 last:pb-0">
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          value={draft}
-          onChange={event => setDraft(event.target.value)}
-          onBlur={commit}
-          onKeyDown={event => {
-            if (event.key === 'Enter') commit()
-            if (event.key === 'Escape') setDraft(folder.path)
-          }}
-          spellCheck={false}
-          aria-label={translate('目录路径')}
-          className="min-w-[16rem] flex-1 font-mono text-xs"
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          aria-label={translate('选择目录')}
-          onClick={onBrowse}
-        >
-          <FolderOpen />
-        </Button>
-        <Select
-          value={String(folder.maxDepth)}
-          onValueChange={value => onChange({ maxDepth: Number(value) })}
-          options={depthOptions()}
-          aria-label={translate('扫描层数')}
-          className="w-32"
-        />
-        <SwitchButton checked={folder.enabled} onChange={enabled => onChange({ enabled })} />
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-label={translate('移除目录')}
-          onClick={onRemove}
-        >
-          <Trash2 />
-        </Button>
+      <div className="flex flex-nowrap items-center gap-2">
+        <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
+          <Input
+            value={draft}
+            onChange={event => setDraft(event.target.value)}
+            onBlur={commit}
+            onKeyDown={event => {
+              if (event.key === 'Enter') commit()
+              if (event.key === 'Escape') setDraft(folder.path)
+            }}
+            spellCheck={false}
+            aria-label={translate('目录路径')}
+            className="min-w-0 flex-1 font-mono text-xs"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-label={translate('选择目录')}
+            onClick={onBrowse}
+            className="shrink-0"
+          >
+            <FolderOpen />
+          </Button>
+          <Select
+            value={String(folder.maxDepth)}
+            onValueChange={value => onChange({ maxDepth: Number(value) })}
+            options={depthOptions()}
+            aria-label={translate('扫描层数')}
+            className="w-32 shrink-0"
+          />
+        </div>
+        <div className="flex shrink-0 flex-nowrap items-center gap-2">
+          <div className="shrink-0">
+            <SwitchButton checked={folder.enabled} onChange={enabled => onChange({ enabled })} />
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={translate('移除目录')}
+            onClick={onRemove}
+            className="shrink-0"
+          >
+            <Trash2 />
+          </Button>
+        </div>
       </div>
       <FolderStatus root={root} />
     </div>
