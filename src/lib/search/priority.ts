@@ -8,12 +8,27 @@
  * Everything 的 `totalResults` 撑起，客户端过滤会让计数与索引错位。所以这里的
  * `ignored` 只是「最强降权」，不是排除。
  */
+
+import { normalizeCatalogFolderPath, type BestMatchFolderConfig } from './bestMatchFolders'
+
 export type SearchPriority = 'high' | 'normal' | 'low' | 'ignored'
 
 export interface FolderPriorityRule {
   priority: SearchPriority
   /** 归一化后（小写、正斜杠、前后带斜杠）在完整路径中出现的目录片段。 */
   folder: string
+}
+
+export interface RootPriorityRule {
+  priority: SearchPriority
+  /**
+   * 归一化后（小写、正斜杠、尾部带斜杠）的绝对路径前缀。
+   *
+   * 高优先级目录用前缀而不是片段：`D:\Green` 归一化后是 `d:/green/`，开头没有斜杠，
+   * 套不进 `folder` 那种「前后都带斜杠」的片段规则。用真实路径也比片段准 ——
+   * `/desktop/` 会连 `D:\projects\desktop\` 一起误判成高优先级。
+   */
+  root: string
 }
 
 export interface ExtensionPriorityRule {
@@ -24,16 +39,19 @@ export interface ExtensionPriorityRule {
 
 export interface SearchPriorityRules {
   folders: FolderPriorityRule[]
+  roots: RootPriorityRule[]
   extensions: ExtensionPriorityRule[]
 }
 
 /**
- * 高优先级只由**目录**决定：这些目录里的东西才是用户会去启动的。
+ * 高优先级只由**用户配置的目录清单**决定：那些目录里的东西才是他要启动的。
  *
  * 刻意不按扩展名给 high —— 「任意位置的 `.exe` 都算高优先级」会把全盘的可执行文件
- * 都拉进「最佳匹配」的候选池（几万条量级），而高优先级目录本身只有几百条。
+ * 都拉进「最佳匹配」的候选池（几万条量级），而目录清单本身只有几百条。
+ *
+ * 也刻意不再保留 `/start menu/`、`/desktop/` 这类兜底片段：清单是用户可以删改的，
+ * 删掉桌面之后还留一条片段规则，等于「删了但没删」。
  */
-const HIGH_FOLDERS = ['start menu', 'desktop', 'quick launch']
 
 const LOW_FOLDERS = [
   // 依赖与包管理器缓存
@@ -98,14 +116,32 @@ const toExtensionRules = (
   priority: SearchPriority
 ): ExtensionPriorityRule[] => extensions.map(extension => ({ priority, extension }))
 
-export const DEFAULT_SEARCH_PRIORITY_RULES: SearchPriorityRules = {
-  folders: [
-    ...toFolderRules(IGNORED_FOLDERS, 'ignored'),
-    ...toFolderRules(LOW_FOLDERS, 'low'),
-    ...toFolderRules(HIGH_FOLDERS, 'high'),
-  ],
-  extensions: [...toExtensionRules(LOW_EXTENSIONS, 'low')],
+const toHighRootRules = (config: BestMatchFolderConfig | undefined): RootPriorityRule[] =>
+  (config?.folders ?? []).flatMap(folder => {
+    if (!folder.enabled) return []
+    const root = normalizeCatalogFolderPath(folder.path)
+    return root ? [{ priority: 'high' as SearchPriority, root: `${root}/` }] : []
+  })
+
+/**
+ * 由用户配置生成规则表：清单里启用的每个目录都成为一条高优先级前缀规则，
+ * 于是它们既能进「最佳匹配」，也在结果列表里靠前。降权规则与配置无关，恒定生效。
+ */
+export function buildSearchPriorityRules(config?: BestMatchFolderConfig): SearchPriorityRules {
+  return {
+    folders: [...toFolderRules(IGNORED_FOLDERS, 'ignored'), ...toFolderRules(LOW_FOLDERS, 'low')],
+    roots: toHighRootRules(config),
+    extensions: [...toExtensionRules(LOW_EXTENSIONS, 'low')],
+  }
 }
+
+/**
+ * 没有配置时的规则：只有降权规则，没有任何高优先级目录。
+ *
+ * 这是刻意的 —— 高优先级完全来自用户的目录清单，拿不到清单就不该凭空假设
+ * 「开始菜单一定是高优先级」。运行时各处都会把真实配置传进来。
+ */
+export const DEFAULT_SEARCH_PRIORITY_RULES: SearchPriorityRules = buildSearchPriorityRules()
 
 /** 越小越应该沉底，用于在多条规则同时命中时取最严厉的那一档。 */
 const PRIORITY_SEVERITY: Record<SearchPriority, number> = {
@@ -145,6 +181,11 @@ export function resolveSearchPriority(
 
   for (const rule of rules.folders) {
     if (normalizedPath.includes(rule.folder) && isMoreSevere(rule.priority, resolved)) {
+      resolved = rule.priority
+    }
+  }
+  for (const rule of rules.roots) {
+    if (normalizedPath.startsWith(rule.root) && isMoreSevere(rule.priority, resolved)) {
       resolved = rule.priority
     }
   }

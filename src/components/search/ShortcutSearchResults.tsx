@@ -4,8 +4,10 @@ import { translate } from '@/lib/i18n'
 import { IconContextMenu } from '@/components/icons/IconContextMenu'
 import { useIconStore } from '@/stores/iconStore'
 import type { BestMatchItem } from '@/lib/search/bestMatch'
+import { buildFuzzyHighlightSegments, buildLiteralHighlightSegments } from '@/lib/search/highlight'
 import { ICON_SIZE_CONFIG, type DesktopIcon } from '@/types'
 import { FileResultContextMenu } from './FileResultContextMenu'
+import { HighlightedText } from './HighlightedText'
 import { SearchResultSectionHeader } from './SearchResultSectionHeader'
 import { SHORTCUT_GRID_COLUMN_GAP, resolveShortcutGridColumnCount } from './shortcutGridLayout'
 import { useStableSearchEvent } from './useStableSearchEvent'
@@ -17,8 +19,45 @@ interface ShortcutSearchResultsProps {
   onSelect: (index: number) => void
   onActivate: (item: BestMatchItem) => void
   mode: 'compact' | 'grid'
+  /** 当前关键词，用于高亮命中字符。 */
+  keyword?: string
   heading?: string
   onColumnCountChange?: (columnCount: number) => void
+}
+
+/**
+ * 名字按打分器的子序列命中高亮（`vscode` → **V**isual **S**tudio **Code**），
+ * 路径只高亮字面子串：路径长，几乎总能子序列命中，逐字点亮反而看不出为什么匹配。
+ */
+function BestMatchLabels({
+  name,
+  detail,
+  keyword,
+}: {
+  name: string
+  detail: string
+  keyword: string
+}) {
+  const nameSegments = useMemo(() => buildFuzzyHighlightSegments(name, keyword), [keyword, name])
+  const detailSegments = useMemo(
+    () => buildLiteralHighlightSegments(detail, keyword),
+    [detail, keyword]
+  )
+
+  return (
+    <span className="min-w-0 flex-1">
+      <HighlightedText
+        segments={nameSegments}
+        className="block truncate text-sm text-foreground"
+        highlightClassName="accent-foreground font-medium"
+      />
+      <HighlightedText
+        segments={detailSegments}
+        className="block truncate text-xs text-muted-foreground"
+        highlightClassName="font-medium text-foreground/85"
+      />
+    </span>
+  )
 }
 
 function ShortcutIcon({ icon, size }: { icon: DesktopIcon; size: number }) {
@@ -66,6 +105,7 @@ export function ShortcutSearchResults({
   onSelect,
   onActivate,
   mode,
+  keyword = '',
   heading,
   onColumnCountChange,
 }: ShortcutSearchResultsProps) {
@@ -150,12 +190,7 @@ export function ShortcutSearchResults({
                     size={30}
                   />
                 )}
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm text-foreground">{item.name}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {item.detail}
-                  </span>
-                </span>
+                <BestMatchLabels name={item.name} detail={item.detail} keyword={keyword} />
               </button>
             )
 
@@ -207,10 +242,12 @@ export function ShortcutSearchResults({
                 onDoubleClick={() => onActivate(item)}
               >
                 <ShortcutIcon icon={item.icon} size={config.imgSize} />
-                <span
+                <HighlightedText
+                  segments={buildFuzzyHighlightSegments(item.name, keyword)}
                   className={`text-center text-[11px] leading-tight ${
                     selectedIndex === index ? 'accent-foreground' : 'text-foreground'
                   }`}
+                  highlightClassName="accent-foreground font-medium"
                   style={{
                     maxWidth: config.containerWidth - 10,
                     display: singleLineTitle ? 'block' : '-webkit-box',
@@ -221,9 +258,7 @@ export function ShortcutSearchResults({
                     whiteSpace: singleLineTitle ? 'nowrap' : 'normal',
                     overflowWrap: 'anywhere',
                   }}
-                >
-                  {item.name}
-                </span>
+                />
               </button>
             </IconContextMenu>
           )

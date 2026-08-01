@@ -15,6 +15,7 @@ import { Select } from '@/components/ui/select'
 import { SettingCard, SettingGroup, ToggleRow } from '@/components/ui/setting-components'
 import { useToast } from '@/components/ui/toast'
 import { translate, useI18n } from '@/lib/i18n'
+import { BestMatchFolderSettings } from './BestMatchFolderSettings'
 import { ShortcutUsageSettings } from './ShortcutUsageSettings'
 
 export function SearchSettingsPanel() {
@@ -90,10 +91,11 @@ export function SearchSettingsPanel() {
 
     setResetting(true)
     try {
-      for (const [key, value] of Object.entries(DEFAULT_SEARCH_SETTINGS) as Array<
-        [keyof SearchSettings, SearchSettings[keyof SearchSettings]]
-      >) {
-        await persistSetting(key, value)
+      for (const key of Object.keys(DEFAULT_SEARCH_SETTINGS) as Array<keyof SearchSettings>) {
+        // 自定义的高优先级目录是用户一条条加进来的内容，不该被「恢复默认」悄悄清空；
+        // 每条目录在界面上都有自己的移除按钮。
+        if (key === 'bestMatchFolders') continue
+        await persistSetting(key, DEFAULT_SEARCH_SETTINGS[key])
       }
       toast.success(translate('默认设置已恢复。'), {
         key: 'search-settings',
@@ -228,6 +230,11 @@ export function SearchSettingsPanel() {
         </div>
 
         <div className="space-y-6">
+          <BestMatchFolderSettings
+            config={settings.bestMatchFolders}
+            onChange={next => void updateSetting('bestMatchFolders', next)}
+          />
+
           <SettingGroup title={translate('匹配与筛选')}>
             <ToggleRow
               title={translate('匹配路径')}

@@ -1,5 +1,6 @@
 import { collectBestMatches } from './bestMatch.ts'
 import { normalizeLauncherPath } from './launcherIdentity.ts'
+import { buildSearchPriorityRules } from './priority.ts'
 
 const icon = (id, name, targetPath = `C:/Apps/${name}.exe`) => ({
   id,
@@ -29,9 +30,29 @@ const assert = (condition, message) => {
 const names = items => items.map(item => item.name)
 
 const START_MENU = 'C:/Users/me/AppData/Roaming/Microsoft/Windows/Start Menu/Programs'
+const DESKTOP = 'C:/Users/me/Desktop'
+
+/** 「最佳匹配」的资格来自用户的目录清单，所以测试也得先有一份清单。 */
+const folderConfig = (folders, overrides = {}) => ({
+  presetsApplied: true,
+  folders,
+  extensions: [],
+  includeFolders: true,
+  ...overrides,
+})
+
+const RULES = buildSearchPriorityRules(
+  folderConfig([
+    { path: START_MENU, maxDepth: 4, enabled: true },
+    { path: DESKTOP, maxDepth: 2, enabled: true },
+  ])
+)
+
+/** 除非某个用例特意要换规则，一律用上面那份清单。 */
+const collect = options => collectBestMatches({ priorityRules: RULES, ...options })
 
 // 高优先级文件命中应该出现在最佳匹配里
-const merged = collectBestMatches({
+const merged = collect({
   icons: [icon('note', 'Notepad')],
   fileHits: [hit('VSCode.exe - 快捷方式.lnk', `${START_MENU}/VSCode.exe - 快捷方式.lnk`)],
   keyword: 'vscode',
@@ -45,7 +66,7 @@ assert(!names(merged).includes('Notepad'), '不匹配关键词的快捷方式不
 assert(merged[0].kind === 'file', '只有文件命中时首位应为文件条目')
 
 // 低优先级文件命中不应进入最佳匹配
-const lowPriority = collectBestMatches({
+const lowPriority = collect({
   icons: [],
   fileHits: [hit('vscode.cmd', 'D:/Project/app/node_modules/.bin/vscode.cmd')],
   keyword: 'vscode',
@@ -54,7 +75,7 @@ const lowPriority = collectBestMatches({
 assert(lowPriority.length === 0, 'node_modules 里的命中不应进入最佳匹配')
 
 // 普通优先级也不够资格
-const normalPriority = collectBestMatches({
+const normalPriority = collect({
   icons: [],
   fileHits: [hit('vscode.md', 'D:/Notes/vscode.md')],
   keyword: 'vscode',
@@ -63,7 +84,7 @@ const normalPriority = collectBestMatches({
 assert(normalPriority.length === 0, '只有高优先级文件命中才有资格进入最佳匹配')
 
 // 同分时启动台图标占优
-const tie = collectBestMatches({
+const tie = collect({
   icons: [icon('code', 'Code')],
   fileHits: [hit('Code', `${START_MENU}/Code`)],
   keyword: 'code',
@@ -72,7 +93,7 @@ const tie = collectBestMatches({
 assert(tie[0].kind === 'shortcut', '同分时用户亲手摆的启动台图标应靠前')
 
 // 运行次数应该能把文件命中顶到快捷方式之前
-const runCountWins = collectBestMatches({
+const runCountWins = collect({
   icons: [icon('editor', 'Editor')],
   fileHits: [hit('Editor.lnk', `${START_MENU}/Editor.lnk`, 40)],
   keyword: 'editor',
@@ -84,7 +105,7 @@ assert(
 )
 
 // 启动次数加权同样生效
-const usageWins = collectBestMatches({
+const usageWins = collect({
   icons: [icon('a', 'Tool Alpha'), icon('b', 'Tool Beta')],
   fileHits: [],
   keyword: 'tool',
@@ -98,7 +119,7 @@ const usageWins = collectBestMatches({
 assert(usageWins[0].name === 'Tool Beta', '启动次数高的快捷方式应靠前')
 
 // 同一条路径既在启动台又被 Everything 命中时只留一条
-const deduped = collectBestMatches({
+const deduped = collect({
   icons: [
     {
       id: 'vs',
@@ -142,7 +163,7 @@ const catalogHit = (name, path) => ({
   runCount: 0,
 })
 
-const abbreviation = collectBestMatches({
+const abbreviation = collect({
   icons: [],
   fileHits: [catalogHit('Visual Studio Code', `${START_MENU}/Visual Studio Code`)],
   keyword: 'vscode',
@@ -153,7 +174,7 @@ assert(
   'vscode 应通过词首缩写命中开始菜单里的 Visual Studio Code 目录'
 )
 
-const ideaCatalog = collectBestMatches({
+const ideaCatalog = collect({
   icons: [],
   fileHits: [catalogHit('IntelliJ IDEA', `${START_MENU}/JetBrains/IntelliJ IDEA`)],
   keyword: 'idea',
@@ -162,7 +183,7 @@ const ideaCatalog = collectBestMatches({
 assert(ideaCatalog.length === 1, 'idea 应命中 IntelliJ IDEA')
 
 // 带运行次数的 Everything 命中与目录表的同一条路径，去重后应保留前者
-const dedupedAcrossSources = collectBestMatches({
+const dedupedAcrossSources = collect({
   icons: [],
   fileHits: [
     hit('Visual Studio Code', `${START_MENU}/Visual Studio Code`, 12),
@@ -178,14 +199,12 @@ assert(
 
 // 「程序本体 + 指向它的快捷方式」去重 ------------------------------------------
 
-const DESKTOP = 'C:/Users/me/Desktop'
-
 /** 目标表的键必须是归一化后的路径，和最佳匹配内部的查表方式保持一致。 */
 const targets = pairs =>
   new Map(pairs.map(([path, target]) => [normalizeLauncherPath(path), target]))
 
 // 启动台图标与开始菜单里指向同一个程序的同名快捷方式只留一条
-const curatedVsStartMenu = collectBestMatches({
+const curatedVsStartMenu = collect({
   icons: [
     {
       id: 'vs',
@@ -209,7 +228,7 @@ assert(
 )
 
 // 程序本体与桌面上指向它的快捷方式只留一条
-const exeVsShortcut = collectBestMatches({
+const exeVsShortcut = collect({
   icons: [],
   fileHits: [hit('Foo.exe', `${DESKTOP}/Foo.exe`), hit('Foo.lnk', `${DESKTOP}/Foo.lnk`)],
   keyword: 'foo',
@@ -219,7 +238,7 @@ const exeVsShortcut = collectBestMatches({
 assert(exeVsShortcut.length === 1, `程序本体与它的快捷方式应合并，实际 ${exeVsShortcut.length} 条`)
 
 // Windows 自动加的「- 快捷方式」后缀不应妨碍认亲
-const suffixedShortcut = collectBestMatches({
+const suffixedShortcut = collect({
   icons: [],
   fileHits: [
     hit('Bar.exe', `${DESKTOP}/Bar.exe`),
@@ -235,7 +254,7 @@ assert(
 )
 
 // 不同位置的同名文件夹不是一回事，不能合并
-const sameNameFolders = collectBestMatches({
+const sameNameFolders = collect({
   icons: [],
   fileHits: [catalogHit('Tools', `${START_MENU}/Tools`), catalogHit('Tools', `${DESKTOP}/Tools`)],
   keyword: 'tools',
@@ -244,7 +263,7 @@ const sameNameFolders = collectBestMatches({
 assert(sameNameFolders.length === 2, `同名文件夹应各留一条，实际 ${sameNameFolders.length} 条`)
 
 // 目标相同但名字不同的两个入口（都指向 cmd.exe）不能合并
-const promptEntries = collectBestMatches({
+const promptEntries = collect({
   icons: [],
   fileHits: [
     hit('Command Prompt.lnk', `${START_MENU}/Command Prompt.lnk`),
@@ -263,7 +282,7 @@ assert(
 )
 
 // 目标解析不出来时退化成按路径去重，不应误伤
-const unresolvedTargets = collectBestMatches({
+const unresolvedTargets = collect({
   icons: [],
   fileHits: [
     hit('Baz.lnk', `${START_MENU}/Baz.lnk`),
@@ -275,6 +294,78 @@ const unresolvedTargets = collectBestMatches({
 assert(
   unresolvedTargets.length === 2,
   `目标未知的同名快捷方式应保守保留，实际 ${unresolvedTargets.length} 条`
+)
+
+// 清单里加了绿色软件目录之后，它里面的程序也够格进最佳匹配
+const greenFolderRules = buildSearchPriorityRules(
+  folderConfig([{ path: 'D:\\Green', maxDepth: 0, enabled: true }])
+)
+const greenFolderMatch = collect({
+  icons: [],
+  fileHits: [hit('portable.exe', 'D:/Green/Portable/portable.exe')],
+  keyword: 'portable',
+  limit: 6,
+  priorityRules: greenFolderRules,
+})
+assert(
+  greenFolderMatch.length === 1,
+  `清单里的目录内的程序应进最佳匹配，实际 ${greenFolderMatch.length} 条`
+)
+
+// 同一条命中，在没有这个目录的清单下不够格
+const withoutGreenFolder = collect({
+  icons: [],
+  fileHits: [hit('portable.exe', 'D:/Green/Portable/portable.exe')],
+  keyword: 'portable',
+  limit: 6,
+})
+assert(withoutGreenFolder.length === 0, '不在清单里的目录不应有资格进最佳匹配')
+
+// 把桌面从清单里删掉后，桌面上的命中不再够格
+const desktopRemoved = collect({
+  icons: [],
+  fileHits: [hit('Foo.lnk', `${DESKTOP}/Foo.lnk`)],
+  keyword: 'foo',
+  limit: 6,
+  priorityRules: buildSearchPriorityRules(
+    folderConfig([{ path: START_MENU, maxDepth: 4, enabled: true }])
+  ),
+})
+assert(desktopRemoved.length === 0, '从清单里删掉桌面后桌面条目不应进最佳匹配')
+
+// 目录表条目走 catalogHits：调用方已经筛过资格，这里不再重算优先级
+const preapproved = collect({
+  icons: [],
+  fileHits: [],
+  catalogHits: [hit('portable.exe', 'D:/Green/Portable/portable.exe')],
+  keyword: 'portable',
+  limit: 6,
+})
+assert(
+  preapproved.length === 1,
+  `catalogHits 应被视为已够格（不再逐条重算优先级），实际 ${preapproved.length} 条`
+)
+
+// 同一条路径若走 fileHits 仍要过资格判定
+const stillGated = collect({
+  icons: [],
+  fileHits: [hit('portable.exe', 'D:/Green/Portable/portable.exe')],
+  keyword: 'portable',
+  limit: 6,
+})
+assert(stillGated.length === 0, 'Everything 命中仍应逐条判定资格')
+
+// 两个来源的同一条路径仍然只留一条
+const dedupedAcrossKinds = collect({
+  icons: [],
+  fileHits: [hit('Visual Studio Code.lnk', `${START_MENU}/Visual Studio Code.lnk`, 5)],
+  catalogHits: [hit('Visual Studio Code.lnk', `${START_MENU}/Visual Studio Code.lnk`)],
+  keyword: 'vscode',
+  limit: 6,
+})
+assert(
+  dedupedAcrossKinds.length === 1 && dedupedAcrossKinds[0].hit.runCount === 5,
+  `Everything 命中与目录表的同一条路径应合并，并保留带运行次数的那条，实际 ${dedupedAcrossKinds.length} 条`
 )
 
 console.log('最佳匹配合并排序测试通过')

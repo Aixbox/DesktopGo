@@ -233,7 +233,8 @@ export function Launchpad() {
       keyword,
       searchSource,
       searchBestMatchCandidates,
-      isSearchPanelOpen
+      isSearchPanelOpen,
+      searchSettings.bestMatchFolders
     )
   const isSearchPanelVisible = isSearchPanelOpen
   const surfaceInteractions = useLaunchpadSurfaceInteractions({

@@ -1,8 +1,9 @@
 import { memo } from 'react'
 import { parseEverythingHighlightedText } from '@/lib/search/highlight'
 import type { SearchHit } from '@/lib/search/types'
+import { HighlightedText } from './HighlightedText'
 
-function HighlightedText({
+function EverythingHighlightedText({
   highlightedText,
   fallbackText,
   className,
@@ -13,19 +14,12 @@ function HighlightedText({
   className: string
   highlightClassName: string
 }) {
-  const segments = parseEverythingHighlightedText(highlightedText, fallbackText)
-
   return (
-    <span className={className}>
-      {segments.map((segment, index) => (
-        <span
-          key={`${segment.text}-${index}`}
-          className={segment.highlighted ? highlightClassName : undefined}
-        >
-          {segment.text}
-        </span>
-      ))}
-    </span>
+    <HighlightedText
+      segments={parseEverythingHighlightedText(highlightedText, fallbackText)}
+      className={className}
+      highlightClassName={highlightClassName}
+    />
   )
 }
 
@@ -98,13 +92,13 @@ export const SearchResultRow = memo(function SearchResultRow({
         </span>
 
         <span className="min-w-0 flex-1">
-          <HighlightedText
+          <EverythingHighlightedText
             highlightedText={item.highlightedName}
             fallbackText={item.name || item.path}
             className="block truncate text-sm text-foreground"
             highlightClassName="accent-foreground font-medium"
           />
-          <HighlightedText
+          <EverythingHighlightedText
             highlightedText={item.highlightedPath}
             fallbackText={item.parent}
             className="block truncate text-xs text-muted-foreground"

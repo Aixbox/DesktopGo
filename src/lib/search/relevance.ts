@@ -118,6 +118,9 @@ export interface RankedSearchPage {
   /**
    * 排序过程中顺带收集的高优先级命中（已按分数排好），供「最佳匹配」直接使用。
    * 优先级本来就要为每条结果算一次，所以这里不产生额外扫描。
+   *
+   * 「高优先级」取决于传入的规则表：用户在设置里加的自定义目录同样算高优先级，
+   * 关掉的内置目录组则不再算（见 `buildSearchPriorityRules`）。
    */
   highPriorityItems: SearchHit[]
 }
@@ -127,7 +130,8 @@ const stripFilterPrefix = (keyword: string): string =>
 
 export const rankSearchPageItems = (
   items: SearchHit[],
-  context: SearchPageContext
+  context: SearchPageContext,
+  priorityRules: SearchPriorityRules = DEFAULT_SEARCH_PRIORITY_RULES
 ): RankedSearchPage => {
   if (context.queryOptions.sort !== 'relevance') return { items, highPriorityItems: [] }
 
@@ -136,7 +140,7 @@ export const rankSearchPageItems = (
 
   const scored = scoreSearchHits(items, normalizedKeyword, {
     matchPath: Boolean(context.queryOptions.matchPath),
-    priorityRules: DEFAULT_SEARCH_PRIORITY_RULES,
+    priorityRules,
   })
 
   return {

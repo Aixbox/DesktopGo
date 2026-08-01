@@ -1,6 +1,8 @@
 use crate::everything::{self, SearchPage, SearchQuery, SearchRuntimeStatus};
 use crate::icons;
-use crate::launcher_catalog::{self, LauncherCatalogEntry};
+use crate::launcher_catalog::{
+    self, DefaultLauncherFolder, LauncherCatalogConfig, LauncherCatalogSnapshot,
+};
 use crate::search_preview::{self, SearchPreview};
 use serde::{Deserialize, Serialize};
 
@@ -57,29 +59,49 @@ pub async fn get_complete_search_snapshot(
     .map_err(|error| format!("Failed to join complete search snapshot task: {error}"))?
 }
 
-/// 高优先级目录（开始菜单、桌面、快速启动）的完整条目表。每次调用都重新枚举，
-/// 目录内容变化立即反映。
+/// 「最佳匹配」目录清单的完整条目表。扫哪些目录、收哪些类型全部由 `config` 决定，
+/// 每次调用都重新枚举，目录内容与配置变化立即反映。
 #[tauri::command]
 pub async fn get_launcher_catalog(
     app_handle: tauri::AppHandle,
-) -> Result<Vec<LauncherCatalogEntry>, String> {
-    let entries = tauri::async_runtime::spawn_blocking(launcher_catalog::collect_launcher_catalog)
-        .await
-        .map_err(|error| format!("Failed to join launcher catalog task: {error}"))?;
+    config: Option<LauncherCatalogConfig>,
+) -> Result<LauncherCatalogSnapshot, String> {
+    let config = config.unwrap_or_default();
+    let snapshot = tauri::async_runtime::spawn_blocking(move || {
+        launcher_catalog::collect_launcher_catalog(config)
+    })
+    .await
+    .map_err(|error| format!("Failed to join launcher catalog task: {error}"))?;
     // 走搜索调试日志，这样「最佳匹配为什么没出现某一项」可以不开 DevTools 就定位。
     // 目标解析数一并记下：合并「程序 + 它的快捷方式」全靠它，为 0 就说明去重失效了。
-    let resolved = entries
+    let resolved = snapshot
+        .entries
         .iter()
         .filter(|entry| entry.has_shortcut_target())
         .count();
+    let roots = snapshot
+        .roots
+        .iter()
+        .map(|root| format!("{}={}", root.key, root.entry_count))
+        .collect::<Vec<_>>()
+        .join(" ");
     everything::log_search_debug(
         &app_handle,
         format!(
-            "launcher catalog: collected {} entries, {resolved} shortcut targets resolved",
-            entries.len()
+            "launcher catalog: collected {} entries, {resolved} shortcut targets resolved, roots: {roots}",
+            snapshot.entries.len()
         ),
     );
-    Ok(entries)
+    Ok(snapshot)
+}
+
+/// 预设目录（开始菜单、桌面、快速启动的真实路径）。前端首次写入目录清单、
+/// 以及用户点「恢复预设目录」时调用；写进清单后它们就是普通目录了。
+#[tauri::command]
+pub async fn get_default_launcher_folders() -> Result<Vec<DefaultLauncherFolder>, String> {
+    tauri::async_runtime::spawn_blocking(launcher_catalog::default_launcher_folders)
+        .await
+        .map_err(|error| format!("Failed to join default launcher folders task: {error}"))
 }
 
 #[tauri::command]

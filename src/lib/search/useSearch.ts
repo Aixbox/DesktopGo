@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getCompleteSearchSnapshot, searchFiles } from './api'
 import { buildSearchKeyword } from './filters'
+import { buildSearchPriorityRules } from './priority'
 import { rankSearchPageItems } from './relevance'
 import { selectNextSearchOffset } from './rangeScheduling'
 import { clampSearchSelection, resolveCommittedKeyword } from './searchState'
@@ -195,6 +196,20 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
    * 由相关性排序在打分时顺带收集（优先级本来就要为每条结果算一次）。
    */
   const [bestMatchCandidates, setHighPriorityHits] = useState<SearchHit[]>([])
+
+  /**
+   * 优先级规则跟着设置走：自定义的高优先级目录和内置目录同权，既影响这里的结果排序，
+   * 也决定哪些命中够格进「最佳匹配」。排序发生在异步回调里，所以额外用 ref 持有最新
+   * 规则 —— 用户改完设置回到主窗口后，下一次排序立刻用新规则，不必重跑当前查询。
+   */
+  const priorityRules = useMemo(
+    () => buildSearchPriorityRules(settings.bestMatchFolders),
+    [settings.bestMatchFolders]
+  )
+  const priorityRulesRef = useRef(priorityRules)
+  useEffect(() => {
+    priorityRulesRef.current = priorityRules
+  }, [priorityRules])
   const committedKeyword = resolveCommittedKeyword({
     keyword,
     submittedKeyword,
@@ -344,12 +359,12 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
 
           if (!isContextActive(context)) return
           if (exactItems) {
-            const ranked = rankSearchPageItems(exactItems, context)
+            const ranked = rankSearchPageItems(exactItems, context, priorityRulesRef.current)
             setCompleteItemsAndRef(ranked.items)
             setPagesAndRef({})
             setHighPriorityHits(ranked.highPriorityItems)
           } else {
-            const ranked = rankSearchPageItems(page.items, context)
+            const ranked = rankSearchPageItems(page.items, context, priorityRulesRef.current)
             setCompleteItemsAndRef(null)
             setPagesAndRef({ 0: ranked.items })
             setHighPriorityHits(ranked.highPriorityItems)
@@ -450,7 +465,7 @@ export function useSearch({ enabled = true }: UseSearchOptions = {}): UseSearchR
           return
         }
 
-        const ranked = rankSearchPageItems(page.items, context)
+        const ranked = rankSearchPageItems(page.items, context, priorityRulesRef.current)
         setPagesAndRef({
           ...pagesRef.current,
           [nextOffset]: ranked.items,

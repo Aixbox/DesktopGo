@@ -433,6 +433,7 @@ export function SearchPanel({
             onSelect={onSelectIcon}
             onActivate={onActivateIcon}
             mode="grid"
+            keyword={trimmedKeyword}
             onColumnCountChange={onShortcutColumnCountChange}
           />
         ) : (
@@ -447,6 +448,7 @@ export function SearchPanel({
           onSelect={onSelectIcon}
           onActivate={onActivateIcon}
           mode="compact"
+          keyword={trimmedKeyword}
           heading="最佳匹配"
         />
       ) : null}

@@ -24,6 +24,18 @@ export type BestMatchItem =
 const ELIGIBLE_FILE_PRIORITY = 'high'
 
 /**
+ * 这条命中够不够格进最佳匹配。
+ *
+ * 目录清单的条目在拉取时判定一次就够了（配置不变，判定结果也不会变），调用方据此
+ * 预先筛好再传进来 —— 目录表可以有上万条，而优先级判定要为每条把整条路径小写化、
+ * 再逐条比对降权规则，放在按键的关键路径上会明显拖慢输入。
+ */
+export const isBestMatchEligible = (
+  hit: { path: string; name: string },
+  rules: SearchPriorityRules = DEFAULT_SEARCH_PRIORITY_RULES
+): boolean => resolveSearchPriority(hit, rules) === ELIGIBLE_FILE_PRIORITY
+
+/**
  * 两类候选都是「高优先级」：文件命中由 `resolveSearchPriority` 判定为 high 才准入，
  * 启动台图标是用户亲手摆上去的，本身就等同于 high。所以两边同样计入这一项，
  * 它对排序没有净影响，写出来是为了让「启动台图标没被漏掉加权」这件事在代码里可见。
@@ -86,9 +98,10 @@ const scoreFileHit = (
   hit: SearchHit,
   keyword: string,
   order: number,
-  rules: SearchPriorityRules
+  rules: SearchPriorityRules,
+  preapproved: boolean
 ): ScoredBestMatch | null => {
-  if (resolveSearchPriority(hit, rules) !== ELIGIBLE_FILE_PRIORITY) return null
+  if (!preapproved && !isBestMatchEligible(hit, rules)) return null
 
   const fuzzy = scoreBestFuzzyMatch(keyword, [
     { text: hit.name },
@@ -111,14 +124,19 @@ const scoreFileHit = (
 
 export interface CollectBestMatchesOptions {
   icons: DesktopIcon[]
-  /** 已经按相关性排好序的文件命中，通常只传前若干条。 */
+  /** Everything 的命中（已按相关性排好序，通常只传前若干条），逐条判定是否够格。 */
   fileHits: SearchHit[]
+  /**
+   * 目录清单枚举出来的条目。调用方必须已经按 `isBestMatchEligible` 筛过 ——
+   * 这里不再逐条重算优先级，因为目录表可能有上万条，而这段代码在按键的关键路径上。
+   */
+  catalogHits?: SearchHit[]
   keyword: string
   limit: number
   usage?: ShortcutUsageState
   priorityRules?: SearchPriorityRules
   /**
-   * 归一化路径 → `.lnk` 目标，来自高优先级目录表（`useLauncherCatalog`）。
+   * 归一化路径 → `.lnk` 目标，来自目录清单（`useLauncherCatalog`）。
    * Everything 的命中本身不带目标路径，靠这张表补齐后才能和启动台图标、
    * 程序本体互相认亲。表里没有的条目退化成只按自身路径去重。
    */
@@ -150,6 +168,7 @@ const identitiesFor = (
 export function collectBestMatches({
   icons,
   fileHits,
+  catalogHits,
   keyword,
   limit,
   usage,
@@ -164,8 +183,14 @@ export function collectBestMatches({
     const result = scoreShortcut(icon, normalizedKeyword, index, usage)
     if (result) scored.push(result)
   })
+  // order 决定完全同分时谁靠前：启动台图标 → Everything 命中（带运行次数）→ 目录表。
   fileHits.forEach((hit, index) => {
-    const result = scoreFileHit(hit, normalizedKeyword, icons.length + index, priorityRules)
+    const result = scoreFileHit(hit, normalizedKeyword, icons.length + index, priorityRules, false)
+    if (result) scored.push(result)
+  })
+  const catalogOffset = icons.length + fileHits.length
+  catalogHits?.forEach((hit, index) => {
+    const result = scoreFileHit(hit, normalizedKeyword, catalogOffset + index, priorityRules, true)
     if (result) scored.push(result)
   })
 

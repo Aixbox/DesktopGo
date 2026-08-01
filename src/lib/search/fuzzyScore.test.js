@@ -1,4 +1,4 @@
-import { scoreFuzzyMatch, scoreBestFuzzyMatch } from './fuzzyScore.ts'
+import { matchFuzzyPositions, scoreFuzzyMatch, scoreBestFuzzyMatch } from './fuzzyScore.ts'
 
 const assert = (condition, message) => {
   if (!condition) throw new Error(message)
@@ -79,5 +79,33 @@ assert(!missing.matched && missing.score === 0, '全部未命中时应返回未�
 
 assert(score('文件', '文件夹') !== null, '中文应可子序列命中')
 assert(score('wj', '文件夹') === null, '拼音尚未支持，不应意外命中')
+
+// 命中位置（高亮用）
+
+const positionsMatchQuery = (query, text) => {
+  const positions = matchFuzzyPositions(query, text)
+  const lowerText = text.toLowerCase()
+  const lowerQuery = query.trim().toLowerCase()
+  if (positions.length !== lowerQuery.length) return false
+  return positions.every(
+    (position, step) =>
+      lowerText[position] === lowerQuery[step] && (step === 0 || position > positions[step - 1])
+  )
+}
+
+assert(
+  positionsMatchQuery('vscode', 'Visual Studio Code'),
+  '命中位置应严格递增且逐个对上关键词字符'
+)
+assert(positionsMatchQuery('et', 'PDF-XChange-Editor-Plus-v10.6.0.396-x64'), '长名称同样应对齐')
+assert(positionsMatchQuery('文件', '文件夹'), '中文命中位置同样应对齐')
+assert(
+  matchFuzzyPositions('vscode', 'Visual Studio Code').join(',') === '0,7,14,15,16,17',
+  `词首缩写应落在词首和连续段上，实际 ${matchFuzzyPositions('vscode', 'Visual Studio Code')}`
+)
+assert(matchFuzzyPositions('code', 'Code').join(',') === '0,1,2,3', '完全匹配应逐字对齐')
+assert(matchFuzzyPositions('zzz', 'Notepad').length === 0, '未命中时不应给出位置')
+assert(matchFuzzyPositions('', 'Notepad').length === 0, '空关键词不应给出位置')
+assert(matchFuzzyPositions('note', '').length === 0, '空文本不应给出位置')
 
 console.log('fzf 式打分器测试通过')

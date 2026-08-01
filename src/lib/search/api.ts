@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core'
+import type { BestMatchFolderConfig } from './bestMatchFolders'
 import type {
-  LauncherCatalogEntry,
+  DefaultLauncherFolder,
+  LauncherCatalogSnapshot,
   SearchHit,
   SearchIconRequest,
   SearchPage,
@@ -9,6 +11,12 @@ import type {
   SearchResultIcon,
   SearchRuntimeStatus,
 } from './types'
+
+/**
+ * Rust 侧的 `LauncherCatalogConfig`。字段与 `BestMatchFolderConfig` 同形，
+ * 单独起个别名是为了让「这是发给命令的载荷」这件事在调用处看得见。
+ */
+export type LauncherCatalogConfigPayload = BestMatchFolderConfig
 
 const SEARCH_RUNTIME_TIMEOUT_MS = 8_000
 const SEARCH_ICON_TIMEOUT_MS = 10_000
@@ -45,7 +53,12 @@ export const searchFiles = (query: SearchQuery) => invoke<SearchPage>('search_fi
 export const getCompleteSearchSnapshot = (query: SearchQuery) =>
   invoke<SearchHit[]>('get_complete_search_snapshot', { query })
 
-export const getLauncherCatalog = () => invoke<LauncherCatalogEntry[]>('get_launcher_catalog')
+export const getLauncherCatalog = (config: LauncherCatalogConfigPayload) =>
+  invoke<LauncherCatalogSnapshot>('get_launcher_catalog', { config })
+
+/** 预设目录（开始菜单、桌面、快速启动的真实路径），只返回存在的那些。 */
+export const getDefaultLauncherFolders = () =>
+  invoke<DefaultLauncherFolder[]>('get_default_launcher_folders')
 
 export const getSearchResultIcons = (requests: SearchIconRequest[], iconSize = 48) =>
   withTimeout(

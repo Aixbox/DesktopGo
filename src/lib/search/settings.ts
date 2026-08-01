@@ -1,4 +1,12 @@
 ﻿import { invoke } from '@tauri-apps/api/core'
+import { getDefaultLauncherFolders } from './api'
+import {
+  DEFAULT_BEST_MATCH_FOLDER_CONFIG,
+  normalizeBestMatchFolderConfig,
+  withPresetFolders,
+  type BestMatchFolderConfig,
+  type CatalogFolder,
+} from './bestMatchFolders'
 import type { SearchRuntimeState, SearchSort } from './types'
 import { translate } from '@/lib/i18n'
 
@@ -28,6 +36,8 @@ export interface SearchSettings {
   sortBy: SearchSort
   rememberLastFilter: boolean
   autoStartRuntime: boolean
+  /** 「最佳匹配」扫哪些目录：内置目录组的开关 + 用户自定义的高优先级目录。 */
+  bestMatchFolders: BestMatchFolderConfig
 }
 
 const SEARCH_PROFILE_VERSION = 6
@@ -48,6 +58,7 @@ export const DEFAULT_SEARCH_SETTINGS: SearchSettings = {
   sortBy: 'relevance',
   rememberLastFilter: true,
   autoStartRuntime: true,
+  bestMatchFolders: DEFAULT_BEST_MATCH_FOLDER_CONFIG,
 }
 
 const LEGACY_SEARCH_DEFAULTS = {
@@ -70,6 +81,7 @@ const SEARCH_SETTING_KEYS: { [K in keyof SearchSettings]: string } = {
   sortBy: 'search.sortBy',
   rememberLastFilter: 'search.rememberLastFilter',
   autoStartRuntime: 'search.autoStartRuntime',
+  bestMatchFolders: 'search.bestMatchFolders',
 }
 
 const LAST_FILTER_KEY = 'search.lastFilter'
@@ -182,6 +194,9 @@ const normalizeValue = <K extends keyof SearchSettings>(
   if (key === 'sortBy') {
     return normalizeSort(value, fallback as SearchSort) as SearchSettings[K]
   }
+  if (key === 'bestMatchFolders') {
+    return normalizeBestMatchFolderConfig(value) as SearchSettings[K]
+  }
 
   return fallback
 }
@@ -291,11 +306,39 @@ export const loadSearchSettings = async (): Promise<SearchSettings> => {
     pendingWrites.push([SEARCH_PROFILE_VERSION_KEY, SEARCH_PROFILE_VERSION])
   }
 
+  // 首次使用时把预设目录写进清单。之后清单完全由用户掌握 —— 删掉的预设不会被补回来，
+  // 需要时在设置里点「恢复预设目录」。
+  if (!settings.bestMatchFolders.presetsApplied) {
+    settings.bestMatchFolders = withPresetFolders(
+      settings.bestMatchFolders,
+      await loadPresetCatalogFolders()
+    )
+    pendingWrites.push([SEARCH_SETTING_KEYS.bestMatchFolders, settings.bestMatchFolders])
+  }
+
   if (pendingWrites.length > 0) {
     await writeRawSettings(pendingWrites)
   }
 
   return settings
+}
+
+/**
+ * 预设目录（开始菜单、桌面、快速启动的真实路径）。拿不到时返回空清单：
+ * 没有目录只是最佳匹配少了候选，不该让整份设置加载失败。
+ */
+export const loadPresetCatalogFolders = async (): Promise<CatalogFolder[]> => {
+  try {
+    const presets = await getDefaultLauncherFolders()
+    return presets.map(preset => ({
+      path: preset.path,
+      maxDepth: preset.maxDepth,
+      enabled: true,
+    }))
+  } catch (error) {
+    console.error('Failed to load preset catalog folders:', error)
+    return []
+  }
 }
 
 export const saveSearchSetting = async <K extends keyof SearchSettings>(

@@ -193,3 +193,109 @@ export function scoreBestFuzzyMatch(
   }
   return NO_MATCH
 }
+
+const NO_POSITIONS: number[] = []
+
+/**
+ * 高亮要按**代码单元**下标去切原字符串，所以填充必须和字符串下标严格 1:1 对齐，
+ * 不能像 `fillCodes` 那样在少数字符（`İ` 之类，小写化后长度会变）上退化成按字符遍历。
+ */
+const fillHighlightCodes = (text: string): number => {
+  ensureCapacity(text.length)
+  const lower = text.toLowerCase()
+  const aligned = lower.length === text.length ? lower : null
+
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index)
+    originalCodes[index] = code
+    lowerCodes[index] = aligned
+      ? aligned.charCodeAt(index)
+      : String.fromCharCode(code).toLowerCase().charCodeAt(0)
+  }
+  return text.length
+}
+
+/**
+ * 最优匹配落在哪些字符上，用于高亮。返回**递增**的代码单元下标，未命中时为空数组。
+ *
+ * `scoreFuzzyMatch` 只要最大值，所以它逐步覆盖同一行缓冲区；这里还要回溯路径，
+ * 于是多记一张父指针表。只对最终渲染出来的那几行调用（「最佳匹配」一次最多 6 行），
+ * 不在打分热路径上，所以按可读性写、每次分配新表，不去复用打分器的缓冲区。
+ */
+export function matchFuzzyPositions(query: string, text: string): number[] {
+  const trimmedQuery = query.trim().toLowerCase()
+  if (!trimmedQuery || !text) return NO_POSITIONS
+
+  const textLength = fillHighlightCodes(text)
+  const queryLength = trimmedQuery.length
+  if (queryLength > textLength) return NO_POSITIONS
+
+  fillBonuses(textLength)
+
+  const scores = new Float64Array(queryLength * textLength).fill(NEGATIVE_INFINITY)
+  // 父指针：当前字符的上一个匹配字符落在哪个下标，-1 表示这里是起点。
+  const parents = new Int32Array(queryLength * textLength).fill(-1)
+
+  for (let step = 0; step < queryLength; step += 1) {
+    const queryCode = trimmedQuery.charCodeAt(step)
+    const row = step * textLength
+    const previousRow = row - textLength
+    let bestBefore = NEGATIVE_INFINITY
+    let bestBeforeIndex = -1
+    let bestBeforeExcludingLast = NEGATIVE_INFINITY
+    let bestBeforeExcludingLastIndex = -1
+
+    for (let index = 0; index < textLength; index += 1) {
+      if (lowerCodes[index] === queryCode) {
+        if (step === 0) {
+          scores[row + index] = SCORE_MATCH + bonuses[index] * FIRST_CHAR_BONUS_MULTIPLIER
+        } else {
+          const consecutive =
+            index >= 1 && scores[previousRow + index - 1] > NEGATIVE_INFINITY
+              ? scores[previousRow + index - 1] + BONUS_CONSECUTIVE
+              : NEGATIVE_INFINITY
+          const skipped =
+            bestBeforeExcludingLast > NEGATIVE_INFINITY
+              ? bestBeforeExcludingLast + SCORE_GAP
+              : NEGATIVE_INFINITY
+          // 同分时选「紧接上一个字符」，高亮出来是连成一片的，比散落着好读。
+          if (consecutive > NEGATIVE_INFINITY && consecutive >= skipped) {
+            scores[row + index] = SCORE_MATCH + bonuses[index] + consecutive
+            parents[row + index] = index - 1
+          } else if (skipped > NEGATIVE_INFINITY) {
+            scores[row + index] = SCORE_MATCH + bonuses[index] + skipped
+            parents[row + index] = bestBeforeExcludingLastIndex
+          }
+        }
+      }
+
+      bestBeforeExcludingLast = bestBefore
+      bestBeforeExcludingLastIndex = bestBeforeIndex
+      if (step > 0 && scores[previousRow + index] > bestBefore) {
+        bestBefore = scores[previousRow + index]
+        bestBeforeIndex = index
+      }
+    }
+  }
+
+  const lastRow = (queryLength - 1) * textLength
+  let best = NEGATIVE_INFINITY
+  let bestIndex = -1
+  for (let index = 0; index < textLength; index += 1) {
+    if (scores[lastRow + index] > best) {
+      best = scores[lastRow + index]
+      bestIndex = index
+    }
+  }
+  if (bestIndex < 0) return NO_POSITIONS
+
+  const positions = new Array<number>(queryLength)
+  let index = bestIndex
+  for (let step = queryLength - 1; step >= 0; step -= 1) {
+    positions[step] = index
+    index = parents[step * textLength + index]
+    // 父链断在中途只可能是打分与回溯不一致，宁可不高亮也不要给出错位的下标。
+    if (index < 0 && step > 0) return NO_POSITIONS
+  }
+  return positions
+}
