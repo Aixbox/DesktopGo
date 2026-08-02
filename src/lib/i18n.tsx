@@ -763,6 +763,8 @@ const EN_MESSAGES: Record<string, string> = {
   '预览已生成，可保存或不保存退出。': 'Preview is ready. Save it or exit without saving.',
   '正在保存 AI 预览...': 'Saving AI preview...',
   展开侧栏: 'Expand sidebar',
+  展开至窗口: 'Expand to window',
+  恢复侧栏大小: 'Restore sidebar size',
   收起侧栏: 'Collapse sidebar',
   保存预览: 'Save preview',
   不保存退出: 'Exit without saving',

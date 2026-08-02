@@ -10,16 +10,7 @@ import {
 } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import {
-  ArrowDown,
-  Bot,
-  History,
-  Loader2,
-  MessageSquareText,
-  Plus,
-  Sparkles,
-  X,
-} from 'lucide-react'
+import { ArrowDown, Bot, Loader2, MessageSquareText, Sparkles } from 'lucide-react'
 import { translate } from '@/lib/i18n'
 import { useToast } from '@/components/ui/toast'
 import type { AiGroup } from '@/lib/aiOrganize'
@@ -34,6 +25,7 @@ import {
 } from '@/lib/aiOrganizeSessions'
 import type { DesktopIcon } from '@/types'
 import { AiOrganizeComposer } from './AiOrganizeComposer'
+import { AiOrganizePanelHeaderActions } from './AiOrganizePanelHeaderActions'
 import { AiOrganizeHistoryMenu } from './AiOrganizeHistoryMenu'
 import { AiOrganizeRunInline as AssistantRunInline } from './AiOrganizeRunInline'
 import { AiOrganizeSnapshotPreview } from './AiOrganizeSnapshotPreview'
@@ -54,6 +46,10 @@ import type { AiOrganizePanelHandle, AiOrganizePanelProps } from './aiOrganizePa
 import { useAiOrganizeRunState } from './useAiOrganizeRunState'
 import { useAiOrganizeLayoutPreview } from './useAiOrganizeLayoutPreview'
 import { isAiOrganizePreviewRefreshError } from './useAiOrganizeLayoutPreview.helpers'
+import {
+  resolveAiOrganizeComposerKeyAction,
+  shouldRestoreAiOrganizeLayoutPreview,
+} from './aiOrganizePanelInteraction'
 
 export type { AiOrganizePanelHandle } from './aiOrganizePanelTypes'
 export type { AiOrganizePanelRunState } from './useAiOrganizeRunState'
@@ -91,6 +87,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
     const [sessionSaveError, setSessionSaveError] = useState<string | null>(null)
     const [historyExpanded, setHistoryExpanded] = useState(false)
     const [presetsExpanded, setPresetsExpanded] = useState(false)
+    const [isExpanded, setIsExpanded] = useState(false)
     const [showScrollToBottom, setShowScrollToBottom] = useState(false)
     const sessionsRef = useRef<AiOrganizeSession[]>([])
     const groupsRef = useRef<EditableGroup[]>([])
@@ -103,12 +100,8 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
     const historyMenuRef = useRef<HTMLDivElement | null>(null)
     const presetsButtonRef = useRef<HTMLButtonElement | null>(null)
     const presetsMenuRef = useRef<HTMLDivElement | null>(null)
-    const {
-      applyAiOrganizeLayout,
-      applyLayoutPreview,
-      restoreLayoutPreview,
-      markApplied,
-    } = useAiOrganizeLayoutPreview({ icons, layoutViewMode, onPreviewed })
+    const { applyAiOrganizeLayout, applyLayoutPreview, restoreLayoutPreview, markApplied } =
+      useAiOrganizeLayoutPreview({ icons, layoutViewMode, onPreviewed })
 
     useEffect(() => {
       if (!historyExpanded && !presetsExpanded) return
@@ -531,9 +524,13 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
     }, [restoreLayoutPreview, toast])
 
     useEffect(() => {
-      if (open && visible) return
+      if (
+        !shouldRestoreAiOrganizeLayoutPreview({ open, visible, hasOnCollapse: Boolean(onCollapse) })
+      ) {
+        return
+      }
       restoreLayoutPreviewAfterClose()
-    }, [open, restoreLayoutPreviewAfterClose, visible])
+    }, [onCollapse, open, restoreLayoutPreviewAfterClose, visible])
 
     useEffect(() => {
       if (!open) return
@@ -675,12 +672,20 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
 
     const handleComposerKeyDown = useCallback(
       (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-        if (event.key === 'Backspace' && composerValue.length === 0 && composerCommand) {
+        const action = resolveAiOrganizeComposerKeyAction({
+          key: event.key,
+          ctrlKey: event.ctrlKey,
+          shiftKey: event.shiftKey,
+          isComposing: event.nativeEvent.isComposing,
+          composerValue,
+          hasComposerCommand: Boolean(composerCommand),
+        })
+        if (action === 'remove-command') {
           event.preventDefault()
           setComposerCommand(null)
           return
         }
-        if (event.key !== 'Enter' || !event.ctrlKey) return
+        if (action !== 'send') return
         event.preventDefault()
         sendPrompt(composerValue)
       },
@@ -764,7 +769,9 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
           initial={prefersReducedMotion ? false : { x: 28, opacity: 0 }}
           animate={prefersReducedMotion ? undefined : { x: 0, opacity: 1 }}
           transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-          className="flex h-full w-[min(460px,100vw)] flex-col overflow-hidden border-l border-border/85 bg-background/95 shadow-2xl backdrop-blur-xl"
+          className={`flex h-full ${
+            isExpanded ? 'w-full' : 'w-[min(460px,100vw)]'
+          } flex-col overflow-hidden border-l border-border/85 bg-background/95 shadow-2xl backdrop-blur-xl`}
           onClick={event => event.stopPropagation()}
         >
           <div className="relative flex items-center justify-between border-b border-border/80 px-4 py-3.5">
@@ -779,41 +786,22 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
                 <p className="truncate text-xs text-muted-foreground">{statusTitle}</p>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <button
-                ref={historyButtonRef}
-                type="button"
-                aria-label={translate('会话历史')}
-                title={translate('会话历史')}
-                onClick={() => setHistoryExpanded(expanded => !expanded)}
-                className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
-                  historyExpanded
-                    ? 'bg-primary/10 accent-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                }`}
-              >
-                <History className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                aria-label={translate('新对话')}
-                title={translate('新对话')}
-                onClick={handleNewSession}
-                disabled={isBusy}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                aria-label={translate(onCollapse ? '收起侧栏' : '关闭')}
-                onClick={collapseOrClose}
-                disabled={phase === 'applying'}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+            <AiOrganizePanelHeaderActions
+              historyButtonRef={historyButtonRef}
+              historyExpanded={historyExpanded}
+              isBusy={isBusy}
+              isExpanded={isExpanded}
+              closeDisabled={phase === 'applying'}
+              historyLabel={translate('会话历史')}
+              newChatLabel={translate('新对话')}
+              expandLabel={translate('展开至窗口')}
+              restoreLabel={translate('恢复侧栏大小')}
+              closeLabel={translate(onCollapse ? '收起侧栏' : '关闭')}
+              onToggleHistory={() => setHistoryExpanded(expanded => !expanded)}
+              onNewSession={handleNewSession}
+              onToggleExpanded={() => setIsExpanded(expanded => !expanded)}
+              onClose={collapseOrClose}
+            />
             <AiOrganizeHistoryMenu
               expanded={historyExpanded}
               menuRef={historyMenuRef}
