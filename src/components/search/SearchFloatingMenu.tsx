@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { NativeScrollArea } from '@/components/ui/native-scroll-area'
 import {
   useCallback,
   useLayoutEffect,
@@ -152,14 +153,16 @@ export function SearchFloatingMenu({
         ['--search-floating-menu-viewport-max-height' as string]: viewportMaxHeight,
       }}
     >
-      <div
-        className={cn(
-          'max-h-[var(--search-floating-menu-viewport-max-height)] overflow-y-auto overflow-x-hidden',
-          scrollClassName
-        )}
-      >
-        <div className={contentClassName}>{children}</div>
-      </div>
+      <NativeScrollArea asChild>
+        <div
+          className={cn(
+            'max-h-[var(--search-floating-menu-viewport-max-height)] overflow-y-auto overflow-x-hidden',
+            scrollClassName
+          )}
+        >
+          <div className={contentClassName}>{children}</div>
+        </div>
+      </NativeScrollArea>
     </div>,
     document.body
   )

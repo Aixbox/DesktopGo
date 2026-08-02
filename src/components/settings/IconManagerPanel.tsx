@@ -14,6 +14,7 @@ import { AiOrganizePanel } from '@/components/ai/AiOrganizePanel'
 import { AddIconDialog } from '@/components/icons/AddIconDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { NativeScrollArea } from '@/components/ui/native-scroll-area'
 import { OptionButton } from '@/components/ui/setting-components'
 import { useToast } from '@/components/ui/toast'
 import type {
@@ -723,48 +724,50 @@ export function IconManagerPanel() {
                   </p>
                 </div>
 
-                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3 sm:px-5">
-                  {invalidIconResults.map(icon => {
-                    const key = invalidIconKey(icon)
-                    const reasonLabel =
-                      icon.reason === 'entry_missing'
-                        ? translate('入口文件不存在')
-                        : icon.reason === 'target_unresolved'
-                          ? translate('无法解析快捷方式目标')
-                          : translate('目标文件不存在')
-                    return (
-                      <label
-                        key={key}
-                        className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/80 bg-background p-3 transition-colors hover:bg-muted/20"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedInvalidIconKeySet.has(key)}
-                          onChange={() => handleToggleInvalidIcon(key)}
-                          disabled={deletingInvalidIcons}
-                          className="mt-1 h-4 w-4 shrink-0 rounded border-border accent-primary"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="truncate text-sm font-medium" title={icon.name}>
-                              {icon.name || translate('未命名')}
+                <NativeScrollArea asChild>
+                  <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3 sm:px-5">
+                    {invalidIconResults.map(icon => {
+                      const key = invalidIconKey(icon)
+                      const reasonLabel =
+                        icon.reason === 'entry_missing'
+                          ? translate('入口文件不存在')
+                          : icon.reason === 'target_unresolved'
+                            ? translate('无法解析快捷方式目标')
+                            : translate('目标文件不存在')
+                      return (
+                        <label
+                          key={key}
+                          className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/80 bg-background p-3 transition-colors hover:bg-muted/20"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedInvalidIconKeySet.has(key)}
+                            onChange={() => handleToggleInvalidIcon(key)}
+                            disabled={deletingInvalidIcons}
+                            className="mt-1 h-4 w-4 shrink-0 rounded border-border accent-primary"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="truncate text-sm font-medium" title={icon.name}>
+                                {icon.name || translate('未命名')}
+                              </p>
+                              <span className="rounded border border-destructive/25 bg-destructive/10 px-1.5 py-0.5 text-[10px] text-destructive">
+                                {reasonLabel}
+                              </span>
+                            </div>
+                            <p
+                              className="mt-1 truncate text-xs text-muted-foreground"
+                              title={icon.target_path || icon.path}
+                            >
+                              {icon.target_path || icon.path}
                             </p>
-                            <span className="rounded border border-destructive/25 bg-destructive/10 px-1.5 py-0.5 text-[10px] text-destructive">
-                              {reasonLabel}
-                            </span>
                           </div>
-                          <p
-                            className="mt-1 truncate text-xs text-muted-foreground"
-                            title={icon.target_path || icon.path}
-                          >
-                            {icon.target_path || icon.path}
-                          </p>
-                        </div>
-                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                      </label>
-                    )
-                  })}
-                </div>
+                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                        </label>
+                      )
+                    })}
+                  </div>
+                </NativeScrollArea>
               </>
             )}
 

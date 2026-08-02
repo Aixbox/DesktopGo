@@ -12,6 +12,7 @@ import {
 import { invoke } from '@tauri-apps/api/core'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowDown, Bot, Loader2, MessageSquareText, Sparkles } from 'lucide-react'
+import { NativeScrollArea } from '@/components/ui/native-scroll-area'
 import { translate } from '@/lib/i18n'
 import { useToast } from '@/components/ui/toast'
 import type { AiGroup } from '@/lib/aiOrganize'
@@ -832,108 +833,110 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
                 </div>
               ) : null}
 
-              <div
-                ref={transcriptRef}
-                onScroll={handleTranscriptScroll}
-                className="min-h-0 flex-1 overflow-y-auto py-4"
-              >
-                <div className="space-y-3">
-                  {activeSession?.messages.length ? (
-                    activeSession.messages.map(message => {
-                      const isUser = message.role === 'user'
-                      const failed = message.status === 'failed'
-                      const running = message.status === 'running'
-                      const snapshotIndex =
-                        !isUser && message.snapshotId
-                          ? activeSnapshots.findIndex(
-                              snapshot => snapshot.id === message.snapshotId
-                            )
-                          : -1
-                      const messageSnapshot =
-                        snapshotIndex >= 0 ? activeSnapshots[snapshotIndex] : null
-                      return (
-                        <div
-                          key={message.id}
-                          className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
-                        >
+              <NativeScrollArea asChild>
+                <div
+                  ref={transcriptRef}
+                  onScroll={handleTranscriptScroll}
+                  className="min-h-0 flex-1 overflow-y-auto py-4"
+                >
+                  <div className="space-y-3">
+                    {activeSession?.messages.length ? (
+                      activeSession.messages.map(message => {
+                        const isUser = message.role === 'user'
+                        const failed = message.status === 'failed'
+                        const running = message.status === 'running'
+                        const snapshotIndex =
+                          !isUser && message.snapshotId
+                            ? activeSnapshots.findIndex(
+                                snapshot => snapshot.id === message.snapshotId
+                              )
+                            : -1
+                        const messageSnapshot =
+                          snapshotIndex >= 0 ? activeSnapshots[snapshotIndex] : null
+                        return (
                           <div
-                            className={`flex max-w-[92%] flex-col ${isUser ? 'items-end' : 'items-start'}`}
+                            key={message.id}
+                            className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
                           >
                             <div
-                              className={`rounded-lg border px-3 py-2 text-sm leading-5 ${
-                                isUser
-                                  ? 'border-primary/25 bg-primary/12 text-foreground'
-                                  : failed
-                                    ? 'border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-200'
-                                    : 'border-border/80 bg-muted/35 text-foreground'
-                              }`}
+                              className={`flex max-w-[92%] flex-col ${isUser ? 'items-end' : 'items-start'}`}
                             >
-                              <div className="flex items-start gap-2">
-                                {!isUser ? (
-                                  running ? (
-                                    <Loader2 className="accent-foreground mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
-                                  ) : (
-                                    <MessageSquareText className="accent-foreground mt-0.5 h-3.5 w-3.5 shrink-0" />
-                                  )
-                                ) : null}
-                                <div className="min-w-0 flex-1">
-                                  <p className="whitespace-pre-wrap break-words">
-                                    {message.content}
-                                  </p>
-                                  {message.error ? (
-                                    <p className="mt-1 break-words text-xs opacity-80">
-                                      {message.error}
+                              <div
+                                className={`rounded-lg border px-3 py-2 text-sm leading-5 ${
+                                  isUser
+                                    ? 'border-primary/25 bg-primary/12 text-foreground'
+                                    : failed
+                                      ? 'border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-200'
+                                      : 'border-border/80 bg-muted/35 text-foreground'
+                                }`}
+                              >
+                                <div className="flex items-start gap-2">
+                                  {!isUser ? (
+                                    running ? (
+                                      <Loader2 className="accent-foreground mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
+                                    ) : (
+                                      <MessageSquareText className="accent-foreground mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                    )
+                                  ) : null}
+                                  <div className="min-w-0 flex-1">
+                                    <p className="whitespace-pre-wrap break-words">
+                                      {message.content}
                                     </p>
-                                  ) : null}
-                                  {running || (failed && message.error) ? (
-                                    <AssistantRunInline
-                                      status={runStatus}
-                                      title={statusTitle}
-                                      detail={statusDetail}
-                                      elapsedMs={elapsedMs}
-                                      events={agentEvents}
-                                      streamChunks={streamChunks}
-                                      isStreaming={isStreaming}
-                                    />
-                                  ) : null}
+                                    {message.error ? (
+                                      <p className="mt-1 break-words text-xs opacity-80">
+                                        {message.error}
+                                      </p>
+                                    ) : null}
+                                    {running || (failed && message.error) ? (
+                                      <AssistantRunInline
+                                        status={runStatus}
+                                        title={statusTitle}
+                                        detail={statusDetail}
+                                        elapsedMs={elapsedMs}
+                                        events={agentEvents}
+                                        streamChunks={streamChunks}
+                                        isStreaming={isStreaming}
+                                      />
+                                    ) : null}
+                                  </div>
                                 </div>
                               </div>
+                              {messageSnapshot ? (
+                                <AiOrganizeSnapshotPreview
+                                  snapshot={messageSnapshot}
+                                  snapshotIndex={snapshotIndex}
+                                  activeSnapshotId={activeSnapshotId}
+                                  editingSnapshotId={editingSnapshotId}
+                                  groups={groups}
+                                  phase={phase}
+                                  iconByKey={iconByKey}
+                                  resolveIconName={resolveIconName}
+                                  onPreviewSnapshot={handlePreviewSnapshot}
+                                  onInsertEditCommand={handleInsertEditCommand}
+                                  onExitEditSnapshot={handleExitEditSnapshot}
+                                  onRenameGroup={handleRenameGroup}
+                                  onDropGroup={handleDropGroup}
+                                  onRemoveIcon={handleRemoveIcon}
+                                />
+                              ) : null}
                             </div>
-                            {messageSnapshot ? (
-                              <AiOrganizeSnapshotPreview
-                                snapshot={messageSnapshot}
-                                snapshotIndex={snapshotIndex}
-                                activeSnapshotId={activeSnapshotId}
-                                editingSnapshotId={editingSnapshotId}
-                                groups={groups}
-                                phase={phase}
-                                iconByKey={iconByKey}
-                                resolveIconName={resolveIconName}
-                                onPreviewSnapshot={handlePreviewSnapshot}
-                                onInsertEditCommand={handleInsertEditCommand}
-                                onExitEditSnapshot={handleExitEditSnapshot}
-                                onRenameGroup={handleRenameGroup}
-                                onDropGroup={handleDropGroup}
-                                onRemoveIcon={handleRemoveIcon}
-                              />
-                            ) : null}
                           </div>
+                        )
+                      })
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+                        <div className="mb-2 flex items-center gap-2 text-foreground">
+                          <Sparkles className="accent-foreground h-4 w-4" />
+                          {translate('选择预设或输入要求开始整理')}
                         </div>
-                      )
-                    })
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
-                      <div className="mb-2 flex items-center gap-2 text-foreground">
-                        <Sparkles className="accent-foreground h-4 w-4" />
-                        {translate('选择预设或输入要求开始整理')}
+                        <p className="text-xs leading-5">
+                          {translate('你可以先生成一版布局，再继续对话要求 AI 调整。')}
+                        </p>
                       </div>
-                      <p className="text-xs leading-5">
-                        {translate('你可以先生成一版布局，再继续对话要求 AI 调整。')}
-                      </p>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
+              </NativeScrollArea>
 
               <div className="relative shrink-0 pb-3 pt-1">
                 <AnimatePresence initial={false}>

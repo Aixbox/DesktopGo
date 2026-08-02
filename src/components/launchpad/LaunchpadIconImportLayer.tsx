@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Check, Download, FileIcon, Pencil, RefreshCw, X } from 'lucide-react'
 import { translate } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
+import { NativeScrollArea } from '@/components/ui/native-scroll-area'
 import type { LaunchpadIconImportController } from './useLaunchpadIconImportController'
 
 const AddIconDialog = lazy(() =>
@@ -87,67 +88,69 @@ export function LaunchpadIconImportLayer({ controller }: LaunchpadIconImportLaye
                   </Button>
                 </div>
 
-                <div className="max-h-[min(28rem,56vh)] overflow-y-auto px-4 py-3 sm:px-5">
-                  <div className="grid justify-start gap-x-2 gap-y-1 [grid-template-columns:repeat(auto-fill,5rem)]">
-                    {pendingDropDrafts.map((draft, index) => (
-                      <div key={draft.key} className="group relative min-w-0">
-                        <button
-                          type="button"
-                          aria-pressed={draft.selected}
-                          aria-label={
-                            draft.selected
-                              ? translate('取消选择 {name}', { name: draft.displayName })
-                              : translate('选择 {name}', { name: draft.displayName })
-                          }
-                          onClick={() => toggleDroppedDraft(index)}
-                          disabled={isImportingDrop}
-                          className={`flex h-[4.75rem] w-full min-w-0 flex-col items-center justify-start gap-1 px-1 py-1 text-center transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 ${
-                            draft.selected ? 'opacity-100' : 'opacity-70 hover:opacity-100'
-                          }`}
-                        >
-                          <span
-                            className={`pointer-events-none absolute left-1.5 top-0.5 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full transition-opacity ${
+                <NativeScrollArea asChild>
+                  <div className="max-h-[min(28rem,56vh)] overflow-y-auto px-4 py-3 sm:px-5">
+                    <div className="grid justify-start gap-x-2 gap-y-1 [grid-template-columns:repeat(auto-fill,5rem)]">
+                      {pendingDropDrafts.map((draft, index) => (
+                        <div key={draft.key} className="group relative min-w-0">
+                          <button
+                            type="button"
+                            aria-pressed={draft.selected}
+                            aria-label={
                               draft.selected
-                                ? 'bg-primary text-primary-foreground opacity-100'
-                                : 'border border-border bg-background opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+                                ? translate('取消选择 {name}', { name: draft.displayName })
+                                : translate('选择 {name}', { name: draft.displayName })
+                            }
+                            onClick={() => toggleDroppedDraft(index)}
+                            disabled={isImportingDrop}
+                            className={`flex h-[4.75rem] w-full min-w-0 flex-col items-center justify-start gap-1 px-1 py-1 text-center transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 ${
+                              draft.selected ? 'opacity-100' : 'opacity-70 hover:opacity-100'
                             }`}
                           >
-                            {draft.selected ? <Check className="h-2.5 w-2.5" /> : null}
-                          </span>
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden">
-                            {draft.previewLoading ? (
-                              <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-                            ) : draft.preview ? (
-                              <img
-                                src={draft.preview}
-                                alt=""
-                                className="h-full w-full object-contain"
-                              />
-                            ) : (
-                              <FileIcon className="h-5 w-5 text-muted-foreground" />
-                            )}
-                          </span>
-                          <span
-                            className="min-h-6 w-full overflow-hidden text-[11px] font-medium leading-3 text-foreground [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
-                            title={draft.displayName}
+                            <span
+                              className={`pointer-events-none absolute left-1.5 top-0.5 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full transition-opacity ${
+                                draft.selected
+                                  ? 'bg-primary text-primary-foreground opacity-100'
+                                  : 'border border-border bg-background opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+                              }`}
+                            >
+                              {draft.selected ? <Check className="h-2.5 w-2.5" /> : null}
+                            </span>
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden">
+                              {draft.previewLoading ? (
+                                <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                              ) : draft.preview ? (
+                                <img
+                                  src={draft.preview}
+                                  alt=""
+                                  className="h-full w-full object-contain"
+                                />
+                              ) : (
+                                <FileIcon className="h-5 w-5 text-muted-foreground" />
+                              )}
+                            </span>
+                            <span
+                              className="min-h-6 w-full overflow-hidden text-[11px] font-medium leading-3 text-foreground [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
+                              title={draft.displayName}
+                            >
+                              {draft.displayName}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={translate('编辑 {name}', { name: draft.displayName })}
+                            title={translate('编辑')}
+                            onClick={() => handleEditDroppedDraft(index)}
+                            disabled={isImportingDrop}
+                            className="absolute right-0.5 top-0.5 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-background/90 text-muted-foreground opacity-100 shadow-sm transition-[opacity,color] hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                           >
-                            {draft.displayName}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={translate('编辑 {name}', { name: draft.displayName })}
-                          title={translate('编辑')}
-                          onClick={() => handleEditDroppedDraft(index)}
-                          disabled={isImportingDrop}
-                          className="absolute right-0.5 top-0.5 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-background/90 text-muted-foreground opacity-100 shadow-sm transition-[opacity,color] hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                </NativeScrollArea>
 
                 <div className="flex flex-wrap justify-end gap-2 border-t border-border/80 bg-muted/15 px-4 py-3 sm:px-5">
                   <Button

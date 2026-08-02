@@ -36,6 +36,7 @@ import { translate, useI18n } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { NativeScrollArea } from '@/components/ui/native-scroll-area'
 import { useToast } from '@/components/ui/toast'
 import { IconCropDialog, type IconCropResult } from './IconCropDialog'
 import {
@@ -700,254 +701,256 @@ function AddIconDialogSession({
         </div>
 
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-            <div className="grid gap-y-3 sm:grid-cols-[max-content_minmax(0,1fr)] sm:gap-x-3">
-              <AddIconFormRow label={translate('图标类型')}>
-                <div
-                  role="tablist"
-                  aria-label={translate('图标类型')}
-                  className="inline-flex h-9 rounded-lg bg-muted p-1"
-                >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={entryKind === 'app'}
-                    onClick={() => handleEntryKindChange('app')}
-                    disabled={submitting}
-                    className={cn(
-                      'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
-                      entryKind === 'app'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    )}
+          <NativeScrollArea asChild>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+              <div className="grid gap-y-3 sm:grid-cols-[max-content_minmax(0,1fr)] sm:gap-x-3">
+                <AddIconFormRow label={translate('图标类型')}>
+                  <div
+                    role="tablist"
+                    aria-label={translate('图标类型')}
+                    className="inline-flex h-9 rounded-lg bg-muted p-1"
                   >
-                    <Monitor className="h-3.5 w-3.5" />
-                    {translate('应用')}
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={entryKind === 'website'}
-                    onClick={() => handleEntryKindChange('website')}
-                    disabled={submitting}
-                    className={cn(
-                      'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
-                      entryKind === 'website'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    <Globe2 className="h-3.5 w-3.5" />
-                    {translate('网页')}
-                  </button>
-                </div>
-              </AddIconFormRow>
-              {entryKind === 'app' ? (
-                <AddIconFormRow label={translate('选择目标')} labelFor={targetInputId}>
-                  <div className="min-w-0 space-y-1.5">
-                    <div className="flex min-w-0 flex-wrap gap-2">
-                      <Input
-                        id={targetInputId}
-                        ref={targetInputRef}
-                        value={targetPath}
-                        onChange={event => updateTargetPath(event.target.value)}
-                        placeholder={translate('输入程序、快捷方式、文件或文件夹路径')}
-                        disabled={submitting}
-                        className="min-w-0 flex-[1_1_18rem]"
-                      />
-                      <div
-                        ref={targetPickerRef}
-                        className="relative min-w-0 flex-[1_1_8rem] sm:flex-none"
-                      >
-                        <Button
-                          type="button"
-                          variant="outline"
-                          aria-haspopup="menu"
-                          aria-expanded={targetPickerOpen}
-                          onClick={() => setTargetPickerOpen(current => !current)}
-                          disabled={submitting}
-                          className="w-full sm:w-auto"
-                        >
-                          <FileSearch className="h-4 w-4" />
-                          {translate('选择目标')}
-                          <ChevronDown
-                            className={cn(
-                              'h-3.5 w-3.5 transition-transform duration-200 motion-reduce:transition-none',
-                              targetPickerOpen && 'rotate-180'
-                            )}
-                          />
-                        </Button>
-                        {targetPickerOpen ? (
-                          <div
-                            role="menu"
-                            className="absolute right-0 top-full z-20 mt-1.5 w-40 overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-lg"
-                          >
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => void handlePickTarget(false)}
-                              className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
-                            >
-                              <FileSearch className="h-4 w-4 text-muted-foreground" />
-                              {translate('选择文件')}
-                            </button>
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => void handlePickTarget(true)}
-                              className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
-                            >
-                              <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                              {translate('选择文件夹')}
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                    <span
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={entryKind === 'app'}
+                      onClick={() => handleEntryKindChange('app')}
+                      disabled={submitting}
                       className={cn(
-                        'flex items-center gap-1.5 text-xs leading-5',
-                        hasTargetPreviewFailure
-                          ? 'text-amber-600 dark:text-amber-400'
-                          : 'text-muted-foreground'
+                        'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+                        entryKind === 'app'
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
                       )}
                     >
-                      {!normalizedTargetPath ? null : targetPreviewLoading ? (
-                        <>
-                          <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                          {translate('正在读取目标并提取图标...')}
-                        </>
-                      ) : hasTargetPreviewFailure ? (
-                        <>
-                          <CircleAlert className="h-3.5 w-3.5 shrink-0" />
-                          {translate('未能识别该路径或提取图标，仍可尝试添加。')}
-                        </>
-                      ) : targetPreview ? (
-                        <>
-                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                          {translate('已识别目标并生成图标预览。')}
-                        </>
-                      ) : null}
-                    </span>
+                      <Monitor className="h-3.5 w-3.5" />
+                      {translate('应用')}
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={entryKind === 'website'}
+                      onClick={() => handleEntryKindChange('website')}
+                      disabled={submitting}
+                      className={cn(
+                        'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+                        entryKind === 'website'
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      <Globe2 className="h-3.5 w-3.5" />
+                      {translate('网页')}
+                    </button>
                   </div>
                 </AddIconFormRow>
-              ) : (
-                <AddIconFormRow label={translate('网页地址')} labelFor={targetInputId}>
-                  <div className="min-w-0 space-y-1.5">
-                    <div className="flex min-w-0 flex-wrap gap-2">
-                      <div className="relative min-w-0 flex-[1_1_18rem]">
-                        <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                {entryKind === 'app' ? (
+                  <AddIconFormRow label={translate('选择目标')} labelFor={targetInputId}>
+                    <div className="min-w-0 space-y-1.5">
+                      <div className="flex min-w-0 flex-wrap gap-2">
                         <Input
                           id={targetInputId}
                           ref={targetInputRef}
-                          type="url"
-                          inputMode="url"
                           value={targetPath}
                           onChange={event => updateTargetPath(event.target.value)}
-                          onBlur={handleWebsiteUrlBlur}
-                          placeholder={translate('例如：https://www.example.com')}
-                          disabled={submitting || websitePreviewLoading}
-                          className="min-w-0 pl-9"
+                          placeholder={translate('输入程序、快捷方式、文件或文件夹路径')}
+                          disabled={submitting}
+                          className="min-w-0 flex-[1_1_18rem]"
                         />
+                        <div
+                          ref={targetPickerRef}
+                          className="relative min-w-0 flex-[1_1_8rem] sm:flex-none"
+                        >
+                          <Button
+                            type="button"
+                            variant="outline"
+                            aria-haspopup="menu"
+                            aria-expanded={targetPickerOpen}
+                            onClick={() => setTargetPickerOpen(current => !current)}
+                            disabled={submitting}
+                            className="w-full sm:w-auto"
+                          >
+                            <FileSearch className="h-4 w-4" />
+                            {translate('选择目标')}
+                            <ChevronDown
+                              className={cn(
+                                'h-3.5 w-3.5 transition-transform duration-200 motion-reduce:transition-none',
+                                targetPickerOpen && 'rotate-180'
+                              )}
+                            />
+                          </Button>
+                          {targetPickerOpen ? (
+                            <div
+                              role="menu"
+                              className="absolute right-0 top-full z-20 mt-1.5 w-40 overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-lg"
+                            >
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => void handlePickTarget(false)}
+                                className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
+                              >
+                                <FileSearch className="h-4 w-4 text-muted-foreground" />
+                                {translate('选择文件')}
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => void handlePickTarget(true)}
+                                className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
+                              >
+                                <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                                {translate('选择文件夹')}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => void handleExtractWebsiteIcon()}
-                        disabled={!normalizedTargetPath || websitePreviewLoading || submitting}
-                        className="min-w-0 flex-[1_1_8rem] whitespace-nowrap sm:flex-none"
-                      >
-                        {websitePreviewLoading ? (
-                          <RefreshCw className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Globe2 className="h-4 w-4" />
-                        )}
-                        {websitePreviewLoading ? translate('正在提取...') : translate('提取图标')}
-                      </Button>
-                    </div>
-                    <span
-                      className={cn(
-                        'flex items-center gap-1.5 text-xs leading-5',
-                        websitePreviewError || (targetPath.trim() && !normalizedTargetPath)
-                          ? 'text-destructive'
-                          : websitePreviewResolved && !websitePreview
+                      <span
+                        className={cn(
+                          'flex items-center gap-1.5 text-xs leading-5',
+                          hasTargetPreviewFailure
                             ? 'text-amber-600 dark:text-amber-400'
                             : 'text-muted-foreground'
-                      )}
-                    >
-                      {!targetPath.trim() ? null : !normalizedTargetPath ? (
-                        <>
-                          <CircleAlert className="h-3.5 w-3.5 shrink-0" />
-                          {translate('请输入有效的 HTTP 或 HTTPS 网页地址。')}
-                        </>
-                      ) : websitePreviewLoading ? (
-                        <>
-                          <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                          {translate('正在读取网页并提取站点图标...')}
-                        </>
-                      ) : websitePreviewError ? (
-                        <>
-                          <CircleAlert className="h-3.5 w-3.5 shrink-0" />
-                          {translate('网页图标提取失败：{error}', { error: websitePreviewError })}
-                        </>
-                      ) : websitePreviewResolved && websitePreview ? (
-                        <>
-                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                          {translate('已提取 {count} 个网页图标。', {
-                            count: websitePreviews.length,
-                          })}
-                        </>
-                      ) : websitePreviewResolved ? (
-                        <>
-                          <CircleAlert className="h-3.5 w-3.5 shrink-0" />
-                          {translate('网页未提供可用图标，仍可继续添加。')}
-                        </>
-                      ) : null}
-                    </span>
-                  </div>
-                </AddIconFormRow>
-              )}
+                        )}
+                      >
+                        {!normalizedTargetPath ? null : targetPreviewLoading ? (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                            {translate('正在读取目标并提取图标...')}
+                          </>
+                        ) : hasTargetPreviewFailure ? (
+                          <>
+                            <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                            {translate('未能识别该路径或提取图标，仍可尝试添加。')}
+                          </>
+                        ) : targetPreview ? (
+                          <>
+                            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                            {translate('已识别目标并生成图标预览。')}
+                          </>
+                        ) : null}
+                      </span>
+                    </div>
+                  </AddIconFormRow>
+                ) : (
+                  <AddIconFormRow label={translate('网页地址')} labelFor={targetInputId}>
+                    <div className="min-w-0 space-y-1.5">
+                      <div className="flex min-w-0 flex-wrap gap-2">
+                        <div className="relative min-w-0 flex-[1_1_18rem]">
+                          <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <Input
+                            id={targetInputId}
+                            ref={targetInputRef}
+                            type="url"
+                            inputMode="url"
+                            value={targetPath}
+                            onChange={event => updateTargetPath(event.target.value)}
+                            onBlur={handleWebsiteUrlBlur}
+                            placeholder={translate('例如：https://www.example.com')}
+                            disabled={submitting || websitePreviewLoading}
+                            className="min-w-0 pl-9"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void handleExtractWebsiteIcon()}
+                          disabled={!normalizedTargetPath || websitePreviewLoading || submitting}
+                          className="min-w-0 flex-[1_1_8rem] whitespace-nowrap sm:flex-none"
+                        >
+                          {websitePreviewLoading ? (
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Globe2 className="h-4 w-4" />
+                          )}
+                          {websitePreviewLoading ? translate('正在提取...') : translate('提取图标')}
+                        </Button>
+                      </div>
+                      <span
+                        className={cn(
+                          'flex items-center gap-1.5 text-xs leading-5',
+                          websitePreviewError || (targetPath.trim() && !normalizedTargetPath)
+                            ? 'text-destructive'
+                            : websitePreviewResolved && !websitePreview
+                              ? 'text-amber-600 dark:text-amber-400'
+                              : 'text-muted-foreground'
+                        )}
+                      >
+                        {!targetPath.trim() ? null : !normalizedTargetPath ? (
+                          <>
+                            <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                            {translate('请输入有效的 HTTP 或 HTTPS 网页地址。')}
+                          </>
+                        ) : websitePreviewLoading ? (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                            {translate('正在读取网页并提取站点图标...')}
+                          </>
+                        ) : websitePreviewError ? (
+                          <>
+                            <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                            {translate('网页图标提取失败：{error}', { error: websitePreviewError })}
+                          </>
+                        ) : websitePreviewResolved && websitePreview ? (
+                          <>
+                            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                            {translate('已提取 {count} 个网页图标。', {
+                              count: websitePreviews.length,
+                            })}
+                          </>
+                        ) : websitePreviewResolved ? (
+                          <>
+                            <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                            {translate('网页未提供可用图标，仍可继续添加。')}
+                          </>
+                        ) : null}
+                      </span>
+                    </div>
+                  </AddIconFormRow>
+                )}
 
-              <AddIconAppearanceFields
-                iconTextInputId={iconTextInputId}
-                entryKind={entryKind}
-                websitePreviews={websitePreviews}
-                websitePreview={websitePreview}
-                selectedIconSource={selectedIconSource}
-                automaticPreview={automaticPreview}
-                automaticPreviewLoading={automaticPreviewLoading}
-                automaticPreviewLabel={automaticPreviewLabel}
-                iconColor={iconColor}
-                iconText={iconText}
-                textIconPreview={textIconPreview}
-                customIconPath={customIconPath}
-                customPreview={customPreview}
-                customPreviewLoading={customPreviewLoading}
-                disabled={submitting}
-                onColorChange={handleIconColorChange}
-                onTextChange={handleIconTextChange}
-                onIconSourceChange={handleIconSourceChange}
-                onOpenCropEditor={openCropEditor}
-                onPickCustomIcon={() => void handlePickCustomIcon()}
-              />
+                <AddIconAppearanceFields
+                  iconTextInputId={iconTextInputId}
+                  entryKind={entryKind}
+                  websitePreviews={websitePreviews}
+                  websitePreview={websitePreview}
+                  selectedIconSource={selectedIconSource}
+                  automaticPreview={automaticPreview}
+                  automaticPreviewLoading={automaticPreviewLoading}
+                  automaticPreviewLabel={automaticPreviewLabel}
+                  iconColor={iconColor}
+                  iconText={iconText}
+                  textIconPreview={textIconPreview}
+                  customIconPath={customIconPath}
+                  customPreview={customPreview}
+                  customPreviewLoading={customPreviewLoading}
+                  disabled={submitting}
+                  onColorChange={handleIconColorChange}
+                  onTextChange={handleIconTextChange}
+                  onIconSourceChange={handleIconSourceChange}
+                  onOpenCropEditor={openCropEditor}
+                  onPickCustomIcon={() => void handlePickCustomIcon()}
+                />
 
-              <AddIconMetadataFields
-                entryKind={entryKind}
-                nameInputId={nameInputId}
-                name={name}
-                effectiveName={effectiveName}
-                advancedOpen={advancedOpen}
-                launchArguments={launchArguments}
-                workingDirectory={workingDirectory}
-                disabled={submitting}
-                onNameChange={setName}
-                onToggleAdvanced={() => setAdvancedOpen(current => !current)}
-                onLaunchArgumentsChange={setLaunchArguments}
-                onWorkingDirectoryChange={setWorkingDirectory}
-                onPickWorkingDirectory={() => void handlePickWorkingDirectory()}
-              />
+                <AddIconMetadataFields
+                  entryKind={entryKind}
+                  nameInputId={nameInputId}
+                  name={name}
+                  effectiveName={effectiveName}
+                  advancedOpen={advancedOpen}
+                  launchArguments={launchArguments}
+                  workingDirectory={workingDirectory}
+                  disabled={submitting}
+                  onNameChange={setName}
+                  onToggleAdvanced={() => setAdvancedOpen(current => !current)}
+                  onLaunchArgumentsChange={setLaunchArguments}
+                  onWorkingDirectoryChange={setWorkingDirectory}
+                  onPickWorkingDirectory={() => void handlePickWorkingDirectory()}
+                />
+              </div>
             </div>
-          </div>
+          </NativeScrollArea>
 
           <AddIconFormActions
             submitting={submitting}

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
+import { NativeScrollArea } from '@/components/ui/native-scroll-area'
 import { translate } from '@/lib/i18n'
 import {
   formatElapsed,
@@ -111,38 +112,42 @@ export function AiOrganizeRunInline({
             </span>
           ) : null}
         </div>
-        <div
-          ref={outputRef}
-          className="max-h-28 min-h-10 overflow-y-auto font-mono text-[11px] leading-relaxed text-foreground/85"
-        >
-          {hasStreamOutput ? (
-            <pre className="whitespace-pre-wrap break-words">
-              <AnimatePresence initial={false}>
-                {streamChunks.map(chunk => (
-                  <motion.span
-                    key={chunk.id}
-                    initial={prefersReducedMotion ? false : { opacity: 0.7, filter: 'blur(3px)' }}
-                    animate={prefersReducedMotion ? undefined : { opacity: 1, filter: 'blur(0px)' }}
-                    transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-                    style={prefersReducedMotion ? undefined : { willChange: 'filter, opacity' }}
-                  >
-                    {chunk.text}
-                  </motion.span>
-                ))}
-              </AnimatePresence>
-              {isStreaming ? <span className="accent-foreground ml-0.5">|</span> : null}
-            </pre>
-          ) : isStreaming ? (
-            <div className="flex min-h-10 items-center gap-2 text-muted-foreground">
-              <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
-                <div className="h-full w-8 rounded-full bg-primary/70 motion-safe:animate-[ai-stream-wait_1.1s_cubic-bezier(0.22,1,0.36,1)_infinite]" />
+        <NativeScrollArea asChild>
+          <div
+            ref={outputRef}
+            className="max-h-28 min-h-10 overflow-y-auto font-mono text-[11px] leading-relaxed text-foreground/85"
+          >
+            {hasStreamOutput ? (
+              <pre className="whitespace-pre-wrap break-words">
+                <AnimatePresence initial={false}>
+                  {streamChunks.map(chunk => (
+                    <motion.span
+                      key={chunk.id}
+                      initial={prefersReducedMotion ? false : { opacity: 0.7, filter: 'blur(3px)' }}
+                      animate={
+                        prefersReducedMotion ? undefined : { opacity: 1, filter: 'blur(0px)' }
+                      }
+                      transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+                      style={prefersReducedMotion ? undefined : { willChange: 'filter, opacity' }}
+                    >
+                      {chunk.text}
+                    </motion.span>
+                  ))}
+                </AnimatePresence>
+                {isStreaming ? <span className="accent-foreground ml-0.5">|</span> : null}
+              </pre>
+            ) : isStreaming ? (
+              <div className="flex min-h-10 items-center gap-2 text-muted-foreground">
+                <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full w-8 rounded-full bg-primary/70 motion-safe:animate-[ai-stream-wait_1.1s_cubic-bezier(0.22,1,0.36,1)_infinite]" />
+                </div>
+                <span>{translate('正在等待首段模型输出...')}</span>
               </div>
-              <span>{translate('正在等待首段模型输出...')}</span>
-            </div>
-          ) : (
-            <span className="text-muted-foreground">{translate('等待模型输出...')}</span>
-          )}
-        </div>
+            ) : (
+              <span className="text-muted-foreground">{translate('等待模型输出...')}</span>
+            )}
+          </div>
+        </NativeScrollArea>
       </div>
     </div>
   )

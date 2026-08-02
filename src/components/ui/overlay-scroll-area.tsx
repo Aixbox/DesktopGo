@@ -3,8 +3,6 @@ import * as ScrollArea from '@radix-ui/react-scroll-area'
 
 import { cn } from '@/lib/utils'
 
-const scrollbarSize = 16
-
 // Radix must own the thumb's main-axis size so its endpoint calculation stays accurate.
 const thumbBaseClassName =
   'group relative flex-1 rounded-full bg-transparent focus-visible:outline-none'
@@ -22,11 +20,11 @@ function OverlayScrollbars({ scrollbars }: Pick<OverlayScrollAreaProps, 'scrollb
     <>
       <ScrollArea.Scrollbar
         orientation="vertical"
-        className="absolute right-0 top-0 z-20 flex w-4 touch-none select-none bg-transparent p-[3px]"
-        style={{ bottom: hasHorizontalScrollbar ? scrollbarSize : 0 }}
+        className="absolute right-0 top-0 z-20 flex w-[var(--native-scrollbar-rail-size)] touch-none select-none bg-transparent p-[var(--native-scrollbar-overlay-inset)]"
+        style={{ bottom: hasHorizontalScrollbar ? 'var(--native-scrollbar-rail-size)' : 0 }}
       >
         <ScrollArea.Thumb className={thumbBaseClassName}>
-          <span className="pointer-events-none absolute inset-y-0 left-1/2 w-2 -translate-x-1/2 rounded-full bg-foreground/18 transition-colors group-hover:bg-foreground/34 group-active:bg-foreground/48" />
+          <span className="pointer-events-none absolute inset-y-0 left-1/2 w-[var(--native-scrollbar-thumb-size)] -translate-x-1/2 rounded-full bg-[var(--native-scrollbar-thumb-rest)] transition-colors group-hover:bg-[var(--native-scrollbar-thumb-hover)] group-active:bg-[var(--native-scrollbar-thumb-active)]" />
         </ScrollArea.Thumb>
       </ScrollArea.Scrollbar>
 
@@ -34,11 +32,11 @@ function OverlayScrollbars({ scrollbars }: Pick<OverlayScrollAreaProps, 'scrollb
         <>
           <ScrollArea.Scrollbar
             orientation="horizontal"
-            className="absolute bottom-0 left-0 z-20 flex h-4 flex-col touch-none select-none bg-transparent p-[3px]"
-            style={{ right: scrollbarSize }}
+            className="absolute bottom-0 left-0 z-20 flex h-[var(--native-scrollbar-rail-size)] flex-col touch-none select-none bg-transparent p-[var(--native-scrollbar-overlay-inset)]"
+            style={{ right: 'var(--native-scrollbar-rail-size)' }}
           >
             <ScrollArea.Thumb className={thumbBaseClassName}>
-              <span className="pointer-events-none absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-foreground/18 transition-colors group-hover:bg-foreground/34 group-active:bg-foreground/48" />
+              <span className="pointer-events-none absolute inset-x-0 top-1/2 h-[var(--native-scrollbar-thumb-size)] -translate-y-1/2 rounded-full bg-[var(--native-scrollbar-thumb-rest)] transition-colors group-hover:bg-[var(--native-scrollbar-thumb-hover)] group-active:bg-[var(--native-scrollbar-thumb-active)]" />
             </ScrollArea.Thumb>
           </ScrollArea.Scrollbar>
           <ScrollArea.Corner className="bg-transparent" />

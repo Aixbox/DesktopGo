@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { AppWindow, Folder } from 'lucide-react'
 import { translate } from '@/lib/i18n'
 import { IconContextMenu } from '@/components/icons/IconContextMenu'
+import { NativeScrollArea } from '@/components/ui/native-scroll-area'
 import { useIconStore } from '@/stores/iconStore'
 import type { BestMatchItem } from '@/lib/search/bestMatch'
 import { buildFuzzyHighlightSegments, buildLiteralHighlightSegments } from '@/lib/search/highlight'
@@ -214,60 +215,62 @@ export function ShortcutSearchResults({
   }
 
   return (
-    <div className="max-h-[56vh] overflow-auto px-4 py-4">
-      <div
-        ref={gridRef}
-        className="grid justify-start gap-y-5"
-        style={{
-          columnGap: SHORTCUT_GRID_COLUMN_GAP,
-          gridTemplateColumns: `repeat(auto-fill, ${tileWidth}px)`,
-        }}
-      >
-        {items.map((item, index) =>
-          item.kind !== 'shortcut' ? null : (
-            <IconContextMenu key={item.key} icon={item.icon} onOpen={() => onActivate(item)}>
-              <button
-                type="button"
-                data-shortcut-index={index}
-                aria-current={selectedIndex === index ? 'true' : undefined}
-                className={`group relative flex cursor-pointer flex-col items-center gap-2 rounded-md border-none p-3 shadow-none ${
-                  selectedIndex === index
-                    ? 'bg-primary/12 ring-1 ring-primary/40 dark:bg-primary/18 dark:ring-primary/45'
-                    : 'bg-transparent hover:bg-accent/60 active:bg-accent'
-                }`}
-                style={{ width: config.containerWidth }}
-                title={item.name}
-                onMouseEnter={() => onSelect(index)}
-                onClick={() => onSelect(index)}
-                onDoubleClick={() => onActivate(item)}
-              >
-                <ShortcutIcon icon={item.icon} size={config.imgSize} />
-                <HighlightedText
-                  segments={buildFuzzyHighlightSegments(item.name, keyword)}
-                  className={`text-center text-[11px] leading-[15px] ${
-                    selectedIndex === index ? 'accent-foreground' : 'text-foreground'
+    <NativeScrollArea asChild>
+      <div className="max-h-[56vh] overflow-auto px-4 py-4">
+        <div
+          ref={gridRef}
+          className="grid justify-start gap-y-5"
+          style={{
+            columnGap: SHORTCUT_GRID_COLUMN_GAP,
+            gridTemplateColumns: `repeat(auto-fill, ${tileWidth}px)`,
+          }}
+        >
+          {items.map((item, index) =>
+            item.kind !== 'shortcut' ? null : (
+              <IconContextMenu key={item.key} icon={item.icon} onOpen={() => onActivate(item)}>
+                <button
+                  type="button"
+                  data-shortcut-index={index}
+                  aria-current={selectedIndex === index ? 'true' : undefined}
+                  className={`group relative flex cursor-pointer flex-col items-center gap-2 rounded-md border-none p-3 shadow-none ${
+                    selectedIndex === index
+                      ? 'bg-primary/12 ring-1 ring-primary/40 dark:bg-primary/18 dark:ring-primary/45'
+                      : 'bg-transparent hover:bg-accent/60 active:bg-accent'
                   }`}
-                  highlightClassName="accent-foreground font-medium"
-                  style={{
-                    // 标题不受磁贴左右 padding 限制，和 hover 背景保持同宽。
-                    width: config.containerWidth,
-                    maxWidth: config.containerWidth,
-                    marginInline: -12,
-                    flexShrink: 0,
-                    display: singleLineTitle ? 'block' : '-webkit-box',
-                    WebkitLineClamp: singleLineTitle ? 1 : 2,
-                    WebkitBoxOrient: singleLineTitle ? undefined : 'vertical',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: singleLineTitle ? 'nowrap' : 'normal',
-                    overflowWrap: 'anywhere',
-                  }}
-                />
-              </button>
-            </IconContextMenu>
-          )
-        )}
+                  style={{ width: config.containerWidth }}
+                  title={item.name}
+                  onMouseEnter={() => onSelect(index)}
+                  onClick={() => onSelect(index)}
+                  onDoubleClick={() => onActivate(item)}
+                >
+                  <ShortcutIcon icon={item.icon} size={config.imgSize} />
+                  <HighlightedText
+                    segments={buildFuzzyHighlightSegments(item.name, keyword)}
+                    className={`text-center text-[11px] leading-[15px] ${
+                      selectedIndex === index ? 'accent-foreground' : 'text-foreground'
+                    }`}
+                    highlightClassName="accent-foreground font-medium"
+                    style={{
+                      // 标题不受磁贴左右 padding 限制，和 hover 背景保持同宽。
+                      width: config.containerWidth,
+                      maxWidth: config.containerWidth,
+                      marginInline: -12,
+                      flexShrink: 0,
+                      display: singleLineTitle ? 'block' : '-webkit-box',
+                      WebkitLineClamp: singleLineTitle ? 1 : 2,
+                      WebkitBoxOrient: singleLineTitle ? undefined : 'vertical',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: singleLineTitle ? 'nowrap' : 'normal',
+                      overflowWrap: 'anywhere',
+                    }}
+                  />
+                </button>
+              </IconContextMenu>
+            )
+          )}
+        </div>
       </div>
-    </div>
+    </NativeScrollArea>
   )
 }

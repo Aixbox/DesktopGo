@@ -11,6 +11,7 @@ import {
 import { Icon } from '../../Icon'
 import { translate } from '../../../lib/i18n'
 import { useIconStore } from '../../../stores/iconStore'
+import { NativeScrollArea } from '@/components/ui/native-scroll-area'
 import {
   getIconGridTitleMetrics,
   ICON_GRID_TILE_PADDING_Y,
@@ -258,228 +259,230 @@ export function ScrollableOuterGridView({
         onDragEnd={handleKeyboardItemDragEnd}
         onDragCancel={handleKeyboardItemDragCancel}
       >
-        <div
-          ref={containerRef}
-          className={`scroll-grid-content-scroll min-h-0 min-w-0 overflow-x-hidden overflow-y-auto px-6 pt-24 ${
-            dockEnabled ? 'pb-32' : 'pb-12'
-          }`}
-        >
-          <div className="flex min-h-full justify-center">
-            <div
-              data-scroll-grid-page={currentPage}
-              data-scroll-grid-inner={currentPage}
-              ref={node => {
-                gridElementRef.current = node
-                bindGridPageRef(currentPage, node)
-              }}
-              className="relative grid max-w-full content-start"
-              onPointerDown={handleGridPointerDown}
-              onPointerMove={handleGridPointerMove}
-              onPointerUp={handleGridPointerUp}
-              onPointerCancel={handleGridPointerCancel}
-              onLostPointerCapture={handleGridPointerCancel}
-              style={{
-                width: `${Math.max(
-                  gridWidth,
-                  layoutColumns * itemWidth + Math.max(0, layoutColumns - 1) * gridGap
-                )}px`,
-                height: `${gridHeight}px`,
-                gridTemplateColumns: `repeat(${layoutColumns}, ${itemWidth}px)`,
-                gridTemplateRows: `repeat(${gridRows}, ${itemHeight}px)`,
-                gap: `${gridGap}px`,
-              }}
-            >
-              <SortableContext
-                items={entries.map(entry => entry.id)}
-                strategy={noSortableTransform}
+        <NativeScrollArea asChild>
+          <div
+            ref={containerRef}
+            className={`scroll-grid-content-scroll min-h-0 min-w-0 overflow-x-hidden overflow-y-auto px-6 pt-24 ${
+              dockEnabled ? 'pb-32' : 'pb-12'
+            }`}
+          >
+            <div className="flex min-h-full justify-center">
+              <div
+                data-scroll-grid-page={currentPage}
+                data-scroll-grid-inner={currentPage}
+                ref={node => {
+                  gridElementRef.current = node
+                  bindGridPageRef(currentPage, node)
+                }}
+                className="relative grid max-w-full content-start"
+                onPointerDown={handleGridPointerDown}
+                onPointerMove={handleGridPointerMove}
+                onPointerUp={handleGridPointerUp}
+                onPointerCancel={handleGridPointerCancel}
+                onLostPointerCapture={handleGridPointerCancel}
+                style={{
+                  width: `${Math.max(
+                    gridWidth,
+                    layoutColumns * itemWidth + Math.max(0, layoutColumns - 1) * gridGap
+                  )}px`,
+                  height: `${gridHeight}px`,
+                  gridTemplateColumns: `repeat(${layoutColumns}, ${itemWidth}px)`,
+                  gridTemplateRows: `repeat(${gridRows}, ${itemHeight}px)`,
+                  gap: `${gridGap}px`,
+                }}
               >
-                {entries.map(entry => {
-                  const activeItem = activeDraggedItemId === entry.id
-                  const hideItem = hiddenOuterItemIds.includes(entry.id) || activeItem
-                  const highlightedItem = highlightedOuterItemIdSet.has(entry.id)
-                  const folderPreview =
-                    (dragContext === 'outer' && dragFolderPreviewTargetId === entry.id) ||
-                    mergeTargetId === entry.id ||
-                    folderPreviewFreezeTargetId === entry.id ||
-                    folderCreateTransitionTargetId === entry.id
+                <SortableContext
+                  items={entries.map(entry => entry.id)}
+                  strategy={noSortableTransform}
+                >
+                  {entries.map(entry => {
+                    const activeItem = activeDraggedItemId === entry.id
+                    const hideItem = hiddenOuterItemIds.includes(entry.id) || activeItem
+                    const highlightedItem = highlightedOuterItemIdSet.has(entry.id)
+                    const folderPreview =
+                      (dragContext === 'outer' && dragFolderPreviewTargetId === entry.id) ||
+                      mergeTargetId === entry.id ||
+                      folderPreviewFreezeTargetId === entry.id ||
+                      folderCreateTransitionTargetId === entry.id
 
-                  return (
-                    <SortableGridItem key={entry.id} id={entry.id} disabled={selectionMode}>
-                      {sortable => (
-                        <div
-                          ref={node => {
-                            sortable.setNodeRef(node)
-                            bindTileRef(entry.id, node)
-                            if (node) gridItemRefs.current.set(entry.id, node)
-                            else gridItemRefs.current.delete(entry.id)
-                          }}
-                          data-scroll-sortable-id={entry.id}
-                          className={`relative touch-pan-y justify-self-center self-start ${
-                            activeItem
-                              ? 'pointer-events-none opacity-0'
-                              : `transition-opacity duration-[220ms] ${hideItem ? 'opacity-0' : 'opacity-100'}`
-                          } ${sortable.isDragging ? 'z-20 cursor-grabbing' : 'z-10'}`}
-                          style={{
-                            gridColumn: `${entry.col + 1} / span ${entry.span.cols}`,
-                            gridRow: `${entry.row + 1} / span ${entry.span.rows}`,
-                            width: `${entry.span.cols * itemWidth + Math.max(0, entry.span.cols - 1) * gridGap}px`,
-                            height: `${entry.span.rows * itemHeight + Math.max(0, entry.span.rows - 1) * gridGap}px`,
-                          }}
-                          {...sortable.attributes}
-                          {...sortable.listeners}
-                          onPointerDown={event => {
-                            if (selectionMode) return
-                            event.stopPropagation()
-                            onTilePointerDown(event, entry.id)
-                          }}
-                          onClickCapture={handleGridClickCapture}
-                        >
-                          {entry.item.kind === 'icon' ? (
-                            <div className="relative">
-                              <div
-                                className={`transition-opacity duration-[220ms] ${
-                                  folderPreview ? 'opacity-0' : 'opacity-100'
-                                }`}
-                              >
-                                <Icon
+                    return (
+                      <SortableGridItem key={entry.id} id={entry.id} disabled={selectionMode}>
+                        {sortable => (
+                          <div
+                            ref={node => {
+                              sortable.setNodeRef(node)
+                              bindTileRef(entry.id, node)
+                              if (node) gridItemRefs.current.set(entry.id, node)
+                              else gridItemRefs.current.delete(entry.id)
+                            }}
+                            data-scroll-sortable-id={entry.id}
+                            className={`relative touch-pan-y justify-self-center self-start ${
+                              activeItem
+                                ? 'pointer-events-none opacity-0'
+                                : `transition-opacity duration-[220ms] ${hideItem ? 'opacity-0' : 'opacity-100'}`
+                            } ${sortable.isDragging ? 'z-20 cursor-grabbing' : 'z-10'}`}
+                            style={{
+                              gridColumn: `${entry.col + 1} / span ${entry.span.cols}`,
+                              gridRow: `${entry.row + 1} / span ${entry.span.rows}`,
+                              width: `${entry.span.cols * itemWidth + Math.max(0, entry.span.cols - 1) * gridGap}px`,
+                              height: `${entry.span.rows * itemHeight + Math.max(0, entry.span.rows - 1) * gridGap}px`,
+                            }}
+                            {...sortable.attributes}
+                            {...sortable.listeners}
+                            onPointerDown={event => {
+                              if (selectionMode) return
+                              event.stopPropagation()
+                              onTilePointerDown(event, entry.id)
+                            }}
+                            onClickCapture={handleGridClickCapture}
+                          >
+                            {entry.item.kind === 'icon' ? (
+                              <div className="relative">
+                                <div
+                                  className={`transition-opacity duration-[220ms] ${
+                                    folderPreview ? 'opacity-0' : 'opacity-100'
+                                  }`}
+                                >
+                                  <Icon
+                                    icon={entry.item.icon}
+                                    selectionKey={entry.item.key}
+                                    selectionMode={selectionMode}
+                                    selected={selectedSet.has(entry.item.key)}
+                                    onToggleSelect={onToggleSelectIcon}
+                                    highlighted={highlightedItem}
+                                    motionProfile="scroll"
+                                  />
+                                </div>
+                                <FolderCreatePreview
+                                  active={folderPreview}
                                   icon={entry.item.icon}
-                                  selectionKey={entry.item.key}
-                                  selectionMode={selectionMode}
-                                  selected={selectedSet.has(entry.item.key)}
-                                  onToggleSelect={onToggleSelectIcon}
-                                  highlighted={highlightedItem}
-                                  motionProfile="scroll"
+                                  imgSize={iconConfig.imgSize}
+                                  reorderAnimationMs={reorderAnimationMs}
+                                  tileWidth={itemWidth}
+                                  tileHeight={itemHeight}
                                 />
                               </div>
-                              <FolderCreatePreview
-                                active={folderPreview}
-                                icon={entry.item.icon}
-                                imgSize={iconConfig.imgSize}
-                                reorderAnimationMs={reorderAnimationMs}
-                                tileWidth={itemWidth}
-                                tileHeight={itemHeight}
+                            ) : (
+                              <OuterFolderTile
+                                folder={entry.item}
+                                span={entry.span}
+                                slotWidth={itemWidth}
+                                slotHeight={itemHeight}
+                                gridGap={gridGap}
+                                folderPreview={folderPreview}
+                                folderOpen={openFolderId === entry.item.id}
+                                sharedLayoutActive={activeFolderSharedLayoutId === entry.item.id}
+                                selectionMode={selectionMode}
+                                onPointerDown={NOOP}
+                                onClickCapture={NOOP}
+                                onOpenFolder={onOpenFolder}
+                                onLaunchIcon={onLaunchIcon}
+                                onResizeFolder={onResizeFolder}
                               />
-                            </div>
-                          ) : (
-                            <OuterFolderTile
-                              folder={entry.item}
-                              span={entry.span}
-                              slotWidth={itemWidth}
-                              slotHeight={itemHeight}
-                              gridGap={gridGap}
-                              folderPreview={folderPreview}
-                              folderOpen={openFolderId === entry.item.id}
-                              sharedLayoutActive={activeFolderSharedLayoutId === entry.item.id}
-                              selectionMode={selectionMode}
-                              onPointerDown={NOOP}
-                              onClickCapture={NOOP}
-                              onOpenFolder={onOpenFolder}
-                              onLaunchIcon={onLaunchIcon}
-                              onResizeFolder={onResizeFolder}
-                            />
-                          )}
-                        </div>
+                            )}
+                          </div>
+                        )}
+                      </SortableGridItem>
+                    )
+                  })}
+                </SortableContext>
+                <DragOverlay adjustScale={false} dropAnimation={null} zIndex={240}>
+                  {keyboardDraggedItem ? (
+                    <div
+                      data-scroll-dragging="true"
+                      className="pointer-events-none relative cursor-grabbing"
+                      style={{
+                        width: `${(keyboardDraggedSpan?.cols ?? 1) * itemWidth + Math.max(0, (keyboardDraggedSpan?.cols ?? 1) - 1) * gridGap}px`,
+                        height: `${(keyboardDraggedSpan?.rows ?? 1) * itemHeight + Math.max(0, (keyboardDraggedSpan?.rows ?? 1) - 1) * gridGap}px`,
+                      }}
+                    >
+                      {keyboardDraggedItem.kind === 'icon' ? (
+                        <Icon
+                          icon={keyboardDraggedItem.icon}
+                          selectionKey={keyboardDraggedItem.key}
+                          selectionMode={false}
+                          selected={false}
+                          onToggleSelect={NOOP}
+                          motionProfile="scroll"
+                        />
+                      ) : (
+                        <OuterFolderTile
+                          folder={keyboardDraggedItem}
+                          span={keyboardDraggedSpan ?? { cols: 1, rows: 1 }}
+                          slotWidth={itemWidth}
+                          slotHeight={itemHeight}
+                          gridGap={gridGap}
+                          folderPreview={false}
+                          folderOpen={false}
+                          sharedLayoutActive={false}
+                          selectionMode={false}
+                          onPointerDown={NOOP}
+                          onClickCapture={NOOP}
+                          onOpenFolder={NOOP}
+                          onLaunchIcon={NOOP}
+                          onResizeFolder={NOOP}
+                        />
                       )}
-                    </SortableGridItem>
-                  )
-                })}
-              </SortableContext>
-              <DragOverlay adjustScale={false} dropAnimation={null} zIndex={240}>
-                {keyboardDraggedItem ? (
-                  <div
-                    data-scroll-dragging="true"
-                    className="pointer-events-none relative cursor-grabbing"
+                    </div>
+                  ) : null}
+                </DragOverlay>
+                {hasAddIconSlot ? (
+                  <button
+                    type="button"
+                    data-no-window-drag="true"
+                    aria-label={addIconLabel}
+                    title={addIconLabel}
+                    disabled={addIconDisabled || !onAddIcon}
+                    className="icon-item group relative flex flex-col items-center justify-start justify-self-center self-start rounded-2xl border-none px-3 text-muted-foreground shadow-none transition-opacity duration-200 hover:bg-foreground/6 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:bg-foreground/10 disabled:pointer-events-none disabled:opacity-45 dark:hover:bg-white/10 dark:active:bg-white/20"
                     style={{
-                      width: `${(keyboardDraggedSpan?.cols ?? 1) * itemWidth + Math.max(0, (keyboardDraggedSpan?.cols ?? 1) - 1) * gridGap}px`,
-                      height: `${(keyboardDraggedSpan?.rows ?? 1) * itemHeight + Math.max(0, (keyboardDraggedSpan?.rows ?? 1) - 1) * gridGap}px`,
+                      gridColumn: addIconCol + 1,
+                      gridRow: addIconRow + 1,
+                      width: `${itemWidth}px`,
+                      height: `${itemHeight}px`,
+                      paddingTop: ICON_GRID_TILE_PADDING_Y,
+                      paddingBottom: ICON_GRID_TILE_PADDING_Y,
+                      rowGap: ICON_GRID_TITLE_GAP,
+                      opacity: addIconVisible ? undefined : 0,
+                      pointerEvents: addIconVisible ? undefined : 'none',
                     }}
-                  >
-                    {keyboardDraggedItem.kind === 'icon' ? (
-                      <Icon
-                        icon={keyboardDraggedItem.icon}
-                        selectionKey={keyboardDraggedItem.key}
-                        selectionMode={false}
-                        selected={false}
-                        onToggleSelect={NOOP}
-                        motionProfile="scroll"
-                      />
-                    ) : (
-                      <OuterFolderTile
-                        folder={keyboardDraggedItem}
-                        span={keyboardDraggedSpan ?? { cols: 1, rows: 1 }}
-                        slotWidth={itemWidth}
-                        slotHeight={itemHeight}
-                        gridGap={gridGap}
-                        folderPreview={false}
-                        folderOpen={false}
-                        sharedLayoutActive={false}
-                        selectionMode={false}
-                        onPointerDown={NOOP}
-                        onClickCapture={NOOP}
-                        onOpenFolder={NOOP}
-                        onLaunchIcon={NOOP}
-                        onResizeFolder={NOOP}
-                      />
-                    )}
-                  </div>
-                ) : null}
-              </DragOverlay>
-              {hasAddIconSlot ? (
-                <button
-                  type="button"
-                  data-no-window-drag="true"
-                  aria-label={addIconLabel}
-                  title={addIconLabel}
-                  disabled={addIconDisabled || !onAddIcon}
-                  className="icon-item group relative flex flex-col items-center justify-start justify-self-center self-start rounded-2xl border-none px-3 text-muted-foreground shadow-none transition-opacity duration-200 hover:bg-foreground/6 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:bg-foreground/10 disabled:pointer-events-none disabled:opacity-45 dark:hover:bg-white/10 dark:active:bg-white/20"
-                  style={{
-                    gridColumn: addIconCol + 1,
-                    gridRow: addIconRow + 1,
-                    width: `${itemWidth}px`,
-                    height: `${itemHeight}px`,
-                    paddingTop: ICON_GRID_TILE_PADDING_Y,
-                    paddingBottom: ICON_GRID_TILE_PADDING_Y,
-                    rowGap: ICON_GRID_TITLE_GAP,
-                    opacity: addIconVisible ? undefined : 0,
-                    pointerEvents: addIconVisible ? undefined : 'none',
-                  }}
-                  onPointerDown={event => event.stopPropagation()}
-                  onClick={() => {
-                    if (activeSection) onAddIcon?.(activeSection.groupId)
-                  }}
-                >
-                  <span
-                    className="icon-image flex flex-1 items-center justify-center overflow-hidden"
-                    style={{ width: iconConfig.imgSize, height: iconConfig.imgSize }}
+                    onPointerDown={event => event.stopPropagation()}
+                    onClick={() => {
+                      if (activeSection) onAddIcon?.(activeSection.groupId)
+                    }}
                   >
                     <span
-                      className="flex shrink-0 items-center justify-center rounded-md border border-dashed border-border/80 bg-foreground/3 transition-colors group-hover:border-foreground/35 group-hover:bg-accent dark:border-white/18 dark:bg-white/4"
+                      className="icon-image flex flex-1 items-center justify-center overflow-hidden"
                       style={{ width: iconConfig.imgSize, height: iconConfig.imgSize }}
                     >
-                      <Plus className="h-5 w-5" />
+                      <span
+                        className="flex shrink-0 items-center justify-center rounded-md border border-dashed border-border/80 bg-foreground/3 transition-colors group-hover:border-foreground/35 group-hover:bg-accent dark:border-white/18 dark:bg-white/4"
+                        style={{ width: iconConfig.imgSize, height: iconConfig.imgSize }}
+                      >
+                        <Plus className="h-5 w-5" />
+                      </span>
                     </span>
-                  </span>
-                  <span
-                    className="icon-label text-center text-[11px] leading-[13px] text-foreground drop-shadow-md"
-                    style={{
-                      maxWidth: itemWidth - 10,
-                      height: addIconTitleMetrics.height,
-                      display: addIconTitleMetrics.singleLine ? 'block' : '-webkit-box',
-                      WebkitLineClamp: addIconTitleMetrics.lineClamp,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: addIconTitleMetrics.singleLine ? 'nowrap' : 'normal',
-                      overflowWrap: 'anywhere',
-                    }}
-                  >
-                    {addIconLabel}
-                  </span>
-                </button>
-              ) : null}
+                    <span
+                      className="icon-label text-center text-[11px] leading-[13px] text-foreground drop-shadow-md"
+                      style={{
+                        maxWidth: itemWidth - 10,
+                        height: addIconTitleMetrics.height,
+                        display: addIconTitleMetrics.singleLine ? 'block' : '-webkit-box',
+                        WebkitLineClamp: addIconTitleMetrics.lineClamp,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: addIconTitleMetrics.singleLine ? 'nowrap' : 'normal',
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
+                      {addIconLabel}
+                    </span>
+                  </button>
+                ) : null}
+              </div>
             </div>
           </div>
-        </div>
+        </NativeScrollArea>
       </DndContext>
     </div>
   )

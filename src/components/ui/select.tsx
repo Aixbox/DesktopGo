@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 
 import { translate, useI18n } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
+import { NativeScrollArea } from './native-scroll-area'
 
 const MENU_GAP = 8
 const MENU_MARGIN = 12
@@ -386,91 +387,95 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
                   ['--select-menu-viewport-max-height' as string]: viewportMaxHeight,
                 }}
               >
-                <div className="max-h-[var(--select-menu-viewport-max-height)] overflow-y-auto overflow-x-hidden">
-                  <div className="p-1">
-                    {options.length === 0 ? (
-                      <div className="px-3 py-2 text-sm text-muted-foreground">{emptyText}</div>
-                    ) : (
-                      <div className="space-y-1">
-                        {options.map((option, index) => {
-                          const selected = option.value === value
-                          return (
-                            <button
-                              key={option.value}
-                              ref={element => {
-                                optionRefs.current[index] = element
-                              }}
-                              type="button"
-                              role="option"
-                              aria-selected={selected}
-                              disabled={option.disabled}
-                              className={cn(
-                                'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors disabled:pointer-events-none disabled:opacity-50',
-                                selected
-                                  ? 'bg-accent text-accent-foreground'
-                                  : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
-                                highlightedIndex === index && !selected && 'bg-accent/55',
-                                optionClassName
-                              )}
-                              onMouseEnter={() => {
-                                if (!option.disabled) {
-                                  setHighlightedIndex(index)
-                                }
-                              }}
-                              onFocus={() => {
-                                if (!option.disabled) {
-                                  setHighlightedIndex(index)
-                                }
-                              }}
-                              onClick={() => {
-                                if (!option.disabled) {
-                                  commitValue(option.value)
-                                }
-                              }}
-                              onKeyDown={event => {
-                                switch (event.key) {
-                                  case 'ArrowDown': {
-                                    event.preventDefault()
-                                    const nextIndex = findEnabledIndex(options, index, 1)
-                                    if (nextIndex >= 0) {
-                                      setHighlightedIndex(nextIndex)
-                                    }
-                                    break
+                <NativeScrollArea asChild>
+                  <div className="max-h-[var(--select-menu-viewport-max-height)] overflow-y-auto overflow-x-hidden">
+                    <div className="p-1">
+                      {options.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-muted-foreground">{emptyText}</div>
+                      ) : (
+                        <div className="space-y-1">
+                          {options.map((option, index) => {
+                            const selected = option.value === value
+                            return (
+                              <button
+                                key={option.value}
+                                ref={element => {
+                                  optionRefs.current[index] = element
+                                }}
+                                type="button"
+                                role="option"
+                                aria-selected={selected}
+                                disabled={option.disabled}
+                                className={cn(
+                                  'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors disabled:pointer-events-none disabled:opacity-50',
+                                  selected
+                                    ? 'bg-accent text-accent-foreground'
+                                    : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
+                                  highlightedIndex === index && !selected && 'bg-accent/55',
+                                  optionClassName
+                                )}
+                                onMouseEnter={() => {
+                                  if (!option.disabled) {
+                                    setHighlightedIndex(index)
                                   }
-                                  case 'ArrowUp': {
-                                    event.preventDefault()
-                                    const nextIndex = findEnabledIndex(options, index, -1)
-                                    if (nextIndex >= 0) {
-                                      setHighlightedIndex(nextIndex)
-                                    }
-                                    break
+                                }}
+                                onFocus={() => {
+                                  if (!option.disabled) {
+                                    setHighlightedIndex(index)
                                   }
-                                  case 'Home':
-                                    event.preventDefault()
-                                    setHighlightedIndex(getFirstEnabledIndex(options))
-                                    break
-                                  case 'End':
-                                    event.preventDefault()
-                                    setHighlightedIndex(getLastEnabledIndex(options))
-                                    break
-                                  case 'Escape':
-                                    event.preventDefault()
-                                    closeMenu(true)
-                                    break
-                                }
-                              }}
-                            >
-                              <span className="min-w-0 truncate">{option.label}</span>
-                              <span className="ml-3 flex h-4 w-4 items-center justify-center">
-                                {selected ? <Check className="accent-foreground h-4 w-4" /> : null}
-                              </span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
+                                }}
+                                onClick={() => {
+                                  if (!option.disabled) {
+                                    commitValue(option.value)
+                                  }
+                                }}
+                                onKeyDown={event => {
+                                  switch (event.key) {
+                                    case 'ArrowDown': {
+                                      event.preventDefault()
+                                      const nextIndex = findEnabledIndex(options, index, 1)
+                                      if (nextIndex >= 0) {
+                                        setHighlightedIndex(nextIndex)
+                                      }
+                                      break
+                                    }
+                                    case 'ArrowUp': {
+                                      event.preventDefault()
+                                      const nextIndex = findEnabledIndex(options, index, -1)
+                                      if (nextIndex >= 0) {
+                                        setHighlightedIndex(nextIndex)
+                                      }
+                                      break
+                                    }
+                                    case 'Home':
+                                      event.preventDefault()
+                                      setHighlightedIndex(getFirstEnabledIndex(options))
+                                      break
+                                    case 'End':
+                                      event.preventDefault()
+                                      setHighlightedIndex(getLastEnabledIndex(options))
+                                      break
+                                    case 'Escape':
+                                      event.preventDefault()
+                                      closeMenu(true)
+                                      break
+                                  }
+                                }}
+                              >
+                                <span className="min-w-0 truncate">{option.label}</span>
+                                <span className="ml-3 flex h-4 w-4 items-center justify-center">
+                                  {selected ? (
+                                    <Check className="accent-foreground h-4 w-4" />
+                                  ) : null}
+                                </span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                </NativeScrollArea>
               </div>,
               document.body
             )

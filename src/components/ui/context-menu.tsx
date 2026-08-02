@@ -3,6 +3,7 @@ import * as ContextMenuPrimitive from '@radix-ui/react-context-menu'
 import { Check, ChevronRight } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { NativeScrollArea } from './native-scroll-area'
 
 const ContextMenu = ContextMenuPrimitive.Root
 
@@ -71,9 +72,11 @@ const ContextMenuContent = React.forwardRef<
       )}
       {...props}
     >
-      <div className="max-h-[var(--radix-context-menu-content-available-height)] overflow-y-auto overflow-x-hidden">
-        <div className="p-1">{children}</div>
-      </div>
+      <NativeScrollArea asChild>
+        <div className="max-h-[var(--radix-context-menu-content-available-height)] overflow-y-auto overflow-x-hidden">
+          <div className="p-1">{children}</div>
+        </div>
+      </NativeScrollArea>
     </ContextMenuPrimitive.Content>
   </ContextMenuPrimitive.Portal>
 ))

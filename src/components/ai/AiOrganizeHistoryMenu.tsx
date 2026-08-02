@@ -1,6 +1,7 @@
 import type { MutableRefObject } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
+import { NativeScrollArea } from '@/components/ui/native-scroll-area'
 import { translate } from '@/lib/i18n'
 import type { AiOrganizeSession } from '@/lib/aiOrganizeSessions'
 import { formatSessionTime } from './aiOrganizePanelModel'
@@ -53,59 +54,61 @@ export function AiOrganizeHistoryMenu({
               {translate('新对话')}
             </button>
           </div>
-          <div className="max-h-72 overflow-y-auto p-2">
-            {!sessionsLoaded ? (
-              <div className="flex h-12 items-center gap-2 px-2 text-xs text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                {translate('正在加载会话...')}
-              </div>
-            ) : sessions.length === 0 ? (
-              <div className="px-2 py-3 text-xs text-muted-foreground">
-                {translate('还没有保存的整理对话。')}
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {sessions.map(session => {
-                  const isActiveSession = session.id === activeSessionId
-                  return (
-                    <div
-                      key={session.id}
-                      className={`group flex items-stretch rounded-md transition-colors ${
-                        isActiveSession
-                          ? 'bg-primary/10 text-foreground'
-                          : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => onSelectSession(session)}
-                        disabled={isBusy}
-                        className="min-w-0 flex-1 rounded-l-md px-2.5 py-2 text-left disabled:cursor-not-allowed disabled:opacity-50"
+          <NativeScrollArea asChild>
+            <div className="max-h-72 overflow-y-auto p-2">
+              {!sessionsLoaded ? (
+                <div className="flex h-12 items-center gap-2 px-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  {translate('正在加载会话...')}
+                </div>
+              ) : sessions.length === 0 ? (
+                <div className="px-2 py-3 text-xs text-muted-foreground">
+                  {translate('还没有保存的整理对话。')}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {sessions.map(session => {
+                    const isActiveSession = session.id === activeSessionId
+                    return (
+                      <div
+                        key={session.id}
+                        className={`group flex items-stretch rounded-md transition-colors ${
+                          isActiveSession
+                            ? 'bg-primary/10 text-foreground'
+                            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                        }`}
                       >
-                        <div className="truncate text-xs font-medium">{session.title}</div>
-                        <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
-                          <span>{formatSessionTime(session.updatedAt)}</span>
-                          <span>
-                            {translate('{count} 版', { count: session.snapshots.length })}
-                          </span>
-                        </div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void onDeleteSession(session.id)}
-                        disabled={isBusy}
-                        aria-label={translate('删除会话')}
-                        title={translate('删除会话')}
-                        className="flex w-9 shrink-0 items-center justify-center rounded-r-md text-muted-foreground opacity-70 transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 group-hover:opacity-100 dark:hover:text-red-300"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+                        <button
+                          type="button"
+                          onClick={() => onSelectSession(session)}
+                          disabled={isBusy}
+                          className="min-w-0 flex-1 rounded-l-md px-2.5 py-2 text-left disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <div className="truncate text-xs font-medium">{session.title}</div>
+                          <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
+                            <span>{formatSessionTime(session.updatedAt)}</span>
+                            <span>
+                              {translate('{count} 版', { count: session.snapshots.length })}
+                            </span>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void onDeleteSession(session.id)}
+                          disabled={isBusy}
+                          aria-label={translate('删除会话')}
+                          title={translate('删除会话')}
+                          className="flex w-9 shrink-0 items-center justify-center rounded-r-md text-muted-foreground opacity-70 transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 group-hover:opacity-100 dark:hover:text-red-300"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </NativeScrollArea>
         </motion.div>
       ) : null}
     </AnimatePresence>

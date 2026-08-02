@@ -1,6 +1,7 @@
 import type { SearchHit, SearchPreview } from '@/lib/search/types'
 import { getIntlLocale, translate, useI18n } from '@/lib/i18n'
 import { OverlayScrollArea } from '@/components/ui/overlay-scroll-area'
+import { NativeScrollArea } from '@/components/ui/native-scroll-area'
 
 interface SearchPreviewPaneProps {
   item: SearchHit | null
@@ -110,9 +111,11 @@ export function SearchPreviewPane({
               <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                 {translate('文本预览')}
               </div>
-              <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-foreground/80">
-                {preview.textSnippet || translate('没有可用的文本预览。')}
-              </pre>
+              <NativeScrollArea asChild>
+                <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-foreground/80">
+                  {preview.textSnippet || translate('没有可用的文本预览。')}
+                </pre>
+              </NativeScrollArea>
               {preview.textTruncated ? (
                 <div className="mt-3 text-[11px] text-muted-foreground">
                   {translate('为保证加载速度，预览内容已截断。')}

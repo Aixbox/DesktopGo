@@ -18,6 +18,7 @@ import {
   getFolderSharedLayoutId,
 } from './folderVisualPolicy'
 import { Input } from '@/components/ui/input'
+import { NativeScrollArea } from '@/components/ui/native-scroll-area'
 import { translate, useI18n } from '@/lib/i18n'
 
 interface FolderModalViewProps {
@@ -303,69 +304,71 @@ export function FolderModalView({
                 transition={contentTransition}
                 className="flex max-h-full flex-col"
               >
-                <div
-                  ref={folderGridContainerRef}
-                  className="-mr-5 overflow-auto pr-5"
-                  style={{ maxHeight: `calc(min(80vh, ${maxModalHeight}px) - 48px)` }}
-                >
+                <NativeScrollArea asChild>
                   <div
-                    ref={folderGridRef}
-                    className="grid content-start justify-items-center gap-2"
-                    style={{
-                      gridTemplateColumns: `repeat(${Math.max(1, folderColumns)}, ${folderItemWidth}px)`,
-                    }}
+                    ref={folderGridContainerRef}
+                    className="-mr-5 overflow-auto pr-5"
+                    style={{ maxHeight: `calc(min(80vh, ${maxModalHeight}px) - 48px)` }}
                   >
-                    {folderRenderOrder.map((entry, index) => {
-                      if (entry === null || entry === DRAG_HOLE_ID) {
-                        const showDropSlot = entry === DRAG_HOLE_ID && dragContext === 'folder'
+                    <div
+                      ref={folderGridRef}
+                      className="grid content-start justify-items-center gap-2"
+                      style={{
+                        gridTemplateColumns: `repeat(${Math.max(1, folderColumns)}, ${folderItemWidth}px)`,
+                      }}
+                    >
+                      {folderRenderOrder.map((entry, index) => {
+                        if (entry === null || entry === DRAG_HOLE_ID) {
+                          const showDropSlot = entry === DRAG_HOLE_ID && dragContext === 'folder'
+                          return (
+                            <div
+                              key={`folder-${showDropSlot ? 'drop' : 'empty'}-${index}`}
+                              data-folder-grid-item
+                              className={`h-full w-full rounded-2xl ${
+                                showDropSlot
+                                  ? 'border border-border/60 bg-background/35 dark:border-white/20 dark:bg-white/8'
+                                  : 'border border-transparent bg-transparent'
+                              }`}
+                              style={{ minHeight: `${folderItemHeight}px` }}
+                              aria-hidden="true"
+                            />
+                          )
+                        }
+
+                        const item = folderItemById.get(entry)
+                        if (!item) return null
+                        const hiddenItem = hiddenItemIds.has(entry)
+
                         return (
                           <div
-                            key={`folder-${showDropSlot ? 'drop' : 'empty'}-${index}`}
+                            key={entry}
+                            ref={node => {
+                              bindFolderTileRef(entry, node)
+                            }}
                             data-folder-grid-item
-                            className={`h-full w-full rounded-2xl ${
-                              showDropSlot
-                                ? 'border border-border/60 bg-background/35 dark:border-white/20 dark:bg-white/8'
-                                : 'border border-transparent bg-transparent'
+                            className={`relative touch-none transition-opacity duration-150 ${
+                              hiddenItem ? 'pointer-events-none opacity-0' : 'opacity-100'
                             }`}
-                            style={{ minHeight: `${folderItemHeight}px` }}
-                            aria-hidden="true"
-                          />
+                            onPointerDown={event =>
+                              onFolderTilePointerDown(event, openFolder.id, entry)
+                            }
+                            onClickCapture={onTileClickCapture}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <Icon
+                              icon={item.icon}
+                              selectionKey={item.key}
+                              selectionMode={selectionMode}
+                              selected={selectedSet.has(item.key)}
+                              onToggleSelect={onToggleSelectIcon}
+                              onActivate={() => onActivateIcon(item)}
+                            />
+                          </div>
                         )
-                      }
-
-                      const item = folderItemById.get(entry)
-                      if (!item) return null
-                      const hiddenItem = hiddenItemIds.has(entry)
-
-                      return (
-                        <div
-                          key={entry}
-                          ref={node => {
-                            bindFolderTileRef(entry, node)
-                          }}
-                          data-folder-grid-item
-                          className={`relative touch-none transition-opacity duration-150 ${
-                            hiddenItem ? 'pointer-events-none opacity-0' : 'opacity-100'
-                          }`}
-                          onPointerDown={event =>
-                            onFolderTilePointerDown(event, openFolder.id, entry)
-                          }
-                          onClickCapture={onTileClickCapture}
-                          onClick={e => e.stopPropagation()}
-                        >
-                          <Icon
-                            icon={item.icon}
-                            selectionKey={item.key}
-                            selectionMode={selectionMode}
-                            selected={selectedSet.has(item.key)}
-                            onToggleSelect={onToggleSelectIcon}
-                            onActivate={() => onActivateIcon(item)}
-                          />
-                        </div>
-                      )
-                    })}
+                      })}
+                    </div>
                   </div>
-                </div>
+                </NativeScrollArea>
               </motion.div>
             </motion.div>
           </div>

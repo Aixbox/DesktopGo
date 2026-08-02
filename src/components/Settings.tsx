@@ -12,6 +12,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { cn } from '@/lib/utils'
 import { translate, useI18n } from '@/lib/i18n'
+import { NativeScrollArea } from '@/components/ui/native-scroll-area'
 import { UpdatePanel } from '@/components/settings/UpdatePanel'
 import { Logo } from '@/components/Logo'
 import { SearchSettingsPanel } from '@/components/search/SearchSettingsPanel'
@@ -278,18 +279,20 @@ export function Settings() {
           </div>
         </header>
 
-        <main className="settings-content-surface settings-main-scroll min-h-0 flex-1 overflow-y-auto rounded-tl-xl border-l border-t border-border/80 bg-background px-6 py-6 xl:px-8">
-          <div className={cn('mx-auto w-full', NAV_CONTENT_WIDTH[activeNav])}>
-            {activeNav === 'settings' && <GeneralSettingsPanel />}
-            {activeNav === 'search' && (
-              <SearchSettingsPanel onOpenIconLibrary={openIconManager} />
-            )}
-            {activeNav === 'iconManager' && <IconManagerPanel />}
-            {activeNav === 'ai' && <AiSettingsPanel />}
-            {activeNav === 'update' && <UpdatePanel />}
-            {activeNav === 'about' && <AboutPanel />}
-          </div>
-        </main>
+        <NativeScrollArea asChild>
+          <main className="settings-content-surface settings-main-scroll min-h-0 flex-1 overflow-y-auto rounded-tl-xl border-l border-t border-border/80 bg-background px-6 py-6 xl:px-8">
+            <div className={cn('mx-auto w-full', NAV_CONTENT_WIDTH[activeNav])}>
+              {activeNav === 'settings' && <GeneralSettingsPanel />}
+              {activeNav === 'search' && (
+                <SearchSettingsPanel onOpenIconLibrary={openIconManager} />
+              )}
+              {activeNav === 'iconManager' && <IconManagerPanel />}
+              {activeNav === 'ai' && <AiSettingsPanel />}
+              {activeNav === 'update' && <UpdatePanel />}
+              {activeNav === 'about' && <AboutPanel />}
+            </div>
+          </main>
+        </NativeScrollArea>
       </div>
     </div>
   )

@@ -884,10 +884,10 @@ export function DockBar({
             >
               <div
                 ref={indicatorThumbRef}
-                className={`absolute top-1/2 h-[5px] -translate-y-1/2 rounded-full will-change-transform transition-[width,opacity,background-color,box-shadow] duration-150 ${
+                className={`absolute top-1/2 h-[var(--native-scrollbar-thumb-size)] -translate-y-1/2 rounded-full will-change-transform transition-[width,opacity,background-color] duration-150 ${
                   isIndicatorDragging
-                    ? 'cursor-grabbing bg-foreground/50 opacity-100 shadow-[0_0_0_1px_rgba(15,23,42,0.08)] dark:bg-white/55 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.08)]'
-                    : 'cursor-grab bg-foreground/34 opacity-85 shadow-[0_0_0_1px_rgba(15,23,42,0.06)] group-hover/dock-scrollbar:bg-foreground/46 group-hover/dock-scrollbar:opacity-100 dark:bg-white/36 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.05)] dark:group-hover/dock-scrollbar:bg-white/48'
+                    ? 'cursor-grabbing bg-[var(--native-scrollbar-thumb-active)]'
+                    : 'cursor-grab bg-[var(--native-scrollbar-thumb-rest)] group-hover/dock-scrollbar:bg-[var(--native-scrollbar-thumb-hover)]'
                 }`}
                 style={{
                   width: '0px',

@@ -37,6 +37,7 @@ import {
 } from '@/lib/textIcon'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { NativeScrollArea } from '@/components/ui/native-scroll-area'
 import {
   ICON_TRANSPARENT_CHECKERBOARD,
   IconCropBackgroundControls,
@@ -678,248 +679,253 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
           <X className="h-3.5 w-3.5" />
         </Button>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 pt-5 sm:px-[58px] sm:pb-10">
-          <h2 id={titleId} className="mb-2.5 text-center text-xl font-semibold text-foreground">
-            {translate('裁剪图标')}
-          </h2>
-          <p id={descriptionId} className="sr-only">
-            {translate('拖动图标调整位置，拖动裁剪框边缘移动或调整大小。')}
-          </p>
+        <NativeScrollArea asChild>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 pt-5 sm:px-[58px] sm:pb-10">
+            <h2 id={titleId} className="mb-2.5 text-center text-xl font-semibold text-foreground">
+              {translate('裁剪图标')}
+            </h2>
+            <p id={descriptionId} className="sr-only">
+              {translate('拖动图标调整位置，拖动裁剪框边缘移动或调整大小。')}
+            </p>
 
-          <div
-            className="relative mx-auto aspect-square w-full bg-muted/60"
-            style={
-              !usingCustomColor && colorId === 'none'
-                ? {
-                    backgroundColor: '#cbd5e1',
-                    backgroundImage: ICON_TRANSPARENT_CHECKERBOARD,
-                    backgroundSize: '16px 16px',
-                  }
-                : { backgroundColor: visibleBackgroundColor ?? undefined }
-            }
-          >
             <div
-              ref={cropViewportRef}
-              className="relative isolate h-full w-full overflow-hidden [contain:paint]"
-            >
-              {mediaObjectFit ? (
-                <Cropper
-                  image={editorSource}
-                  crop={crop}
-                  cropSize={cropSize}
-                  zoom={zoom}
-                  rotation={rotation}
-                  aspect={1}
-                  minZoom={ICON_CROP_MIN_ZOOM}
-                  maxZoom={ICON_CROP_MAX_ZOOM}
-                  objectFit={mediaObjectFit}
-                  showGrid
-                  zoomWithScroll
-                  onWheelRequest={handleCropWheelRequest}
-                  restrictPosition={false}
-                  style={{
-                    cropAreaStyle: {
-                      left: `calc(50% + ${cropFramePosition.x}px)`,
-                      top: `calc(50% + ${cropFramePosition.y}px)`,
-                      borderRadius: `${cornerRadii.nw}px ${cornerRadii.ne}px ${cornerRadii.se}px ${cornerRadii.sw}px`,
-                    },
-                  }}
-                  onCropChange={handleCropChange}
-                  onZoomChange={handleZoomChange}
-                  onMediaLoaded={nextMediaSize => {
-                    const nextViewportSize = cropViewportRef.current?.clientWidth ?? 0
-                    setMediaSize(nextMediaSize)
-                    setViewportSize(nextViewportSize)
-                    if (preserveViewportOnMediaLoadRef.current) {
-                      preserveViewportOnMediaLoadRef.current = false
-                      setCrop(current =>
-                        constrainMediaPositionToViewport(
-                          current,
-                          nextMediaSize.width,
-                          nextMediaSize.height,
-                          rotation,
-                          zoom,
-                          nextViewportSize,
-                          nextViewportSize
-                        )
-                      )
-                      return
+              className="relative mx-auto aspect-square w-full bg-muted/60"
+              style={
+                !usingCustomColor && colorId === 'none'
+                  ? {
+                      backgroundColor: '#cbd5e1',
+                      backgroundImage: ICON_TRANSPARENT_CHECKERBOARD,
+                      backgroundSize: '16px 16px',
                     }
-                    const nextCropSize =
-                      nextViewportSize > 0
-                        ? { width: nextViewportSize, height: nextViewportSize }
-                        : getImageBoundedSquareCropSize(nextMediaSize.width, nextMediaSize.height)
-                    setZoom(1)
-                    setCrop(INITIAL_CROP)
-                    setCropFramePosition(INITIAL_CROP)
-                    setCornerRadii(INITIAL_CORNER_RADII)
-                    setCornerRadiiLinked(true)
-                    initialCropSizeRef.current = nextCropSize
-                    setCropSize(nextCropSize ?? undefined)
-                  }}
-                  mediaProps={{ draggable: false, alt: '' }}
-                  classes={{ cropAreaClassName: '!border-2 !border-foreground' }}
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center">
-                  <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
-                </div>
-              )}
-            </div>
-
-            {cropSize ? (
+                  : { backgroundColor: visibleBackgroundColor ?? undefined }
+              }
+            >
               <div
-                className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
-                style={{
-                  width: cropSize.width,
-                  height: cropSize.height,
-                  left: `calc(50% + ${cropFramePosition.x}px)`,
-                  top: `calc(50% + ${cropFramePosition.y}px)`,
-                  borderRadius: `${cornerRadii.nw}px ${cornerRadii.ne}px ${cornerRadii.se}px ${cornerRadii.sw}px`,
-                }}
+                ref={cropViewportRef}
+                className="relative isolate h-full w-full overflow-hidden [contain:paint]"
               >
-                {CROP_MOVE_EDGES.map(className => (
-                  <span
-                    key={className}
-                    aria-hidden="true"
-                    className={cn('pointer-events-auto absolute touch-none cursor-move', className)}
-                    onPointerDown={startCropFrameMove}
-                    onPointerMove={continueCropFrameMove}
-                    onPointerUp={finishCropFrameMove}
-                    onPointerCancel={finishCropFrameMove}
+                {mediaObjectFit ? (
+                  <Cropper
+                    image={editorSource}
+                    crop={crop}
+                    cropSize={cropSize}
+                    zoom={zoom}
+                    rotation={rotation}
+                    aspect={1}
+                    minZoom={ICON_CROP_MIN_ZOOM}
+                    maxZoom={ICON_CROP_MAX_ZOOM}
+                    objectFit={mediaObjectFit}
+                    showGrid
+                    zoomWithScroll
+                    onWheelRequest={handleCropWheelRequest}
+                    restrictPosition={false}
+                    style={{
+                      cropAreaStyle: {
+                        left: `calc(50% + ${cropFramePosition.x}px)`,
+                        top: `calc(50% + ${cropFramePosition.y}px)`,
+                        borderRadius: `${cornerRadii.nw}px ${cornerRadii.ne}px ${cornerRadii.se}px ${cornerRadii.sw}px`,
+                      },
+                    }}
+                    onCropChange={handleCropChange}
+                    onZoomChange={handleZoomChange}
+                    onMediaLoaded={nextMediaSize => {
+                      const nextViewportSize = cropViewportRef.current?.clientWidth ?? 0
+                      setMediaSize(nextMediaSize)
+                      setViewportSize(nextViewportSize)
+                      if (preserveViewportOnMediaLoadRef.current) {
+                        preserveViewportOnMediaLoadRef.current = false
+                        setCrop(current =>
+                          constrainMediaPositionToViewport(
+                            current,
+                            nextMediaSize.width,
+                            nextMediaSize.height,
+                            rotation,
+                            zoom,
+                            nextViewportSize,
+                            nextViewportSize
+                          )
+                        )
+                        return
+                      }
+                      const nextCropSize =
+                        nextViewportSize > 0
+                          ? { width: nextViewportSize, height: nextViewportSize }
+                          : getImageBoundedSquareCropSize(nextMediaSize.width, nextMediaSize.height)
+                      setZoom(1)
+                      setCrop(INITIAL_CROP)
+                      setCropFramePosition(INITIAL_CROP)
+                      setCornerRadii(INITIAL_CORNER_RADII)
+                      setCornerRadiiLinked(true)
+                      initialCropSizeRef.current = nextCropSize
+                      setCropSize(nextCropSize ?? undefined)
+                    }}
+                    mediaProps={{ draggable: false, alt: '' }}
+                    classes={{ cropAreaClassName: '!border-2 !border-foreground' }}
                   />
-                ))}
-                {CROP_RESIZE_POINTS.map(({ handle, className }) => (
-                  <button
-                    key={handle}
-                    type="button"
-                    aria-label={translate('调整裁剪框大小')}
-                    title={translate('调整裁剪框大小')}
-                    onKeyDown={event => handleResizeKeyDown(handle, event)}
-                    onPointerDown={event => startCropResize(handle, event)}
-                    onPointerMove={continueCropResize}
-                    onPointerUp={finishCropResize}
-                    onPointerCancel={finishCropResize}
-                    disabled={applying}
-                    className={cn(
-                      'pointer-events-auto absolute z-10 h-3 w-3 touch-none rounded-full border-2 border-background bg-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none',
-                      className
-                    )}
-                  />
-                ))}
-                {CROP_CORNER_RADIUS_POINTS.map(({ corner, className }) => {
-                  const maxInset = Math.max(5, cropSize.width / 2 - 6)
-                  const inset = Math.min(
-                    maxInset,
-                    Math.max(
-                      CORNER_RADIUS_HANDLE_MIN_INSET,
-                      cornerRadii[corner] + CORNER_RADIUS_HANDLE_MIN_INSET
-                    )
-                  )
-                  const verticalSide = corner.startsWith('n') ? 'top' : 'bottom'
-                  const horizontalSide = corner.endsWith('w') ? 'left' : 'right'
-                  const translateX = corner.endsWith('w') ? -50 : 50
-                  const translateY = corner.startsWith('n') ? -50 : 50
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+              </div>
 
-                  return (
-                    <button
-                      key={corner}
-                      type="button"
-                      aria-label={translate('调整裁剪框圆角')}
-                      title={translate('调整裁剪框圆角')}
-                      onKeyDown={event => handleCornerRadiusKeyDown(corner, event)}
-                      onPointerDown={event => startCornerRadiusResize(corner, event)}
-                      onPointerMove={continueCornerRadiusResize}
-                      onPointerUp={finishCornerRadiusResize}
-                      onPointerCancel={finishCornerRadiusResize}
-                      disabled={applying}
+              {cropSize ? (
+                <div
+                  className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
+                  style={{
+                    width: cropSize.width,
+                    height: cropSize.height,
+                    left: `calc(50% + ${cropFramePosition.x}px)`,
+                    top: `calc(50% + ${cropFramePosition.y}px)`,
+                    borderRadius: `${cornerRadii.nw}px ${cornerRadii.ne}px ${cornerRadii.se}px ${cornerRadii.sw}px`,
+                  }}
+                >
+                  {CROP_MOVE_EDGES.map(className => (
+                    <span
+                      key={className}
+                      aria-hidden="true"
                       className={cn(
-                        'pointer-events-auto absolute z-20 h-2.5 w-2.5 touch-none rounded-full border-2 border-foreground bg-background shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none',
+                        'pointer-events-auto absolute touch-none cursor-move',
                         className
                       )}
-                      style={{
-                        [verticalSide]: inset,
-                        [horizontalSide]: inset,
-                        transform: `translate(${translateX}%, ${translateY}%)`,
-                      }}
+                      onPointerDown={startCropFrameMove}
+                      onPointerMove={continueCropFrameMove}
+                      onPointerUp={finishCropFrameMove}
+                      onPointerCancel={finishCropFrameMove}
                     />
-                  )
-                })}
-              </div>
-            ) : null}
+                  ))}
+                  {CROP_RESIZE_POINTS.map(({ handle, className }) => (
+                    <button
+                      key={handle}
+                      type="button"
+                      aria-label={translate('调整裁剪框大小')}
+                      title={translate('调整裁剪框大小')}
+                      onKeyDown={event => handleResizeKeyDown(handle, event)}
+                      onPointerDown={event => startCropResize(handle, event)}
+                      onPointerMove={continueCropResize}
+                      onPointerUp={finishCropResize}
+                      onPointerCancel={finishCropResize}
+                      disabled={applying}
+                      className={cn(
+                        'pointer-events-auto absolute z-10 h-3 w-3 touch-none rounded-full border-2 border-background bg-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none',
+                        className
+                      )}
+                    />
+                  ))}
+                  {CROP_CORNER_RADIUS_POINTS.map(({ corner, className }) => {
+                    const maxInset = Math.max(5, cropSize.width / 2 - 6)
+                    const inset = Math.min(
+                      maxInset,
+                      Math.max(
+                        CORNER_RADIUS_HANDLE_MIN_INSET,
+                        cornerRadii[corner] + CORNER_RADIUS_HANDLE_MIN_INSET
+                      )
+                    )
+                    const verticalSide = corner.startsWith('n') ? 'top' : 'bottom'
+                    const horizontalSide = corner.endsWith('w') ? 'left' : 'right'
+                    const translateX = corner.endsWith('w') ? -50 : 50
+                    const translateY = corner.startsWith('n') ? -50 : 50
 
-            {extractingColor && cropSize && mediaSize ? (
-              <div
-                aria-hidden="true"
-                title={translate('点击图片提取颜色')}
-                onPointerDown={event => void handleColorSample(event)}
-                className="absolute inset-0 z-30 cursor-crosshair touch-none"
-              >
-                <span className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 whitespace-nowrap rounded-md border border-border/70 bg-background/90 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm">
-                  {samplingColor ? (
-                    <RefreshCw className="mr-1.5 inline h-3 w-3 animate-spin" />
-                  ) : (
-                    <Pipette className="mr-1.5 inline h-3 w-3" />
-                  )}
-                  {translate('点击图片提取颜色')}
-                </span>
-              </div>
-            ) : null}
+                    return (
+                      <button
+                        key={corner}
+                        type="button"
+                        aria-label={translate('调整裁剪框圆角')}
+                        title={translate('调整裁剪框圆角')}
+                        onKeyDown={event => handleCornerRadiusKeyDown(corner, event)}
+                        onPointerDown={event => startCornerRadiusResize(corner, event)}
+                        onPointerMove={continueCornerRadiusResize}
+                        onPointerUp={finishCornerRadiusResize}
+                        onPointerCancel={finishCornerRadiusResize}
+                        disabled={applying}
+                        className={cn(
+                          'pointer-events-auto absolute z-20 h-2.5 w-2.5 touch-none rounded-full border-2 border-foreground bg-background shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none',
+                          className
+                        )}
+                        style={{
+                          [verticalSide]: inset,
+                          [horizontalSide]: inset,
+                          transform: `translate(${translateX}%, ${translateY}%)`,
+                        }}
+                      />
+                    )
+                  })}
+                </div>
+              ) : null}
 
-            <IconCropImageTools
-              cornerRadiiLinked={cornerRadiiLinked}
-              imageOptimized={imageOptimized}
-              optimizing={optimizing}
+              {extractingColor && cropSize && mediaSize ? (
+                <div
+                  aria-hidden="true"
+                  title={translate('点击图片提取颜色')}
+                  onPointerDown={event => void handleColorSample(event)}
+                  className="absolute inset-0 z-30 cursor-crosshair touch-none"
+                >
+                  <span className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 whitespace-nowrap rounded-md border border-border/70 bg-background/90 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm">
+                    {samplingColor ? (
+                      <RefreshCw className="mr-1.5 inline h-3 w-3 animate-spin" />
+                    ) : (
+                      <Pipette className="mr-1.5 inline h-3 w-3" />
+                    )}
+                    {translate('点击图片提取颜色')}
+                  </span>
+                </div>
+              ) : null}
+
+              <IconCropImageTools
+                cornerRadiiLinked={cornerRadiiLinked}
+                imageOptimized={imageOptimized}
+                optimizing={optimizing}
+                disabled={applying}
+                optimizeDisabled={optimizing || !mediaSize}
+                onToggleCornerRadiiLinked={() => setCornerRadiiLinked(current => !current)}
+                onToggleImageOptimization={() => void handleOptimizeImage()}
+              />
+            </div>
+
+            <IconCropTransformControls
+              zoom={zoom}
+              minZoom={ICON_CROP_MIN_ZOOM}
+              maxZoom={ICON_CROP_MAX_ZOOM}
               disabled={applying}
-              optimizeDisabled={optimizing || !mediaSize}
-              onToggleCornerRadiiLinked={() => setCornerRadiiLinked(current => !current)}
-              onToggleImageOptimization={() => void handleOptimizeImage()}
+              onRotate={rotateBy}
+              onReset={resetCrop}
+              onZoom={changeZoom}
             />
+
+            <IconCropBackgroundControls
+              colorId={colorId}
+              customColor={customColor}
+              usingCustomColor={usingCustomColor}
+              extractingColor={extractingColor}
+              samplingColor={samplingColor}
+              disabled={applying}
+              extractionDisabled={!cropSize || !mediaSize}
+              onToggleExtraction={toggleColorExtraction}
+              onSelectPreset={selectPresetColor}
+              onSelectCustomColor={selectCustomColor}
+            />
+
+            {error ? (
+              <p role="alert" className="mt-3 text-xs leading-5 text-destructive">
+                {error}
+              </p>
+            ) : null}
+
+            <Button
+              type="button"
+              onClick={() => void handleApply()}
+              disabled={applying || optimizing || !cropSize || !mediaSize}
+              className="mt-6 w-full"
+            >
+              {applying ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Crop className="h-4 w-4" />
+              )}
+              {applying ? translate('正在生成...') : translate('完成')}
+            </Button>
           </div>
-
-          <IconCropTransformControls
-            zoom={zoom}
-            minZoom={ICON_CROP_MIN_ZOOM}
-            maxZoom={ICON_CROP_MAX_ZOOM}
-            disabled={applying}
-            onRotate={rotateBy}
-            onReset={resetCrop}
-            onZoom={changeZoom}
-          />
-
-          <IconCropBackgroundControls
-            colorId={colorId}
-            customColor={customColor}
-            usingCustomColor={usingCustomColor}
-            extractingColor={extractingColor}
-            samplingColor={samplingColor}
-            disabled={applying}
-            extractionDisabled={!cropSize || !mediaSize}
-            onToggleExtraction={toggleColorExtraction}
-            onSelectPreset={selectPresetColor}
-            onSelectCustomColor={selectCustomColor}
-          />
-
-          {error ? (
-            <p role="alert" className="mt-3 text-xs leading-5 text-destructive">
-              {error}
-            </p>
-          ) : null}
-
-          <Button
-            type="button"
-            onClick={() => void handleApply()}
-            disabled={applying || optimizing || !cropSize || !mediaSize}
-            className="mt-6 w-full"
-          >
-            {applying ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
-            ) : (
-              <Crop className="h-4 w-4" />
-            )}
-            {applying ? translate('正在生成...') : translate('完成')}
-          </Button>
-        </div>
+        </NativeScrollArea>
       </div>
     </div>,
     document.body
