@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -489,6 +490,11 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       transcript.scrollTop = transcript.scrollHeight
       setShowScrollToBottom(false)
     }, [activeSession?.messages.length, phase, streamChunks.length, agentEvents.length])
+
+    useLayoutEffect(() => {
+      if (!open || !visible) return
+      scrollTranscriptToBottom('auto')
+    }, [activeSessionId, open, scrollTranscriptToBottom, visible])
 
     const handleNewSession = useCallback(() => {
       shouldStickToBottomRef.current = true
