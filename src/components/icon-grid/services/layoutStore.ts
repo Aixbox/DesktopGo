@@ -91,13 +91,7 @@ const normalizePersistedItemCoordinates = (
   return result.length > 0 ? result : undefined
 }
 
-export const readLayout = async (
-  scope: LaunchpadLayoutScope = 'paged'
-): Promise<PersistedLayout | null> => {
-  try {
-    const raw = await invoke<string | null>('get_layout_payload', { key: getLayoutKey(scope) })
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as
+type PersistedLayoutPayload =
       | { version: 1; items: PersistedItem[] }
       | { version: 2; items: PersistedItem[]; slots: unknown[] }
       | { version: 3; items: PersistedItem[]; slots: unknown[]; dockKeys: unknown[] }
@@ -151,82 +145,123 @@ export const readLayout = async (
           geometryKey?: unknown
           scrollGroups?: unknown
         }
-    if (!Array.isArray(parsed.items)) return null
-    if (parsed.version === 1) return { items: parsed.items, slots: null, dockKeys: [] }
-    if (parsed.version === 2 && Array.isArray(parsed.slots)) {
-      return {
-        items: parsed.items,
-        slots: parsed.slots.map(slot => (typeof slot === 'string' ? slot : null)),
-        dockKeys: [],
-      }
+
+export const parsePersistedLayout = (raw: string): PersistedLayout | null => {
+  const parsed = JSON.parse(raw) as unknown
+  if (!parsed || typeof parsed !== 'object') return null
+
+  const payload = parsed as PersistedLayoutPayload
+  if (!Array.isArray(payload.items)) return null
+  if (payload.version === 1) return { items: payload.items, slots: null, dockKeys: [] }
+  if (payload.version === 2 && Array.isArray(payload.slots)) {
+    return {
+      items: payload.items,
+      slots: payload.slots.map(slot => (typeof slot === 'string' ? slot : null)),
+      dockKeys: [],
     }
-    if (
-      (parsed.version !== 3 &&
-        parsed.version !== 4 &&
-        parsed.version !== 5 &&
-        parsed.version !== 6 &&
-        parsed.version !== 7 &&
-        parsed.version !== 8 &&
-        parsed.version !== 9) ||
-      !Array.isArray(parsed.slots) ||
-      !Array.isArray(parsed.dockKeys)
-    ) {
-      return null
+  }
+  if (
+    (payload.version !== 3 &&
+      payload.version !== 4 &&
+      payload.version !== 5 &&
+      payload.version !== 6 &&
+      payload.version !== 7 &&
+      payload.version !== 8 &&
+      payload.version !== 9) ||
+    !Array.isArray(payload.slots) ||
+    !Array.isArray(payload.dockKeys)
+  ) {
+    return null
+  }
+  const result: PersistedLayout = {
+    items: payload.items,
+    slots: payload.slots.map(slot => (typeof slot === 'string' ? slot : null)),
+    dockKeys: payload.dockKeys.map(key => (typeof key === 'string' ? key : null)),
+  }
+  if (payload.version === 5) {
+    if (typeof payload.pageSize === 'number' && payload.pageSize > 0)
+      result.pageSize = payload.pageSize
+    if (typeof payload.columns === 'number' && payload.columns > 0) result.columns = payload.columns
+  }
+  if (payload.version === 6) {
+    if (typeof payload.pageSize === 'number' && payload.pageSize > 0)
+      result.pageSize = payload.pageSize
+    if (typeof payload.columns === 'number' && payload.columns > 0) result.columns = payload.columns
+    result.coordinates = normalizePersistedItemCoordinates(payload.coordinates)
+  }
+  if (payload.version === 7 || payload.version === 8 || payload.version === 9) {
+    if (typeof payload.pageSize === 'number' && payload.pageSize > 0)
+      result.pageSize = payload.pageSize
+    if (typeof payload.columns === 'number' && payload.columns > 0) result.columns = payload.columns
+    result.coordinates = normalizePersistedItemCoordinates(payload.coordinates)
+    if (typeof payload.geometryKey === 'string' && payload.geometryKey.length > 0) {
+      result.geometryKey = payload.geometryKey
     }
-    const result: PersistedLayout = {
-      items: parsed.items,
-      slots: parsed.slots.map(slot => (typeof slot === 'string' ? slot : null)),
-      dockKeys: parsed.dockKeys.map(key => (typeof key === 'string' ? key : null)),
+    if ((payload.version === 8 || payload.version === 9) && Array.isArray(payload.scrollGroups)) {
+      const validIcons = new Set<ScrollGroupIcon>(SCROLL_GROUP_ICONS)
+      result.scrollGroups = payload.scrollGroups.flatMap((entry, index) => {
+        if (!entry || typeof entry !== 'object') return []
+        const name = 'name' in entry && typeof entry.name === 'string' ? entry.name.trim() : ''
+        const icon = 'icon' in entry && typeof entry.icon === 'string' ? entry.icon : ''
+        if (!name || !validIcons.has(icon as ScrollGroupIcon)) return []
+        const id = 'id' in entry && typeof entry.id === 'string' ? entry.id.trim() : ''
+        const itemIds =
+          'itemIds' in entry && Array.isArray(entry.itemIds)
+            ? entry.itemIds.filter((itemId: unknown): itemId is string => typeof itemId === 'string')
+            : []
+        return [
+          {
+            id: id || `scroll-group-migrated-${index + 1}`,
+            name,
+            icon: icon as ScrollGroupIcon,
+            itemIds,
+          } satisfies ScrollGroupMeta,
+        ]
+      })
+      result.scrollGroupItemsExplicit = payload.version === 9
     }
-    if (parsed.version === 5) {
-      if (typeof parsed.pageSize === 'number' && parsed.pageSize > 0)
-        result.pageSize = parsed.pageSize
-      if (typeof parsed.columns === 'number' && parsed.columns > 0) result.columns = parsed.columns
-    }
-    if (parsed.version === 6) {
-      if (typeof parsed.pageSize === 'number' && parsed.pageSize > 0)
-        result.pageSize = parsed.pageSize
-      if (typeof parsed.columns === 'number' && parsed.columns > 0) result.columns = parsed.columns
-      result.coordinates = normalizePersistedItemCoordinates(parsed.coordinates)
-    }
-    if (parsed.version === 7 || parsed.version === 8 || parsed.version === 9) {
-      if (typeof parsed.pageSize === 'number' && parsed.pageSize > 0)
-        result.pageSize = parsed.pageSize
-      if (typeof parsed.columns === 'number' && parsed.columns > 0) result.columns = parsed.columns
-      result.coordinates = normalizePersistedItemCoordinates(parsed.coordinates)
-      if (typeof parsed.geometryKey === 'string' && parsed.geometryKey.length > 0) {
-        result.geometryKey = parsed.geometryKey
-      }
-      if ((parsed.version === 8 || parsed.version === 9) && Array.isArray(parsed.scrollGroups)) {
-        const validIcons = new Set<ScrollGroupIcon>(SCROLL_GROUP_ICONS)
-        result.scrollGroups = parsed.scrollGroups.flatMap((entry, index) => {
-          if (!entry || typeof entry !== 'object') return []
-          const name = 'name' in entry && typeof entry.name === 'string' ? entry.name.trim() : ''
-          const icon = 'icon' in entry && typeof entry.icon === 'string' ? entry.icon : ''
-          if (!name || !validIcons.has(icon as ScrollGroupIcon)) return []
-          const id = 'id' in entry && typeof entry.id === 'string' ? entry.id.trim() : ''
-          const itemIds =
-            'itemIds' in entry && Array.isArray(entry.itemIds)
-              ? entry.itemIds.filter(
-                  (itemId: unknown): itemId is string => typeof itemId === 'string'
-                )
-              : []
-          return [
-            {
-              id: id || `scroll-group-migrated-${index + 1}`,
-              name,
-              icon: icon as ScrollGroupIcon,
-              itemIds,
-            } satisfies ScrollGroupMeta,
-          ]
-        })
-        result.scrollGroupItemsExplicit = parsed.version === 9
-      }
-    }
-    return result
+  }
+  return result
+}
+
+export const parsePersistedLayoutStrict = (
+  raw: string,
+  scope: LaunchpadLayoutScope
+): PersistedLayout => {
+  const key = getLayoutKey(scope)
+  let layout: PersistedLayout | null
+  try {
+    layout = parsePersistedLayout(raw)
+  } catch (error) {
+    throw new Error(
+      `Unable to parse persisted layout payload for scope "${scope}" (key "${key}"): ${String(error)}`
+    )
+  }
+  if (!layout) {
+    throw new Error(`Invalid persisted layout payload for scope "${scope}" (key "${key}").`)
+  }
+  return layout
+}
+
+export const readLayout = async (
+  scope: LaunchpadLayoutScope = 'paged'
+): Promise<PersistedLayout | null> => {
+  try {
+    const raw = await invoke<string | null>('get_layout_payload', { key: getLayoutKey(scope) })
+    if (raw === null) return null
+    return parsePersistedLayout(raw)
   } catch {
     return null
   }
+}
+
+export const readLayoutStrict = async (
+  scope: LaunchpadLayoutScope = 'paged'
+): Promise<PersistedLayout | null> => {
+  const key = getLayoutKey(scope)
+  const raw = await invoke<string | null>('get_layout_payload', { key })
+  if (raw === null) return null
+  return parsePersistedLayoutStrict(raw, scope)
 }
 
 export const writeLayout = async (

@@ -937,6 +937,7 @@ export function Launchpad() {
           <AiOrganizePanel
             ref={aiOrganizePanelRef}
             visible={isAiOrganizeSidebarOpen}
+            layoutViewMode={launchpadGridViewMode}
             icons={icons}
             customNames={customNames}
             onRunStateChange={setAiOrganizeRunState}

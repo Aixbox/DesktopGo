@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import { translate } from '@/lib/i18n'
 import { useToast } from '@/components/ui/toast'
-import { applyAiGroupsToLayout, type AiGroup } from '@/lib/aiOrganize'
+import type { AiGroup } from '@/lib/aiOrganize'
 import {
   createAiOrganizeId,
   createAiOrganizeSession,
@@ -32,12 +32,6 @@ import {
   type AiOrganizeSession,
   type AiOrganizeSnapshot,
 } from '@/lib/aiOrganizeSessions'
-import {
-  hydrateItems,
-  readLayout,
-  writeLayout,
-  writePersistedLayout,
-} from '@/components/icon-grid/services/layoutStore'
 import type { DesktopIcon } from '@/types'
 import { AiOrganizeComposer } from './AiOrganizeComposer'
 import { AiOrganizeHistoryMenu } from './AiOrganizeHistoryMenu'
@@ -58,6 +52,8 @@ import { useAiOrganizeExecution } from './useAiOrganizeExecution'
 import { useQueuedPrompts } from './useQueuedPrompts'
 import type { AiOrganizePanelHandle, AiOrganizePanelProps } from './aiOrganizePanelTypes'
 import { useAiOrganizeRunState } from './useAiOrganizeRunState'
+import { useAiOrganizeLayoutPreview } from './useAiOrganizeLayoutPreview'
+import { isAiOrganizePreviewRefreshError } from './useAiOrganizeLayoutPreview.helpers'
 
 export type { AiOrganizePanelHandle } from './aiOrganizePanelTypes'
 export type { AiOrganizePanelRunState } from './useAiOrganizeRunState'
@@ -67,6 +63,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
     {
       open = true,
       visible = open,
+      layoutViewMode,
       icons,
       customNames,
       onRunStateChange,
@@ -106,15 +103,12 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
     const historyMenuRef = useRef<HTMLDivElement | null>(null)
     const presetsButtonRef = useRef<HTMLButtonElement | null>(null)
     const presetsMenuRef = useRef<HTMLDivElement | null>(null)
-    const previewBaselineLayoutRef = useRef<Awaited<ReturnType<typeof readLayout>> | null>(null)
-    const previewBaselineCapturedRef = useRef(false)
-    const previewDirtyRef = useRef(false)
-    const appliedRef = useRef(false)
-    const onPreviewedRef = useRef(onPreviewed)
-
-    useEffect(() => {
-      onPreviewedRef.current = onPreviewed
-    }, [onPreviewed])
+    const {
+      applyAiOrganizeLayout,
+      applyLayoutPreview,
+      restoreLayoutPreview,
+      markApplied,
+    } = useAiOrganizeLayoutPreview({ icons, layoutViewMode, onPreviewed })
 
     useEffect(() => {
       if (!historyExpanded && !presetsExpanded) return
@@ -359,38 +353,34 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       [activeSession, activateSnapshot, commitSession]
     )
 
-    const applyLayoutPreview = useCallback(
-      async (aiGroups: AiGroup[]) => {
-        if (!previewBaselineCapturedRef.current) {
-          previewBaselineLayoutRef.current = await readLayout()
-          previewBaselineCapturedRef.current = true
-        }
+    const handleLayoutPreview = useCallback(
+      (aiGroups: AiGroup[]) => {
+        void applyLayoutPreview(aiGroups).catch(error => {
+          if (isAiOrganizePreviewRefreshError(error)) {
+            console.error('Failed to refresh AI organize layout preview:', error.cause)
+            toast.error(translate('预览已写入但刷新失败，可关闭以恢复布局。'), {
+              key: 'ai-organize-layout-preview-refresh',
+              title: translate('AI 智能整理'),
+            })
+            return
+          }
 
-        const baselineLayout = previewBaselineLayoutRef.current
-        const currentItems = hydrateItems(icons, baselineLayout?.items ?? null)
-        const nextItems = applyAiGroupsToLayout(currentItems, aiGroups)
-        await writeLayout(nextItems, [], [])
-        previewDirtyRef.current = true
-        await onPreviewedRef.current?.()
+          console.error('Failed to create AI organize layout preview:', error)
+          toast.error(translate('无法创建布局预览，请重试。'), {
+            key: 'ai-organize-layout-preview-write',
+            title: translate('AI 智能整理'),
+          })
+        })
       },
-      [icons]
+      [applyLayoutPreview, toast]
     )
 
-    const restoreLayoutPreview = useCallback(async () => {
-      if (!previewDirtyRef.current || appliedRef.current) return
-      await writePersistedLayout(previewBaselineLayoutRef.current)
-      previewDirtyRef.current = false
-      previewBaselineLayoutRef.current = null
-      previewBaselineCapturedRef.current = false
-      await onPreviewedRef.current?.()
-    }, [])
-
     const handlePreviewSnapshot = useCallback(
-      async (snapshot: AiOrganizeSnapshot) => {
+      (snapshot: AiOrganizeSnapshot) => {
         handleSelectSnapshot(snapshot)
-        await applyLayoutPreview(snapshot.groups)
+        handleLayoutPreview(snapshot.groups)
       },
-      [applyLayoutPreview, handleSelectSnapshot]
+      [handleLayoutPreview, handleSelectSnapshot]
     )
 
     const insertComposerCommand = useCallback(
@@ -530,6 +520,21 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       setHistoryExpanded(false)
     }, [resetExecution])
 
+    const restoreLayoutPreviewAfterClose = useCallback(() => {
+      void restoreLayoutPreview().catch(error => {
+        console.error('Failed to restore AI organize layout preview:', error)
+        toast.error(translate('无法恢复 AI 整理预览，布局未被重置。'), {
+          key: 'ai-organize-layout-restore',
+          title: translate('AI 智能整理'),
+        })
+      })
+    }, [restoreLayoutPreview, toast])
+
+    useEffect(() => {
+      if (open && visible) return
+      restoreLayoutPreviewAfterClose()
+    }, [open, restoreLayoutPreviewAfterClose, visible])
+
     useEffect(() => {
       if (!open) return
 
@@ -561,7 +566,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
 
       return () => {
         active = false
-        void restoreLayoutPreview()
+        restoreLayoutPreviewAfterClose()
         setGroups([])
         sessionsRef.current = []
         activeSessionIdRef.current = null
@@ -575,9 +580,8 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
         setComposerValue('')
         setComposerCommand(null)
         setPresetsExpanded(false)
-        appliedRef.current = false
       }
-    }, [activateSessionOnly, open, restoreLayoutPreview])
+    }, [activateSessionOnly, open, restoreLayoutPreviewAfterClose])
 
     const handleRenameGroup = (id: string, name: string) => {
       const nextGroups = groups.map(group =>
@@ -586,7 +590,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       setGroups(nextGroups)
       persistCurrentPreview(nextGroups)
       if (phase === 'preview') {
-        void applyLayoutPreview(toAiGroups(nextGroups))
+        handleLayoutPreview(toAiGroups(nextGroups))
       }
     }
 
@@ -597,7 +601,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       setGroups(nextGroups)
       persistCurrentPreview(nextGroups)
       if (phase === 'preview') {
-        void applyLayoutPreview(toAiGroups(nextGroups))
+        handleLayoutPreview(toAiGroups(nextGroups))
       }
     }
 
@@ -606,7 +610,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       setGroups(nextGroups)
       persistCurrentPreview(nextGroups)
       if (phase === 'preview') {
-        void applyLayoutPreview(toAiGroups(nextGroups))
+        handleLayoutPreview(toAiGroups(nextGroups))
       }
     }
 
@@ -701,20 +705,14 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
 
       setPhase('applying')
       try {
-        const persisted = await readLayout()
-        const currentItems = hydrateItems(icons, persisted?.items ?? null)
         const aiGroups: AiGroup[] = applicableGroups.map(group => ({
           folder_name: group.folderName,
           icon_keys: group.iconKeys,
           folder_size: group.folderSize,
         }))
-        const nextItems = applyAiGroupsToLayout(currentItems, aiGroups)
         // 与「重置布局」一致：清空 slots/dock，交给 IconGrid 重新 hydrate。
-        await writeLayout(nextItems, [], [])
-        appliedRef.current = true
-        previewDirtyRef.current = false
-        previewBaselineLayoutRef.current = null
-        previewBaselineCapturedRef.current = false
+        await applyAiOrganizeLayout(aiGroups)
+        markApplied()
         if (runId) {
           await invoke('ai_organize_record_apply', { runId, groups: aiGroups }).catch(e => {
             console.warn('Failed to record AI organize apply:', e)
@@ -735,7 +733,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
         setError(String(e))
         setPhase('preview')
       }
-    }, [applicableGroups, icons, onApplied, onClose, runId, toast])
+    }, [applicableGroups, applyAiOrganizeLayout, markApplied, onApplied, onClose, runId, toast])
 
     useImperativeHandle(
       ref,

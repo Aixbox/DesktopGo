@@ -1,9 +1,10 @@
-import type { DesktopIcon } from '@/types'
+import type { DesktopIcon, LaunchpadGridViewMode } from '@/types'
 import type { AiOrganizePanelRunState } from './useAiOrganizeRunState'
 
 export interface AiOrganizePanelProps {
   open?: boolean
   visible?: boolean
+  layoutViewMode: LaunchpadGridViewMode
   icons: DesktopIcon[]
   customNames: Record<string, string>
   onRunStateChange?: (state: AiOrganizePanelRunState) => void

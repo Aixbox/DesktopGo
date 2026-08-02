@@ -19,7 +19,7 @@ interface AiOrganizeSnapshotPreviewProps {
   phase: AiOrganizePhase
   iconByKey: Map<string, DesktopIcon>
   resolveIconName: (key: string) => string
-  onPreviewSnapshot: (snapshot: AiOrganizeSnapshot) => void | Promise<void>
+  onPreviewSnapshot: (snapshot: AiOrganizeSnapshot) => void
   onInsertEditCommand: (snapshot: AiOrganizeSnapshot) => void | Promise<void>
   onExitEditSnapshot: (snapshotId: string) => void
   onRenameGroup: (groupId: string, name: string) => void
@@ -74,7 +74,7 @@ export function AiOrganizeSnapshotPreview({
             <>
               <button
                 type="button"
-                onClick={() => void onPreviewSnapshot(snapshot)}
+                onClick={() => onPreviewSnapshot(snapshot)}
                 disabled={previewDisabled}
                 className="rounded-md border border-border/75 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >

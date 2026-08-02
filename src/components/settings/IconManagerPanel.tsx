@@ -21,6 +21,7 @@ import type {
   IconManagerViewMode,
   IconMutationTarget,
   InvalidIconEntry,
+  LaunchpadGridViewMode,
 } from '@/types'
 import {
   RefreshCw,
@@ -73,6 +74,8 @@ export function IconManagerPanel() {
   const [searchKeyword, setSearchKeyword] = useState('')
   const [visibilityFilter, setVisibilityFilter] = useState<IconVisibilityFilter>('all')
   const [aiOrganizeOpen, setAiOrganizeOpen] = useState(false)
+  const [aiOrganizeLayoutViewMode, setAiOrganizeLayoutViewMode] =
+    useState<LaunchpadGridViewMode | null>(null)
   const [customNames, setCustomNames] = useState<Record<string, string>>({})
   const toast = useToast()
 
@@ -97,6 +100,9 @@ export function IconManagerPanel() {
     void getSetting('iconManagerViewMode')
       .then(setViewMode)
       .catch(e => console.error('Failed to load icon manager view mode:', e))
+    void getSetting('launchpadGridViewMode')
+      .then(setAiOrganizeLayoutViewMode)
+      .catch(e => console.error('Failed to load launchpad grid view mode:', e))
     void invoke<IconManagerItem[]>('get_icon_manager_items', { iconSize: 48 })
       .then(setAllIcons)
       .catch(e => {
@@ -146,6 +152,21 @@ export function IconManagerPanel() {
   const handleIconCreated = async () => {
     await refreshIconManagerList()
     await notifyMainWindow()
+  }
+
+  const handleOpenAiOrganize = () => {
+    void getSetting('launchpadGridViewMode')
+      .then(layoutViewMode => {
+        setAiOrganizeLayoutViewMode(layoutViewMode)
+        setAiOrganizeOpen(true)
+      })
+      .catch(error => {
+        console.error('Failed to load launchpad grid view mode:', error)
+        toast.error(translate('无法读取启动台布局模式，请稍后重试。'), {
+          key: 'ai-organize-layout-mode',
+          title: translate('AI 智能整理'),
+        })
+      })
   }
 
   const undoVisibilityMutation = async (
@@ -386,7 +407,7 @@ export function IconManagerPanel() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setAiOrganizeOpen(true)}
+                onClick={handleOpenAiOrganize}
                 disabled={controlsDisabled || allIcons.length === 0}
               >
                 <Bot className="h-3.5 w-3.5" />
@@ -780,14 +801,17 @@ export function IconManagerPanel() {
         </div>
       ) : null}
 
-      <AiOrganizePanel
-        open={aiOrganizeOpen}
-        icons={allIcons.filter(icon => !icon.hidden)}
-        customNames={customNames}
-        onClose={() => setAiOrganizeOpen(false)}
-        onPreviewed={notifyMainWindow}
-        onApplied={notifyMainWindow}
-      />
+      {aiOrganizeLayoutViewMode ? (
+        <AiOrganizePanel
+          open={aiOrganizeOpen}
+          layoutViewMode={aiOrganizeLayoutViewMode}
+          icons={allIcons.filter(icon => !icon.hidden)}
+          customNames={customNames}
+          onClose={() => setAiOrganizeOpen(false)}
+          onPreviewed={notifyMainWindow}
+          onApplied={notifyMainWindow}
+        />
+      ) : null}
     </>
   )
 }
