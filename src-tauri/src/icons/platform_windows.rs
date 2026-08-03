@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use super::search_icon_plan::is_special_shell_path;
+
 pub(super) fn get_dpi_scale() -> f64 {
     unsafe {
         let hdc = windows::Win32::Graphics::Gdi::GetDC(None);
@@ -10,11 +12,6 @@ pub(super) fn get_dpi_scale() -> f64 {
         windows::Win32::Graphics::Gdi::ReleaseDC(None, hdc);
         dpi as f64 / 96.0
     }
-}
-
-#[cfg(windows)]
-pub(super) fn is_special_shell_path(path: &str) -> bool {
-    super::search_icon_plan::is_shell_namespace_path(path)
 }
 
 #[cfg(windows)]

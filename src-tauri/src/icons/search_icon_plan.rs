@@ -47,10 +47,17 @@ const OWNED_ICON_EXTENSIONS: &[&str] = &[
 /// Picture formats whose own content is the better icon at list sizes.
 const THUMBNAIL_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff"];
 
-/// Control panel style entries are addressed by CLSID instead of by file path.
-pub(super) fn is_shell_namespace_path(path: &str) -> bool {
+/// Control panel style entries are addressed by one CLSID instead of by a file path.
+pub(crate) fn is_special_shell_path(path: &str) -> bool {
     let trimmed = path.trim();
-    trimmed.starts_with("::{") && trimmed.ends_with('}')
+    let Some(guid) = trimmed
+        .strip_prefix("::{")
+        .and_then(|value| value.strip_suffix('}'))
+    else {
+        return false;
+    };
+
+    uuid::Uuid::parse_str(guid).is_ok()
 }
 
 /// Lowercase extension without the dot; empty when the entry has none.
@@ -64,7 +71,7 @@ pub(super) fn icon_extension(path: &str) -> String {
 
 pub(super) fn plan_search_icon(path: &str, is_folder: bool) -> SearchIconSource {
     let trimmed = path.trim();
-    if is_shell_namespace_path(trimmed) {
+    if is_special_shell_path(trimmed) {
         return SearchIconSource::ShellNamespace(trimmed.to_lowercase());
     }
     if is_folder {
@@ -98,7 +105,7 @@ pub(super) fn extension_lookup_name(extension: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        extension_lookup_name, icon_extension, is_shell_namespace_path, plan_search_icon,
+        extension_lookup_name, icon_extension, is_special_shell_path, plan_search_icon,
         SearchIconSource,
     };
 
@@ -109,11 +116,18 @@ mod tests {
     }
 
     #[test]
-    fn recognizes_shell_namespace_entries() {
-        assert!(is_shell_namespace_path(
+    fn recognizes_only_valid_shell_namespace_entries() {
+        assert!(is_special_shell_path(
             "::{20D04FE0-3AEA-1069-A2D8-08002B30309D}"
         ));
-        assert!(!is_shell_namespace_path("C:\\Users\\demo\\notes.txt"));
+        assert!(is_special_shell_path(
+            "::{645ff040-5081-101b-9f08-00aa002f954e}"
+        ));
+        assert!(!is_special_shell_path("::{not-a-guid}"));
+        assert!(!is_special_shell_path(
+            "::{20D04FE0-3AEA-1069-A2D8-08002B30309D}\\child"
+        ));
+        assert!(!is_special_shell_path("C:\\Users\\demo\\notes.txt"));
     }
 
     #[test]

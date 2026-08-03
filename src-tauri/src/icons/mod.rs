@@ -18,6 +18,7 @@ pub use models::{
 /// `.lnk` 目标解析。图标提取之外，`crate::shortcut_target` 也要用它做搜索去重。
 #[cfg(windows)]
 pub(crate) use platform_windows::resolve_lnk;
+pub(crate) use search_icon_plan::is_special_shell_path;
 pub use service::{
     create_icon_entry, delete_icons, get_custom_icon_source, get_icon_edit_source,
     get_icon_manager_items, get_icons, get_path_icon_base64, get_search_result_icons, hide_icons,

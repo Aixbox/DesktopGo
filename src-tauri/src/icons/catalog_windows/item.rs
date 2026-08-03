@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use crate::icons::models::{ScannedDesktopItem, SnapshotIconItem};
-use crate::icons::platform_windows::{is_special_shell_path, resolve_lnk};
+use crate::icons::platform_windows::resolve_lnk;
+use crate::icons::search_icon_plan::is_special_shell_path;
 
 use super::image::build_scanned_icon_path;
 use super::source::{IconSource, AUTOMATIC_TARGET_ICON_CACHE_VERSION};

@@ -8,7 +8,8 @@ use super::super::item::{
 };
 use super::super::source::IconSource;
 use super::super::storage::{
-    load_icon_library_snapshot, max_snapshot_display_order, write_icon_snapshot,
+    load_icon_library_snapshot, max_snapshot_display_order, remove_cached_icon_file,
+    write_icon_snapshot,
 };
 use super::entry::{create_managed_shortcut, has_duplicate_entry, NormalizedIconEntry};
 use super::import::icon_entry_dir_windows;
@@ -28,8 +29,17 @@ pub(in crate::icons) fn create_icon_entry_windows(
     }
 
     let destination_path = create_destination(app_handle, &entry)?;
-    if let Err(error) = write_created_entry(app_handle, entry, destination_path.as_deref()) {
+    let mut created_icon = None;
+    if let Err(error) = write_created_entry(
+        app_handle,
+        entry,
+        destination_path.as_deref(),
+        &mut created_icon,
+    ) {
         remove_destination(destination_path.as_deref());
+        if let Some(icon) = created_icon {
+            let _ = remove_cached_icon_file(app_handle, &icon);
+        }
         return Err(error);
     }
     Ok(ImportDroppedPathsResult {
@@ -43,7 +53,7 @@ fn create_destination(
     app_handle: &tauri::AppHandle,
     entry: &NormalizedIconEntry,
 ) -> Result<Option<PathBuf>, String> {
-    if entry.is_web {
+    if entry.writes_direct_snapshot() {
         Ok(None)
     } else {
         let entry_dir = icon_entry_dir_windows(app_handle)?;
@@ -55,6 +65,7 @@ fn write_created_entry(
     app_handle: &tauri::AppHandle,
     entry: NormalizedIconEntry,
     destination_path: Option<&Path>,
+    created_icon: &mut Option<String>,
 ) -> Result<(), String> {
     let created_scan = match destination_path {
         Some(path) => build_scanned_item_from_path(path)
@@ -69,15 +80,19 @@ fn write_created_entry(
         IconSource::Library,
         display_order,
     )?;
+    created_icon.replace(item.icon.clone());
     entry.apply_metadata(&mut item);
     apply_explicit_icon(app_handle, &entry, &mut item)?;
+    created_icon.replace(item.icon.clone());
     set_automatic_target_icon_cache(&mut item, entry_uses_automatic_target_icon(&entry));
     snapshot.icons.push(item);
     write_icon_snapshot(app_handle, IconSource::Library, &snapshot)
 }
 
 fn entry_uses_automatic_target_icon(entry: &NormalizedIconEntry) -> bool {
-    entry.icon_source == "target" && entry.generated_icon_base64.is_empty() && !entry.is_web
+    entry.icon_source == "target"
+        && entry.generated_icon_base64.is_empty()
+        && !entry.writes_direct_snapshot()
 }
 
 fn apply_explicit_icon(

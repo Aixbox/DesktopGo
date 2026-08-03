@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::icons::models::{DesktopIcon, IconManagerItem, IconSnapshot, SnapshotIconItem};
-use crate::icons::platform_windows::is_special_shell_path;
+use crate::icons::search_icon_plan::is_special_shell_path;
 
 use super::image::read_icon_file_as_data_uri;
 use super::item::{is_web_url, resolved_icon_color, resolved_icon_source};

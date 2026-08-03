@@ -41,7 +41,7 @@ pub(in crate::icons) fn update_icon_entry_windows(
     }
 
     let managed_entry_dir = icon_entry_dir_windows(app_handle)?;
-    let destination_path = if entry.is_web {
+    let destination_path = if entry.writes_direct_snapshot() {
         None
     } else {
         Some(create_managed_shortcut(&managed_entry_dir, &entry)?)
@@ -140,7 +140,9 @@ fn apply_updated_item(
 }
 
 fn entry_uses_automatic_target_icon(entry: &NormalizedIconEntry) -> bool {
-    entry.icon_source == "target" && entry.generated_icon_base64.is_empty() && !entry.is_web
+    entry.icon_source == "target"
+        && entry.generated_icon_base64.is_empty()
+        && !entry.writes_direct_snapshot()
 }
 
 fn remove_file(path: Option<&std::path::Path>) {

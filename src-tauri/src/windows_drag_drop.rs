@@ -14,19 +14,28 @@ use windows::{
     Win32::{
         Foundation::{DRAGDROP_E_INVALIDHWND, HWND, LPARAM, POINT, POINTL},
         System::{
-            Com::{CoCreateInstance, IDataObject, DVASPECT_CONTENT, FORMATETC, TYMED_HGLOBAL},
+            Com::{
+                CoCreateInstance, CoTaskMemFree, IDataObject, DVASPECT_CONTENT, FORMATETC,
+                STGMEDIUM, TYMED_HGLOBAL,
+            },
             Ole::{
-                IDropTarget, IDropTarget_Impl, RegisterDragDrop, RevokeDragDrop, CF_HDROP,
-                DROPEFFECT, DROPEFFECT_COPY, DROPEFFECT_NONE,
+                IDropTarget, IDropTarget_Impl, RegisterDragDrop, ReleaseStgMedium, RevokeDragDrop,
+                CF_HDROP, DROPEFFECT, DROPEFFECT_COPY, DROPEFFECT_NONE,
             },
             SystemServices::MODIFIERKEYS_FLAGS,
         },
         UI::{
-            Shell::{CLSID_DragDropHelper, DragQueryFileW, IDropTargetHelper, HDROP},
+            Shell::{
+                CLSID_DragDropHelper, DragQueryFileW, IDropTargetHelper, IShellItemArray,
+                SHCreateShellItemArrayFromDataObject, HDROP, SIGDN_DESKTOPABSOLUTEPARSING,
+                SIGDN_FILESYSPATH, SIGDN_NORMALDISPLAY,
+            },
             WindowsAndMessaging::EnumChildWindows,
         },
     },
 };
+
+use crate::icons::is_special_shell_path;
 
 pub const NATIVE_FILE_DRAG_EVENT: &str = "desktopgo://native-file-drag";
 
@@ -38,7 +47,30 @@ thread_local! {
 #[serde(rename_all = "camelCase")]
 struct NativeFileDragPayload {
     event_type: &'static str,
+    items: Vec<NativeFileDragItem>,
     paths: Vec<String>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeFileDragItem {
+    path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    display_name: Option<String>,
+}
+
+struct StgMediumGuard(STGMEDIUM);
+
+impl StgMediumGuard {
+    unsafe fn hdrop(&self) -> HDROP {
+        HDROP(self.0.u.hGlobal.0 as _)
+    }
+}
+
+impl Drop for StgMediumGuard {
+    fn drop(&mut self) {
+        unsafe { ReleaseStgMedium(&mut self.0) };
+    }
 }
 
 #[implement(IDropTarget)]
@@ -70,20 +102,18 @@ impl ShellDropTarget {
         }
     }
 
-    fn emit(&self, event_type: &'static str, paths: Vec<PathBuf>) {
+    fn emit(&self, event_type: &'static str, items: Vec<NativeFileDragItem>) {
         let payload = NativeFileDragPayload {
             event_type,
-            paths: paths
-                .into_iter()
-                .map(|path| path.to_string_lossy().into_owned())
-                .collect(),
+            paths: items.iter().map(|item| item.path.clone()).collect(),
+            items,
         };
         if let Err(error) = self.app.emit(NATIVE_FILE_DRAG_EVENT, payload) {
             eprintln!("Failed to emit native file drag event: {error}");
         }
     }
 
-    unsafe fn collect_paths(data_object: &IDataObject) -> Option<Vec<PathBuf>> {
+    unsafe fn collect_paths(data_object: &IDataObject) -> Option<Vec<NativeFileDragItem>> {
         let format = FORMATETC {
             cfFormat: CF_HDROP.0,
             ptd: ptr::null_mut(),
@@ -91,8 +121,8 @@ impl ShellDropTarget {
             lindex: -1,
             tymed: TYMED_HGLOBAL.0 as u32,
         };
-        let medium = data_object.GetData(&format).ok()?;
-        let hdrop = HDROP(medium.u.hGlobal.0 as _);
+        let medium = StgMediumGuard(data_object.GetData(&format).ok()?);
+        let hdrop = medium.hdrop();
         let item_count = DragQueryFileW(hdrop, 0xFFFF_FFFF, None);
         let mut paths = Vec::with_capacity(item_count as usize);
 
@@ -100,10 +130,62 @@ impl ShellDropTarget {
             let character_count = DragQueryFileW(hdrop, index, None) as usize;
             let mut path_buffer = vec![0; character_count + 1];
             DragQueryFileW(hdrop, index, Some(&mut path_buffer));
-            paths.push(OsString::from_wide(&path_buffer[..character_count]).into());
+            let path: PathBuf = OsString::from_wide(&path_buffer[..character_count]).into();
+            paths.push(NativeFileDragItem {
+                path: path.to_string_lossy().into_owned(),
+                display_name: None,
+            });
         }
 
         Some(paths)
+    }
+
+    unsafe fn collect_shell_items(data_object: &IDataObject) -> Option<Vec<NativeFileDragItem>> {
+        let shell_items: IShellItemArray =
+            SHCreateShellItemArrayFromDataObject(data_object).ok()?;
+        let item_count = shell_items.GetCount().ok()?;
+        let mut items = Vec::with_capacity(item_count as usize);
+
+        for index in 0..item_count {
+            let Ok(shell_item) = shell_items.GetItemAt(index) else {
+                continue;
+            };
+            let file_system_path = Self::shell_item_display_name(&shell_item, SIGDN_FILESYSPATH);
+            let Some(path) = file_system_path.or_else(|| {
+                Self::shell_item_display_name(&shell_item, SIGDN_DESKTOPABSOLUTEPARSING)
+                    .filter(|value| is_special_shell_path(value))
+            }) else {
+                continue;
+            };
+            items.push(NativeFileDragItem {
+                path,
+                display_name: Self::shell_item_display_name(&shell_item, SIGDN_NORMALDISPLAY),
+            });
+        }
+
+        Some(items)
+    }
+
+    unsafe fn shell_item_display_name(
+        shell_item: &windows::Win32::UI::Shell::IShellItem,
+        display_name_kind: windows::Win32::UI::Shell::SIGDN,
+    ) -> Option<String> {
+        let raw = shell_item.GetDisplayName(display_name_kind).ok()?;
+        if raw.is_null() {
+            return None;
+        }
+        let value = raw
+            .to_string()
+            .ok()
+            .filter(|value| !value.trim().is_empty());
+        CoTaskMemFree(Some(raw.0 as *const _));
+        value
+    }
+
+    unsafe fn collect_dropped_items(data_object: &IDataObject) -> Option<Vec<NativeFileDragItem>> {
+        Self::collect_shell_items(data_object)
+            .filter(|items| !items.is_empty())
+            .or_else(|| Self::collect_paths(data_object))
     }
 
     fn screen_point(point: &POINTL) -> POINT {
@@ -127,8 +209,8 @@ impl IDropTarget_Impl for ShellDropTarget_Impl {
             unsafe { *effect = DROPEFFECT_NONE };
             return Ok(());
         };
-        let paths = unsafe { ShellDropTarget::collect_paths(data_object_ref) };
-        let is_valid = paths.as_ref().is_some_and(|paths| !paths.is_empty());
+        let items = unsafe { ShellDropTarget::collect_dropped_items(data_object_ref) };
+        let is_valid = items.as_ref().is_some_and(|items| !items.is_empty());
         let cursor_effect = if is_valid {
             DROPEFFECT_COPY
         } else {
@@ -149,7 +231,7 @@ impl IDropTarget_Impl for ShellDropTarget_Impl {
                 helper.DragEnter(self.hwnd, data_object_ref, &screen_point, cursor_effect)
             };
         }
-        self.emit("enter", paths.unwrap_or_default());
+        self.emit("enter", items.unwrap_or_default());
         Ok(())
     }
 
@@ -196,13 +278,13 @@ impl IDropTarget_Impl for ShellDropTarget_Impl {
                 self.cursor_effect.set(DROPEFFECT_NONE);
                 return Ok(());
             };
-            let paths =
-                unsafe { ShellDropTarget::collect_paths(data_object_ref) }.unwrap_or_default();
+            let items = unsafe { ShellDropTarget::collect_dropped_items(data_object_ref) }
+                .unwrap_or_default();
             let screen_point = ShellDropTarget::screen_point(point);
             if let Some(helper) = &self.helper {
                 let _ = unsafe { helper.Drop(data_object_ref, &screen_point, cursor_effect) };
             }
-            self.emit("drop", paths);
+            self.emit("drop", items);
         }
 
         self.cursor_effect.set(DROPEFFECT_NONE);

@@ -6,6 +6,7 @@ use crate::icons::models::{
 use crate::icons::platform_windows::{
     create_shortcut_windows, update_shortcut_launch_options_windows,
 };
+use crate::icons::search_icon_plan::is_special_shell_path;
 use crate::icons::website::normalize_website_url;
 
 use super::super::item::{
@@ -38,6 +39,7 @@ pub(super) struct NormalizedIconEntry {
     pub icon_color: String,
     pub icon_text: String,
     pub is_web: bool,
+    pub is_special: bool,
     pub source_path: PathBuf,
     pub scanned_item: ScannedDesktopItem,
 }
@@ -93,13 +95,14 @@ impl NormalizedIconEntry {
         }
 
         let is_web = is_web_url(raw_target_path);
+        let is_special = is_special_shell_path(raw_target_path);
         let target_path_text = if is_web {
             normalize_website_url(raw_target_path)?.to_string()
         } else {
             raw_target_path.to_string()
         };
-        let launch_arguments = normalized_local_value(is_web, raw.launch_arguments);
-        let working_directory = normalized_local_value(is_web, raw.working_directory);
+        let launch_arguments = normalized_local_value(is_web || is_special, raw.launch_arguments);
+        let working_directory = normalized_local_value(is_web || is_special, raw.working_directory);
         let custom_icon_path = raw.custom_icon_path.trim().to_string();
         let generated_icon_base64 = raw.generated_icon_base64.trim().to_string();
         let icon_source = normalize_icon_source(raw.icon_source, &custom_icon_path);
@@ -112,7 +115,13 @@ impl NormalizedIconEntry {
         )?;
 
         let source_path = PathBuf::from(&target_path_text);
-        let scanned_item = scanned_item(&source_path, is_web, &display_name, &target_path_text)?;
+        let scanned_item = scanned_item(
+            &source_path,
+            is_web,
+            is_special,
+            &display_name,
+            &target_path_text,
+        )?;
         Ok(Self {
             display_name,
             launch_arguments,
@@ -128,6 +137,7 @@ impl NormalizedIconEntry {
             },
             icon_source,
             is_web,
+            is_special,
             source_path,
             scanned_item,
         })
@@ -141,6 +151,10 @@ impl NormalizedIconEntry {
         item.icon_source.clone_from(&self.icon_source);
         item.icon_color.clone_from(&self.icon_color);
         item.icon_text.clone_from(&self.icon_text);
+    }
+
+    pub fn writes_direct_snapshot(&self) -> bool {
+        self.is_web || self.is_special
     }
 }
 
@@ -172,6 +186,7 @@ fn validate_paths(
 fn scanned_item(
     source_path: &Path,
     is_web: bool,
+    is_special: bool,
     display_name: &str,
     target_path_text: &str,
 ) -> Result<ScannedDesktopItem, String> {
@@ -181,6 +196,14 @@ fn scanned_item(
             path: target_path_text.to_string(),
             target_path: target_path_text.to_string(),
             item_type: "website".to_string(),
+        });
+    }
+    if is_special {
+        return Ok(ScannedDesktopItem {
+            name: display_name.to_string(),
+            path: target_path_text.to_string(),
+            target_path: target_path_text.to_string(),
+            item_type: "special".to_string(),
         });
     }
     build_scanned_item_from_path(source_path)
@@ -284,6 +307,25 @@ mod tests {
 
         assert!(entry.is_web);
         assert_eq!(entry.scanned_item.target_path, "https://example.com/");
+        assert!(entry.launch_arguments.is_empty());
+        assert!(entry.working_directory.is_empty());
+    }
+
+    #[test]
+    fn shell_namespace_entries_keep_display_name_and_clear_local_launch_options() {
+        let mut input = create_input();
+        input.display_name = "回收站".to_string();
+        input.target_path = "::{645FF040-5081-101B-9F08-00AA002F954E}".to_string();
+        input.launch_arguments = "--ignored".to_string();
+        input.working_directory = "C:\\ignored".to_string();
+
+        let entry = NormalizedIconEntry::from_create(&input).unwrap();
+
+        assert!(entry.is_special);
+        assert!(!entry.is_web);
+        assert!(entry.writes_direct_snapshot());
+        assert_eq!(entry.scanned_item.name, "回收站");
+        assert_eq!(entry.scanned_item.item_type, "special");
         assert!(entry.launch_arguments.is_empty());
         assert!(entry.working_directory.is_empty());
     }

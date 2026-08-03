@@ -6,9 +6,9 @@ use base64::Engine;
 use crate::icons::image_data::decode_data_uri;
 use crate::icons::models::ScannedDesktopItem;
 use crate::icons::platform_windows::{
-    extract_icon_for_item, extract_special_shell_icon, get_dpi_scale, is_special_shell_path,
-    resolve_lnk,
+    extract_icon_for_item, extract_special_shell_icon, get_dpi_scale, resolve_lnk,
 };
+use crate::icons::search_icon_plan::is_special_shell_path;
 
 use super::item::{build_scanned_item_from_path, has_extension};
 use super::source::IconSource;

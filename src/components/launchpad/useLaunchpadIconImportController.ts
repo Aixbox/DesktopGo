@@ -13,7 +13,13 @@ const NATIVE_FILE_DRAG_EVENT = 'desktopgo://native-file-drag'
 
 type NativeFileDragPayload = {
   eventType: 'enter' | 'leave' | 'drop'
-  paths: string[]
+  items?: NativeFileDragItem[]
+  paths?: string[]
+}
+
+type NativeFileDragItem = {
+  path: string
+  displayName?: string
 }
 
 type ImportDroppedPathsResult = {
@@ -141,17 +147,27 @@ export function useLaunchpadIconImportController({
   }, [fetchIcons])
 
   const prepareDroppedPaths = useCallback(
-    (paths: string[]) => {
-      const uniquePaths = Array.from(new Set(paths.filter(path => path.trim())))
-      if (uniquePaths.length === 0) return
+    (items: NativeFileDragItem[]) => {
+      const uniqueItems = Array.from(
+        new Map(
+          items
+            .map(item => ({ ...item, path: item.path.trim(), displayName: item.displayName?.trim() }))
+            .filter(item => item.path)
+            .map(item => [item.path, item])
+        ).values()
+      )
+      if (uniqueItems.length === 0) return
       const requestId = ++dropPreviewRequestRef.current
       setPendingDropDrafts([])
-      const drafts = uniquePaths.map<DroppedIconDraft>(path => ({
-        key: path,
+      const drafts = uniqueItems.map<DroppedIconDraft>(item => ({
+        key: item.path,
         selected: true,
         entryKind: 'app',
-        displayName: deriveIconEntryName(path),
-        targetPath: path,
+        displayName:
+          isSpecialShellPath(item.path) && item.displayName
+            ? item.displayName
+            : deriveIconEntryName(item.path),
+        targetPath: item.path,
         launchArguments: '',
         workingDirectory: '',
         customIconPath: '',
@@ -350,7 +366,10 @@ export function useLaunchpadIconImportController({
     let disposed = false
     let unlisten: (() => void) | null = null
     let unlistenNative: (() => void) | null = null
-    const handleFileDrag = (type: 'enter' | 'over' | 'leave' | 'drop', paths: string[] = []) => {
+    const handleFileDrag = (
+      type: 'enter' | 'over' | 'leave' | 'drop',
+      items: NativeFileDragItem[] = []
+    ) => {
       if (type === 'enter' || type === 'over') {
         setIsExternalDragActive(true)
         return
@@ -360,19 +379,25 @@ export function useLaunchpadIconImportController({
         return
       }
       setIsExternalDragActive(false)
-      prepareDroppedPaths(paths)
+      prepareDroppedPaths(items)
     }
     void getCurrentWindow()
       .onDragDropEvent(event => {
         const payload = event.payload
-        handleFileDrag(payload.type, payload.type === 'drop' ? payload.paths : [])
+        handleFileDrag(
+          payload.type,
+          payload.type === 'drop' ? payload.paths.map(path => ({ path })) : []
+        )
       })
       .then(fn => {
         if (disposed) fn()
         else unlisten = fn
       })
     void listen<NativeFileDragPayload>(NATIVE_FILE_DRAG_EVENT, event => {
-      handleFileDrag(event.payload.eventType, event.payload.paths)
+      const items = event.payload.items?.length
+        ? event.payload.items
+        : (event.payload.paths ?? []).map(path => ({ path }))
+      handleFileDrag(event.payload.eventType, items)
     }).then(fn => {
       if (disposed) fn()
       else unlistenNative = fn
@@ -412,3 +437,8 @@ export function useLaunchpadIconImportController({
 }
 
 export type LaunchpadIconImportController = ReturnType<typeof useLaunchpadIconImportController>
+
+function isSpecialShellPath(path: string) {
+  const trimmed = path.trim()
+  return trimmed.startsWith('::{') && trimmed.endsWith('}')
+}
