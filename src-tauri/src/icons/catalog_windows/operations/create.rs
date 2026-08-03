@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 use crate::icons::models::{CreateIconEntryInput, ImportDroppedPathsResult, SnapshotIconItem};
 
 use super::super::image::{build_custom_icon_path, build_data_icon_path};
-use super::super::item::{build_scanned_item_from_path, build_snapshot_item};
+use super::super::item::{
+    build_scanned_item_from_path, build_snapshot_item, set_automatic_target_icon_cache,
+};
 use super::super::source::IconSource;
 use super::super::storage::{
     load_icon_library_snapshot, max_snapshot_display_order, write_icon_snapshot,
@@ -69,8 +71,13 @@ fn write_created_entry(
     )?;
     entry.apply_metadata(&mut item);
     apply_explicit_icon(app_handle, &entry, &mut item)?;
+    set_automatic_target_icon_cache(&mut item, entry_uses_automatic_target_icon(&entry));
     snapshot.icons.push(item);
     write_icon_snapshot(app_handle, IconSource::Library, &snapshot)
+}
+
+fn entry_uses_automatic_target_icon(entry: &NormalizedIconEntry) -> bool {
+    entry.icon_source == "target" && entry.generated_icon_base64.is_empty() && !entry.is_web
 }
 
 fn apply_explicit_icon(

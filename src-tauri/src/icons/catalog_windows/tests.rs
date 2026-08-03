@@ -24,6 +24,8 @@ fn snapshot_item_with_legacy_icons(paths: LegacySnapshotIconPaths) -> SnapshotIc
         item_type: "shortcut".to_string(),
         hidden: false,
         icon: String::new(),
+        automatic_target_icon_cache: false,
+        automatic_target_icon_cache_version: 0,
         legacy_icons: Some(paths),
     }
 }

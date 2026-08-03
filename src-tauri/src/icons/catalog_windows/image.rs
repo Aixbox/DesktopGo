@@ -14,7 +14,14 @@ use super::item::{build_scanned_item_from_path, has_extension};
 use super::source::IconSource;
 use super::storage::snapshot_base_dir;
 
-pub(super) const NATIVE_ICON_EXTRACT_SIZE: i32 = 512;
+pub(super) const NATIVE_ICON_EDIT_EXTRACT_SIZE: i32 = 512;
+pub(super) const LAUNCHPAD_MAX_ICON_LOGICAL_SIZE: i32 = 72;
+
+pub(super) fn native_icon_request_size(logical_size: i32, dpi_scale: f64) -> i32 {
+    (((logical_size as f64) * dpi_scale).round() as i32)
+        .max(logical_size)
+        .max(1)
+}
 
 fn image_mime_type(data: &[u8]) -> Option<&'static str> {
     match image::guess_format(data).ok()? {
@@ -154,9 +161,13 @@ pub(super) fn build_scanned_icon_path(
     id: &str,
     source: IconSource,
 ) -> Result<String, String> {
-    let requested_size = ((NATIVE_ICON_EXTRACT_SIZE as f64) * get_dpi_scale()).round() as i32;
-    let data_uri =
-        extract_icon_for_scanned_item(item, requested_size.max(NATIVE_ICON_EXTRACT_SIZE));
+    let logical_size = if item.item_type == "special" {
+        NATIVE_ICON_EDIT_EXTRACT_SIZE
+    } else {
+        LAUNCHPAD_MAX_ICON_LOGICAL_SIZE
+    };
+    let requested_size = native_icon_request_size(logical_size, get_dpi_scale());
+    let data_uri = extract_icon_for_scanned_item(item, requested_size);
     if data_uri.is_empty() {
         return Ok(String::new());
     }
@@ -193,7 +204,9 @@ pub(super) fn build_custom_icon_path(
 mod image_type_tests {
     use std::path::Path;
 
-    use super::is_supported_image_file;
+    use super::{
+        is_supported_image_file, native_icon_request_size, LAUNCHPAD_MAX_ICON_LOGICAL_SIZE,
+    };
 
     #[test]
     fn recognizes_supported_image_extensions_case_insensitively() {
@@ -207,5 +220,21 @@ mod image_type_tests {
         assert!(!is_supported_image_file(Path::new("archive.zip")));
         assert!(!is_supported_image_file(Path::new("program.exe")));
         assert!(!is_supported_image_file(Path::new("README")));
+    }
+
+    #[test]
+    fn scales_launchpad_icon_request_to_the_display_dpi() {
+        assert_eq!(
+            native_icon_request_size(LAUNCHPAD_MAX_ICON_LOGICAL_SIZE, 1.0),
+            72
+        );
+        assert_eq!(
+            native_icon_request_size(LAUNCHPAD_MAX_ICON_LOGICAL_SIZE, 1.5),
+            108
+        );
+        assert_eq!(
+            native_icon_request_size(LAUNCHPAD_MAX_ICON_LOGICAL_SIZE, 2.0),
+            144
+        );
     }
 }

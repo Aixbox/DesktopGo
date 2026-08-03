@@ -88,6 +88,10 @@ pub(crate) struct SnapshotIconItem {
     pub(crate) hidden: bool,
     #[serde(default)]
     pub(crate) icon: String,
+    #[serde(default)]
+    pub(crate) automatic_target_icon_cache: bool,
+    #[serde(default)]
+    pub(crate) automatic_target_icon_cache_version: u32,
     #[serde(default, rename = "icons", skip_serializing_if = "Option::is_none")]
     pub(crate) legacy_icons: Option<LegacySnapshotIconPaths>,
 }
@@ -170,7 +174,7 @@ pub(crate) struct ScannedDesktopItem {
 
 #[cfg(test)]
 mod tests {
-    use super::LegacySnapshotIconPaths;
+    use super::{LegacySnapshotIconPaths, SnapshotIconItem};
 
     #[test]
     fn legacy_icon_paths_default_to_no_master() {
@@ -180,5 +184,24 @@ mod tests {
         .expect("legacy icon paths should deserialize");
 
         assert!(paths.master.is_empty());
+    }
+
+    #[test]
+    fn legacy_snapshot_items_do_not_opt_into_automatic_cache_refresh() {
+        let item: SnapshotIconItem = serde_json::from_str(
+            r#"{
+                "id":"legacy-id",
+                "key":"legacy-key",
+                "name":"Legacy",
+                "path":"C:\\Legacy\\legacy.lnk",
+                "target_path":"C:\\Legacy\\legacy.exe",
+                "item_type":"shortcut",
+                "icon":"icons/library/legacy-id.img"
+            }"#,
+        )
+        .expect("legacy snapshots should deserialize");
+
+        assert!(!item.automatic_target_icon_cache);
+        assert_eq!(item.automatic_target_icon_cache_version, 0);
     }
 }

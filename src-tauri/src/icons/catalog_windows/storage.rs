@@ -1,5 +1,7 @@
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use crate::icons::models::{IconSnapshot, LegacySnapshotIconPaths};
 
@@ -155,8 +157,54 @@ pub(super) fn write_icon_snapshot(
 
     let json = serde_json::to_string_pretty(snapshot)
         .map_err(|e| format!("Failed to serialize icon snapshot: {}", e))?;
-    std::fs::write(path, json).map_err(|e| format!("Failed to write icon snapshot: {}", e))?;
-    Ok(())
+    write_snapshot_file_atomically(&path, &json)
+}
+
+fn write_snapshot_file_atomically(path: &Path, json: &str) -> Result<(), String> {
+    write_snapshot_file_atomically_with_replace(path, json, |temporary_path, snapshot_path| {
+        std::fs::rename(temporary_path, snapshot_path)
+    })
+}
+
+fn write_snapshot_file_atomically_with_replace(
+    path: &Path,
+    json: &str,
+    replace_file: impl FnOnce(&Path, &Path) -> std::io::Result<()>,
+) -> Result<(), String> {
+    let temporary_path = snapshot_temporary_path(path)?;
+    let result = (|| {
+        let mut temporary_file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary_path)
+            .map_err(|error| format!("Failed to create temporary icon snapshot: {error}"))?;
+        temporary_file
+            .write_all(json.as_bytes())
+            .map_err(|error| format!("Failed to write temporary icon snapshot: {error}"))?;
+        temporary_file
+            .sync_all()
+            .map_err(|error| format!("Failed to sync temporary icon snapshot: {error}"))?;
+        drop(temporary_file);
+
+        replace_file(&temporary_path, path)
+            .map_err(|error| format!("Failed to replace icon snapshot: {error}"))
+    })();
+
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temporary_path);
+    }
+    result
+}
+
+fn snapshot_temporary_path(path: &Path) -> Result<PathBuf, String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "Icon snapshot path has no parent directory".to_string())?;
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| "Icon snapshot path has no file name".to_string())?
+        .to_string_lossy();
+    Ok(parent.join(format!(".{file_name}.{}.tmp", uuid::Uuid::new_v4())))
 }
 
 pub(super) fn remove_cached_icon_file(
@@ -200,4 +248,73 @@ pub(super) fn load_icon_library_snapshot(
     };
     write_icon_snapshot(app_handle, IconSource::Library, &snapshot)?;
     Ok(snapshot)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::io::{Error, ErrorKind};
+    use std::path::PathBuf;
+
+    use super::{write_snapshot_file_atomically, write_snapshot_file_atomically_with_replace};
+
+    fn test_directory() -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "desktopgo-icon-snapshot-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&path).expect("create test snapshot directory");
+        path
+    }
+
+    #[test]
+    fn atomically_replaces_a_snapshot_after_writing_the_temporary_file() {
+        let directory = test_directory();
+        let snapshot_path = directory.join("icons.json");
+        fs::write(&snapshot_path, "old snapshot").expect("write original snapshot");
+
+        write_snapshot_file_atomically(&snapshot_path, "new snapshot")
+            .expect("replace snapshot atomically");
+
+        assert_eq!(
+            fs::read_to_string(&snapshot_path).expect("read replaced snapshot"),
+            "new snapshot"
+        );
+        assert_eq!(
+            fs::read_dir(&directory)
+                .expect("read snapshot directory")
+                .count(),
+            1
+        );
+        fs::remove_dir_all(directory).expect("remove test snapshot directory");
+    }
+
+    #[test]
+    fn keeps_the_existing_snapshot_and_removes_temp_file_when_replace_fails() {
+        let directory = test_directory();
+        let snapshot_path = directory.join("icons.json");
+        fs::write(&snapshot_path, "old snapshot").expect("write original snapshot");
+
+        let error =
+            write_snapshot_file_atomically_with_replace(&snapshot_path, "new snapshot", |_, _| {
+                Err(Error::new(
+                    ErrorKind::PermissionDenied,
+                    "test replacement failure",
+                ))
+            })
+            .expect_err("replacement failure should be returned");
+
+        assert!(error.contains("Failed to replace icon snapshot"));
+        assert_eq!(
+            fs::read_to_string(&snapshot_path).expect("read original snapshot"),
+            "old snapshot"
+        );
+        assert_eq!(
+            fs::read_dir(&directory)
+                .expect("read snapshot directory")
+                .count(),
+            1
+        );
+        fs::remove_dir_all(directory).expect("remove test snapshot directory");
+    }
 }

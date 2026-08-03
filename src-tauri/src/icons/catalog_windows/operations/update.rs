@@ -7,7 +7,9 @@ use crate::icons::models::{
 use super::super::image::{
     build_custom_icon_path, build_data_icon_path, build_scanned_icon_path, icon_file_rel_path,
 };
-use super::super::item::{build_scanned_item_from_path, stable_item_key};
+use super::super::item::{
+    build_scanned_item_from_path, set_automatic_target_icon_cache, stable_item_key,
+};
 use super::super::source::IconSource;
 use super::super::storage::{
     load_icon_library_snapshot, remove_cached_icon_file, write_icon_snapshot,
@@ -134,6 +136,11 @@ fn apply_updated_item(
     item.icon = next_icon;
     item.legacy_icons = None;
     entry.apply_metadata(item);
+    set_automatic_target_icon_cache(item, entry_uses_automatic_target_icon(entry));
+}
+
+fn entry_uses_automatic_target_icon(entry: &NormalizedIconEntry) -> bool {
+    entry.icon_source == "target" && entry.generated_icon_base64.is_empty() && !entry.is_web
 }
 
 fn remove_file(path: Option<&std::path::Path>) {
