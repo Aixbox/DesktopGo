@@ -361,14 +361,19 @@ pub(crate) fn resolve_initial_main_window_size(app: &tauri::AppHandle) -> (f64, 
 }
 
 pub(crate) fn read_saved_window_persistent_enabled(app: &tauri::AppHandle) -> bool {
-    app.store(storage_profile::settings_store_path())
+    let saved_value = app
+        .store(storage_profile::settings_store_path())
         .ok()
         .and_then(|store| {
             store
                 .get(WINDOW_PERSISTENT_SETTING_KEY)
                 .and_then(|value| value.as_bool())
-        })
-        .unwrap_or(false)
+        });
+    resolve_window_persistent_enabled(saved_value)
+}
+
+fn resolve_window_persistent_enabled(saved_value: Option<bool>) -> bool {
+    saved_value.unwrap_or(true)
 }
 
 pub(crate) fn main_window_persistent_enabled(state: &MainWindowState) -> bool {
@@ -379,6 +384,22 @@ pub(crate) fn set_main_window_persistent_enabled(state: &MainWindowState, enable
     state
         .window_persistent_enabled
         .store(enabled, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_window_persistent_enabled;
+
+    #[test]
+    fn window_persistent_defaults_to_enabled_without_a_saved_value() {
+        assert!(resolve_window_persistent_enabled(None));
+    }
+
+    #[test]
+    fn window_persistent_preserves_saved_boolean_values() {
+        assert!(!resolve_window_persistent_enabled(Some(false)));
+        assert!(resolve_window_persistent_enabled(Some(true)));
+    }
 }
 
 fn main_window_should_always_on_top(state: &MainWindowState) -> bool {

@@ -125,7 +125,7 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   windowStyle: 'default',
   language: 'zh',
   dockEnabled: true,
-  windowPersistent: false,
+  windowPersistent: true,
   launchOnStartup: true,
   launchpadShortcut: DEFAULT_LAUNCHPAD_SHORTCUT,
   launchpadOpenFocusTarget: DEFAULT_LAUNCHPAD_OPEN_FOCUS_TARGET,
