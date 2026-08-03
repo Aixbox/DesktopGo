@@ -78,11 +78,33 @@ jobs:
             throw "Release notes not found: $releaseNotesPath"
           }
 
-          $releaseBody = Get-Content -LiteralPath $releaseNotesPath -Raw -Encoding UTF8
+          $runNumber = $env:GITHUB_RUN_NUMBER
+          $runAttempt = $env:GITHUB_RUN_ATTEMPT
+          if ([string]::IsNullOrWhiteSpace($runNumber) -or $runNumber -notmatch '^[1-9]\d*$') {
+            throw "Invalid or missing GITHUB_RUN_NUMBER: '$runNumber'"
+          }
+
+          if ([string]::IsNullOrWhiteSpace($runAttempt) -or $runAttempt -notmatch '^[1-9]\d*$') {
+            throw "Invalid or missing GITHUB_RUN_ATTEMPT: '$runAttempt'"
+          }
+
+          $buildId = "$runNumber.$runAttempt"
+          $releaseTag = "v$packageVersion-test.$buildId"
+          $releaseName = "DesktopGo 测试构建 v$packageVersion（构建 $buildId）"
+          $releaseNotes = Get-Content -LiteralPath $releaseNotesPath -Raw -Encoding UTF8
+          $releaseBody = @"
+> [!WARNING]
+> **测试构建**：应用版本 $packageVersion，运行号 $runNumber，重试序号 $runAttempt（构建号 $buildId）。
+> 发布前请核对标题、说明和附件。
+
+$releaseNotes
+"@
           $delimiter = [guid]::NewGuid().Guid
 
           "version=$packageVersion" >> $env:GITHUB_OUTPUT
           "release_notes_path=$releaseNotesPath" >> $env:GITHUB_OUTPUT
+          "release_tag=$releaseTag" >> $env:GITHUB_OUTPUT
+          "release_name=$releaseName" >> $env:GITHUB_OUTPUT
           "release_body<<$delimiter" >> $env:GITHUB_OUTPUT
           $releaseBody >> $env:GITHUB_OUTPUT
           $delimiter >> $env:GITHUB_OUTPUT
@@ -95,8 +117,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v${{ steps.release_meta.outputs.version }}
-          releaseName: DesktopGo v${{ steps.release_meta.outputs.version }}
+          tagName: ${{ steps.release_meta.outputs.release_tag }}
+          releaseName: ${{ steps.release_meta.outputs.release_name }}
           releaseBody: ${{ steps.release_meta.outputs.release_body }}
           releaseDraft: true
           prerelease: false
