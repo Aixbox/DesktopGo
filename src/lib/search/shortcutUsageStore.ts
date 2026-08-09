@@ -7,6 +7,7 @@ import {
   setShortcutUsageEnabled,
   type ShortcutUsageState,
 } from './shortcutUsage'
+import { isMissingShortcutUsageStoreError } from './shortcutUsageStorePolicy'
 
 export const SHORTCUT_USAGE_CHANGED_EVENT = 'desktopgo://shortcut-usage-changed'
 
@@ -18,7 +19,11 @@ const store = new LazyStore(STORE_PATH)
 let mutationQueue: Promise<void> = Promise.resolve()
 
 export async function loadShortcutUsage(): Promise<ShortcutUsageState> {
-  await store.reload()
+  try {
+    await store.reload()
+  } catch (error) {
+    if (!isMissingShortcutUsageStoreError(error)) throw error
+  }
   return normalizeShortcutUsageState(await store.get<unknown>(STATE_KEY))
 }
 
