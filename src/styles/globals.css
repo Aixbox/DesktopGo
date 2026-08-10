@@ -525,7 +525,9 @@ body,
   --ring: var(--appearance-accent, oklch(0.61 0.08 255));
   --settings-nav-active: oklch(0.93 0.002 255);
   --settings-nav-hover: oklch(0.96 0.001 255);
-  --settings-content-shadow: -7px -7px 18px -12px oklch(0.24 0.018 255 / 32%);
+  --settings-content-shadow:
+    -7px -7px 18px -12px oklch(0.24 0.018 255 / 18%),
+    inset -1px -1px 4px -1px oklch(0.24 0.018 255 / 8%);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -550,7 +552,9 @@ body,
   --ring: var(--appearance-accent, oklch(0.72 0.08 255));
   --settings-nav-active: oklch(0.315 0.016 255);
   --settings-nav-hover: oklch(0.29 0.012 255);
-  --settings-content-shadow: -7px -7px 20px -12px oklch(0.025 0.008 255 / 78%);
+  --settings-content-shadow:
+    -7px -7px 20px -12px oklch(0.025 0.008 255 / 42%),
+    inset -1px -1px 4px -1px oklch(0.025 0.008 255 / 18%);
 }
 
 @layer base {
