@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from 'react'
+import { createContext, useContext, type CSSProperties, type ReactNode } from 'react'
 
 interface SettingGroupProps {
   title?: string
@@ -155,6 +155,16 @@ export function RangeControl({
   disabled = false,
   onChange,
 }: RangeControlProps) {
+  const rangeSpan = max - min
+  const progress =
+    Number.isFinite(value) &&
+    Number.isFinite(min) &&
+    Number.isFinite(max) &&
+    Number.isFinite(rangeSpan) &&
+    rangeSpan > 0
+      ? Math.min(100, Math.max(0, ((value - min) / rangeSpan) * 100))
+      : 0
+
   return (
     <div className={`flex min-w-0 items-center gap-3 ${disabled ? 'opacity-50' : ''}`}>
       <input
@@ -166,6 +176,7 @@ export function RangeControl({
         value={value}
         disabled={disabled}
         onChange={event => onChange(Number(event.currentTarget.value))}
+        style={{ '--setting-range-progress': `${progress}%` } as CSSProperties}
         className="setting-range h-2 min-w-0 flex-1 cursor-pointer disabled:cursor-not-allowed"
       />
       <output className="w-14 shrink-0 rounded-md border border-border/80 bg-background px-2 py-1 text-center text-xs tabular-nums text-foreground">

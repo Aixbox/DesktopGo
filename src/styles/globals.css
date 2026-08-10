@@ -591,7 +591,110 @@ textarea {
 }
 
 .setting-range {
-  accent-color: var(--primary);
+  --setting-range-fill: var(--appearance-accent, var(--primary));
+  --setting-range-track: color-mix(in oklch, var(--foreground) 18%, var(--background));
+  --setting-range-progress: 0%;
+  width: 100%;
+  height: 0.5rem;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--setting-range-fill) 0 var(--setting-range-progress),
+    var(--setting-range-track) var(--setting-range-progress) 100%
+  );
+  accent-color: var(--setting-range-fill);
+}
+
+.setting-range::-webkit-slider-runnable-track {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.setting-range::-moz-range-track {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--setting-range-track);
+}
+
+.setting-range::-moz-range-progress {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--setting-range-fill);
+}
+
+.setting-range::-webkit-slider-thumb {
+  width: 1rem;
+  height: 1rem;
+  margin-top: -0.25rem;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 2px solid var(--background);
+  border-radius: 50%;
+  background: var(--setting-range-fill);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 24%, transparent);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.setting-range::-moz-range-thumb {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--background);
+  border-radius: 50%;
+  background: var(--setting-range-fill);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 24%, transparent);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.setting-range:not(:disabled):hover {
+  --setting-range-track: color-mix(in oklch, var(--foreground) 24%, var(--background));
+}
+
+.setting-range:not(:disabled):hover::-webkit-slider-thumb,
+.setting-range:not(:disabled):focus-visible::-webkit-slider-thumb {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 32%, transparent);
+}
+
+.setting-range:not(:disabled):hover::-moz-range-thumb,
+.setting-range:not(:disabled):focus-visible::-moz-range-thumb {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 32%, transparent);
+}
+
+.setting-range:not(:disabled):active::-webkit-slider-thumb {
+  transform: scale(1.14);
+}
+
+.setting-range:not(:disabled):active::-moz-range-thumb {
+  transform: scale(1.14);
+}
+
+.setting-range:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--setting-range-fill) 72%, transparent);
+  outline-offset: 3px;
+}
+
+.setting-range:disabled {
+  cursor: not-allowed;
+}
+
+.setting-range:disabled::-webkit-slider-thumb {
+  cursor: not-allowed;
+  transform: none;
+  transition: none;
+}
+
+.setting-range:disabled::-moz-range-thumb {
+  cursor: not-allowed;
+  transform: none;
+  transition: none;
 }
 
 .setting-option-default {
