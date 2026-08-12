@@ -11,26 +11,26 @@
 
 ## 当前事项
 
-| 编号  | 优先级 | 状态   | 事项                                         | 目标                                                         |
-| ----- | ------ | ------ | -------------------------------------------- | ------------------------------------------------------------ |
-| D-001 | P0     | 已完成 | 安装包启动时先选择语言                       | 使用一个安装包承载简体中文和英文；启动安装包后首先选择语言，再进入对应语言的完整安装流程。 |
-| D-002 | P0     | 已完成 | ESLint 告警清零与超大文件模块化              | 普通与严格 ESLint 均恢复零告警；所有手写 TypeScript 模块已进入统一的 1000 行预算。 |
-| D-003 | P1     | 已完成 | Rust 静态检查与超大模块治理                  | 建立 rustfmt、Clippy、check、test 门禁，并将 9 个超预算 Rust 模块分批拆回 500 行预算。 |
-| D-004 |        | 已完成 | 优化搜索结果面板顶部 选中态                  | 优化搜索结果面板顶部 全部、快捷入口、文件以及右侧排序这些选中态的样式，现在选中态样式太扁了 |
-| D-005 |        | 已完成 | 优化添加分组弹窗的分组名称输入框的聚焦框样式 | 添加分组弹窗的分组名称输入框的聚焦框样式和其他输入框不一致，没有用同一个组件？ |
-| D-006 |        | 已完成 | 自定义背景 + 主题色                          | 添加主题色功能，用户可以自行选择主题色，以及开发自定义背景，还能从背景自动提取合适的主题色 |
-| D-007 | P0     | 已完成 | 修复拖动文件到遮罩层文件夹没有关闭的问题     | 拖动图标到文件夹并自动打开文件夹后，将图标移入文件夹再拖到遮罩层时，文件夹应自动关闭并继续顶层拖放。 |
-| D-008 | P1     | 已完成 | 优化搜索面板最佳快捷入口                     | 最佳快捷入口与下方文件列表组成统一键盘导航序列，支持上下左右键选择并通过回车打开。 |
-| D-009 | P2     | 已完成 | 优化图标库中“删除”按钮                       | 图标库操作按钮使用简洁一致的“删除”文案，列表操作区保持紧凑并按内容自适应换行。 |
-| D-010 | P1     | 已完成 | 在目录清单显示图标库                         | 搜索目录清单明确显示当前图标库这一固定来源及其参与最佳匹配的条目数。 |
-| D-011 | P1     | 已完成 | 全局筛选目录收录的文件类型                   | 用户可在搜索设置中一次性选择所有目录清单要收录的文件类型。   |
-| D-012 |        | 已完成 |                                              | 现在项目ai智能整理的对话框回车键是换行，修改一下，回车应该是直接发送才对，shift回车才是换行才对 |
-| D-013 |        | 已完成 |                                              | 还有帮我给ai智能整理添加一个全屏的选项，点击可以把对话框展开到整个窗口 |
+| 编号  | 优先级 | 状态   | 事项                                         | 目标                                                                                                                                                                 |
+| ----- | ------ | ------ | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-001 | P0     | 已完成 | 安装包启动时先选择语言                       | 使用一个安装包承载简体中文和英文；启动安装包后首先选择语言，再进入对应语言的完整安装流程。                                                                           |
+| D-002 | P0     | 已完成 | ESLint 告警清零与超大文件模块化              | 普通与严格 ESLint 均恢复零告警；所有手写 TypeScript 模块已进入统一的 1000 行预算。                                                                                   |
+| D-003 | P1     | 已完成 | Rust 静态检查与超大模块治理                  | 建立 rustfmt、Clippy、check、test 门禁，并将 9 个超预算 Rust 模块分批拆回 500 行预算。                                                                               |
+| D-004 |        | 已完成 | 优化搜索结果面板顶部 选中态                  | 优化搜索结果面板顶部 全部、快捷入口、文件以及右侧排序这些选中态的样式，现在选中态样式太扁了                                                                          |
+| D-005 |        | 已完成 | 优化添加分组弹窗的分组名称输入框的聚焦框样式 | 添加分组弹窗的分组名称输入框的聚焦框样式和其他输入框不一致，没有用同一个组件？                                                                                       |
+| D-006 |        | 已完成 | 自定义背景 + 主题色                          | 添加主题色功能，用户可以自行选择主题色，以及开发自定义背景，还能从背景自动提取合适的主题色                                                                           |
+| D-007 | P0     | 已完成 | 修复拖动文件到遮罩层文件夹没有关闭的问题     | 拖动图标到文件夹并自动打开文件夹后，将图标移入文件夹再拖到遮罩层时，文件夹应自动关闭并继续顶层拖放。                                                                 |
+| D-008 | P1     | 已完成 | 优化搜索面板最佳快捷入口                     | 最佳快捷入口与下方文件列表组成统一键盘导航序列，支持上下左右键选择并通过回车打开。                                                                                   |
+| D-009 | P2     | 已完成 | 优化图标库中“删除”按钮                       | 图标库操作按钮使用简洁一致的“删除”文案，列表操作区保持紧凑并按内容自适应换行。                                                                                       |
+| D-010 | P1     | 已完成 | 在目录清单显示图标库                         | 搜索目录清单明确显示当前图标库这一固定来源及其参与最佳匹配的条目数。                                                                                                 |
+| D-011 | P1     | 已完成 | 全局筛选目录收录的文件类型                   | 用户可在搜索设置中一次性选择所有目录清单要收录的文件类型。                                                                                                           |
+| D-012 |        | 已完成 |                                              | 现在项目ai智能整理的对话框回车键是换行，修改一下，回车应该是直接发送才对，shift回车才是换行才对                                                                      |
+| D-013 |        | 已完成 |                                              | 还有帮我给ai智能整理添加一个全屏的选项，点击可以把对话框展开到整个窗口                                                                                               |
 | D-014 |        | 已完成 |                                              | 现在ai整理输出完成后，预览状态，用户关闭ai整理对话侧边栏，图标的预览会消失，变回原来的样式，这是不对的，应该继续保持预览状态，因为我并没有关闭预览状态，修复这个问题 |
-| D-015 |        | 已完成 | 隐藏滚动分组主内容区滚动条                   | 隐藏滚动分组主内容区滚动条但保留滚动和拖拽。 |
-| D-016 |        | 已完成 | 美化设置中的滑动条组件                       | 统一设置滑杆的圆角轨道、主题色进度、焦点反馈，并保留键盘可访问性。 |
-| D-017 |        | 已完成 | 给启动台背景右键主菜单添加图标               | 为启动台背景右键主菜单的父子菜单和操作项添加一致的 Lucide 前导图标，不改变现有交互行为。                                                                            |
-| D-018 |        | 已完成 | 调整设置右侧内容区边框阴影                   | 降低浅深主题阴影暗度，并在右侧内容区内补齐不受窗口裁剪影响的底边阴影。 |
+| D-015 |        | 已完成 | 隐藏滚动分组主内容区滚动条                   | 隐藏滚动分组主内容区滚动条但保留滚动和拖拽。                                                                                                                         |
+| D-016 |        | 已完成 | 美化设置中的滑动条组件                       | 统一设置滑杆的圆角轨道、主题色进度、焦点反馈，并保留键盘可访问性。                                                                                                   |
+| D-017 |        | 已完成 | 给启动台背景右键主菜单添加图标               | 为启动台背景右键主菜单的父子菜单和操作项添加一致的 Lucide 前导图标，不改变现有交互行为。                                                                             |
+| D-018 |        | 已完成 | 调整设置右侧内容区边框阴影                   | 降低浅深主题阴影暗度，并在右侧内容区内补齐不受窗口裁剪影响的底边阴影。                                                                                               |
 
 - 已完成：窗口常驻默认开启；缺失或无效设置按开启处理，已有 `true`/`false` 不迁移覆盖。
 - 已完成：拖动导入图标按最大显示尺寸提取；仅新建或重新自动提取的缓存会安全升级，历史缓存保留以避免覆盖用户裁剪或着色图。
@@ -41,6 +41,7 @@
 - 已完成（D-017）：给右键菜单添加图标，如主菜单（仅启动台背景右键主菜单）。
 - 已完成（D-018）：调整设置右侧内容区边框阴影。
 - 现在拖动特殊图标还是无法导入，如拖入回收站，拖入后会打开拖动导入窗口，但是松手后没有打开图标的添加弹窗，也没有在网格中添加图标
+- 优化设置中的滑块，弄一个新增一个组件 弄成这个dom样式的滑块 <div class="scrubber"><div class="scrubber-track" role="slider" aria-label="Falloff" aria-valuemin="0.5" aria-valuemax="4" aria-valuenow="1.6" aria-disabled="false" tabindex="0" data-dragging="false" data-disabled="false" data-active="false"><div class="scrubber-fill" style="width: 31.4286%;"></div><div class="scrubber-ticks"><div class="scrubber-tick" style="left: 10%;"></div><div class="scrubber-tick" style="left: 20%;"></div><div class="scrubber-tick" style="left: 30%;"></div><div class="scrubber-tick" style="left: 40%;"></div><div class="scrubber-tick" style="left: 50%;"></div><div class="scrubber-tick" style="left: 60%;"></div><div class="scrubber-tick" style="left: 70%;"></div><div class="scrubber-tick" style="left: 80%;"></div><div class="scrubber-tick" style="left: 90%;"></div></div><div class="scrubber-thumb-wrapper" style="left: 31.4286%;"><div class="scrubber-thumb"></div></div><div class="scrubber-label">Falloff</div><div class="scrubber-value">1.6</div></div></div>
 
 ## D-001：安装包启动时先选择语言
 
@@ -165,14 +166,14 @@
 
 ### ESLint 告警清零批次
 
-| 批次 | 状态   | 范围                          | 当前告警 | 处理策略                                                                                                                                                                                                                                                                                                                           | 完成后目标 |
-| ---- | ------ | ----------------------------- | -------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------: |
-| E-00 | 已完成 | ESLint/Prettier 基线          |        - | 收窄检查范围、移除 `eslint-plugin-prettier`、增加 `lint:strict` 和格式检查。                                                                                                                                                                                                                                                       |         81 |
-| E-01 | 已完成 | Fast Refresh 导出边界         |       13 | 文件夹视觉 policy、按钮变体和输入样式已与组件分离；i18n 已拆出语言运行态、Context/Hook 和仅导出组件的 Provider，组件文件不再混合导出纯能力。                                                                                                                                                                                       |         68 |
-| E-02 | 已完成 | 搜索、设置、AI 和图标编辑流程 |       16 | 搜索重试与分页改为迭代调度，关键词和选择状态改为纯策略；设置加载、图标会话重置、AI 提示队列和应用请求已移动到异步结果或显式事件边界。                                                                                                                                                                                              |         63 |
-| E-03 | 已完成 | 分页图标网格                  |       29 | 布局尺寸快照进入独立状态控制器，自动翻页回调保持稳定；拖拽处理器在指针会话开始时显式装配，覆盖层、Dock 和文件夹弹窗改用真实依赖与 effect 同步边界。                                                                                                                                                                                |         34 |
-| E-04 | 已完成 | 滚动图标网格                  |       23 | 已复用布局尺寸控制器与稳定自动翻页接口；滚动分组数量、文件夹可见状态和页码改为派生或渲染期校正，拖拽处理器改为在指针会话开始时显式装配。                                                                                                                                                                                           |         11 |
-| E-05 | 已完成 | 恢复零告警门禁                |       11 | 11 个超预算模块已按领域、控制器和视图边界拆分并进入预算；React Compiler legacy 规则降级已删除，普通与严格 lint 均恢复零告警。                                                                                                                                                                                                   |          0 |
+| 批次 | 状态   | 范围                          | 当前告警 | 处理策略                                                                                                                                            | 完成后目标 |
+| ---- | ------ | ----------------------------- | -------: | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------: |
+| E-00 | 已完成 | ESLint/Prettier 基线          |        - | 收窄检查范围、移除 `eslint-plugin-prettier`、增加 `lint:strict` 和格式检查。                                                                        |         81 |
+| E-01 | 已完成 | Fast Refresh 导出边界         |       13 | 文件夹视觉 policy、按钮变体和输入样式已与组件分离；i18n 已拆出语言运行态、Context/Hook 和仅导出组件的 Provider，组件文件不再混合导出纯能力。        |         68 |
+| E-02 | 已完成 | 搜索、设置、AI 和图标编辑流程 |       16 | 搜索重试与分页改为迭代调度，关键词和选择状态改为纯策略；设置加载、图标会话重置、AI 提示队列和应用请求已移动到异步结果或显式事件边界。               |         63 |
+| E-03 | 已完成 | 分页图标网格                  |       29 | 布局尺寸快照进入独立状态控制器，自动翻页回调保持稳定；拖拽处理器在指针会话开始时显式装配，覆盖层、Dock 和文件夹弹窗改用真实依赖与 effect 同步边界。 |         34 |
+| E-04 | 已完成 | 滚动图标网格                  |       23 | 已复用布局尺寸控制器与稳定自动翻页接口；滚动分组数量、文件夹可见状态和页码改为派生或渲染期校正，拖拽处理器改为在指针会话开始时显式装配。            |         11 |
+| E-05 | 已完成 | 恢复零告警门禁                |       11 | 11 个超预算模块已按领域、控制器和视图边界拆分并进入预算；React Compiler legacy 规则降级已删除，普通与严格 lint 均恢复零告警。                       |          0 |
 
 每个批次必须严格达到表中的告警目标；如果发现新增告警，必须在同一批次处理，不能把基线数字向上调整。
 
@@ -329,7 +330,7 @@
 | M-02 分页图标网格     | P0     | `IconGrid.tsx` 957、`useFolderGridMeasurement.ts` 69、`usePagedIconGridLayout.ts` 596、`usePagedGridReorderAnimations.ts` 240、`useIconGridDragWorkflow.ts` 988、`usePagedDragGeometryController.ts` 469、`usePagedDragMoveProcessor.ts` 442、`useTopLevelDwellEvasion.ts` 110、`usePagedDragStarter.ts` 228、`useDragDropCommit.ts` 764、`DragOverlays.tsx` 668、`DockBar.tsx` 904、`OuterFolderTile.tsx` 537                                                                                                                                                                                                    | 水合、持久化、几何测量、导入落位、文件夹尺寸测量、重排动画与分页拖拽会话职责已从组合视图拆出；后续继续收敛文件夹、选择和提交边界。                                                                                      |
 | M-03 滚动图标网格     | P0     | `ScrollableIconGrid.tsx` 1000、`useScrollableIconGridLayout.ts` 751、`useScrollableGridReorderAnimations.ts` 203、`useScrollGroupController.ts` 260、`useScrollableIconGridViewModel.ts` 251、`useScrollableFolderController.ts` 318、`ScrollableOuterGridView.tsx` 486、`ScrollableGroupNavigation.tsx` 781、`useScrollableOuterGridDragWorkflow.ts` 916、`useScrollableIconGridDragWorkflow.ts` 946、`useScrollableDragGeometryController.ts` 868、`useScrollableDragMoveProcessor.ts` 706、`useScrollableFolderDragController.ts` 588、`useScrollableDragStarter.ts` 263、`useScrollableDragDropCommit.ts` 810 | 水合、持久化、几何测量、导入落位、文件夹生命周期、分组 CRUD、渲染模型、重排动画和滚动拖拽工作流均已进入独立控制器或视图；组合根已进入 1000 行预算，后续继续收敛预览提交和分页兼容交互边界。                             |
 | M-04 图标网格领域规则 | P1     | `dragMovePolicy.ts` 918、`footprintPlacementPolicy.ts` 798、`topLevelLayout.ts` 929、`gridCoordinates.ts` 111、`dropPolicy.ts` 667、`scrollDropPolicy.ts` 800、`scrollGroupLayout.ts` 522                                                                                                                                                                                                                                                                                                                                                                                                                         | 持久化网格坐标与 footprint 放置求解已拆为独立纯策略并配有边界测试；后续继续按候选目标、移动决策、提交变换和滚动分组策略拆分，保持 domain 无 React、store、DOM、Tauri 和持久化依赖。                                     |
-| M-05 AI 与图标编辑    | P1     | `AiOrganizePanel.tsx` 990、`useAiOrganizeExecution.ts` 628、`aiOrganizePanelModel.ts` 239、`AiOrganizeSnapshotPreview.tsx` 198、`AiOrganizeComposer.tsx` 195、`AiOrganizeRunInline.tsx` 149、`AiOrganizeHistoryMenu.tsx` 113、`aiOrganizePanelTypes.ts` 18、`AddIconDialog.tsx` 982、`AddIconFormSections.tsx` 608、`IconCropDialog.tsx` 927、`IconCropControls.tsx` 309                                                                                                                                                                                                                                      | AI 执行控制、纯模型、运行遥测、会话历史、布局预览、输入区和外部契约已从组合面板分离；图标表单 sections 与裁剪控件也已独立，所有相关手写模块均进入 1000 行预算。                                                         |
+| M-05 AI 与图标编辑    | P1     | `AiOrganizePanel.tsx` 990、`useAiOrganizeExecution.ts` 628、`aiOrganizePanelModel.ts` 239、`AiOrganizeSnapshotPreview.tsx` 198、`AiOrganizeComposer.tsx` 195、`AiOrganizeRunInline.tsx` 149、`AiOrganizeHistoryMenu.tsx` 113、`aiOrganizePanelTypes.ts` 18、`AddIconDialog.tsx` 982、`AddIconFormSections.tsx` 608、`IconCropDialog.tsx` 927、`IconCropControls.tsx` 309                                                                                                                                                                                                                                          | AI 执行控制、纯模型、运行遥测、会话历史、布局预览、输入区和外部契约已从组合面板分离；图标表单 sections 与裁剪控件也已独立，所有相关手写模块均进入 1000 行预算。                                                         |
 | M-06 设置界面         | P1     | `GeneralSettingsPanel.tsx` 879、`IconManagerPanel.tsx` 793                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | 按设置分区拆成 feature-local sections；持久化由现有 settings service/store 统一处理；列表操作与导入/删除流程进入控制器，避免分区组件直接组合平台调用。                                                                  |
 | M-07 基础设施         | P2     | `i18n.tsx` 977、`iconStore.ts` 456                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | i18n 已拆出 React Provider、Context/Hook 和语言运行态，后续继续按领域拆分翻译目录；store 保留稳定公共 facade，将选择、启动、布局偏好等 action 按职责拆到独立 slice 或 domain policy，避免消费者迁移期间出现多个状态源。 |
 
@@ -399,7 +400,7 @@
 | R-03 | 已完成 | 图标网站与 Windows 目录 | 拆分 `icons/website.rs`、`catalog_windows.rs` 和 `operations.rs` 的网络、解析、候选策略、扫描、提取与持久化边界。 | 3 个模块进入 500 行预算          |
 | R-04 | 已完成 | Tauri 入口与命令组织    | 将 `lib.rs` 和 `commands.rs` 收敛为装配与导出层，按窗口、图标、布局、搜索、设置和生命周期拆分命令及操作。         | 2 个中央模块进入 500 行预算      |
 | R-05 | 已完成 | 零告警与预算收尾        | 清理临时 Clippy 例外，执行全仓门禁与 Windows 真实运行回归，并在路线图记录最终文件规模。                           | 0 个 Rust 超预算文件、0 条新告警 |
-| R-06 | 已完成 | 函数规模与复杂度治理    | 启用函数长度、认知复杂度和参数数量诊断，按领域拆分超预算编排函数，清零后纳入统一 Clippy 门禁。                   | 0 条函数预算告警                 |
+| R-06 | 已完成 | 函数规模与复杂度治理    | 启用函数长度、认知复杂度和参数数量诊断，按领域拆分超预算编排函数，清零后纳入统一 Clippy 门禁。                    | 0 条函数预算告警                 |
 
 #### R-00 实施结果
 
