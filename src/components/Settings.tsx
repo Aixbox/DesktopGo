@@ -218,7 +218,7 @@ export function Settings() {
   }
 
   return (
-    <div className="settings-shell flex h-screen w-screen bg-card text-foreground">
+    <div className="settings-shell flex h-screen w-screen text-foreground">
       <aside className="settings-sidebar-surface flex w-48 shrink-0 flex-col">
         <div
           onPointerDown={handleWindowDragStart}
@@ -249,7 +249,7 @@ export function Settings() {
         </nav>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col bg-card">
+      <div className="flex min-w-0 flex-1 flex-col">
         <header
           onPointerDown={handleWindowDragStart}
           onDoubleClick={handleTitlebarDoubleClick}
