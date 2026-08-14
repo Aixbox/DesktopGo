@@ -263,22 +263,6 @@ pub fn notify_main_window_ready(
 ) -> Result<(), String> {
     main_window_state.ready.store(true, Ordering::SeqCst);
 
-    #[cfg(windows)]
-    if let Some(window) = app_handle.get_webview_window("main") {
-        let install_window = window.clone();
-        if let Err(error) = window.run_on_main_thread(move || {
-            if let Err(error) = crate::windows_drag_drop::install(&install_window) {
-                eprintln!(
-                    "Warning: Failed to refresh Windows Shell drag-drop support after WebView ready: {error}"
-                );
-            }
-        }) {
-            eprintln!(
-                "Warning: Failed to schedule Windows Shell drag-drop refresh on the main thread: {error}"
-            );
-        }
-    }
-
     if !main_window_state.pending_show.swap(false, Ordering::SeqCst) {
         return Ok(());
     }

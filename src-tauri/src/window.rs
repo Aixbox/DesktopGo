@@ -191,6 +191,9 @@ pub(crate) fn create_main_window(app: &tauri::AppHandle) {
             .initialization_script(bootstrap_script)
             .center();
 
+    #[cfg(windows)]
+    let builder = builder.disable_drag_drop_handler();
+
     match builder.build() {
         Ok(window) => {
             #[cfg(windows)]
