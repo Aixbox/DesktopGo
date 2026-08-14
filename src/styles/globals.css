@@ -386,6 +386,18 @@ body,
   box-shadow: var(--settings-content-shadow);
 }
 
+.settings-sidebar-surface,
+.settings-titlebar-surface {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--card) 84%, transparent) 0%,
+    color-mix(in oklch, var(--background) 76%, transparent) 100%
+  );
+  box-shadow: inset 0 1px 0 color-mix(in oklch, var(--foreground) 5%, transparent);
+  backdrop-filter: blur(16px) saturate(120%);
+  -webkit-backdrop-filter: blur(16px) saturate(120%);
+}
+
 .settings-nav-item-active {
   background-color: var(--settings-nav-active);
 }
@@ -525,7 +537,9 @@ body,
   --ring: var(--appearance-accent, oklch(0.61 0.08 255));
   --settings-nav-active: oklch(0.93 0.002 255);
   --settings-nav-hover: oklch(0.96 0.001 255);
-  --settings-content-shadow: -7px -7px 18px -12px oklch(0.24 0.018 255 / 32%);
+  --settings-content-shadow:
+    -7px -7px 18px -12px oklch(0.24 0.018 255 / 18%),
+    inset -1px -1px 4px -1px oklch(0.24 0.018 255 / 8%);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -550,7 +564,9 @@ body,
   --ring: var(--appearance-accent, oklch(0.72 0.08 255));
   --settings-nav-active: oklch(0.315 0.016 255);
   --settings-nav-hover: oklch(0.29 0.012 255);
-  --settings-content-shadow: -7px -7px 20px -12px oklch(0.025 0.008 255 / 78%);
+  --settings-content-shadow:
+    -7px -7px 20px -12px oklch(0.025 0.008 255 / 42%),
+    inset -1px -1px 4px -1px oklch(0.025 0.008 255 / 18%);
 }
 
 @layer base {
@@ -591,7 +607,110 @@ textarea {
 }
 
 .setting-range {
-  accent-color: var(--primary);
+  --setting-range-fill: var(--appearance-accent, var(--primary));
+  --setting-range-track: color-mix(in oklch, var(--foreground) 18%, var(--background));
+  --setting-range-progress: 0%;
+  width: 100%;
+  height: 0.5rem;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--setting-range-fill) 0 var(--setting-range-progress),
+    var(--setting-range-track) var(--setting-range-progress) 100%
+  );
+  accent-color: var(--setting-range-fill);
+}
+
+.setting-range::-webkit-slider-runnable-track {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.setting-range::-moz-range-track {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--setting-range-track);
+}
+
+.setting-range::-moz-range-progress {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--setting-range-fill);
+}
+
+.setting-range::-webkit-slider-thumb {
+  width: 1rem;
+  height: 1rem;
+  margin-top: -0.25rem;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 2px solid var(--background);
+  border-radius: 50%;
+  background: var(--setting-range-fill);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 24%, transparent);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.setting-range::-moz-range-thumb {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--background);
+  border-radius: 50%;
+  background: var(--setting-range-fill);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 24%, transparent);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.setting-range:not(:disabled):hover {
+  --setting-range-track: color-mix(in oklch, var(--foreground) 24%, var(--background));
+}
+
+.setting-range:not(:disabled):hover::-webkit-slider-thumb,
+.setting-range:not(:disabled):focus-visible::-webkit-slider-thumb {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 32%, transparent);
+}
+
+.setting-range:not(:disabled):hover::-moz-range-thumb,
+.setting-range:not(:disabled):focus-visible::-moz-range-thumb {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 32%, transparent);
+}
+
+.setting-range:not(:disabled):active::-webkit-slider-thumb {
+  transform: scale(1.14);
+}
+
+.setting-range:not(:disabled):active::-moz-range-thumb {
+  transform: scale(1.14);
+}
+
+.setting-range:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--setting-range-fill) 72%, transparent);
+  outline-offset: 3px;
+}
+
+.setting-range:disabled {
+  cursor: not-allowed;
+}
+
+.setting-range:disabled::-webkit-slider-thumb {
+  cursor: not-allowed;
+  transform: none;
+  transition: none;
+}
+
+.setting-range:disabled::-moz-range-thumb {
+  cursor: not-allowed;
+  transform: none;
+  transition: none;
 }
 
 .setting-option-default {
@@ -1216,13 +1335,29 @@ textarea {
   .launchpad-glass-panel-strong,
   .search-panel-surface,
   .search-floating-menu,
-  .search-surface-card {
+  .search-surface-card,
+  .settings-sidebar-surface,
+  .settings-titlebar-surface {
     border-color: ButtonText;
     background: Canvas;
     color: CanvasText;
     box-shadow: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+  }
+
+  .settings-sidebar-surface {
+    border-right: 1px solid ButtonText;
+  }
+
+  .settings-titlebar-surface {
+    border-bottom: 1px solid ButtonText;
+  }
+
+  .settings-nav-item-active,
+  .settings-nav-item:not(.settings-nav-item-active):hover {
+    background-color: Highlight;
+    color: HighlightText;
   }
 
   .search-preview-surface {

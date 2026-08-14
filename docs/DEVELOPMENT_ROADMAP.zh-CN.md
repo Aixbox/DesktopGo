@@ -27,6 +27,10 @@
 | D-012 |        | 已完成 |                                              | 现在项目ai智能整理的对话框回车键是换行，修改一下，回车应该是直接发送才对，shift回车才是换行才对                                                                      |
 | D-013 |        | 已完成 |                                              | 还有帮我给ai智能整理添加一个全屏的选项，点击可以把对话框展开到整个窗口                                                                                               |
 | D-014 |        | 已完成 |                                              | 现在ai整理输出完成后，预览状态，用户关闭ai整理对话侧边栏，图标的预览会消失，变回原来的样式，这是不对的，应该继续保持预览状态，因为我并没有关闭预览状态，修复这个问题 |
+| D-015 |        | 已完成 | 隐藏滚动分组主内容区滚动条                   | 隐藏滚动分组主内容区滚动条但保留滚动和拖拽。                                                                                                                         |
+| D-016 |        | 已完成 | 美化设置中的滑动条组件                       | 统一设置滑杆的圆角轨道、主题色进度、焦点反馈，并保留键盘可访问性。                                                                                                   |
+| D-017 |        | 已完成 | 给启动台背景右键主菜单添加图标               | 为启动台背景右键主菜单的父子菜单和操作项添加一致的 Lucide 前导图标，不改变现有交互行为。                                                                             |
+| D-018 |        | 已完成 | 调整设置右侧内容区边框阴影                   | 降低浅深主题阴影暗度，并在右侧内容区内补齐不受窗口裁剪影响的底边阴影。                                                                                               |
 
 - 已完成：窗口常驻默认开启；缺失或无效设置按开启处理，已有 `true`/`false` 不迁移覆盖。
 - 已完成：拖动导入图标按最大显示尺寸提取；仅新建或重新自动提取的缓存会安全升级，历史缓存保留以避免覆盖用户裁剪或着色图。
@@ -38,6 +42,13 @@
 - 给右键菜单添加图标，如主菜单
 - 设置右侧内容区边框阴影降低一点暗度，现在太黑了，还有在边框最末端阴影没有的问题修复一下
 - 现在拖动系统图标（如回收站）还有有问题，拖入后，打开了拖动导入弹窗，但是松手后没有显示导入图标的弹窗，没有编辑名称编辑图标，以及网格中也没有这个图标，导入提示也没有
+- 已完成（提交 `4cd8742`）：点击设置的搜索菜单时，快捷入口排序不再报“加载快捷入口使用数据失败”。
+- 已完成（提交 `ecfa303`）：自定义背景支持预览和调整。
+- 已完成（D-016）：美化设置中的滑动条组件。
+- 已完成（D-017）：给右键菜单添加图标，如主菜单（仅启动台背景右键主菜单）。
+- 已完成（D-018）：调整设置右侧内容区边框阴影。
+- 现在拖动特殊图标还是无法导入，如拖入回收站，拖入后会打开拖动导入窗口，但是松手后没有打开图标的添加弹窗，也没有在网格中添加图标
+- 优化设置中的滑块，弄一个新增一个组件 弄成这个dom样式的滑块 <div class="scrubber"><div class="scrubber-track" role="slider" aria-label="Falloff" aria-valuemin="0.5" aria-valuemax="4" aria-valuenow="1.6" aria-disabled="false" tabindex="0" data-dragging="false" data-disabled="false" data-active="false"><div class="scrubber-fill" style="width: 31.4286%;"></div><div class="scrubber-ticks"><div class="scrubber-tick" style="left: 10%;"></div><div class="scrubber-tick" style="left: 20%;"></div><div class="scrubber-tick" style="left: 30%;"></div><div class="scrubber-tick" style="left: 40%;"></div><div class="scrubber-tick" style="left: 50%;"></div><div class="scrubber-tick" style="left: 60%;"></div><div class="scrubber-tick" style="left: 70%;"></div><div class="scrubber-tick" style="left: 80%;"></div><div class="scrubber-tick" style="left: 90%;"></div></div><div class="scrubber-thumb-wrapper" style="left: 31.4286%;"><div class="scrubber-thumb"></div></div><div class="scrubber-label">Falloff</div><div class="scrubber-value">1.6</div></div></div>
 
 ## D-001：安装包启动时先选择语言
 
@@ -661,3 +672,37 @@ node .codex/skills/maintain-modular-code/scripts/check-changed-files.mjs
 - Tauri 目录枚举按这一统一扩展名清单过滤，并保留独立的“同时收录文件夹”开关。
 - 选择“全部”时会明确显示已收录全部文件类型；存档中的 `*` 仍表示不按扩展名过滤。
 - 文件类型筛选仅作用于磁盘目录；图标库继续作为固定的最佳匹配来源。
+
+## D-015：隐藏滚动分组主内容区滚动条
+
+### 范围与验收标准
+
+- 仅隐藏滚动分组视图主内容区的可见原生滚动条，不改变内容滚动和拖拽自动滚动行为。
+
+### 实施结果
+
+- 主内容区保留 `NativeScrollArea` 的既有结构和 `overflow-y-auto` 滚动元素，并通过局部样式隐藏视觉滚动条；滚轮、触摸板、键盘和拖拽交互保持不变。
+- `.scroll-grid-content-scroll` 采用与侧栏一致的跨 Chromium/WebKit、Firefox 和旧 Edge 隐藏滚动条策略，并取消滚动条槽位预留。
+- 未修改共享 `NativeScrollArea`、侧栏或 Dock 行为。
+
+## D-016：美化设置中的滑动条组件
+
+### 范围与实施结果
+
+- `RangeControl` 将当前值安全钳制为 `0..100%` 进度变量，覆盖无效范围、越界值和 `max === min`，不改变原有设置值、事件或输出。
+- `.setting-range` 提供跨 Chromium/WebKit 与 Firefox 的圆角轨道、主题色进度、可辨识滑块、悬停/按下反馈和 `:focus-visible` 焦点环，并保留原生键盘控制与禁用行为。
+
+## D-017：给启动台背景右键主菜单添加图标
+
+### 范围与实施结果
+
+- 仅为启动台背景右键主菜单的四个父子菜单和操作项添加 Lucide 前导图标，并保留子菜单右侧 `ChevronRight`、单选/复选右侧勾选标记及原有键盘行为。
+- 未修改 context-menu primitive、`IconContextMenu`、`FileResultContextMenu`、Dock、Folder、Group 或原生 Windows 菜单。
+
+## D-018：调整设置右侧内容区边框阴影
+
+### 范围与实施结果
+
+- 仅调整 settings shadow token；进一步降低浅深主题的外/内阴影透明度，保留现有左上外阴影几何。
+- 使用单一右下 `inset -1px -1px` 层连续覆盖底边和右下收口，以避开根裁剪并补齐最右侧阴影。
+- 未改 Settings DOM/NativeScrollArea/滚动/边框方向或 scrollbar gutter。

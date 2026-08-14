@@ -219,7 +219,7 @@ export function Settings() {
 
   return (
     <div className="settings-shell flex h-screen w-screen bg-card text-foreground">
-      <aside className="flex w-48 shrink-0 flex-col bg-card">
+      <aside className="settings-sidebar-surface flex w-48 shrink-0 flex-col">
         <div
           onPointerDown={handleWindowDragStart}
           onDoubleClick={handleTitlebarDoubleClick}
@@ -253,7 +253,7 @@ export function Settings() {
         <header
           onPointerDown={handleWindowDragStart}
           onDoubleClick={handleTitlebarDoubleClick}
-          className="flex h-12 shrink-0 cursor-grab items-center gap-3 px-4 active:cursor-grabbing"
+          className="settings-titlebar-surface flex h-12 shrink-0 cursor-grab items-center gap-3 px-4 active:cursor-grabbing"
         >
           <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
             {translate('设置 / {label}', { label: activeNavItem.label })}
