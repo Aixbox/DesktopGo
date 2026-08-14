@@ -12,7 +12,7 @@ use windows::Win32::System::Com::CLSCTX_INPROC_SERVER;
 use windows::{
     core::implement,
     Win32::{
-        Foundation::{DRAGDROP_E_INVALIDHWND, HWND, LPARAM, POINT, POINTL},
+        Foundation::{HWND, LPARAM, POINT, POINTL},
         System::{
             Com::{
                 CoCreateInstance, CoTaskMemFree, IDataObject, DVASPECT_CONTENT, FORMATETC,
@@ -306,15 +306,31 @@ pub fn install(window: &tauri::WebviewWindow) -> Result<usize, String> {
         .hwnd()
         .map_err(|error| format!("Failed to resolve main window handle: {error}"))?;
     let app = window.app_handle().clone();
+
+    // Revoke targets from a previous WebView instance before registering the
+    // new handles. Revoking them after RegisterDragDrop would also revoke a
+    // freshly installed target when the window is recreated.
+    REGISTERED_TARGETS.with(|current| {
+        for (hwnd, _) in current.borrow_mut().drain(..) {
+            let _ = unsafe { RevokeDragDrop(HWND(hwnd as *mut _)) };
+        }
+    });
+
     let registered = Rc::new(RefCell::new(Vec::<(isize, IDropTarget)>::new()));
     let callback_targets = registered.clone();
 
     let mut callback = move |hwnd: HWND| {
-        let target: IDropTarget = ShellDropTarget::new(hwnd, app.clone()).into();
-        let revoke_result = unsafe { RevokeDragDrop(hwnd) };
-        if revoke_result != Err(DRAGDROP_E_INVALIDHWND.into())
-            && unsafe { RegisterDragDrop(hwnd, &target) }.is_ok()
+        if callback_targets
+            .borrow()
+            .iter()
+            .any(|(registered_hwnd, _)| *registered_hwnd == hwnd.0 as isize)
         {
+            return true;
+        }
+
+        let target: IDropTarget = ShellDropTarget::new(hwnd, app.clone()).into();
+        let _ = unsafe { RevokeDragDrop(hwnd) };
+        if unsafe { RegisterDragDrop(hwnd, &target) }.is_ok() {
             callback_targets
                 .borrow_mut()
                 .push((hwnd.0 as isize, target));
@@ -330,6 +346,7 @@ pub fn install(window: &tauri::WebviewWindow) -> Result<usize, String> {
         callback(hwnd).into()
     }
 
+    callback(parent);
     let _ = unsafe {
         EnumChildWindows(
             Some(parent),
@@ -343,13 +360,7 @@ pub fn install(window: &tauri::WebviewWindow) -> Result<usize, String> {
         .map_err(|_| "Failed to finalize native drag-drop targets".to_string())?
         .into_inner();
     let installed_count = targets.len();
-    REGISTERED_TARGETS.with(|current| {
-        let mut current = current.borrow_mut();
-        for (hwnd, _) in current.drain(..) {
-            let _ = unsafe { RevokeDragDrop(HWND(hwnd as *mut _)) };
-        }
-        *current = targets;
-    });
+    REGISTERED_TARGETS.with(|current| *current.borrow_mut() = targets);
 
     if installed_count == 0 {
         return Err("No WebView drag-drop target was found".to_string());
