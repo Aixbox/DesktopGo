@@ -47,17 +47,25 @@ const OWNED_ICON_EXTENSIONS: &[&str] = &[
 /// Picture formats whose own content is the better icon at list sizes.
 const THUMBNAIL_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff"];
 
+/// Canonicalizes a root Shell namespace entry to the `::{GUID}` form used by
+/// the icon catalog and Shell APIs.
+pub(crate) fn normalize_special_shell_path(path: &str) -> Option<String> {
+    let trimmed = path.trim().trim_end_matches(['\\', '/']);
+    let candidate = trimmed
+        .get(..6)
+        .filter(|prefix| prefix.eq_ignore_ascii_case("shell:"))
+        .map_or(trimmed, |_| &trimmed[6..]);
+    let guid = candidate
+        .strip_prefix("::{")
+        .and_then(|value| value.strip_suffix('}'))?;
+
+    let guid = uuid::Uuid::parse_str(guid).ok()?;
+    Some(format!("::{{{guid}}}"))
+}
+
 /// Control panel style entries are addressed by one CLSID instead of by a file path.
 pub(crate) fn is_special_shell_path(path: &str) -> bool {
-    let trimmed = path.trim();
-    let Some(guid) = trimmed
-        .strip_prefix("::{")
-        .and_then(|value| value.strip_suffix('}'))
-    else {
-        return false;
-    };
-
-    uuid::Uuid::parse_str(guid).is_ok()
+    normalize_special_shell_path(path).is_some()
 }
 
 /// Lowercase extension without the dot; empty when the entry has none.
@@ -71,8 +79,8 @@ pub(super) fn icon_extension(path: &str) -> String {
 
 pub(super) fn plan_search_icon(path: &str, is_folder: bool) -> SearchIconSource {
     let trimmed = path.trim();
-    if is_special_shell_path(trimmed) {
-        return SearchIconSource::ShellNamespace(trimmed.to_lowercase());
+    if let Some(shell_path) = normalize_special_shell_path(trimmed) {
+        return SearchIconSource::ShellNamespace(shell_path.to_lowercase());
     }
     if is_folder {
         return SearchIconSource::OwnedByPath(trimmed.to_lowercase());
@@ -105,8 +113,8 @@ pub(super) fn extension_lookup_name(extension: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        extension_lookup_name, icon_extension, is_special_shell_path, plan_search_icon,
-        SearchIconSource,
+        extension_lookup_name, icon_extension, is_special_shell_path, normalize_special_shell_path,
+        plan_search_icon, SearchIconSource,
     };
 
     #[test]
@@ -128,6 +136,23 @@ mod tests {
             "::{20D04FE0-3AEA-1069-A2D8-08002B30309D}\\child"
         ));
         assert!(!is_special_shell_path("C:\\Users\\demo\\notes.txt"));
+    }
+
+    #[test]
+    fn normalizes_shell_uri_and_trailing_separator_variants() {
+        assert_eq!(
+            normalize_special_shell_path("shell:::{645FF040-5081-101B-9F08-00AA002F954E}\\"),
+            Some("::{645ff040-5081-101b-9f08-00aa002f954e}".to_string())
+        );
+        assert_eq!(
+            normalize_special_shell_path("SHELL:::{645FF040-5081-101B-9F08-00AA002F954E}"),
+            Some("::{645ff040-5081-101b-9f08-00aa002f954e}".to_string())
+        );
+        assert_eq!(
+            normalize_special_shell_path("::{20D04FE0-3AEA-1069-A2D8-08002B30309D}"),
+            Some("::{20d04fe0-3aea-1069-a2d8-08002b30309d}".to_string())
+        );
+        assert_eq!(normalize_special_shell_path("::{not-a-guid}"), None);
     }
 
     #[test]
@@ -183,6 +208,12 @@ mod tests {
             plan_search_icon("::{ED7BA470-8E54-465E-825C-99712043E01C}", true),
             SearchIconSource::ShellNamespace(
                 "::{ed7ba470-8e54-465e-825c-99712043e01c}".to_string()
+            )
+        );
+        assert_eq!(
+            plan_search_icon("shell:::{645FF040-5081-101B-9F08-00AA002F954E}\\", false),
+            SearchIconSource::ShellNamespace(
+                "::{645ff040-5081-101b-9f08-00aa002f954e}".to_string()
             )
         );
     }
