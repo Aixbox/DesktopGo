@@ -1,4 +1,12 @@
-import { createContext, useContext, type CSSProperties, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react'
 
 interface SettingGroupProps {
   title?: string
@@ -155,33 +163,132 @@ export function RangeControl({
   disabled = false,
   onChange,
 }: RangeControlProps) {
+  return (
+    <Scrubber
+      label={label}
+      value={value}
+      min={min}
+      max={max}
+      step={step}
+      valueLabel={valueLabel}
+      disabled={disabled}
+      onChange={onChange}
+    />
+  )
+}
+
+interface ScrubberProps {
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  valueLabel: string
+  disabled: boolean
+  onChange: (value: number) => void
+}
+
+function Scrubber({ label, value, min, max, step, valueLabel, disabled, onChange }: ScrubberProps) {
+  const trackRef = useRef<HTMLDivElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const rangeSpan = max - min
-  const progress =
-    Number.isFinite(value) &&
-    Number.isFinite(min) &&
-    Number.isFinite(max) &&
-    Number.isFinite(rangeSpan) &&
-    rangeSpan > 0
-      ? Math.min(100, Math.max(0, ((value - min) / rangeSpan) * 100))
-      : 0
+  const normalizedValue = alignRangeValue(value, min, max, step)
+  const progress = getRangeProgress(normalizedValue, min, max)
+
+  const commitPointerValue = useCallback(
+    (clientX: number) => {
+      const track = trackRef.current
+      if (!track || !Number.isFinite(rangeSpan) || rangeSpan <= 0) return
+      const bounds = track.getBoundingClientRect()
+      if (bounds.width <= 0) return
+      const ratio = Math.min(1, Math.max(0, (clientX - bounds.left) / bounds.width))
+      onChange(alignRangeValue(min + ratio * rangeSpan, min, max, step))
+    },
+    [max, min, onChange, rangeSpan, step]
+  )
+
+  const commitKeyboardValue = useCallback(
+    (nextValue: number) => onChange(alignRangeValue(nextValue, min, max, step)),
+    [max, min, onChange, step]
+  )
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (disabled) return
+    const safeStep = Number.isFinite(step) && step > 0 ? step : 1
+    const pageStep = Math.max(safeStep, rangeSpan / 10)
+    let nextValue: number | null = null
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowDown')
+      nextValue = normalizedValue - safeStep
+    if (event.key === 'ArrowRight' || event.key === 'ArrowUp')
+      nextValue = normalizedValue + safeStep
+    if (event.key === 'PageDown') nextValue = normalizedValue - pageStep
+    if (event.key === 'PageUp') nextValue = normalizedValue + pageStep
+    if (event.key === 'Home') nextValue = min
+    if (event.key === 'End') nextValue = max
+    if (nextValue === null) return
+    event.preventDefault()
+    commitKeyboardValue(nextValue)
+  }
 
   return (
-    <div className={`flex min-w-0 items-center gap-3 ${disabled ? 'opacity-50' : ''}`}>
-      <input
-        type="range"
+    <div className={`scrubber ${disabled ? 'opacity-50' : ''}`}>
+      <div
+        ref={trackRef}
+        role="slider"
         aria-label={label}
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        disabled={disabled}
-        onChange={event => onChange(Number(event.currentTarget.value))}
-        style={{ '--setting-range-progress': `${progress}%` } as CSSProperties}
-        className="setting-range h-2 min-w-0 flex-1 cursor-pointer disabled:cursor-not-allowed"
-      />
-      <output className="w-14 shrink-0 rounded-md border border-border/80 bg-background px-2 py-1 text-center text-xs tabular-nums text-foreground">
-        {valueLabel}
-      </output>
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={normalizedValue}
+        aria-valuetext={valueLabel}
+        aria-disabled={disabled}
+        tabIndex={disabled ? -1 : 0}
+        data-dragging={isDragging}
+        data-disabled={disabled}
+        data-active={isDragging}
+        className="scrubber-track"
+        onKeyDown={handleKeyDown}
+        onPointerDown={event => {
+          if (disabled) return
+          event.currentTarget.setPointerCapture(event.pointerId)
+          setIsDragging(true)
+          commitPointerValue(event.clientX)
+        }}
+        onPointerMove={event => {
+          if (isDragging) commitPointerValue(event.clientX)
+        }}
+        onPointerUp={event => {
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId)
+          }
+          setIsDragging(false)
+        }}
+        onPointerCancel={() => setIsDragging(false)}
+      >
+        <div className="scrubber-fill" style={{ width: `${progress}%` }} />
+        <div className="scrubber-ticks" aria-hidden="true">
+          {Array.from({ length: 9 }, (_, index) => (
+            <span key={index} className="scrubber-tick" style={{ left: `${(index + 1) * 10}%` }} />
+          ))}
+        </div>
+        <div className="scrubber-thumb-wrapper" style={{ left: `${progress}%` }}>
+          <div className="scrubber-thumb" />
+        </div>
+        <div className="scrubber-label">{label}</div>
+        <div className="scrubber-value">{valueLabel}</div>
+      </div>
     </div>
   )
+}
+
+function getRangeProgress(value: number, min: number, max: number) {
+  const rangeSpan = max - min
+  if (!Number.isFinite(value) || !Number.isFinite(rangeSpan) || rangeSpan <= 0) return 0
+  return Math.min(100, Math.max(0, ((value - min) / rangeSpan) * 100))
+}
+
+function alignRangeValue(value: number, min: number, max: number, step: number) {
+  const safeStep = Number.isFinite(step) && step > 0 ? step : 1
+  const stepped = min + Math.round((value - min) / safeStep) * safeStep
+  const clamped = Math.min(max, Math.max(min, stepped))
+  return Number.isFinite(clamped) ? Number(clamped.toFixed(10)) : min
 }

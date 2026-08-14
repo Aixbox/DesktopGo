@@ -606,111 +606,109 @@ textarea {
   -webkit-appearance: none;
 }
 
-.setting-range {
-  --setting-range-fill: var(--appearance-accent, var(--primary));
-  --setting-range-track: color-mix(in oklch, var(--foreground) 18%, var(--background));
-  --setting-range-progress: 0%;
+.scrubber {
+  position: relative;
   width: 100%;
-  height: 0.5rem;
-  appearance: none;
-  -webkit-appearance: none;
-  border-radius: 999px;
-  background: linear-gradient(
-    to right,
-    var(--setting-range-fill) 0 var(--setting-range-progress),
-    var(--setting-range-track) var(--setting-range-progress) 100%
-  );
-  accent-color: var(--setting-range-fill);
+  user-select: none;
 }
 
-.setting-range::-webkit-slider-runnable-track {
-  height: 0.5rem;
-  border-radius: 999px;
-  background: transparent;
+.scrubber-track {
+  position: relative;
+  height: 40px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: color-mix(in oklch, var(--foreground) 4%, transparent);
+  cursor: pointer;
+  overflow: hidden;
+  touch-action: pan-y;
+  outline: none;
+  outline-offset: 2px;
 }
 
-.setting-range::-moz-range-track {
-  height: 0.5rem;
-  border-radius: 999px;
-  background: var(--setting-range-track);
+.scrubber-track:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--foreground) 20%, transparent);
 }
 
-.setting-range::-moz-range-progress {
-  height: 0.5rem;
-  border-radius: 999px;
-  background: var(--setting-range-fill);
+.scrubber-track[data-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.35;
+  pointer-events: none;
 }
 
-.setting-range::-webkit-slider-thumb {
-  width: 1rem;
-  height: 1rem;
-  margin-top: -0.25rem;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 2px solid var(--background);
-  border-radius: 50%;
-  background: var(--setting-range-fill);
-  box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 24%, transparent);
+.scrubber-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 10px;
+  background: color-mix(in oklch, var(--foreground) 6%, transparent);
+  pointer-events: none;
+}
+
+.scrubber-ticks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.scrubber-tick {
+  position: absolute;
+  top: 50%;
+  width: 1px;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--foreground) 20%, transparent);
+  transform: translate(-50%) translateY(-50%);
+}
+
+.scrubber-thumb-wrapper {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  margin-left: -6px;
+  transform: translate(-50%) translateY(-50%);
+  pointer-events: none;
+}
+
+.scrubber-thumb {
+  width: 5px;
+  height: 26px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--foreground) 90%, transparent);
+  opacity: 0.15;
+  transform: scaleX(0.7) scaleY(0.7);
   transition:
-    transform 120ms ease,
-    box-shadow 120ms ease;
+    opacity 120ms ease,
+    transform 120ms ease;
 }
 
-.setting-range::-moz-range-thumb {
-  width: 1rem;
-  height: 1rem;
-  border: 2px solid var(--background);
-  border-radius: 50%;
-  background: var(--setting-range-fill);
-  box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 24%, transparent);
-  transition:
-    transform 120ms ease,
-    box-shadow 120ms ease;
+.scrubber-label,
+.scrubber-value {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  z-index: 4;
 }
 
-.setting-range:not(:disabled):hover {
-  --setting-range-track: color-mix(in oklch, var(--foreground) 24%, var(--background));
+.scrubber-label {
+  left: 14px;
+  color: var(--muted-foreground);
 }
 
-.setting-range:not(:disabled):hover::-webkit-slider-thumb,
-.setting-range:not(:disabled):focus-visible::-webkit-slider-thumb {
-  transform: scale(1.08);
-  box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 32%, transparent);
+.scrubber-value {
+  right: 12px;
+  color: var(--foreground);
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
-.setting-range:not(:disabled):hover::-moz-range-thumb,
-.setting-range:not(:disabled):focus-visible::-moz-range-thumb {
-  transform: scale(1.08);
-  box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 32%, transparent);
-}
-
-.setting-range:not(:disabled):active::-webkit-slider-thumb {
-  transform: scale(1.14);
-}
-
-.setting-range:not(:disabled):active::-moz-range-thumb {
-  transform: scale(1.14);
-}
-
-.setting-range:focus-visible {
-  outline: 2px solid color-mix(in oklch, var(--setting-range-fill) 72%, transparent);
-  outline-offset: 3px;
-}
-
-.setting-range:disabled {
-  cursor: not-allowed;
-}
-
-.setting-range:disabled::-webkit-slider-thumb {
-  cursor: not-allowed;
-  transform: none;
-  transition: none;
-}
-
-.setting-range:disabled::-moz-range-thumb {
-  cursor: not-allowed;
-  transform: none;
-  transition: none;
+.scrubber-track[data-active='true'] .scrubber-thumb {
+  opacity: 0.9;
+  transform: scaleX(1) scaleY(1);
 }
 
 .setting-option-default {

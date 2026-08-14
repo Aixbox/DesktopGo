@@ -80,6 +80,7 @@ struct ShellDropTarget {
     helper: Option<IDropTargetHelper>,
     cursor_effect: Cell<DROPEFFECT>,
     enter_is_valid: Cell<bool>,
+    entered_items: RefCell<Vec<NativeFileDragItem>>,
 }
 
 impl ShellDropTarget {
@@ -99,6 +100,7 @@ impl ShellDropTarget {
             helper,
             cursor_effect: Cell::new(DROPEFFECT_NONE),
             enter_is_valid: Cell::new(false),
+            entered_items: RefCell::new(Vec::new()),
         }
     }
 
@@ -206,6 +208,7 @@ impl IDropTarget_Impl for ShellDropTarget_Impl {
         effect: *mut DROPEFFECT,
     ) -> windows::core::Result<()> {
         let Some(data_object_ref) = data_object.as_ref() else {
+            self.entered_items.borrow_mut().clear();
             unsafe { *effect = DROPEFFECT_NONE };
             return Ok(());
         };
@@ -219,6 +222,8 @@ impl IDropTarget_Impl for ShellDropTarget_Impl {
 
         self.enter_is_valid.set(is_valid);
         self.cursor_effect.set(cursor_effect);
+        self.entered_items
+            .replace(items.clone().unwrap_or_default());
         unsafe { *effect = cursor_effect };
 
         if !is_valid {
@@ -259,6 +264,7 @@ impl IDropTarget_Impl for ShellDropTarget_Impl {
             }
             self.emit("leave", Vec::new());
         }
+        self.entered_items.borrow_mut().clear();
         self.cursor_effect.set(DROPEFFECT_NONE);
         Ok(())
     }
@@ -275,11 +281,14 @@ impl IDropTarget_Impl for ShellDropTarget_Impl {
 
         if self.enter_is_valid.replace(false) {
             let Some(data_object_ref) = data_object.as_ref() else {
+                self.entered_items.borrow_mut().clear();
                 self.cursor_effect.set(DROPEFFECT_NONE);
                 return Ok(());
             };
             let items = unsafe { ShellDropTarget::collect_dropped_items(data_object_ref) }
-                .unwrap_or_default();
+                .filter(|items| !items.is_empty())
+                .unwrap_or_else(|| self.entered_items.borrow().clone());
+            self.entered_items.borrow_mut().clear();
             let screen_point = ShellDropTarget::screen_point(point);
             if let Some(helper) = &self.helper {
                 let _ = unsafe { helper.Drop(data_object_ref, &screen_point, cursor_effect) };

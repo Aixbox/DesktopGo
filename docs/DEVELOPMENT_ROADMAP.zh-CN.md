@@ -31,24 +31,25 @@
 | D-016 |        | 已完成 | 美化设置中的滑动条组件                       | 统一设置滑杆的圆角轨道、主题色进度、焦点反馈，并保留键盘可访问性。                                                                                                   |
 | D-017 |        | 已完成 | 给启动台背景右键主菜单添加图标               | 为启动台背景右键主菜单的父子菜单和操作项添加一致的 Lucide 前导图标，不改变现有交互行为。                                                                             |
 | D-018 |        | 已完成 | 调整设置右侧内容区边框阴影                   | 降低浅深主题阴影暗度，并在右侧内容区内补齐不受窗口裁剪影响的底边阴影。                                                                                               |
+| D-019 | P0     | 已完成 | 修复特殊 Shell 图标拖放导入                  | 拖入回收站等虚拟 Shell 项目后，松手阶段复用进入时解析的条目，正常打开添加弹窗并完成导入落位。                                                                         |
 
 - 已完成：窗口常驻默认开启；缺失或无效设置按开启处理，已有 `true`/`false` 不迁移覆盖。
 - 已完成：拖动导入图标按最大显示尺寸提取；仅新建或重新自动提取的缓存会安全升级，历史缓存保留以避免覆盖用户裁剪或着色图。
 - 已完成：拖动导入支持回收站等合法 Windows 系统图标，并保留本地名称、图标与启动能力。
 - 已完成：滚动分组网格主内容区和分组侧栏隐藏原生滚动条，同时保留滚轮、触控板和键盘滚动。
 - 已完成：设置中的快捷入口排序不再因首次使用时持久化文件尚未生成而提示“加载快捷入口使用数据失败”；空 store 现在按默认状态加载。
-- 自定义背景要能预览和调整
-- 美化设置中的滑动条组件
-- 给右键菜单添加图标，如主菜单
-- 设置右侧内容区边框阴影降低一点暗度，现在太黑了，还有在边框最末端阴影没有的问题修复一下
-- 现在拖动系统图标（如回收站）还有有问题，拖入后，打开了拖动导入弹窗，但是松手后没有显示导入图标的弹窗，没有编辑名称编辑图标，以及网格中也没有这个图标，导入提示也没有
+- 已完成（D-006）：自定义背景支持预览和调整。
+- 已完成（D-016）：设置滑动条已统一为可访问的 scrubber 组件。
+- 已完成（D-017）：启动台背景右键主菜单添加一致的 Lucide 图标。
+- 已完成（D-018）：设置右侧内容区边框阴影降低暗度并补齐底边收口。
+- 已完成：修复系统图标（如回收站）拖放导入在松手阶段丢失条目的问题；保留拖入预览并正常打开图标添加弹窗、写入网格和显示导入提示。
 - 已完成（提交 `4cd8742`）：点击设置的搜索菜单时，快捷入口排序不再报“加载快捷入口使用数据失败”。
 - 已完成（提交 `ecfa303`）：自定义背景支持预览和调整。
 - 已完成（D-016）：美化设置中的滑动条组件。
 - 已完成（D-017）：给右键菜单添加图标，如主菜单（仅启动台背景右键主菜单）。
 - 已完成（D-018）：调整设置右侧内容区边框阴影。
-- 现在拖动特殊图标还是无法导入，如拖入回收站，拖入后会打开拖动导入窗口，但是松手后没有打开图标的添加弹窗，也没有在网格中添加图标
-- 优化设置中的滑块，弄一个新增一个组件 弄成这个dom样式的滑块 <div class="scrubber"><div class="scrubber-track" role="slider" aria-label="Falloff" aria-valuemin="0.5" aria-valuemax="4" aria-valuenow="1.6" aria-disabled="false" tabindex="0" data-dragging="false" data-disabled="false" data-active="false"><div class="scrubber-fill" style="width: 31.4286%;"></div><div class="scrubber-ticks"><div class="scrubber-tick" style="left: 10%;"></div><div class="scrubber-tick" style="left: 20%;"></div><div class="scrubber-tick" style="left: 30%;"></div><div class="scrubber-tick" style="left: 40%;"></div><div class="scrubber-tick" style="left: 50%;"></div><div class="scrubber-tick" style="left: 60%;"></div><div class="scrubber-tick" style="left: 70%;"></div><div class="scrubber-tick" style="left: 80%;"></div><div class="scrubber-tick" style="left: 90%;"></div></div><div class="scrubber-thumb-wrapper" style="left: 31.4286%;"><div class="scrubber-thumb"></div></div><div class="scrubber-label">Falloff</div><div class="scrubber-value">1.6</div></div></div>
+- 已完成：特殊 Shell 图标在拖放数据对象于松手阶段无法再次读取时，复用进入阶段缓存的条目完成导入。
+- 已完成（D-016）：设置滑块新增 scrubber 轨道、进度、刻度、滑块和值标签，并支持指针与键盘操作。
 
 ## D-001：安装包启动时先选择语言
 
@@ -689,8 +690,8 @@ node .codex/skills/maintain-modular-code/scripts/check-changed-files.mjs
 
 ### 范围与实施结果
 
-- `RangeControl` 将当前值安全钳制为 `0..100%` 进度变量，覆盖无效范围、越界值和 `max === min`，不改变原有设置值、事件或输出。
-- `.setting-range` 提供跨 Chromium/WebKit 与 Firefox 的圆角轨道、主题色进度、可辨识滑块、悬停/按下反馈和 `:focus-visible` 焦点环，并保留原生键盘控制与禁用行为。
+- `RangeControl` 现在复用自定义 `scrubber`，将当前值安全钳制为 `0..100%` 进度变量，覆盖无效范围、越界值和 `max === min`，不改变原有设置值、事件或输出。
+- `.scrubber-track` 提供圆角轨道、主题色进度、刻度、可辨识滑块、悬停/拖动反馈和 `:focus-visible` 焦点环；`role="slider"` 保留方向键、Home/End、PageUp/PageDown 和禁用语义。
 
 ## D-017：给启动台背景右键主菜单添加图标
 
@@ -706,3 +707,15 @@ node .codex/skills/maintain-modular-code/scripts/check-changed-files.mjs
 - 仅调整 settings shadow token；进一步降低浅深主题的外/内阴影透明度，保留现有左上外阴影几何。
 - 使用单一右下 `inset -1px -1px` 层连续覆盖底边和右下收口，以避开根裁剪并补齐最右侧阴影。
 - 未改 Settings DOM/NativeScrollArea/滚动/边框方向或 scrollbar gutter。
+
+## D-019：修复特殊 Shell 图标拖放导入
+
+### 范围与验收标准
+
+- 从桌面或资源管理器拖入回收站等虚拟 Shell 项目时，松手后仍应打开图标添加弹窗，并能完成导入、落位和提示。
+- 普通文件拖放行为保持不变。
+
+### 实施结果
+
+- `ShellDropTarget` 缓存 `DragEnter` 阶段已解析的条目，在 `Drop` 阶段数据对象无法再次提供虚拟项目时回退使用缓存。
+- 每次离开、放下或无效数据对象都会清理缓存，避免跨拖放会话复用旧条目。
