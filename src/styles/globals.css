@@ -518,25 +518,24 @@ body,
 .settings-shell {
   border: 0;
   outline: 0;
-  --background: oklch(0.965 0.001 255);
-  --card: oklch(0.982 0.002 255);
-  --popover: oklch(0.99 0.002 255);
-  --secondary: oklch(0.945 0.006 255);
-  --muted: oklch(0.955 0.005 255);
-  --muted-foreground: oklch(0.47 0.012 255);
-  --accent: oklch(0.93 0.008 255);
-  --border: oklch(0.88 0.008 255);
-  --input: oklch(0.855 0.01 255);
+  --background: oklch(0.965 0 0);
+  --card: oklch(0.982 0 0);
+  --popover: oklch(0.99 0 0);
+  --secondary: oklch(0.945 0 0);
+  --muted: oklch(0.955 0 0);
+  --muted-foreground: oklch(0.47 0 0);
+  --accent: oklch(0.93 0 0);
+  --border: oklch(0.88 0 0);
+  --input: oklch(0.855 0 0);
   --ring: var(--appearance-accent, oklch(0.61 0.08 255));
-  --settings-chrome: oklch(0.925 0.012 255);
-  --settings-nav-active: color-mix(in oklch, var(--ring) 24%, var(--card));
-  --settings-nav-active-border: color-mix(in oklch, var(--ring) 46%, transparent);
-  --settings-nav-hover: color-mix(in oklch, var(--ring) 8%, var(--popover));
+  --settings-chrome: oklch(0.925 0 0);
+  --settings-nav-active: color-mix(in oklab, var(--ring) 24%, var(--card));
+  --settings-nav-active-border: color-mix(in oklab, var(--ring) 46%, transparent);
+  --settings-nav-hover: color-mix(in oklab, var(--ring) 8%, var(--popover));
   --settings-content-border: color-mix(in oklch, var(--foreground) 24%, transparent);
   --settings-content-shadow:
-    -8px -8px 22px -12px oklch(0.24 0.018 255 / 14%),
-    inset -1px -1px 4px -1px oklch(0.24 0.018 255 / 4%), -2px 0 7px -4px oklch(0.24 0.018 255 / 2%),
-    0 -2px 7px -4px oklch(0.24 0.018 255 / 2%);
+    -8px -8px 22px -12px oklch(0.24 0 0 / 14%), inset -1px -1px 4px -1px oklch(0.24 0 0 / 4%),
+    -2px 0 7px -4px oklch(0.24 0 0 / 2%), 0 -2px 7px -4px oklch(0.24 0 0 / 2%);
   background: linear-gradient(
     180deg,
     color-mix(in oklch, var(--settings-chrome) 82%, var(--card)) 0%,
@@ -556,22 +555,21 @@ body,
 }
 
 .dark .settings-shell {
-  --background: oklch(0.17 0.009 255);
-  --card: oklch(0.215 0.011 255);
-  --popover: oklch(0.225 0.011 255);
-  --secondary: oklch(0.29 0.012 255);
-  --muted: oklch(0.27 0.011 255);
-  --muted-foreground: oklch(0.77 0.012 255);
-  --accent: oklch(0.315 0.016 255);
-  --border: oklch(0.74 0.012 255 / 22%);
-  --input: oklch(0.82 0.012 255 / 28%);
+  --background: oklch(0.17 0 0);
+  --card: oklch(0.215 0 0);
+  --popover: oklch(0.225 0 0);
+  --secondary: oklch(0.29 0 0);
+  --muted: oklch(0.27 0 0);
+  --muted-foreground: oklch(0.77 0 0);
+  --accent: oklch(0.315 0 0);
+  --border: oklch(0.74 0 0 / 22%);
+  --input: oklch(0.82 0 0 / 28%);
   --ring: var(--appearance-accent, oklch(0.72 0.08 255));
-  --settings-chrome: oklch(0.125 0.012 255);
+  --settings-chrome: oklch(0.125 0 0);
   --settings-content-border: color-mix(in oklch, var(--foreground) 30%, transparent);
   --settings-content-shadow:
-    -8px -8px 24px -12px oklch(0.025 0.008 255 / 20%),
-    inset -1px -1px 4px -1px oklch(0.025 0.008 255 / 6%),
-    -2px 0 7px -4px oklch(0.025 0.008 255 / 2%), 0 -2px 7px -4px oklch(0.025 0.008 255 / 2%);
+    -8px -8px 24px -12px oklch(0.025 0 0 / 20%), inset -1px -1px 4px -1px oklch(0.025 0 0 / 6%),
+    -2px 0 7px -4px oklch(0.025 0 0 / 2%), 0 -2px 7px -4px oklch(0.025 0 0 / 2%);
 }
 
 @layer base {
@@ -724,12 +722,12 @@ textarea {
 .setting-option-selected,
 .accent-tonal {
   border-color: color-mix(
-    in oklch,
+    in oklab,
     var(--appearance-accent, oklch(0.61 0.15 255)) 36%,
     var(--border)
   );
   background: color-mix(
-    in oklch,
+    in oklab,
     var(--appearance-accent, oklch(0.61 0.15 255)) 12%,
     var(--background)
   );
@@ -739,12 +737,12 @@ textarea {
 .dark .setting-option-selected,
 .dark .accent-tonal {
   border-color: color-mix(
-    in oklch,
+    in oklab,
     var(--appearance-accent, oklch(0.72 0.12 255)) 42%,
     var(--border)
   );
   background: color-mix(
-    in oklch,
+    in oklab,
     var(--appearance-accent, oklch(0.72 0.12 255)) 16%,
     var(--background)
   );
