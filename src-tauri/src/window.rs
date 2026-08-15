@@ -232,11 +232,16 @@ fn create_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
     .center()
     .resizable(true)
     .decorations(false)
-    .shadow(true)
+    .shadow(false)
     .visible(false)
     .initialization_script(bootstrap_script)
     .build()
-    .map(|_| ())
+    .map(|window| {
+        #[cfg(windows)]
+        if let Err(error) = crate::window_style::remove_native_window_border(&window) {
+            eprintln!("Warning: {error}");
+        }
+    })
     .map_err(|error| format!("Failed to create settings window: {error}"))
 }
 
@@ -249,6 +254,10 @@ pub(crate) fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String>
         .ok_or_else(|| "Settings window not found".to_string())?;
     let _ = settings_window.unminimize();
     let _ = settings_window.show();
+    #[cfg(windows)]
+    if let Err(error) = crate::window_style::remove_native_window_border(&settings_window) {
+        eprintln!("Warning: {error}");
+    }
     activate_webview_window(&settings_window)?;
     hide_main_window(app);
     Ok(())

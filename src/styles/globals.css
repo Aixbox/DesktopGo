@@ -383,6 +383,8 @@ body,
 }
 
 .settings-content-surface {
+  border-left: 1px solid var(--settings-content-border);
+  border-top: 1px solid var(--settings-content-border);
   box-shadow: var(--settings-content-shadow);
 }
 
@@ -514,6 +516,8 @@ body,
 }
 
 .settings-shell {
+  border: 0;
+  outline: 0;
   --background: oklch(0.965 0.001 255);
   --card: oklch(0.982 0.002 255);
   --popover: oklch(0.99 0.002 255);
@@ -528,15 +532,16 @@ body,
   --settings-nav-active: color-mix(in oklch, var(--ring) 24%, var(--card));
   --settings-nav-active-border: color-mix(in oklch, var(--ring) 46%, transparent);
   --settings-nav-hover: color-mix(in oklch, var(--ring) 8%, var(--popover));
+  --settings-content-border: color-mix(in oklch, var(--foreground) 24%, transparent);
   --settings-content-shadow:
-    -8px -8px 22px -12px oklch(0.24 0.018 255 / 26%),
-    inset -1px -1px 4px -1px oklch(0.24 0.018 255 / 10%);
+    -8px -8px 22px -12px oklch(0.24 0.018 255 / 14%),
+    inset -1px -1px 4px -1px oklch(0.24 0.018 255 / 4%), -2px 0 7px -4px oklch(0.24 0.018 255 / 2%),
+    0 -2px 7px -4px oklch(0.24 0.018 255 / 2%);
   background: linear-gradient(
     180deg,
     color-mix(in oklch, var(--settings-chrome) 82%, var(--card)) 0%,
     var(--settings-chrome) 100%
   );
-  box-shadow: inset 0 1px 0 color-mix(in oklch, var(--foreground) 5%, transparent);
   backdrop-filter: blur(16px) saturate(120%);
   -webkit-backdrop-filter: blur(16px) saturate(120%);
   user-select: none;
@@ -562,9 +567,11 @@ body,
   --input: oklch(0.82 0.012 255 / 28%);
   --ring: var(--appearance-accent, oklch(0.72 0.08 255));
   --settings-chrome: oklch(0.125 0.012 255);
+  --settings-content-border: color-mix(in oklch, var(--foreground) 30%, transparent);
   --settings-content-shadow:
-    -8px -8px 24px -12px oklch(0.025 0.008 255 / 56%),
-    inset -1px -1px 4px -1px oklch(0.025 0.008 255 / 22%);
+    -8px -8px 24px -12px oklch(0.025 0.008 255 / 20%),
+    inset -1px -1px 4px -1px oklch(0.025 0.008 255 / 6%),
+    -2px 0 7px -4px oklch(0.025 0.008 255 / 2%), 0 -2px 7px -4px oklch(0.025 0.008 255 / 2%);
 }
 
 @layer base {

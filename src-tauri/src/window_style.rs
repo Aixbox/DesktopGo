@@ -7,7 +7,9 @@ use tauri_plugin_store::StoreExt;
 #[cfg(target_os = "windows")]
 use window_vibrancy::{apply_acrylic, apply_mica, clear_acrylic, clear_mica};
 #[cfg(windows)]
-use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE};
+use windows::Win32::Graphics::Dwm::{
+    DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE, DWMWA_USE_IMMERSIVE_DARK_MODE,
+};
 #[cfg(windows)]
 use winreg::{enums::HKEY_CURRENT_USER, RegKey};
 
@@ -161,6 +163,23 @@ fn set_window_immersive_dark_mode(window: &tauri::WebviewWindow, dark: bool) -> 
             std::mem::size_of::<u32>() as u32,
         )
         .map_err(|error| format!("Failed to set immersive dark mode: {}", error))
+    }
+}
+
+#[cfg(windows)]
+pub(crate) fn remove_native_window_border(window: &tauri::WebviewWindow) -> Result<(), String> {
+    let hwnd = window
+        .hwnd()
+        .map_err(|error| format!("Failed to resolve window HWND: {}", error))?;
+
+    unsafe {
+        DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_BORDER_COLOR,
+            &DWMWA_COLOR_NONE as *const _ as _,
+            std::mem::size_of_val(&DWMWA_COLOR_NONE) as u32,
+        )
+        .map_err(|error| format!("Failed to remove native window border: {}", error))
     }
 }
 
