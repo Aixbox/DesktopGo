@@ -22,6 +22,7 @@ import { getSetting, setSetting } from '@/lib/settingsStore'
 import { translate } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { formControlFocusWithinClassName } from '@/components/ui/inputStyles'
 import { RangeControl, SettingCard, SwitchButton } from '@/components/ui/setting-components'
 import { useToast } from '@/components/ui/toast'
 
@@ -274,7 +275,10 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
             />
           ))}
           <label
-            className="relative size-8 cursor-pointer overflow-hidden rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
+            className={cn(
+              'relative size-8 cursor-pointer overflow-hidden rounded-md border border-input bg-background',
+              formControlFocusWithinClassName
+            )}
             title={translate('选择自定义主题色')}
           >
             <span

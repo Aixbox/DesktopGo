@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 
 import { translate, useI18n } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
+import { formControlActiveClassName, formControlFocusClassName } from './inputStyles'
 import { NativeScrollArea } from './native-scroll-area'
 
 const MENU_GAP = 8
@@ -343,9 +344,10 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
           aria-expanded={open}
           data-state={open ? 'open' : 'closed'}
           className={cn(
-            'flex h-9 w-full items-center justify-between gap-3 rounded-md border border-input bg-background px-3 py-2 text-sm transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/20 disabled:pointer-events-none disabled:opacity-50',
+            'flex h-9 w-full items-center justify-between gap-3 rounded-md border border-input bg-background px-3 py-2 text-sm transition-colors disabled:pointer-events-none disabled:opacity-50',
+            formControlFocusClassName,
             !hasValue && 'text-muted-foreground',
-            open && 'border-ring ring-2 ring-ring/10',
+            open && formControlActiveClassName,
             className
           )}
           onClick={event => {

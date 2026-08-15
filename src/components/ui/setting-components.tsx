@@ -7,6 +7,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react'
+import { formControlFocusClassName } from '@/components/ui/inputStyles'
 
 interface SettingGroupProps {
   title?: string
@@ -245,7 +246,7 @@ function Scrubber({ label, value, min, max, step, valueLabel, disabled, onChange
         data-dragging={isDragging}
         data-disabled={disabled}
         data-active={isDragging}
-        className="scrubber-track"
+        className={`scrubber-track ${formControlFocusClassName}`}
         onKeyDown={handleKeyDown}
         onPointerDown={event => {
           if (disabled) return

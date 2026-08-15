@@ -627,12 +627,6 @@ textarea {
   cursor: pointer;
   overflow: hidden;
   touch-action: pan-y;
-  outline: none;
-  outline-offset: 2px;
-}
-
-.scrubber-track:focus-visible {
-  outline: 2px solid color-mix(in oklch, var(--foreground) 20%, transparent);
 }
 
 .scrubber-track[data-disabled='true'] {

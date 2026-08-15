@@ -14,6 +14,7 @@ import {
 } from '@/lib/aiConfigStore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { textareaBaseClassName } from '@/components/ui/inputStyles'
 import { Select } from '@/components/ui/select'
 import { SettingCard } from '@/components/ui/setting-components'
 import { useToast } from '@/components/ui/toast'
@@ -257,7 +258,7 @@ export function AiSettingsPanel() {
               onChange={e => updateField('customPrompt', e.target.value)}
               placeholder={translate('例如：把所有游戏单独归到「游戏」文件夹。')}
               rows={3}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/25"
+              className={textareaBaseClassName}
             />
           </div>
 
