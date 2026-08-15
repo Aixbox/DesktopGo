@@ -5,6 +5,7 @@ import {
   useState,
   type ChangeEvent,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
@@ -24,10 +25,11 @@ import { DEFAULT_LAUNCHPAD_OPEN_FOCUS_TARGET } from '@/lib/launchpadOpenFocus'
 import { MAIN_WINDOW_APPEARANCE_SYNC_EVENT } from '@/lib/windowPersistent'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Monitor, Moon, Sun } from 'lucide-react'
 import {
   SettingGroup,
   SettingCard,
-  OptionButton,
+  SegmentedControl,
   RangeControl,
   ToggleRow,
 } from '@/components/ui/setting-components'
@@ -79,6 +81,12 @@ const THEME_OPTIONS: { label: string; value: ThemeMode }[] = [
   { label: '深色模式', value: 'dark' },
   { label: '浅色模式', value: 'light' },
 ]
+
+const THEME_MODE_ICONS: Record<ThemeMode, ReactNode> = {
+  system: <Monitor className="h-4 w-4" />,
+  dark: <Moon className="h-4 w-4" />,
+  light: <Sun className="h-4 w-4" />,
+}
 
 const WINDOW_STYLE_OPTIONS: {
   label: string
@@ -593,44 +601,40 @@ export function GeneralSettingsPanel() {
         </div>
         <SettingGroup>
           <SettingCard label={translate('界面语言')}>
-            <div className="flex flex-wrap gap-2">
-              {LANGUAGE_OPTIONS.map(option => (
-                <OptionButton
-                  key={option.value}
-                  label={translate(option.label)}
-                  selected={language === option.value}
-                  onClick={() => {
-                    void setLanguage(option.value)
-                  }}
-                />
-              ))}
-            </div>
+            <SegmentedControl
+              ariaLabel={translate('界面语言')}
+              options={LANGUAGE_OPTIONS.map(option => ({
+                ...option,
+                label: translate(option.label),
+              }))}
+              value={language}
+              onChange={value => void setLanguage(value)}
+            />
           </SettingCard>
 
           <SettingCard label={translate('主题模式')}>
-            <div className="flex flex-wrap gap-2">
-              {THEME_OPTIONS.map(opt => (
-                <OptionButton
-                  key={opt.value}
-                  label={translate(opt.label)}
-                  selected={themeMode === opt.value}
-                  onClick={() => handleThemeMode(opt.value)}
-                />
-              ))}
-            </div>
+            <SegmentedControl
+              ariaLabel={translate('主题模式')}
+              options={THEME_OPTIONS.map(option => ({
+                ...option,
+                icon: THEME_MODE_ICONS[option.value],
+                label: translate(option.label),
+              }))}
+              value={themeMode}
+              onChange={handleThemeMode}
+            />
           </SettingCard>
 
           <SettingCard label={translate('主题风格')}>
-            <div className="flex flex-wrap gap-2">
-              {WINDOW_STYLE_OPTIONS.map(option => (
-                <OptionButton
-                  key={option.value}
-                  label={translate(option.label)}
-                  selected={windowStyle === option.value}
-                  onClick={() => void handleWindowStyle(option.value)}
-                />
-              ))}
-            </div>
+            <SegmentedControl
+              ariaLabel={translate('主题风格')}
+              options={WINDOW_STYLE_OPTIONS.map(option => ({
+                ...option,
+                label: translate(option.label),
+              }))}
+              value={windowStyle}
+              onChange={value => void handleWindowStyle(value)}
+            />
             <p className="text-xs leading-5 text-muted-foreground">
               {translate(selectedWindowStyleOption.description)}
             </p>
@@ -651,16 +655,15 @@ export function GeneralSettingsPanel() {
         </div>
         <SettingGroup>
           <SettingCard label={translate('图标大小')}>
-            <div className="flex flex-wrap gap-2">
-              {ICON_SIZE_OPTIONS.map(opt => (
-                <OptionButton
-                  key={opt.value}
-                  label={translate(opt.label)}
-                  selected={iconSize === opt.value}
-                  onClick={() => handleIconSize(opt.value)}
-                />
-              ))}
-            </div>
+            <SegmentedControl
+              ariaLabel={translate('图标大小')}
+              options={ICON_SIZE_OPTIONS.map(option => ({
+                ...option,
+                label: translate(option.label),
+              }))}
+              value={iconSize}
+              onChange={handleIconSize}
+            />
           </SettingCard>
 
           <SettingCard
@@ -692,29 +695,27 @@ export function GeneralSettingsPanel() {
           </SettingCard>
 
           <SettingCard label={translate('窗口大小')}>
-            <div className="flex flex-wrap gap-2">
-              {WINDOW_MODE_OPTIONS.map(opt => (
-                <OptionButton
-                  key={opt.value}
-                  label={translate(opt.label)}
-                  selected={windowMode === opt.value}
-                  onClick={() => handleWindowMode(opt.value)}
-                />
-              ))}
-            </div>
+            <SegmentedControl
+              ariaLabel={translate('窗口大小')}
+              options={WINDOW_MODE_OPTIONS.map(option => ({
+                ...option,
+                label: translate(option.label),
+              }))}
+              value={windowMode}
+              onChange={handleWindowMode}
+            />
           </SettingCard>
 
           <SettingCard label={translate('标题行数')}>
-            <div className="flex flex-wrap gap-2">
-              {TITLE_LINE_OPTIONS.map(opt => (
-                <OptionButton
-                  key={opt.value}
-                  label={translate(opt.label)}
-                  selected={titleLineCount === opt.value}
-                  onClick={() => handleTitleLineCount(opt.value)}
-                />
-              ))}
-            </div>
+            <SegmentedControl
+              ariaLabel={translate('标题行数')}
+              options={TITLE_LINE_OPTIONS.map(option => ({
+                ...option,
+                label: translate(option.label),
+              }))}
+              value={titleLineCount}
+              onChange={handleTitleLineCount}
+            />
           </SettingCard>
 
           <ToggleRow
@@ -861,16 +862,15 @@ export function GeneralSettingsPanel() {
             label={translate('打开启动台时默认焦点')}
             desc={translate('选择唤起启动台后，默认把输入焦点放到搜索栏，还是仅显示主界面。')}
           >
-            <div className="flex flex-wrap gap-2">
-              {LAUNCHPAD_OPEN_FOCUS_OPTIONS.map(option => (
-                <OptionButton
-                  key={option.value}
-                  label={translate(option.label)}
-                  selected={launchpadOpenFocusTarget === option.value}
-                  onClick={() => handleLaunchpadOpenFocusTarget(option.value)}
-                />
-              ))}
-            </div>
+            <SegmentedControl
+              ariaLabel={translate('打开启动台时默认焦点')}
+              options={LAUNCHPAD_OPEN_FOCUS_OPTIONS.map(option => ({
+                ...option,
+                label: translate(option.label),
+              }))}
+              value={launchpadOpenFocusTarget}
+              onChange={handleLaunchpadOpenFocusTarget}
+            />
             <p className="text-xs leading-5 text-muted-foreground">
               {translate(LAUNCHPAD_OPEN_FOCUS_DESCRIPTIONS[launchpadOpenFocusTarget])}
             </p>

@@ -148,6 +148,78 @@ export function OptionButton({ label, selected, onClick }: OptionButtonProps) {
   )
 }
 
+export interface SegmentedControlOption<Value extends string> {
+  label: string
+  value: Value
+  icon?: ReactNode
+}
+
+interface SegmentedControlProps<Value extends string> {
+  options: readonly SegmentedControlOption<Value>[]
+  value: Value
+  onChange: (value: Value) => void
+  ariaLabel: string
+}
+
+export function SegmentedControl<Value extends string>({
+  options,
+  value,
+  onChange,
+  ariaLabel,
+}: SegmentedControlProps<Value>) {
+  const selectedIndex = Math.max(
+    0,
+    options.findIndex(option => option.value === value)
+  )
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let nextIndex: number | null = null
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      nextIndex = (index - 1 + options.length) % options.length
+    }
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      nextIndex = (index + 1) % options.length
+    }
+    if (event.key === 'Home') nextIndex = 0
+    if (event.key === 'End') nextIndex = options.length - 1
+    if (nextIndex === null || nextIndex === index) return
+
+    event.preventDefault()
+    onChange(options[nextIndex].value)
+    const buttons =
+      event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')
+    buttons?.[nextIndex]?.focus()
+  }
+
+  return (
+    <div className="segmented-control" role="radiogroup" aria-label={ariaLabel}>
+      {options.map((option, index) => {
+        const selected = option.value === value
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            tabIndex={index === selectedIndex ? 0 : -1}
+            data-selected={selected}
+            className={`segmented-control-option ${
+              selected ? 'segmented-control-option-selected' : 'segmented-control-option-default'
+            }`}
+            onClick={() => onChange(option.value)}
+            onKeyDown={event => handleKeyDown(event, index)}
+          >
+            {option.icon ? (
+              <span className="segmented-control-option-icon">{option.icon}</span>
+            ) : null}
+            <span>{option.label}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 interface RangeControlProps {
   label: string
   value: number

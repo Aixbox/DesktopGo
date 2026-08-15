@@ -719,7 +719,63 @@ textarea {
   background: var(--accent);
 }
 
+.segmented-control {
+  display: inline-flex;
+  max-width: 100%;
+  overflow-x: auto;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  background: var(--background);
+  scrollbar-width: none;
+}
+
+.segmented-control::-webkit-scrollbar {
+  display: none;
+}
+
+.segmented-control-option {
+  display: inline-flex;
+  min-height: 32px;
+  min-width: 5.5rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius) - 2px);
+  padding: 0 0.75rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.segmented-control-option-default:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.segmented-control-option:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--ring) 45%, transparent);
+  outline-offset: 1px;
+}
+
+.segmented-control-option-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .setting-option-selected,
+.segmented-control-option-selected,
 .accent-tonal {
   border-color: color-mix(
     in oklab,
@@ -735,6 +791,7 @@ textarea {
 }
 
 .dark .setting-option-selected,
+.dark .segmented-control-option-selected,
 .dark .accent-tonal {
   border-color: color-mix(
     in oklab,
