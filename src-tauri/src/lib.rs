@@ -15,6 +15,7 @@ mod shortcut_target;
 mod startup;
 mod storage_profile;
 mod tray;
+mod tray_icon;
 mod updater;
 mod window;
 mod window_style;

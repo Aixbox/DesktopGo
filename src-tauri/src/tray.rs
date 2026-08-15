@@ -135,9 +135,15 @@ pub(crate) fn install(app: &mut tauri::App) -> tauri::Result<()> {
     let tray_state = app.state::<TrayState>();
     let (menu, menu_items) = build_tray_menu(app.handle())?;
     tray_state.set_menu_items(menu_items);
+    let scale_factor = app
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .map(|monitor| monitor.scale_factor())
+        .unwrap_or(1.0);
 
     let _tray = TrayIconBuilder::with_id(TRAY_ICON_ID)
-        .icon(app.default_window_icon().unwrap().clone())
+        .icon(crate::tray_icon::build(scale_factor))
         .tooltip(tray_state.language().tray_menu_text().tooltip)
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
