@@ -2,12 +2,17 @@ import {
   createContext,
   useCallback,
   useContext,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent,
   type ReactNode,
 } from 'react'
 import { formControlFocusClassName } from '@/components/ui/inputStyles'
+import {
+  getVisibleScrubberTickPercentages,
+  haveSameTickPercentages,
+} from '@/components/ui/scrubberTickVisibility'
 
 interface SettingGroupProps {
   title?: string
@@ -191,10 +196,49 @@ interface ScrubberProps {
 
 function Scrubber({ label, value, min, max, step, valueLabel, disabled, onChange }: ScrubberProps) {
   const trackRef = useRef<HTMLDivElement>(null)
+  const labelRef = useRef<HTMLDivElement>(null)
+  const valueRef = useRef<HTMLDivElement>(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [visibleTickPercentages, setVisibleTickPercentages] = useState<number[]>([])
   const rangeSpan = max - min
   const normalizedValue = alignRangeValue(value, min, max, step)
   const progress = getRangeProgress(normalizedValue, min, max)
+
+  useLayoutEffect(() => {
+    const track = trackRef.current
+    const labelElement = labelRef.current
+    const valueElement = valueRef.current
+    if (!track || !labelElement || !valueElement) return
+
+    const syncVisibleTicks = () => {
+      const trackRect = track.getBoundingClientRect()
+      const labelRect = labelElement.getBoundingClientRect()
+      const valueRect = valueElement.getBoundingClientRect()
+      const next = getVisibleScrubberTickPercentages({
+        trackWidth: trackRect.width,
+        labelLeft: labelRect.left - trackRect.left,
+        labelRight: labelRect.right - trackRect.left,
+        valueLeft: valueRect.left - trackRect.left,
+        valueRight: valueRect.right - trackRect.left,
+      })
+
+      setVisibleTickPercentages(current =>
+        haveSameTickPercentages(current, next) ? current : next
+      )
+    }
+
+    syncVisibleTicks()
+
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(syncVisibleTicks)
+    resizeObserver?.observe(track)
+    resizeObserver?.observe(labelElement)
+    resizeObserver?.observe(valueElement)
+
+    return () => {
+      resizeObserver?.disconnect()
+    }
+  }, [label, valueLabel])
 
   const commitPointerValue = useCallback(
     (clientX: number) => {
@@ -267,15 +311,19 @@ function Scrubber({ label, value, min, max, step, valueLabel, disabled, onChange
       >
         <div className="scrubber-fill" style={{ width: `${progress}%` }} />
         <div className="scrubber-ticks" aria-hidden="true">
-          {Array.from({ length: 9 }, (_, index) => (
-            <span key={index} className="scrubber-tick" style={{ left: `${(index + 1) * 10}%` }} />
+          {visibleTickPercentages.map(percentage => (
+            <span key={percentage} className="scrubber-tick" style={{ left: `${percentage}%` }} />
           ))}
         </div>
         <div className="scrubber-thumb-wrapper" style={{ left: `${progress}%` }}>
           <div className="scrubber-thumb" />
         </div>
-        <div className="scrubber-label">{label}</div>
-        <div className="scrubber-value">{valueLabel}</div>
+        <div ref={labelRef} className="scrubber-label">
+          {label}
+        </div>
+        <div ref={valueRef} className="scrubber-value">
+          {valueLabel}
+        </div>
       </div>
     </div>
   )
