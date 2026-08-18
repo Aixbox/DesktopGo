@@ -699,7 +699,6 @@ textarea {
 .scrubber-value {
   right: 12px;
   color: var(--foreground);
-  font-family: 'Geist Mono', ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
 
