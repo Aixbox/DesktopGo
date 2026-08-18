@@ -1,7 +1,7 @@
 use crate::icons::models::{ICON_SOURCE_CUSTOMAPP, ICON_SOURCE_DESKTOP};
 
 pub(super) const ICON_SNAPSHOT_VERSION: u32 = 2;
-pub(super) const AUTOMATIC_TARGET_ICON_CACHE_VERSION: u32 = 4;
+pub(super) const AUTOMATIC_TARGET_ICON_CACHE_VERSION: u32 = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum IconSource {
