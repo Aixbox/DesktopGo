@@ -82,11 +82,34 @@ pub(super) fn system_icon_index(
 pub(super) fn icon_index_to_data_uri(icon_index: i32, image_list_id: i32) -> Option<String> {
     let image_list: IImageList = unsafe { SHGetImageList(image_list_id) }.ok()?;
     let icon = unsafe { image_list.GetIcon(icon_index, ILD_TRANSPARENT.0) }.ok()?;
+    unsafe { owned_icon_to_data_uri(icon) }
+}
+
+/// Converts an owned HICON and releases it after reading its color and mask
+/// bitmaps. Resource extraction and the shared image list use the same path so
+/// alpha and legacy icon masks behave consistently.
+pub(super) unsafe fn owned_icon_to_data_uri(icon: HICON) -> Option<String> {
+    if icon.is_invalid() {
+        return None;
+    }
     let data_uri = unsafe { icon_to_data_uri(icon) };
     unsafe {
         let _ = DestroyIcon(icon);
     }
     data_uri
+}
+
+/// Resolves a path through the shared image list used by Windows shell views.
+/// This is also the mask-aware fallback for image-factory bitmaps that do not
+/// expose a usable alpha channel.
+pub(super) fn path_icon_to_data_uri(
+    path: &str,
+    is_directory: bool,
+    icon_size: i32,
+) -> Option<String> {
+    let icon_index = system_icon_index(path, is_directory, false)
+        .or_else(|| system_icon_index(path, is_directory, true))?;
+    icon_index_to_data_uri(icon_index, image_list_id_for_size(icon_size))
 }
 
 unsafe fn icon_to_data_uri(icon: HICON) -> Option<String> {
@@ -149,7 +172,10 @@ unsafe fn apply_mask_alpha(
 }
 
 /// Reads a GDI bitmap as top-down 32-bit BGRA.
-unsafe fn read_bitmap_pixels(device_context: HDC, bitmap: HBITMAP) -> Option<(u32, u32, Vec<u8>)> {
+pub(super) unsafe fn read_bitmap_pixels(
+    device_context: HDC,
+    bitmap: HBITMAP,
+) -> Option<(u32, u32, Vec<u8>)> {
     if bitmap.is_invalid() {
         return None;
     }

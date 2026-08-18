@@ -43,6 +43,21 @@ pub(super) fn bgra_to_rgba(bgra: &[u8]) -> Vec<u8> {
     rgba
 }
 
+/// Encodes a native BGRA bitmap only when it carries a usable alpha channel.
+/// Callers can then fall back to an HICON/mask path instead of turning a
+/// transparent canvas into an opaque rectangular background.
+pub(super) fn encode_bgra_png_data_uri_preserving_alpha(
+    bgra: &[u8],
+    width: u32,
+    height: u32,
+) -> Option<String> {
+    let rgba = bgra_to_rgba(bgra);
+    if is_fully_transparent(&rgba) {
+        return None;
+    }
+    encode_rgba_png_data_uri(&rgba, width, height)
+}
+
 /// A fully transparent result means the source carried no alpha channel at all,
 /// not that the icon is invisible.
 pub(super) fn is_fully_transparent(rgba: &[u8]) -> bool {
@@ -51,7 +66,10 @@ pub(super) fn is_fully_transparent(rgba: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{bgra_to_rgba, encode_rgba_png_data_uri, is_fully_transparent};
+    use super::{
+        bgra_to_rgba, encode_bgra_png_data_uri_preserving_alpha, encode_rgba_png_data_uri,
+        is_fully_transparent,
+    };
 
     #[test]
     fn converts_bgra_pixels_to_rgba() {
@@ -62,6 +80,12 @@ mod tests {
     fn detects_missing_alpha_channel() {
         assert!(is_fully_transparent(&[9, 9, 9, 0, 8, 8, 8, 0]));
         assert!(!is_fully_transparent(&[9, 9, 9, 0, 8, 8, 8, 255]));
+    }
+
+    #[test]
+    fn rejects_missing_native_alpha_instead_of_making_the_canvas_opaque() {
+        assert!(encode_bgra_png_data_uri_preserving_alpha(&[9, 8, 7, 0], 1, 1).is_none());
+        assert!(encode_bgra_png_data_uri_preserving_alpha(&[9, 8, 7, 255], 1, 1).is_some());
     }
 
     #[test]
