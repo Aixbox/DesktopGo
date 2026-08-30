@@ -14,6 +14,12 @@ export default defineConfig(async () => ({
     },
   },
 
+  // 依赖扫描只从应用入口开始：默认会抓取根下所有 *.html，
+  // 会误扫 src-tauri/target 里的构建产物（数万个文件导致 EMFILE）。
+  optimizeDeps: {
+    entries: ['index.html'],
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
