@@ -10,8 +10,8 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ArrowDown, Bot, Loader2, MessageSquareText, Sparkles } from 'lucide-react'
+import { motion, useReducedMotion } from 'framer-motion'
+import { Bot, MessageSquareText } from 'lucide-react'
 import { NativeScrollArea } from '@/components/ui/native-scroll-area'
 import { translate } from '@/lib/i18n'
 import { useToast } from '@/components/ui/toast'
@@ -27,10 +27,16 @@ import {
 } from '@/lib/aiOrganizeSessions'
 import type { DesktopIcon } from '@/types'
 import { AiOrganizeComposer } from './AiOrganizeComposer'
+import { AiOrganizeEmptyState } from './AiOrganizeEmptyState'
 import { AiOrganizePanelHeaderActions } from './AiOrganizePanelHeaderActions'
 import { AiOrganizeHistoryMenu } from './AiOrganizeHistoryMenu'
-import { AiOrganizeRunInline as AssistantRunInline } from './AiOrganizeRunInline'
+import { AiMarkdown } from './AiMarkdown'
+import { AiMessageActions } from './AiMessageActions'
 import { AiOrganizeSnapshotPreview } from './AiOrganizeSnapshotPreview'
+import { AiResponseTime } from './AiResponseTime'
+import { AiScrollToBottomButton } from './AiScrollToBottomButton'
+import { AiThinkingBlock } from './AiThinkingBlock'
+import { AiWaitingDots } from './AiWaitingDots'
 import {
   getComposerCommandLabel,
   isNearScrollBottom,
@@ -43,6 +49,8 @@ import {
   type QueuedAiPrompt as QueuedPrompt,
 } from './aiOrganizePanelModel'
 import { useAiOrganizeExecution } from './useAiOrganizeExecution'
+import { useAiOrganizeConfig } from './useAiOrganizeConfig'
+import { useAiOrganizeMenuDismiss } from './useAiOrganizeMenuDismiss'
 import { useQueuedPrompts } from './useQueuedPrompts'
 import type { AiOrganizePanelHandle, AiOrganizePanelProps } from './aiOrganizePanelTypes'
 import { useAiOrganizeRunState } from './useAiOrganizeRunState'
@@ -105,44 +113,18 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
     const { applyAiOrganizeLayout, applyLayoutPreview, restoreLayoutPreview, markApplied } =
       useAiOrganizeLayoutPreview({ icons, layoutViewMode, onPreviewed })
 
-    useEffect(() => {
-      if (!historyExpanded && !presetsExpanded) return
+    const { aiConfig, updateAiConfig } = useAiOrganizeConfig(open)
 
-      const isInside = (node: Node, elements: Array<HTMLElement | null>) =>
-        elements.some(element => element?.contains(node))
-
-      const handlePointerDown = (event: PointerEvent) => {
-        const target = event.target
-        if (!(target instanceof Node)) return
-
-        if (
-          historyExpanded &&
-          !isInside(target, [historyButtonRef.current, historyMenuRef.current])
-        ) {
-          setHistoryExpanded(false)
-        }
-
-        if (
-          presetsExpanded &&
-          !isInside(target, [presetsButtonRef.current, presetsMenuRef.current])
-        ) {
-          setPresetsExpanded(false)
-        }
-      }
-
-      const handleKeyDown = (event: KeyboardEvent) => {
-        if (event.key !== 'Escape') return
-        setHistoryExpanded(false)
-        setPresetsExpanded(false)
-      }
-
-      document.addEventListener('pointerdown', handlePointerDown, true)
-      document.addEventListener('keydown', handleKeyDown, true)
-      return () => {
-        document.removeEventListener('pointerdown', handlePointerDown, true)
-        document.removeEventListener('keydown', handleKeyDown, true)
-      }
-    }, [historyExpanded, presetsExpanded])
+    useAiOrganizeMenuDismiss({
+      historyExpanded,
+      presetsExpanded,
+      historyButtonRef,
+      historyMenuRef,
+      presetsButtonRef,
+      presetsMenuRef,
+      setHistoryExpanded,
+      setPresetsExpanded,
+    })
 
     const iconByKey = useMemo(() => {
       const map = new Map<string, DesktopIcon>()
@@ -227,6 +209,28 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       },
       [commitSessions]
     )
+
+    // 流式回复期间只更新本地状态，最终内容仍由 commitSession 持久化。
+    const patchMessageContent = useCallback((messageId: string, content: string) => {
+      const sessionId = activeSessionIdRef.current
+      if (!sessionId) return
+      const currentSessions = sessionsRef.current
+      const sessionIndex = currentSessions.findIndex(session => session.id === sessionId)
+      if (sessionIndex < 0) return
+      const session = currentSessions[sessionIndex]
+      if (!session.messages.some(message => message.id === messageId)) return
+      const nextSession: AiOrganizeSession = {
+        ...session,
+        updatedAt: Date.now(),
+        messages: session.messages.map(message =>
+          message.id === messageId ? { ...message, content } : message
+        ),
+      }
+      const nextSessions = [...currentSessions]
+      nextSessions[sessionIndex] = nextSession
+      sessionsRef.current = nextSessions
+      setSessions(nextSessions)
+    }, [])
 
     const activateSnapshot = useCallback(
       (session: AiOrganizeSession, snapshot?: AiOrganizeSnapshot) => {
@@ -450,16 +454,19 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
     )
 
     const {
-      agentEvents,
+      activeRunKind,
       elapsedMs,
-      isStreaming,
+      isAnswerStreaming,
+      reasoningActive,
+      reasoningText,
+      regenerateMessage,
       resetExecution,
       runChat,
       runClassification,
-      runStatus,
-      statusDetail,
       statusTitle,
-      streamChunks,
+      stopRun,
+      streamedContentLength,
+      waitingForOutput,
     } = useAiOrganizeExecution({
       open,
       icons,
@@ -472,6 +479,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       activeSessionIdRef,
       groupsRef,
       commitSession,
+      updateMessageContent: patchMessageContent,
       activateSnapshot,
       applyLayoutPreview,
       setPhase,
@@ -490,7 +498,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       }
       transcript.scrollTop = transcript.scrollHeight
       setShowScrollToBottom(false)
-    }, [activeSession?.messages.length, phase, streamChunks.length, agentEvents.length])
+    }, [activeSession?.messages.length, phase, reasoningText.length, streamedContentLength])
 
     useLayoutEffect(() => {
       if (!open || !visible) return
@@ -618,7 +626,6 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       }
     }
 
-    // 只有至少包含 2 个图标的分组才有意义。
     const applicableGroups = useMemo(
       () => groups.filter(group => group.iconKeys.length >= 2),
       [groups]
@@ -841,10 +848,15 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
                 >
                   <div className="space-y-3">
                     {activeSession?.messages.length ? (
-                      activeSession.messages.map(message => {
+                      activeSession.messages.map((message, index) => {
                         const isUser = message.role === 'user'
                         const failed = message.status === 'failed'
                         const running = message.status === 'running'
+                        // 生成中实时计时；完成后展示持久化的总耗时。
+                        const responseTimeMs = running ? elapsedMs : message.responseMs
+                        const showWaitingDots =
+                          running &&
+                          (waitingForOutput || (activeRunKind === 'organize' && !reasoningActive))
                         const snapshotIndex =
                           !isUser && message.snapshotId
                             ? activeSnapshots.findIndex(
@@ -856,51 +868,69 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
                         return (
                           <div
                             key={message.id}
-                            className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+                            className={`group flex ${isUser ? 'justify-end' : 'justify-start'}`}
                           >
                             <div
-                              className={`flex max-w-[92%] flex-col ${isUser ? 'items-end' : 'items-start'}`}
+                              className={`flex flex-col ${
+                                isUser ? 'max-w-[92%] items-end' : 'max-w-full items-start'
+                              }`}
                             >
                               <div
-                                className={`rounded-lg border px-3 py-2 text-sm leading-5 ${
+                                className={`text-sm leading-5 ${
                                   isUser
-                                    ? 'border-primary/25 bg-primary/12 text-foreground'
+                                    ? 'rounded-lg border border-primary/25 bg-primary/12 px-3 py-2 text-foreground'
                                     : failed
-                                      ? 'border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-200'
-                                      : 'border-border/80 bg-muted/35 text-foreground'
+                                      ? 'py-0.5 text-red-700 dark:text-red-200'
+                                      : 'py-0.5 text-foreground'
                                 }`}
                               >
                                 <div className="flex items-start gap-2">
                                   {!isUser ? (
-                                    running ? (
-                                      <Loader2 className="accent-foreground mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
-                                    ) : (
-                                      <MessageSquareText className="accent-foreground mt-0.5 h-3.5 w-3.5 shrink-0" />
-                                    )
+                                    <MessageSquareText className="accent-foreground mt-0.5 h-3.5 w-3.5 shrink-0" />
                                   ) : null}
                                   <div className="min-w-0 flex-1">
-                                    <p className="whitespace-pre-wrap break-words">
-                                      {message.content}
-                                    </p>
+                                    <AiResponseTime ms={responseTimeMs} />
+                                    {!isUser && (running ? reasoningText : message.reasoning) ? (
+                                      <AiThinkingBlock
+                                        text={running ? reasoningText : (message.reasoning ?? '')}
+                                        streaming={running && reasoningActive}
+                                      />
+                                    ) : null}
+                                    {isUser || failed ? (
+                                      <p className="whitespace-pre-wrap break-words">
+                                        {message.content}
+                                        {showWaitingDots ? <AiWaitingDots /> : null}
+                                      </p>
+                                    ) : (
+                                      <>
+                                        <AiMarkdown
+                                          content={
+                                            isAnswerStreaming
+                                              ? `${message.content}▍`
+                                              : message.content
+                                          }
+                                        />
+                                        {showWaitingDots ? <AiWaitingDots /> : null}
+                                      </>
+                                    )}
                                     {message.error ? (
                                       <p className="mt-1 break-words text-xs opacity-80">
                                         {message.error}
                                       </p>
                                     ) : null}
-                                    {running || (failed && message.error) ? (
-                                      <AssistantRunInline
-                                        status={runStatus}
-                                        title={statusTitle}
-                                        detail={statusDetail}
-                                        elapsedMs={elapsedMs}
-                                        events={agentEvents}
-                                        streamChunks={streamChunks}
-                                        isStreaming={isStreaming}
-                                      />
-                                    ) : null}
                                   </div>
                                 </div>
                               </div>
+                              {!isUser && !running ? (
+                                <AiMessageActions
+                                  content={message.content}
+                                  failed={failed}
+                                  alwaysVisible={
+                                    index === (activeSession?.messages.length ?? 0) - 1
+                                  }
+                                  onRegenerate={() => regenerateMessage(message)}
+                                />
+                              ) : null}
                               {messageSnapshot ? (
                                 <AiOrganizeSnapshotPreview
                                   snapshot={messageSnapshot}
@@ -924,38 +954,17 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
                         )
                       })
                     ) : (
-                      <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
-                        <div className="mb-2 flex items-center gap-2 text-foreground">
-                          <Sparkles className="accent-foreground h-4 w-4" />
-                          {translate('选择预设或输入要求开始整理')}
-                        </div>
-                        <p className="text-xs leading-5">
-                          {translate('你可以先生成一版布局，再继续对话要求 AI 调整。')}
-                        </p>
-                      </div>
+                      <AiOrganizeEmptyState />
                     )}
                   </div>
                 </div>
               </NativeScrollArea>
 
               <div className="relative shrink-0 pb-3 pt-1">
-                <AnimatePresence initial={false}>
-                  {showScrollToBottom ? (
-                    <motion.button
-                      type="button"
-                      onClick={() => scrollTranscriptToBottom()}
-                      aria-label={translate('滚动到底部')}
-                      title={translate('滚动到底部')}
-                      initial={prefersReducedMotion ? false : { opacity: 0, y: 6, scale: 0.96 }}
-                      animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
-                      exit={prefersReducedMotion ? undefined : { opacity: 0, y: 6, scale: 0.96 }}
-                      transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-                      className="absolute -top-10 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-border/80 bg-background/95 text-muted-foreground shadow-lg backdrop-blur transition-colors hover:bg-accent hover:text-foreground"
-                    >
-                      <ArrowDown className="h-4 w-4" />
-                    </motion.button>
-                  ) : null}
-                </AnimatePresence>
+                <AiScrollToBottomButton
+                  show={showScrollToBottom}
+                  onClick={() => scrollTranscriptToBottom()}
+                />
                 <AiOrganizeComposer
                   phase={phase}
                   sessionsLoaded={sessionsLoaded}
@@ -970,10 +979,13 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
                   presetsMenuRef={presetsMenuRef}
                   queuedPrompts={queuedPrompts}
                   clearQueuedPrompts={clearQueuedPrompts}
+                  aiConfig={aiConfig}
+                  onUpdateAiConfig={updateAiConfig}
                   onComposerKeyDown={handleComposerKeyDown}
                   onInsertOrganizeCommand={handleInsertOrganizeCommand}
                   onSelectPreset={handleSelectPreset}
                   onSendPrompt={sendPrompt}
+                  onStopRun={stopRun}
                 />
               </div>
             </div>

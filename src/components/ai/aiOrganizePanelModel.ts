@@ -16,8 +16,10 @@ export type AiOrganizeRunStatus =
 
 export const AI_ORGANIZE_AGENT_EVENT = 'ai-organize:agent-event'
 export const MAX_AGENT_EVENTS = 80
-export const MAX_STREAM_CHUNKS = 220
 export const MAX_CONVERSATION_CONTEXT_MESSAGES = 8
+
+/** 用户停止生成时后端返回的哨兵错误，需与 Rust 侧 AI_RUN_CANCELLED_MESSAGE 完全一致。 */
+export const AI_RUN_CANCELLED = '已停止生成。'
 
 const MAX_PROMPT_CONTEXT_CHARS = 2600
 
@@ -74,11 +76,6 @@ export interface AiAgentRunResult extends AiClassifyResult {
 
 export interface AiChatResult {
   content: string
-}
-
-export interface AiStreamChunk {
-  id: number
-  text: string
 }
 
 export interface AiAgentEvent {
@@ -191,6 +188,8 @@ export const buildConversationPrompt = ({
   return sections.join('\n\n').slice(0, MAX_PROMPT_CONTEXT_CHARS)
 }
 
+export const isStreamPhase = (phase: string) => phase === 'token' || phase === 'reasoningToken'
+
 export const getAgentEventLabel = (event: AiAgentEvent): string => {
   switch (event.phase) {
     case 'started':
@@ -201,6 +200,8 @@ export const getAgentEventLabel = (event: AiAgentEvent): string => {
       return translate('正在请求模型生成草稿')
     case 'token':
       return translate('模型正在流式生成草稿')
+    case 'reasoningToken':
+      return translate('模型正在深度思考')
     case 'reasoning':
       return translate('模型正在规划整理策略')
     case 'request':
@@ -228,11 +229,12 @@ export const getAgentEventLabel = (event: AiAgentEvent): string => {
   }
 }
 
-export const formatElapsed = (elapsedMs: number): string => {
-  const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000))
+/** 毫秒时长格式化：不足 1 分钟显示 "8s"，超过显示 "2m 5s"。 */
+export const formatAiDuration = (ms: number) => {
+  const totalSeconds = Math.max(1, Math.round(ms / 1000))
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
-  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${totalSeconds}s`
 }
 
 export const isNearScrollBottom = (element: HTMLElement, threshold = 48) =>

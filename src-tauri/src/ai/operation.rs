@@ -1,5 +1,8 @@
 use std::time::Duration;
 
+use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
+
 use super::endpoint::{
     normalize_anthropic_messages_url, normalize_chat_completions_url, normalize_responses_url,
     DEFAULT_REQUEST_TIMEOUT_SECS,
@@ -11,6 +14,7 @@ use super::models::{
 };
 use super::policy::{build_system_prompt, parse_model_payload, sanitize_groups};
 use super::stream::{read_anthropic_stream, read_chat_completions_stream, read_response_stream};
+use crate::agent::llm::{LlmClient, LlmMessage, ObservedLlmRequest};
 
 pub(super) async fn classify_icons(
     config: AiConfig,
@@ -48,20 +52,19 @@ pub(super) async fn classify_icons(
 }
 
 pub(super) async fn chat(
+    window: &tauri::Window,
+    cancel: CancellationToken,
     config: AiConfig,
     messages: Vec<AiChatMessageInput>,
 ) -> Result<AiChatResult, String> {
     validate_config(&config)?;
-    let client = build_client("初始化 AI 客户端失败")?;
-    let content = execute_streaming_request(
-        &client,
-        &config,
-        build_chat_messages(&config, messages),
-        false,
-    )
-    .await?
-    .trim()
-    .to_string();
+    let request_messages = build_chat_messages(&config, messages);
+    let client = LlmClient::from_config(&config);
+    let run_id = format!("chat-{}", Uuid::new_v4());
+    let observed =
+        ObservedLlmRequest::new(request_messages, false, window, &run_id, "chat").with_cancel(cancel);
+    let response = client.complete_json_observed(&config, observed).await?;
+    let content = response.content.trim().to_string();
     if content.is_empty() {
         return Err("AI 接口未返回有效内容。".to_string());
     }
@@ -147,22 +150,21 @@ fn build_client(error_prefix: &str) -> Result<reqwest::Client, String> {
 fn build_chat_messages(
     config: &AiConfig,
     messages: Vec<AiChatMessageInput>,
-) -> Vec<ChatMessage<'_>> {
-    let mut request_messages = vec![ChatMessage {
-        role: "system",
-        content: "你是 DesktopGo 的桌面整理助手。默认进行自然、简洁的上下文对话；不要擅自生成图标布局或声称已经整理桌面。只有用户明确使用整理图标指令时，应用才会进入整理流程。"
-            .to_string(),
-    }];
+) -> Vec<LlmMessage> {
+    let mut request_messages = vec![LlmMessage::new(
+        "system",
+        "你是 DesktopGo 的桌面整理助手。默认进行自然、简洁的上下文对话；不要擅自生成图标布局或声称已经整理桌面。只有用户明确使用整理图标指令时，应用才会进入整理流程。",
+    )];
 
     if let Some(extra) = config
         .custom_prompt
         .as_deref()
         .filter(|value| !value.trim().is_empty())
     {
-        request_messages.push(ChatMessage {
-            role: "system",
-            content: format!("用户对助手的附加偏好：{}", extra.trim()),
-        });
+        request_messages.push(LlmMessage::new(
+            "system",
+            format!("用户对助手的附加偏好：{}", extra.trim()),
+        ));
     }
 
     for message in messages
@@ -179,10 +181,7 @@ fn build_chat_messages(
         } else {
             "user"
         };
-        request_messages.push(ChatMessage {
-            role,
-            content: message.content.trim().to_string(),
-        });
+        request_messages.push(LlmMessage::new(role, message.content.trim().to_string()));
     }
 
     request_messages

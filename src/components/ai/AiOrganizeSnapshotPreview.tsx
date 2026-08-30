@@ -27,6 +27,7 @@ interface AiOrganizeSnapshotPreviewProps {
   onRemoveIcon: (groupId: string, key: string) => void
 }
 
+// 整理结果在对话里的呈现：分组列表即正文，版本/时间/操作收进底部一行。
 export function AiOrganizeSnapshotPreview({
   snapshot,
   snapshotIndex,
@@ -56,27 +57,99 @@ export function AiOrganizeSnapshotPreview({
   const isEditingSnapshot = isActiveSnapshot && editingSnapshotId === snapshot.id
   const canEdit = isEditingSnapshot && !previewDisabled
 
+  if (previewGroups.length === 0) {
+    return (
+      <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+        {translate('这次没有生成可用分组。')}
+      </p>
+    )
+  }
+
   return (
-    <div className="mt-2 w-[min(100%,390px)] rounded-md border border-border/80 bg-background/82 p-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
-          <FolderClosed className="accent-foreground h-4 w-4 shrink-0" />
-          <span className="truncate">{translate('布局预览')}</span>
-          <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-            {translate('第 {index} 版', { index: snapshotIndex + 1 })}
-          </span>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <span className="text-[11px] text-muted-foreground">
-            {formatSessionTime(snapshot.createdAt)}
-          </span>
+    <div className="mt-1.5 w-full">
+      <div className="space-y-3">
+        {previewGroups.map(group => (
+          <div key={group.id} className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <FolderClosed className="accent-foreground h-3.5 w-3.5 shrink-0" />
+              {canEdit ? (
+                <Input
+                  value={group.folderName}
+                  onChange={event => onRenameGroup(group.id, event.target.value)}
+                  maxLength={64}
+                  className="h-7 min-w-0 flex-1"
+                  aria-label={translate('分组名称')}
+                />
+              ) : (
+                <span className="min-w-0 truncate text-[13px] font-medium text-foreground">
+                  {group.folderName}
+                </span>
+              )}
+              <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">
+                {translate('{count} 个图标', { count: group.iconKeys.length })}
+              </span>
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => onDropGroup(group.id)}
+                  className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300"
+                >
+                  {translate('解散')}
+                </button>
+              ) : null}
+            </div>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-0.5 pl-5">
+              {group.iconKeys.map(key => {
+                const icon = iconByKey.get(key)
+                return (
+                  <span
+                    key={key}
+                    className="inline-flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-xs text-foreground/85 transition-colors hover:bg-accent"
+                  >
+                    {icon?.icon_base64 ? (
+                      <img
+                        src={icon.icon_base64}
+                        alt=""
+                        className="h-4 w-4 shrink-0 object-contain"
+                      />
+                    ) : null}
+                    <span className="max-w-[120px] truncate">{resolveIconName(key)}</span>
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        aria-label={translate('移出分组')}
+                        onClick={() => onRemoveIcon(group.id, key)}
+                        className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground/70 transition-colors hover:bg-red-500/15 hover:text-red-600 dark:hover:text-red-300"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    ) : null}
+                  </span>
+                )
+              })}
+            </div>
+            {group.iconKeys.length < 2 ? (
+              <p className="mt-0.5 pl-5 text-[11px] text-amber-600 dark:text-amber-300">
+                {translate('不足 2 个图标，应用时会被忽略。')}
+              </p>
+            ) : null}
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+        <span className="min-w-0 truncate">
+          {translate('第 {index} 版', { index: snapshotIndex + 1 })} ·{' '}
+          {formatSessionTime(snapshot.createdAt)}
+        </span>
+        <span className="ml-auto flex shrink-0 items-center gap-1">
           {!isActiveSnapshot ? (
             <>
               <button
                 type="button"
                 onClick={() => onPreviewSnapshot(snapshot)}
                 disabled={previewDisabled}
-                className="rounded-md border border-border/75 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded px-1.5 py-0.5 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {translate('预览此版')}
               </button>
@@ -85,21 +158,21 @@ export function AiOrganizeSnapshotPreview({
                 onClick={() => void onInsertEditCommand(snapshot)}
                 disabled={previewDisabled}
                 title={translate('将此布局加入修改上下文')}
-                className="accent-tonal rounded-md border px-2 py-1 text-[11px] transition-colors hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
+                className="accent-tonal rounded px-1.5 py-0.5 transition-colors hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {translate('修改布局')}
               </button>
             </>
           ) : isEditingSnapshot ? (
             <>
-              <span className="accent-foreground rounded-md bg-primary/10 px-2 py-1 text-[11px]">
+              <span className="accent-foreground rounded bg-primary/10 px-1.5 py-0.5">
                 {translate('修改中')}
               </span>
               <button
                 type="button"
                 onClick={() => onExitEditSnapshot(snapshot.id)}
                 disabled={previewDisabled}
-                className="rounded-md border border-border/75 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded px-1.5 py-0.5 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {translate('退出修改')}
               </button>
@@ -110,89 +183,13 @@ export function AiOrganizeSnapshotPreview({
               onClick={() => void onInsertEditCommand(snapshot)}
               disabled={previewDisabled}
               title={translate('将此布局加入修改上下文')}
-              className="accent-tonal rounded-md border px-2 py-1 text-[11px] transition-colors hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
+              className="accent-tonal rounded px-1.5 py-0.5 transition-colors hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {translate('修改布局')}
             </button>
           )}
-        </div>
+        </span>
       </div>
-
-      {previewGroups.length === 0 ? (
-        <div className="rounded-md border border-dashed border-border/75 bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
-          {translate('这次没有生成可用分组。')}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {previewGroups.map(group => (
-            <div key={group.id} className="rounded-md border border-border/75 bg-card/70 p-2.5">
-              <div className="mb-2 flex items-center gap-2">
-                <FolderClosed className="accent-foreground h-4 w-4 shrink-0" />
-                {canEdit ? (
-                  <Input
-                    value={group.folderName}
-                    onChange={event => onRenameGroup(group.id, event.target.value)}
-                    maxLength={64}
-                    className="h-8 min-w-0 flex-1"
-                    aria-label={translate('分组名称')}
-                  />
-                ) : (
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                    {group.folderName}
-                  </span>
-                )}
-                <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
-                  {group.folderSize} / {group.iconKeys.length}
-                </span>
-                {canEdit ? (
-                  <button
-                    type="button"
-                    onClick={() => onDropGroup(group.id)}
-                    className="shrink-0 rounded-md px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300"
-                  >
-                    {translate('解散')}
-                  </button>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {group.iconKeys.map(key => {
-                  const icon = iconByKey.get(key)
-                  return (
-                    <span
-                      key={key}
-                      className="group inline-flex min-w-0 items-center gap-1.5 rounded-md border border-border/70 bg-background py-1 pl-1.5 pr-1 text-xs"
-                    >
-                      {icon?.icon_base64 ? (
-                        <img
-                          src={icon.icon_base64}
-                          alt=""
-                          className="h-4 w-4 shrink-0 object-contain"
-                        />
-                      ) : null}
-                      <span className="max-w-[138px] truncate">{resolveIconName(key)}</span>
-                      {canEdit ? (
-                        <button
-                          type="button"
-                          aria-label={translate('移出分组')}
-                          onClick={() => onRemoveIcon(group.id, key)}
-                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-500/15 hover:text-red-600 dark:hover:text-red-300"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      ) : null}
-                    </span>
-                  )
-                })}
-              </div>
-              {group.iconKeys.length < 2 ? (
-                <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-300">
-                  {translate('不足 2 个图标，应用时会被忽略。')}
-                </p>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

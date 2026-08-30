@@ -2,9 +2,10 @@ use crate::agent::event::{emit_agent_event, AgentEvent, AgentEventPhase};
 use crate::agent::llm::{LlmClient, LlmMessage, LlmResponse, ObservedLlmRequest};
 use crate::agent::memory;
 use crate::agent::tool::{AgentTool, ToolResponse};
-use crate::ai::{self, AiClassifyResult, AiConfig, AiGroup, AiIconInput};
+use crate::ai::{self, AiClassifyResult, AiConfig, AiGroup, AiIconInput, AiRunRegistry};
 use serde::Serialize;
 use tauri::Manager;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize)]
@@ -29,11 +30,14 @@ impl AgentTool for ValidateGroupsTool {
 #[tauri::command]
 pub async fn ai_organize_icons_agent(
     window: tauri::Window,
+    registry: tauri::State<'_, AiRunRegistry>,
+    request_id: String,
     config: AiConfig,
     icons: Vec<AiIconInput>,
 ) -> Result<AiAgentRunResult, String> {
+    let guard = registry.register(request_id);
     let run_id = format!("icon-agent-{}", Uuid::new_v4());
-    let agent = IconOrganizerAgent::new(window, run_id);
+    let agent = IconOrganizerAgent::new(window, run_id, guard.token());
     agent.run(config, icons).await
 }
 
@@ -49,14 +53,16 @@ pub fn ai_organize_record_apply(
 struct IconOrganizerAgent {
     window: tauri::Window,
     run_id: String,
+    cancel: CancellationToken,
     validate_tool: ValidateGroupsTool,
 }
 
 impl IconOrganizerAgent {
-    fn new(window: tauri::Window, run_id: String) -> Self {
+    fn new(window: tauri::Window, run_id: String, cancel: CancellationToken) -> Self {
         Self {
             window,
             run_id,
+            cancel,
             validate_tool: ValidateGroupsTool,
         }
     }
@@ -175,7 +181,8 @@ impl IconOrganizerAgent {
                     &self.window,
                     &self.run_id,
                     "严格 JSON 流式请求",
-                ),
+                )
+                .with_cancel(self.cancel.clone()),
             )
             .await
         {
@@ -196,7 +203,8 @@ impl IconOrganizerAgent {
                             &self.window,
                             &self.run_id,
                             "宽松 JSON 流式请求",
-                        ),
+                        )
+                        .with_cancel(self.cancel.clone()),
                     )
                     .await
                 {

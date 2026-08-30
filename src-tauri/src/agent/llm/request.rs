@@ -28,7 +28,7 @@ pub(super) fn build_responses_request(
         body["temperature"] = json!(temperature);
     }
     if let Some(effort) = config.reasoning_effort.as_openai_value() {
-        body["reasoning"] = json!({ "effort": effort });
+        body["reasoning"] = json!({ "effort": effort, "summary": "auto" });
     }
     if strict_json {
         body["text"] = json!({
@@ -151,6 +151,8 @@ mod tests {
         let body = build_responses_request(&config(), &[LlmMessage::new("user", "organize")], true);
         assert_eq!(body["stream"], true);
         assert_eq!(body["temperature"], 0.25);
+        assert_eq!(body["reasoning"]["effort"], "medium");
+        assert_eq!(body["reasoning"]["summary"], "auto");
         assert_eq!(body["text"]["format"]["type"], "json_schema");
     }
 

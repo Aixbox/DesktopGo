@@ -38,12 +38,8 @@ pub(super) fn emit_reasoning_delta(delta: &str, observation: Option<&LlmObservat
     if let Some(observation) = observation {
         emit_agent_event(
             observation.window,
-            AgentEvent::new(
-                observation.run_id,
-                AgentEventPhase::Reasoning,
-                "模型正在推理。",
-            )
-            .detail(delta.chars().take(160).collect::<String>()),
+            AgentEvent::new(observation.run_id, AgentEventPhase::ReasoningToken, "模型正在推理。")
+                .token(delta),
         );
     }
 }

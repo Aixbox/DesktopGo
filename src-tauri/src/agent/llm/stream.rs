@@ -147,6 +147,11 @@ fn handle_anthropic_messages_event(
             if let Some(delta) = payload.pointer("/delta/text").and_then(Value::as_str) {
                 push_stream_delta(delta, observation, accumulator);
             }
+            if payload.pointer("/delta/type").and_then(Value::as_str) == Some("thinking_delta") {
+                if let Some(delta) = payload.pointer("/delta/thinking").and_then(Value::as_str) {
+                    emit_reasoning_delta(delta, observation);
+                }
+            }
         }
         "error" => {
             let message = extract_error_message(payload)
@@ -229,7 +234,7 @@ fn handle_chat_completions_event(
             }
             if let Some(reasoning_delta) = choice
                 .get("delta")
-                .and_then(|delta| delta.get("reasoning_content"))
+                .and_then(|delta| delta.get("reasoning_content").or_else(|| delta.get("reasoning")))
                 .and_then(Value::as_str)
             {
                 emit_reasoning_delta(reasoning_delta, observation);
@@ -448,5 +453,19 @@ mod tests {
         )
         .unwrap();
         assert_eq!(accumulator.content, "你好");
+    }
+
+    #[test]
+    fn anthropic_thinking_delta_does_not_pollute_content() {
+        let mut accumulator = StreamAccumulator::new();
+        handle_anthropic_messages_event(
+            "content_block_delta",
+            &json!({ "delta": { "type": "thinking_delta", "thinking": "先想一下" } }),
+            None,
+            &Instant::now(),
+            &mut accumulator,
+        )
+        .unwrap();
+        assert!(accumulator.content.is_empty());
     }
 }

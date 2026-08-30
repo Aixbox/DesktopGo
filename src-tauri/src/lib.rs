@@ -23,7 +23,7 @@ mod window_style;
 mod windows_drag_drop;
 
 use agent::icon_agent::{ai_organize_icons_agent, ai_organize_record_apply};
-use ai::{ai_chat, ai_classify_icons};
+use ai::{ai_cancel, ai_chat, ai_classify_icons};
 use commands::{
     activate_main_window, activate_settings_window, apply_window_style, check_for_app_update,
     close_settings_window, create_icon_entry, delete_icons, extract_website_icon,
@@ -89,7 +89,8 @@ pub fn run() {
         .manage(updater::PendingUpdate::default())
         .manage(MainWindowState::default())
         .manage(launchpad_shortcut::LaunchpadShortcutState::default())
-        .manage(TrayState::default());
+        .manage(TrayState::default())
+        .manage(ai::AiRunRegistry::default());
 
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
@@ -144,6 +145,7 @@ pub fn run() {
             update_launch_on_startup_enabled,
             ai_classify_icons,
             ai_chat,
+            ai_cancel,
             ai_organize_icons_agent,
             ai_organize_record_apply
         ])

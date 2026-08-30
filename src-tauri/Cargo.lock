@@ -927,6 +927,8 @@ dependencies = [
  "tauri-plugin-shell",
  "tauri-plugin-store",
  "tauri-plugin-updater",
+ "tokio",
+ "tokio-util",
  "url",
  "uuid",
  "window-vibrancy",

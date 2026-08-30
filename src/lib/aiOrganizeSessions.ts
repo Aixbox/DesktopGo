@@ -6,6 +6,9 @@ const MAX_AI_ORGANIZE_SESSIONS = 18
 const MAX_AI_ORGANIZE_MESSAGES = 48
 const MAX_AI_ORGANIZE_SNAPSHOTS = 12
 
+// 思考轨迹只保留尾部若干字符，避免长推理把会话存储撑爆。
+export const MAX_REASONING_TRACE_CHARS = 6000
+
 export type AiOrganizeMessageRole = 'user' | 'assistant'
 export type AiOrganizeMessageStatus = 'running' | 'success' | 'failed'
 
@@ -18,6 +21,11 @@ export interface AiOrganizeMessage {
   runId?: string
   snapshotId?: string
   error?: string
+  reasoning?: string
+  /** 思考阶段耗时（毫秒），折叠的思考标题会展示“思考了 X 秒”。 */
+  reasoningMs?: number
+  /** 整轮回复总耗时（毫秒，从发出请求到收尾），完成后在操作栏展示“用时 Xs”。 */
+  responseMs?: number
 }
 
 export interface AiOrganizeSnapshot {
@@ -135,6 +143,19 @@ const normalizeMessage = (value: unknown): AiOrganizeMessage | null => {
     runId: asString(value.runId) || undefined,
     snapshotId: asString(value.snapshotId) || undefined,
     error: asString(value.error) || undefined,
+    reasoning: asString(value.reasoning).slice(-MAX_REASONING_TRACE_CHARS) || undefined,
+    reasoningMs:
+      typeof value.reasoningMs === 'number' &&
+      Number.isFinite(value.reasoningMs) &&
+      value.reasoningMs > 0
+        ? Math.round(value.reasoningMs)
+        : undefined,
+    responseMs:
+      typeof value.responseMs === 'number' &&
+      Number.isFinite(value.responseMs) &&
+      value.responseMs > 0
+        ? Math.round(value.responseMs)
+        : undefined,
   }
 }
 

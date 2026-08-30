@@ -17,27 +17,29 @@ import {
   createAiOrganizeId,
   createAiOrganizeSession,
   createAiOrganizeSessionTitle,
+  MAX_REASONING_TRACE_CHARS,
   type AiOrganizeMessage,
   type AiOrganizeSession,
   type AiOrganizeSnapshot,
 } from '@/lib/aiOrganizeSessions'
 import type { DesktopIcon } from '@/types'
+import { findAiRegenerateSourcePrompt } from './aiOrganizePanelInteraction'
 import {
   AI_ORGANIZE_AGENT_EVENT,
+  AI_RUN_CANCELLED,
   MAX_AGENT_EVENTS,
   MAX_CONVERSATION_CONTEXT_MESSAGES,
-  MAX_STREAM_CHUNKS,
   buildAiConfigPayload,
   buildConversationPrompt,
   createAssistantMessageContent,
   getAgentEventLabel,
+  isStreamPhase,
   summarizeGroups,
   type AiAgentEvent,
   type AiAgentRunResult,
   type AiChatResult,
   type AiOrganizePhase,
   type AiOrganizeRunStatus,
-  type AiStreamChunk,
   type EditableAiGroup,
 } from './aiOrganizePanelModel'
 
@@ -59,6 +61,7 @@ interface UseAiOrganizeExecutionParams {
   activeSessionIdRef: MutableRefObject<string | null>
   groupsRef: MutableRefObject<EditableAiGroup[]>
   commitSession: (session: AiOrganizeSession) => Promise<void>
+  updateMessageContent: (messageId: string, content: string) => void
   activateSnapshot: (session: AiOrganizeSession, snapshot?: AiOrganizeSnapshot) => void
   applyLayoutPreview: (groups: AiGroup[]) => Promise<void>
   setPhase: Dispatch<SetStateAction<AiOrganizePhase>>
@@ -80,6 +83,7 @@ export function useAiOrganizeExecution({
   activeSessionIdRef,
   groupsRef,
   commitSession,
+  updateMessageContent,
   activateSnapshot,
   applyLayoutPreview,
   setPhase,
@@ -89,65 +93,79 @@ export function useAiOrganizeExecution({
   setEditingSnapshotId,
 }: UseAiOrganizeExecutionParams) {
   const [agentEvents, setAgentEvents] = useState<AiAgentEvent[]>([])
-  const [streamChunks, setStreamChunks] = useState<AiStreamChunk[]>([])
-  const [runStartedAt, setRunStartedAt] = useState<number | null>(null)
-  const [runFinishedAt, setRunFinishedAt] = useState<number | null>(null)
+  const [reasoningText, setReasoningText] = useState('')
+  const [streamedContentLength, setStreamedContentLength] = useState(0)
+  const [reasoningActive, setReasoningActive] = useState(false)
+  const [runKind, setRunKind] = useState<'chat' | 'organize' | null>(null)
+  const [waitingForOutput, setWaitingForOutput] = useState(true)
   const [elapsedMs, setElapsedMs] = useState(0)
   const runSeqRef = useRef(0)
-  const streamChunkSeqRef = useRef(0)
-  const streamBufferRef = useRef('')
-  const streamFlushTimerRef = useRef<number | null>(null)
-  const streamFirstBufferedAtRef = useRef<number | null>(null)
+  const runStartedAtRef = useRef<number | null>(null)
+  const activeRequestIdRef = useRef<string | null>(null)
+  const runKindRef = useRef<'chat' | 'organize' | null>(null)
+  const reasoningTraceRef = useRef('')
+  const reasoningBufferRef = useRef('')
+  const reasoningFlushTimerRef = useRef<number | null>(null)
+  const reasoningFirstBufferedAtRef = useRef<number | null>(null)
+  // 思考阶段计时：首条思考增量到首个可见输出（或运行结束）之间视为思考耗时。
+  const reasoningStartedAtRef = useRef<number | null>(null)
+  const reasoningEndedAtRef = useRef<number | null>(null)
+  const chatAnswerTextRef = useRef('')
+  const chatAnswerBufferRef = useRef('')
+  const chatAnswerFlushTimerRef = useRef<number | null>(null)
+  const chatAnswerFirstBufferedAtRef = useRef<number | null>(null)
+  const chatAnswerMessageIdRef = useRef<string | null>(null)
 
-  const clearStreamFlushTimer = useCallback(() => {
-    if (streamFlushTimerRef.current === null) return
-    window.clearTimeout(streamFlushTimerRef.current)
-    streamFlushTimerRef.current = null
-  }, [])
-
-  const flushStreamBuffer = useCallback(() => {
-    const buffered = streamBufferRef.current
-    if (!buffered) return
-    streamBufferRef.current = ''
-    streamFirstBufferedAtRef.current = null
-    streamChunkSeqRef.current += 1
-    const nextChunk: AiStreamChunk = {
-      id: streamChunkSeqRef.current,
-      text: buffered,
+  const resetReasoningOutput = useCallback(() => {
+    if (reasoningFlushTimerRef.current !== null) {
+      window.clearTimeout(reasoningFlushTimerRef.current)
+      reasoningFlushTimerRef.current = null
     }
-    setStreamChunks(currentChunks => [...currentChunks, nextChunk].slice(-MAX_STREAM_CHUNKS))
+    reasoningTraceRef.current = ''
+    reasoningBufferRef.current = ''
+    reasoningFirstBufferedAtRef.current = null
+    reasoningStartedAtRef.current = null
+    reasoningEndedAtRef.current = null
+    setReasoningText('')
+    setReasoningActive(false)
   }, [])
 
-  const flushPendingStream = useCallback(() => {
-    clearStreamFlushTimer()
-    flushStreamBuffer()
-  }, [clearStreamFlushTimer, flushStreamBuffer])
+  // 思考结束：正文/整理 JSON 开始输出时调用，折叠思考块并记录结束时间。
+  const markReasoningEnded = useCallback(() => {
+    if (!reasoningStartedAtRef.current) return
+    reasoningEndedAtRef.current ??= Date.now()
+    setReasoningActive(false)
+  }, [])
 
-  const resetStreamOutput = useCallback(() => {
-    clearStreamFlushTimer()
-    streamChunkSeqRef.current = 0
-    streamBufferRef.current = ''
-    streamFirstBufferedAtRef.current = null
-    setStreamChunks([])
-  }, [clearStreamFlushTimer])
+  const flushReasoningBuffer = useCallback(() => {
+    if (reasoningFlushTimerRef.current !== null) {
+      window.clearTimeout(reasoningFlushTimerRef.current)
+      reasoningFlushTimerRef.current = null
+    }
+    const buffered = reasoningBufferRef.current
+    if (!buffered) return
+    reasoningBufferRef.current = ''
+    reasoningFirstBufferedAtRef.current = null
+    reasoningTraceRef.current = `${reasoningTraceRef.current}${buffered}`
+    if (reasoningTraceRef.current.length > MAX_REASONING_TRACE_CHARS) {
+      reasoningTraceRef.current = reasoningTraceRef.current.slice(-MAX_REASONING_TRACE_CHARS)
+    }
+    setReasoningText(reasoningTraceRef.current)
+    setWaitingForOutput(false)
+    setReasoningActive(true)
+  }, [])
 
-  const resetExecution = useCallback(() => {
-    setAgentEvents([])
-    resetStreamOutput()
-    setRunId(null)
-    setRunStartedAt(null)
-    setRunFinishedAt(null)
-    setElapsedMs(0)
-  }, [resetStreamOutput, setRunId])
-
-  const appendStreamDelta = useCallback(
+  const appendReasoningDelta = useCallback(
     (delta: string) => {
-      streamBufferRef.current = `${streamBufferRef.current}${delta}`
-      streamFirstBufferedAtRef.current ??= Date.now()
-      const buffered = streamBufferRef.current
-      const elapsedSinceFirstDelta = Date.now() - streamFirstBufferedAtRef.current
+      reasoningStartedAtRef.current ??= Date.now()
+      reasoningEndedAtRef.current = null
+      reasoningBufferRef.current = `${reasoningBufferRef.current}${delta}`
+      reasoningFirstBufferedAtRef.current ??= Date.now()
+      const buffered = reasoningBufferRef.current
+      const elapsedSinceFirstDelta =
+        Date.now() - (reasoningFirstBufferedAtRef.current ?? Date.now())
       const shouldCommitSoftChunk =
-        buffered.length >= STREAM_FLUSH_SOFT_CHARS && /[\n,}\]]$/.test(buffered.trimEnd())
+        buffered.length >= STREAM_FLUSH_SOFT_CHARS && /[。！？.!?\n]$/.test(buffered.trimEnd())
 
       if (
         buffered.length >= STREAM_FLUSH_CATCH_UP_CHARS ||
@@ -155,28 +173,119 @@ export function useAiOrganizeExecution({
         shouldCommitSoftChunk ||
         elapsedSinceFirstDelta >= STREAM_FLUSH_MAX_HOLD_MS
       ) {
-        flushPendingStream()
+        flushReasoningBuffer()
         return
       }
 
-      if (streamFlushTimerRef.current !== null) return
-      streamFlushTimerRef.current = window.setTimeout(() => {
-        streamFlushTimerRef.current = null
-        flushStreamBuffer()
+      if (reasoningFlushTimerRef.current !== null) return
+      reasoningFlushTimerRef.current = window.setTimeout(() => {
+        reasoningFlushTimerRef.current = null
+        flushReasoningBuffer()
       }, STREAM_FLUSH_INTERVAL_MS)
     },
-    [flushPendingStream, flushStreamBuffer]
+    [flushReasoningBuffer]
   )
 
-  const beginRun = useCallback(
-    (startedAt: number) => {
-      setError(null)
-      setNotConfigured(false)
-      resetExecution()
-      setRunStartedAt(startedAt)
+  // 整轮回复总耗时（从发出请求到收尾）；没有起始时间时省略。
+  const finalizeResponseMs = useCallback((): number | undefined => {
+    const startedAt = runStartedAtRef.current
+    return startedAt ? Math.max(0, Date.now() - startedAt) : undefined
+  }, [])
+
+  // 取走思考轨迹与各类耗时（先冲刷缓冲），没有内容时字段为 undefined 以省略。
+  const finalizeRun = useCallback((): {
+    reasoning?: string
+    reasoningMs?: number
+    responseMs?: number
+  } => {
+    flushReasoningBuffer()
+    markReasoningEnded()
+    const trace = reasoningTraceRef.current.trim()
+    const reasoning = trace.length > 0 ? trace.slice(-MAX_REASONING_TRACE_CHARS) : undefined
+    const reasoningMs =
+      reasoning && reasoningStartedAtRef.current && reasoningEndedAtRef.current
+        ? Math.max(0, reasoningEndedAtRef.current - reasoningStartedAtRef.current)
+        : undefined
+    return { reasoning, reasoningMs, responseMs: finalizeResponseMs() }
+  }, [flushReasoningBuffer, finalizeResponseMs, markReasoningEnded])
+
+  const resetChatAnswer = useCallback(() => {
+    if (chatAnswerFlushTimerRef.current !== null) {
+      window.clearTimeout(chatAnswerFlushTimerRef.current)
+      chatAnswerFlushTimerRef.current = null
+    }
+    chatAnswerTextRef.current = ''
+    chatAnswerBufferRef.current = ''
+    chatAnswerFirstBufferedAtRef.current = null
+    setStreamedContentLength(0)
+  }, [])
+
+  const flushChatAnswerBuffer = useCallback(() => {
+    if (chatAnswerFlushTimerRef.current !== null) {
+      window.clearTimeout(chatAnswerFlushTimerRef.current)
+      chatAnswerFlushTimerRef.current = null
+    }
+    const buffered = chatAnswerBufferRef.current
+    if (!buffered) return
+    chatAnswerBufferRef.current = ''
+    chatAnswerFirstBufferedAtRef.current = null
+    chatAnswerTextRef.current = `${chatAnswerTextRef.current}${buffered}`
+    // 回复开始输出即视为思考结束（折叠思考块、记录耗时）。
+    markReasoningEnded()
+    const messageId = chatAnswerMessageIdRef.current
+    if (messageId) updateMessageContent(messageId, chatAnswerTextRef.current)
+    setStreamedContentLength(chatAnswerTextRef.current.length)
+    setWaitingForOutput(false)
+  }, [markReasoningEnded, updateMessageContent])
+
+  const appendChatAnswerDelta = useCallback(
+    (delta: string) => {
+      chatAnswerBufferRef.current = `${chatAnswerBufferRef.current}${delta}`
+      chatAnswerFirstBufferedAtRef.current ??= Date.now()
+      const buffered = chatAnswerBufferRef.current
+      const elapsedSinceFirstDelta =
+        Date.now() - (chatAnswerFirstBufferedAtRef.current ?? Date.now())
+
+      if (
+        buffered.length >= STREAM_FLUSH_CATCH_UP_CHARS ||
+        buffered.length >= STREAM_FLUSH_MIN_CHARS ||
+        elapsedSinceFirstDelta >= STREAM_FLUSH_MAX_HOLD_MS
+      ) {
+        flushChatAnswerBuffer()
+        return
+      }
+
+      if (chatAnswerFlushTimerRef.current !== null) return
+      chatAnswerFlushTimerRef.current = window.setTimeout(() => {
+        chatAnswerFlushTimerRef.current = null
+        flushChatAnswerBuffer()
+      }, STREAM_FLUSH_INTERVAL_MS)
     },
-    [resetExecution, setError, setNotConfigured]
+    [flushChatAnswerBuffer]
   )
+
+  const resetExecution = useCallback(() => {
+    setAgentEvents([])
+    resetReasoningOutput()
+    resetChatAnswer()
+    chatAnswerMessageIdRef.current = null
+    setWaitingForOutput(true)
+    setRunId(null)
+  }, [resetChatAnswer, resetReasoningOutput, setRunId])
+
+  const beginRun = useCallback(() => {
+    setError(null)
+    setNotConfigured(false)
+    resetExecution()
+    runStartedAtRef.current = Date.now()
+  }, [resetExecution, setError, setNotConfigured])
+
+  // 请求后端取消当前运行；命令返回哨兵错误后由各 catch 分支收尾。
+  const stopRun = useCallback(() => {
+    const requestId = activeRequestIdRef.current
+    if (!requestId) return
+    void invoke('ai_cancel', { requestId }).catch(() => {})
+  }, [])
 
   const runChat = useCallback(
     async (instruction: string) => {
@@ -186,7 +295,11 @@ export function useAiOrganizeExecution({
       const sequence = runSeqRef.current + 1
       runSeqRef.current = sequence
       const isCurrentRun = () => runSeqRef.current === sequence
+      const requestId = createAiOrganizeId('ai-run')
+      activeRequestIdRef.current = requestId
       const now = Date.now()
+      runKindRef.current = 'chat'
+      setRunKind('chat')
       const existingSession =
         sessionsRef.current.find(session => session.id === activeSessionIdRef.current) ?? null
       const session =
@@ -218,7 +331,9 @@ export function useAiOrganizeExecution({
 
       setPhase('loading')
       await commitSession(runningSession)
-      beginRun(now)
+      beginRun()
+      // beginRun 会重置流式缓冲，目标消息 id 需要在其之后登记。
+      chatAnswerMessageIdRef.current = runningMessage.id
 
       try {
         const config = await loadAiConfig()
@@ -235,6 +350,7 @@ export function useAiOrganizeExecution({
                     content: translate('AI 配置不完整，请先到设置页填写接口地址、密钥和模型。'),
                     status: 'failed',
                     error: translate('AI 配置不完整'),
+                    responseMs: finalizeResponseMs(),
                   }
                 : message
             ),
@@ -242,7 +358,6 @@ export function useAiOrganizeExecution({
           await commitSession(failedSession)
           setNotConfigured(true)
           setPhase('idle')
-          setRunFinishedAt(Date.now())
           return
         }
 
@@ -253,23 +368,49 @@ export function useAiOrganizeExecution({
         const result = await invoke<AiChatResult>('ai_chat', {
           config: buildAiConfigPayload(config),
           messages,
+          requestId,
         })
         if (!isCurrentRun()) return
 
+        flushChatAnswerBuffer()
         await commitSession({
           ...runningSession,
           updatedAt: Date.now(),
           messages: runningSession.messages.map(message =>
             message.id === runningMessage.id
-              ? { ...message, content: result.content, status: 'success' }
+              ? {
+                  ...message,
+                  content: result.content,
+                  status: 'success',
+                  ...finalizeRun(),
+                }
               : message
           ),
         })
         setPhase(groupsRef.current.length > 0 ? 'preview' : 'idle')
-        setRunFinishedAt(Date.now())
       } catch (caughtError) {
         if (!isCurrentRun()) return
+        flushChatAnswerBuffer()
         const message = String(caughtError)
+        if (message === AI_RUN_CANCELLED) {
+          // 用户停止生成：保留已流式输出的部分内容，不算失败。
+          await commitSession({
+            ...runningSession,
+            updatedAt: Date.now(),
+            messages: runningSession.messages.map(currentMessage =>
+              currentMessage.id === runningMessage.id
+                ? {
+                    ...currentMessage,
+                    content: chatAnswerTextRef.current.trim() || translate(AI_RUN_CANCELLED),
+                    status: 'success',
+                    ...finalizeRun(),
+                  }
+                : currentMessage
+            ),
+          })
+          setPhase(groupsRef.current.length > 0 ? 'preview' : 'idle')
+          return
+        }
         await commitSession({
           ...runningSession,
           updatedAt: Date.now(),
@@ -280,24 +421,28 @@ export function useAiOrganizeExecution({
                   content: translate('这次回复失败了，可以稍后重试。'),
                   status: 'failed',
                   error: message,
+                  ...finalizeRun(),
                 }
               : currentMessage
           ),
         })
         setError(message)
         setPhase(groupsRef.current.length > 0 ? 'preview' : 'idle')
-        setRunFinishedAt(Date.now())
       }
     },
     [
       activeSessionIdRef,
       beginRun,
       commitSession,
+      finalizeRun,
+      finalizeResponseMs,
+      flushChatAnswerBuffer,
       groupsRef,
       sessionsRef,
       setError,
       setNotConfigured,
       setPhase,
+      setRunKind,
     ]
   )
 
@@ -309,7 +454,11 @@ export function useAiOrganizeExecution({
       const sequence = runSeqRef.current + 1
       runSeqRef.current = sequence
       const isCurrentRun = () => runSeqRef.current === sequence
+      const requestId = createAiOrganizeId('ai-run')
+      activeRequestIdRef.current = requestId
       const now = Date.now()
+      runKindRef.current = 'organize'
+      setRunKind('organize')
       const existingSession =
         sessionsRef.current.find(session => session.id === activeSessionIdRef.current) ?? null
       const session =
@@ -341,7 +490,7 @@ export function useAiOrganizeExecution({
 
       setPhase('loading')
       await commitSession(runningSession)
-      beginRun(now)
+      beginRun()
 
       try {
         const config = await loadAiConfig()
@@ -358,6 +507,7 @@ export function useAiOrganizeExecution({
                     content: translate('AI 配置不完整，请先到设置页填写接口地址、密钥和模型。'),
                     status: 'failed',
                     error: translate('AI 配置不完整'),
+                    responseMs: finalizeResponseMs(),
                   }
                 : message
             ),
@@ -365,7 +515,6 @@ export function useAiOrganizeExecution({
           await commitSession(failedSession)
           setNotConfigured(true)
           setPhase('idle')
-          setRunFinishedAt(Date.now())
           return
         }
 
@@ -391,6 +540,7 @@ export function useAiOrganizeExecution({
                     content: translate('当前没有可整理的图标。'),
                     status: 'success',
                     snapshotId: snapshot.id,
+                    responseMs: finalizeResponseMs(),
                   }
                 : message
             ),
@@ -398,7 +548,6 @@ export function useAiOrganizeExecution({
           await commitSession(emptySession)
           activateSnapshot(emptySession, snapshot)
           setEditingSnapshotId(snapshot.id)
-          setRunFinishedAt(Date.now())
           return
         }
 
@@ -411,6 +560,7 @@ export function useAiOrganizeExecution({
         const result = await invoke<AiAgentRunResult>('ai_organize_icons_agent', {
           config: buildAiConfigPayload(config, prompt),
           icons: inputs,
+          requestId,
         })
         if (!isCurrentRun()) return
 
@@ -436,6 +586,7 @@ export function useAiOrganizeExecution({
                   status: 'success',
                   runId: result.run_id,
                   snapshotId: snapshot.id,
+                  ...finalizeRun(),
                 }
               : message
           ),
@@ -445,12 +596,28 @@ export function useAiOrganizeExecution({
         activateSnapshot(successSession, snapshot)
         setEditingSnapshotId(snapshot.id)
         if (result.groups.length > 0) await applyLayoutPreview(result.groups)
-        flushPendingStream()
-        setRunFinishedAt(Date.now())
       } catch (caughtError) {
         if (!isCurrentRun()) return
-        flushPendingStream()
         const message = String(caughtError)
+        if (message === AI_RUN_CANCELLED) {
+          // 用户停止整理：没有可用的分组结果，仅保留思考轨迹。
+          await commitSession({
+            ...runningSession,
+            updatedAt: Date.now(),
+            messages: runningSession.messages.map(currentMessage =>
+              currentMessage.id === runningMessage.id
+                ? {
+                    ...currentMessage,
+                    content: translate(AI_RUN_CANCELLED),
+                    status: 'success',
+                    ...finalizeRun(),
+                  }
+                : currentMessage
+            ),
+          })
+          setPhase(groupsRef.current.length > 0 ? 'preview' : 'idle')
+          return
+        }
         await commitSession({
           ...runningSession,
           updatedAt: Date.now(),
@@ -461,27 +628,13 @@ export function useAiOrganizeExecution({
                   content: translate('这次请求失败了，可以调整要求后重试。'),
                   status: 'failed',
                   error: message,
+                  ...finalizeRun(),
                 }
               : currentMessage
           ),
         })
         setError(message)
         setPhase('idle')
-        setRunFinishedAt(Date.now())
-        setAgentEvents(current => {
-          if (current.some(event => event.phase === 'failed')) return current
-          const lastEvent = current[current.length - 1]
-          return [
-            ...current,
-            {
-              runId: lastEvent?.runId ?? `local-${Date.now()}`,
-              phase: 'failed',
-              message: 'AI Agent 请求失败。',
-              detail: message,
-              at: Math.floor(Date.now() / 1000),
-            },
-          ].slice(-MAX_AGENT_EVENTS)
-        })
       }
     },
     [
@@ -491,7 +644,8 @@ export function useAiOrganizeExecution({
       beginRun,
       commitSession,
       customNames,
-      flushPendingStream,
+      finalizeRun,
+      finalizeResponseMs,
       groupsRef,
       icons,
       sessionsRef,
@@ -500,7 +654,26 @@ export function useAiOrganizeExecution({
       setNotConfigured,
       setPhase,
       setRunId,
+      setRunKind,
     ]
+  )
+
+  // 重新生成：重发该条回复对应的上一条用户消息（ChatGPT 的 regenerate 行为）。
+  const regenerateMessage = useCallback(
+    (message: AiOrganizeMessage) => {
+      if (phase === 'loading' || phase === 'applying') return
+      const sessionId = activeSessionIdRef.current
+      const session = sessionsRef.current.find(item => item.id === sessionId)
+      if (!session) return
+      const previousUser = findAiRegenerateSourcePrompt(session.messages, message.id)
+      if (!previousUser) return
+      if (message.snapshotId) {
+        void runClassification(previousUser.content)
+      } else {
+        void runChat(previousUser.content)
+      }
+    },
+    [activeSessionIdRef, phase, runChat, runClassification, sessionsRef]
   )
 
   useEffect(() => {
@@ -513,8 +686,17 @@ export function useAiOrganizeExecution({
         if (!active) return
         const payload = event.payload
         setRunId(current => current ?? payload.runId)
+        if (payload.phase === 'reasoningToken') {
+          if (payload.token) appendReasoningDelta(payload.token)
+          return
+        }
         if (payload.phase === 'token') {
-          if (payload.token) appendStreamDelta(payload.token)
+          if (runKindRef.current === 'chat') {
+            if (payload.token) appendChatAnswerDelta(payload.token)
+          } else {
+            // 整理路径：正文 JSON 开始输出即视为思考结束。
+            markReasoningEnded()
+          }
           return
         }
         setAgentEvents(current => [...current, payload].slice(-MAX_AGENT_EVENTS))
@@ -527,7 +709,6 @@ export function useAiOrganizeExecution({
         if (!active) return
         setError(String(caughtError))
         setPhase('idle')
-        setRunFinishedAt(Date.now())
       })
 
     return () => {
@@ -535,29 +716,48 @@ export function useAiOrganizeExecution({
       runSeqRef.current += 1
       unlisten?.()
       resetExecution()
+      activeRequestIdRef.current = null
+      runKindRef.current = null
+      setRunKind(null)
       setPhase('idle')
       setError(null)
       setNotConfigured(false)
     }
-  }, [appendStreamDelta, open, resetExecution, setError, setNotConfigured, setPhase, setRunId])
+  }, [
+    appendChatAnswerDelta,
+    appendReasoningDelta,
+    markReasoningEnded,
+    open,
+    resetExecution,
+    setError,
+    setNotConfigured,
+    setPhase,
+    setRunId,
+  ])
 
+  // 生成期间在回复顶部实时计时：每 tick 读取起始时间 ref，兼容 beginRun 稍晚于 phase 切换。
   useEffect(() => {
-    if (!runStartedAt) return
-    const syncElapsed = () => setElapsedMs((runFinishedAt ?? Date.now()) - runStartedAt)
-    syncElapsed()
-    if (runFinishedAt) return
-    const intervalId = window.setInterval(syncElapsed, 500)
+    if (phase !== 'loading') return
+    const tick = () => {
+      const startedAt = runStartedAtRef.current
+      if (startedAt) setElapsedMs(Math.max(0, Date.now() - startedAt))
+    }
+    tick()
+    const intervalId = window.setInterval(tick, 500)
     return () => window.clearInterval(intervalId)
-  }, [runFinishedAt, runStartedAt])
+  }, [phase])
 
   const latestEvent = useMemo(() => {
     for (let index = agentEvents.length - 1; index >= 0; index -= 1) {
       const event = agentEvents[index]
-      if (event.phase !== 'token') return event
+      if (!isStreamPhase(event.phase)) return event
     }
     return null
   }, [agentEvents])
   const isStreaming = phase === 'loading'
+  const isChatRun = runKind === 'chat'
+  // 聊天正文正在流式输出（思考已结束），用于打字光标。
+  const isAnswerStreaming = isStreaming && isChatRun && !waitingForOutput
 
   const runStatus = useMemo<AiOrganizeRunStatus>(() => {
     if (phase === 'applying') return 'applying'
@@ -572,7 +772,9 @@ export function useAiOrganizeExecution({
   const statusTitle = useMemo(() => {
     switch (runStatus) {
       case 'running':
-        if (isStreaming) return translate('模型正在流式生成草稿')
+        if (isStreaming) {
+          return isChatRun ? translate('正在回复') : translate('模型正在流式生成草稿')
+        }
         return latestEvent ? getAgentEventLabel(latestEvent) : translate('正在准备 AI 请求')
       case 'success':
         return translate('请求成功')
@@ -587,42 +789,22 @@ export function useAiOrganizeExecution({
       default:
         return translate('等待开始')
     }
-  }, [isStreaming, latestEvent, runStatus])
-
-  const statusDetail = useMemo(() => {
-    switch (runStatus) {
-      case 'running':
-        if (isStreaming) {
-          return translate('正在接收模型的原始 JSON 流，分组预览会在解析成功后出现。')
-        }
-        return latestEvent?.detail ?? translate('请求正在进行，窗口保持打开即可继续接收状态。')
-      case 'success':
-        return translate('请求成功，已生成 {count} 个可预览分组。', {
-          count: groups.length,
-        })
-      case 'failed':
-        return error ?? latestEvent?.detail ?? translate('请求没有完成，请检查模型配置或网关日志。')
-      case 'notConfigured':
-        return translate('请先到「设置 → AI 助手」填写接口地址、密钥和模型。')
-      case 'empty':
-        return translate('请求完成，但没有生成可用分组。')
-      case 'applying':
-        return translate('正在写入桌面布局并刷新启动台。')
-      default:
-        return translate('等待 AI Agent 开始处理。')
-    }
-  }, [error, groups.length, isStreaming, latestEvent, runStatus])
+  }, [isChatRun, isStreaming, latestEvent, runStatus])
 
   return {
-    agentEvents,
+    activeRunKind: runKind,
     elapsedMs,
-    isStreaming,
+    isAnswerStreaming,
+    reasoningActive,
+    reasoningText,
+    regenerateMessage,
     resetExecution,
     runChat,
     runClassification,
-    runStatus,
-    statusDetail,
+    // 聊天正文流式长度：驱动对话区跟随滚动。
+    streamedContentLength,
     statusTitle,
-    streamChunks,
+    stopRun,
+    waitingForOutput,
   }
 }

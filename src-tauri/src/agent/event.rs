@@ -10,6 +10,7 @@ pub(crate) enum AgentEventPhase {
     Started,
     Context,
     Reasoning,
+    ReasoningToken,
     Request,
     Model,
     Token,

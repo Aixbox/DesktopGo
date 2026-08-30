@@ -5,6 +5,7 @@ mod stream;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
+use tokio_util::sync::CancellationToken;
 
 use crate::ai::{self, AiCompatibleProtocol, AiConfig, AiProvider, DEFAULT_REQUEST_TIMEOUT_SECS};
 
@@ -83,6 +84,7 @@ pub(crate) struct ObservedLlmRequest<'a> {
     window: &'a tauri::Window,
     run_id: &'a str,
     attempt_label: &'a str,
+    cancel: CancellationToken,
 }
 
 impl<'a> ObservedLlmRequest<'a> {
@@ -99,7 +101,13 @@ impl<'a> ObservedLlmRequest<'a> {
             window,
             run_id,
             attempt_label,
+            cancel: CancellationToken::new(),
         }
+    }
+
+    pub(crate) fn with_cancel(mut self, cancel: CancellationToken) -> Self {
+        self.cancel = cancel;
+        self
     }
 }
 
@@ -130,20 +138,14 @@ impl LlmClient {
     ) -> Result<LlmResponse, String> {
         let observation =
             LlmObservation::new(request.window, request.run_id, request.attempt_label);
-        self.complete_json_inner(
-            config,
-            &request.messages,
-            request.strict_json,
-            Some(observation),
-        )
-        .await
+        self.complete_json_inner(config, &request, Some(observation))
+            .await
     }
 
     async fn complete_json_inner(
         &self,
         config: &AiConfig,
-        messages: &[LlmMessage],
-        strict_json: bool,
+        request: &ObservedLlmRequest<'_>,
         observation: Option<LlmObservation<'_>>,
     ) -> Result<LlmResponse, String> {
         let started_at = Instant::now();
@@ -158,12 +160,13 @@ impl LlmClient {
         let surface = api_surface_for(self.provider, config.compatible_protocol);
         self.complete_streaming_request(
             &client,
-            StreamingRequestInput(config, messages, strict_json),
+            StreamingRequestInput(config, &request.messages, request.strict_json),
             StreamingAttempt {
                 surface,
                 observation: observation.as_ref(),
                 started_at,
             },
+            &request.cancel,
         )
         .await
     }
@@ -173,6 +176,7 @@ impl LlmClient {
         client: &reqwest::Client,
         input: StreamingRequestInput<'_>,
         attempt: StreamingAttempt<'_, '_>,
+        cancel: &CancellationToken,
     ) -> Result<LlmResponse, String> {
         let StreamingRequestInput(config, messages, strict_json) = input;
         let StreamingAttempt {
@@ -220,14 +224,18 @@ impl LlmClient {
         }
 
         let mut accumulator = StreamAccumulator::new();
-        read_sse_stream(
-            response,
-            surface,
-            observation,
-            &started_at,
-            &mut accumulator,
-        )
-        .await?;
+        // 取消令牌触发时立即放弃读取（丢弃响应流即中断连接），返回哨兵错误。
+        let read_result = tokio::select! {
+            _ = cancel.cancelled() => Err(ai::AI_RUN_CANCELLED_MESSAGE.to_string()),
+            result = read_sse_stream(
+                response,
+                surface,
+                observation,
+                &started_at,
+                &mut accumulator,
+            ) => result,
+        };
+        read_result?;
         if accumulator.content.trim().is_empty() {
             let message = format!("{} 流式响应未返回有效内容。", surface.label());
             emit_observed_error(observation, &started_at, &message);
