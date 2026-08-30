@@ -1,6 +1,10 @@
 use std::path::{Path, PathBuf};
 
+use super::image_data::encode_bgra_png_data_uri_preserving_alpha;
 use super::search_icon_plan::is_special_shell_path;
+use super::shell_icon_windows::{
+    owned_icon_to_data_uri, path_icon_to_data_uri, read_bitmap_pixels,
+};
 
 pub(super) fn get_dpi_scale() -> f64 {
     unsafe {
@@ -56,9 +60,13 @@ unsafe fn create_shell_item_from_path(path: &str) -> Option<windows::Win32::UI::
 
 #[cfg(windows)]
 unsafe fn extract_shell_item_icon(path: &str, size: i32) -> Option<String> {
-    use windows::Win32::UI::Shell::SIIGBF_ICONONLY;
+    use windows::Win32::UI::Shell::{SIIGBF_ICONONLY, SIIGBF_SCALEUP};
 
-    unsafe { extract_shell_item_image(path, size, SIIGBF_ICONONLY) }
+    // Without SCALEUP, Shell centers an undersized ICO frame in the requested
+    // square bitmap. Persisting that bitmap makes the artwork look shrunken in
+    // the launchpad even though Windows can scale it to the desktop icon size.
+    unsafe { extract_shell_item_image(path, size, SIIGBF_ICONONLY | SIIGBF_SCALEUP) }
+        .or_else(|| path_icon_to_data_uri(path, false, size))
 }
 
 #[cfg(windows)]
@@ -75,8 +83,9 @@ unsafe fn extract_shell_item_image(
 
     let icon_size = windows::Win32::Foundation::SIZE { cx: size, cy: size };
     let hbitmap = factory.GetImage(icon_size, flags).ok()?;
-
-    hbitmap_to_base64(hbitmap)
+    let data_uri = hbitmap_to_base64(hbitmap);
+    let _ = windows::Win32::Graphics::Gdi::DeleteObject(hbitmap.into());
+    data_uri
 }
 
 #[cfg(windows)]
@@ -260,77 +269,98 @@ unsafe fn extract_high_res_icon(path: &str, size: i32) -> Option<String> {
 }
 
 #[cfg(windows)]
+fn resolve_lnk_icon_location(lnk_path: &Path) -> Option<(String, i32)> {
+    use windows::core::{Interface, PCWSTR};
+    use windows::Win32::System::Com::*;
+    use windows::Win32::UI::Shell::*;
+
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let shell_link: IShellLinkW =
+            CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER).ok()?;
+        let persist_file: IPersistFile = shell_link.cast().ok()?;
+        let shortcut_wide: Vec<u16> = lnk_path
+            .as_os_str()
+            .to_string_lossy()
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        persist_file
+            .Load(PCWSTR(shortcut_wide.as_ptr()), Default::default())
+            .ok()?;
+
+        let mut icon_path = vec![0u16; 32_768];
+        let mut icon_index = 0;
+        shell_link
+            .GetIconLocation(&mut icon_path, &mut icon_index)
+            .ok()?;
+        let path = String::from_utf16_lossy(&icon_path)
+            .trim_end_matches('\0')
+            .trim()
+            .to_string();
+        (!path.is_empty()).then_some((path, icon_index))
+    }
+}
+
+#[cfg(windows)]
+unsafe fn extract_resource_icon(path: &str, icon_index: i32, size: i32) -> Option<String> {
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::Shell::SHDefExtractIconW;
+    use windows::Win32::UI::WindowsAndMessaging::HICON;
+
+    let path_wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+    let mut icon = HICON::default();
+    unsafe {
+        SHDefExtractIconW(
+            PCWSTR(path_wide.as_ptr()),
+            icon_index,
+            0,
+            Some(&mut icon),
+            None,
+            size.max(1) as u32,
+        )
+    }
+    .ok()
+    .ok()?;
+    unsafe { owned_icon_to_data_uri(icon) }
+}
+
+#[cfg(windows)]
+fn shortcut_icon_lookup_paths(item_path: &Path, target_path: &str) -> Vec<String> {
+    let shortcut_path = item_path.to_string_lossy().into_owned();
+    let mut paths = vec![shortcut_path.clone()];
+    let target_path = target_path.trim();
+    if !target_path.is_empty() && !target_path.eq_ignore_ascii_case(&shortcut_path) {
+        paths.push(target_path.to_string());
+    }
+    paths
+}
+
+#[cfg(windows)]
+fn shortcut_icon_resource_candidates(
+    explicit: Option<(String, i32)>,
+    target_path: &str,
+) -> Vec<(String, i32)> {
+    let mut candidates = explicit.into_iter().collect::<Vec<_>>();
+    let target_path = target_path.trim();
+    let already_has_default_target = candidates
+        .iter()
+        .any(|(path, index)| *index == 0 && path.eq_ignore_ascii_case(target_path));
+    if !target_path.is_empty() && !already_has_default_target {
+        candidates.push((target_path.to_string(), 0));
+    }
+    candidates
+}
+
+#[cfg(windows)]
 unsafe fn hbitmap_to_base64(hbitmap: windows::Win32::Graphics::Gdi::HBITMAP) -> Option<String> {
-    use windows::Win32::Graphics::Gdi::*;
+    use windows::Win32::Graphics::Gdi::{GetDC, ReleaseDC};
 
-    let mut bm = BITMAP::default();
-    if GetObjectW(
-        hbitmap.into(),
-        std::mem::size_of::<BITMAP>() as i32,
-        Some(&mut bm as *mut _ as *mut _),
-    ) == 0
-    {
-        return None;
-    }
-
-    let width = bm.bmWidth as u32;
-    let height = bm.bmHeight as u32;
-
-    let hdc_screen = GetDC(None);
-    let hdc_mem = CreateCompatibleDC(Some(hdc_screen));
-
-    let bmi = BITMAPINFO {
-        bmiHeader: BITMAPINFOHEADER {
-            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-            biWidth: width as i32,
-            biHeight: -(height as i32),
-            biPlanes: 1,
-            biBitCount: 32,
-            biCompression: 0,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-
-    let mut bits: *mut std::ffi::c_void = std::ptr::null_mut();
-    let hbm_dib = CreateDIBSection(Some(hdc_mem), &bmi, DIB_RGB_COLORS, &mut bits, None, 0).ok()?;
-
-    let old_bm = SelectObject(hdc_mem, hbm_dib.into());
-
-    let hdc_src = CreateCompatibleDC(Some(hdc_screen));
-    let old_src = SelectObject(hdc_src, hbitmap.into());
-
-    let _ = BitBlt(
-        hdc_mem,
-        0,
-        0,
-        width as i32,
-        height as i32,
-        Some(hdc_src),
-        0,
-        0,
-        SRCCOPY,
-    );
-
-    SelectObject(hdc_src, old_src);
-    let _ = DeleteDC(hdc_src);
-
-    let pixel_count = (width * height) as usize;
-    let slice = std::slice::from_raw_parts(bits as *const u8, pixel_count * 4);
-
-    let mut rgba = crate::icons::image_data::bgra_to_rgba(slice);
-    if crate::icons::image_data::is_fully_transparent(&rgba) {
-        for pixel in rgba.chunks_exact_mut(4) {
-            pixel[3] = 255;
-        }
-    }
-
-    SelectObject(hdc_mem, old_bm);
-    let _ = DeleteObject(hbm_dib.into());
-    let _ = DeleteDC(hdc_mem);
-    ReleaseDC(None, hdc_screen);
-
-    crate::icons::image_data::encode_rgba_png_data_uri(&rgba, width, height)
+    let device_context = GetDC(None);
+    let pixels = read_bitmap_pixels(device_context, hbitmap);
+    ReleaseDC(None, device_context);
+    let (width, height, bgra) = pixels?;
+    encode_bgra_png_data_uri_preserving_alpha(&bgra, width, height)
 }
 
 #[cfg(windows)]
@@ -358,13 +388,19 @@ pub(super) fn extract_icon_for_item(
                 }
             }
             "shortcut" => {
-                if !target_path.is_empty() {
-                    if let Some(b64) = extract_high_res_icon(target_path, icon_size) {
+                for (path, index) in shortcut_icon_resource_candidates(
+                    resolve_lnk_icon_location(item_path),
+                    target_path,
+                ) {
+                    if let Some(b64) = extract_resource_icon(&path, index, icon_size) {
                         return b64;
                     }
                 }
-                if let Some(b64) = extract_high_res_icon(&item_path.to_string_lossy(), icon_size) {
-                    return b64;
+                let lookup_paths = shortcut_icon_lookup_paths(item_path, target_path);
+                for path in lookup_paths {
+                    if let Some(b64) = extract_high_res_icon(&path, icon_size) {
+                        return b64;
+                    }
                 }
             }
             "folder" => {
@@ -372,7 +408,16 @@ pub(super) fn extract_icon_for_item(
                     return b64;
                 }
             }
-            "executable" | "file" => {
+            "executable" => {
+                if let Some(b64) = extract_resource_icon(&item_path.to_string_lossy(), 0, icon_size)
+                {
+                    return b64;
+                }
+                if let Some(b64) = extract_high_res_icon(&item_path.to_string_lossy(), icon_size) {
+                    return b64;
+                }
+            }
+            "file" => {
                 if let Some(b64) = extract_high_res_icon(&item_path.to_string_lossy(), icon_size) {
                     return b64;
                 }
@@ -398,4 +443,56 @@ pub(super) fn launch_app_windows(path: &str) -> Result<(), String> {
         .spawn()
         .map_err(|e| format!("Failed to launch: {}", e))?;
     Ok(())
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use std::path::Path;
+
+    use super::{shortcut_icon_lookup_paths, shortcut_icon_resource_candidates};
+
+    #[test]
+    fn shortcut_icon_lookup_prefers_the_shortcut_before_its_target() {
+        assert_eq!(
+            shortcut_icon_lookup_paths(
+                Path::new(r"C:\Users\Demo\Desktop\Example.lnk"),
+                r"C:\Apps\Example.exe",
+            ),
+            vec![
+                r"C:\Users\Demo\Desktop\Example.lnk".to_string(),
+                r"C:\Apps\Example.exe".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn shortcut_icon_lookup_does_not_repeat_an_empty_or_identical_target() {
+        let shortcut = Path::new(r"C:\Desktop\Example.lnk");
+        assert_eq!(
+            shortcut_icon_lookup_paths(shortcut, ""),
+            vec![r"C:\Desktop\Example.lnk".to_string()]
+        );
+        assert_eq!(
+            shortcut_icon_lookup_paths(shortcut, r"c:\desktop\example.lnk"),
+            vec![r"C:\Desktop\Example.lnk".to_string()]
+        );
+    }
+
+    #[test]
+    fn shortcut_resource_lookup_prefers_explicit_icon_then_target_resource() {
+        assert_eq!(
+            shortcut_icon_resource_candidates(
+                Some((r"C:\Icons\custom.ico".to_string(), 2)),
+                r"C:\Apps\Example.exe",
+            ),
+            vec![
+                (r"C:\Icons\custom.ico".to_string(), 2),
+                (r"C:\Apps\Example.exe".to_string(), 0),
+            ]
+        );
+        assert_eq!(
+            shortcut_icon_resource_candidates(None, r"C:\Apps\Example.exe"),
+            vec![(r"C:\Apps\Example.exe".to_string(), 0)]
+        );
+    }
 }

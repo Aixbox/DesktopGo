@@ -75,6 +75,14 @@ fn is_supported_image_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+fn shortcut_image_target(item: &ScannedDesktopItem) -> Option<PathBuf> {
+    if item.item_type != "shortcut" {
+        return None;
+    }
+    let target = PathBuf::from(item.target_path.trim());
+    is_supported_image_file(&target).then_some(target)
+}
+
 pub(in crate::icons) fn get_path_icon_base64_windows(path: &str, icon_size: i32) -> String {
     if is_special_shell_path(path) {
         return extract_special_shell_icon(path, icon_size).unwrap_or_default();
@@ -118,6 +126,12 @@ pub(super) fn read_icon_file_as_data_uri(path: &Path) -> String {
 fn extract_icon_for_scanned_item(item: &ScannedDesktopItem, icon_size: i32) -> String {
     if item.item_type == "special" {
         return extract_special_shell_icon(&item.path, icon_size).unwrap_or_default();
+    }
+
+    if let Some(target) = shortcut_image_target(item) {
+        if let Some(data_uri) = image_file_to_data_uri(&target, icon_size) {
+            return data_uri;
+        }
     }
 
     let item_path = PathBuf::from(&item.path);
@@ -202,10 +216,13 @@ pub(super) fn build_custom_icon_path(
 
 #[cfg(test)]
 mod image_type_tests {
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
+
+    use crate::icons::models::ScannedDesktopItem;
 
     use super::{
-        is_supported_image_file, native_icon_request_size, LAUNCHPAD_MAX_ICON_LOGICAL_SIZE,
+        is_supported_image_file, native_icon_request_size, shortcut_image_target,
+        LAUNCHPAD_MAX_ICON_LOGICAL_SIZE,
     };
 
     #[test]
@@ -220,6 +237,28 @@ mod image_type_tests {
         assert!(!is_supported_image_file(Path::new("archive.zip")));
         assert!(!is_supported_image_file(Path::new("program.exe")));
         assert!(!is_supported_image_file(Path::new("README")));
+    }
+
+    #[test]
+    fn uses_image_contents_for_shortcut_targets_only() {
+        let shortcut = ScannedDesktopItem {
+            name: "Preview".to_string(),
+            path: r"C:\Icons\Preview.lnk".to_string(),
+            target_path: r"C:\Pictures\Preview.PNG".to_string(),
+            item_type: "shortcut".to_string(),
+        };
+        assert_eq!(
+            shortcut_image_target(&shortcut),
+            Some(PathBuf::from(r"C:\Pictures\Preview.PNG"))
+        );
+
+        let mut non_image_target = shortcut.clone();
+        non_image_target.target_path = r"C:\Documents\Preview.pdf".to_string();
+        assert_eq!(shortcut_image_target(&non_image_target), None);
+
+        let mut direct_file = shortcut;
+        direct_file.item_type = "file".to_string();
+        assert_eq!(shortcut_image_target(&direct_file), None);
     }
 
     #[test]
