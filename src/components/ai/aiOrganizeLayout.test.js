@@ -43,14 +43,12 @@ test('keeps the captured preview scope when the current view mode changes', () =
 })
 
 test('clears baseline and dirty flags when an AI preview session is reset', () => {
-  const state = clearAiOrganizePreviewSessionState(
-    {
-      baseline: { viewMode: 'scroll' },
-      baselineCaptured: true,
-      dirty: true,
-      applied: true,
-    }
-  )
+  const state = clearAiOrganizePreviewSessionState({
+    baseline: { viewMode: 'scroll' },
+    baselineCaptured: true,
+    dirty: true,
+    applied: true,
+  })
 
   assert.deepEqual(state, {
     baseline: null,

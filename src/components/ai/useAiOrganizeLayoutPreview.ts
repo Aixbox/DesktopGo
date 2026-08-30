@@ -73,10 +73,7 @@ export const useAiOrganizeLayoutPreview = ({
       }
 
       const baseline = sessionRef.current.baseline
-      const previewViewMode = resolveAiOrganizePreviewViewMode(
-        baseline?.viewMode,
-        layoutViewMode
-      )
+      const previewViewMode = resolveAiOrganizePreviewViewMode(baseline?.viewMode, layoutViewMode)
       const currentItems = hydrateItems(icons, baseline?.layout?.items ?? null)
       const nextItems = applyAiGroupsToLayout(currentItems, aiGroups)
       try {
