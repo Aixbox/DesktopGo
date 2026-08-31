@@ -844,7 +844,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
                 <div
                   ref={transcriptRef}
                   onScroll={handleTranscriptScroll}
-                  className="min-h-0 flex-1 overflow-y-auto py-4"
+                  className="-mr-4 min-h-0 flex-1 overflow-y-auto py-4 pr-4"
                 >
                   <div className="space-y-3">
                     {activeSession?.messages.length ? (

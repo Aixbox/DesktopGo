@@ -859,6 +859,8 @@ const EN_MESSAGES: Record<string, string> = {
     'Generate a first layout, then keep chatting to refine it.',
   '第 {index} 版': 'Version {index}',
   布局预览: 'Layout preview',
+  '{count} 个分组': '{count} groups',
+  '未整理 {count} 个图标': '{count} icons left ungrouped',
   '正在等待新的布局预览...': 'Waiting for the new layout preview...',
   '发送一个要求，AI 会生成可保存的布局预览。':
     'Send a request and AI will generate a saveable layout preview.',
