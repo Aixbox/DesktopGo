@@ -162,7 +162,7 @@ unsafe fn apply_mask_alpha(
         .filter(|(mask_width, mask_height, _)| *mask_width == width && *mask_height >= height)
         .map(|(_, _, pixels)| pixels);
 
-    for (index, pixel) in rgba.chunks_exact_mut(4).enumerate() {
+    for (index, pixel) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         let masked_out = mask_pixels
             .as_ref()
             .and_then(|pixels| pixels.get(index * 4))

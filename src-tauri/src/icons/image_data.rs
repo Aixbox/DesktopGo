@@ -37,7 +37,7 @@ pub(super) fn encode_rgba_png_data_uri(rgba: &[u8], width: u32, height: u32) -> 
 /// Windows hands back bottom-up BGRA; the encoder wants straight RGBA.
 pub(super) fn bgra_to_rgba(bgra: &[u8]) -> Vec<u8> {
     let mut rgba = bgra.to_vec();
-    for pixel in rgba.chunks_exact_mut(4) {
+    for pixel in rgba.as_chunks_mut::<4>().0 {
         pixel.swap(0, 2);
     }
     rgba
