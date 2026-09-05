@@ -234,7 +234,11 @@ fn handle_chat_completions_event(
             }
             if let Some(reasoning_delta) = choice
                 .get("delta")
-                .and_then(|delta| delta.get("reasoning_content").or_else(|| delta.get("reasoning")))
+                .and_then(|delta| {
+                    delta
+                        .get("reasoning_content")
+                        .or_else(|| delta.get("reasoning"))
+                })
                 .and_then(Value::as_str)
             {
                 emit_reasoning_delta(reasoning_delta, observation);

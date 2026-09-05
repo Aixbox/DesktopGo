@@ -221,42 +221,6 @@ fn resolve_cursor_effect(is_valid: bool, allowed_effects: DROPEFFECT) -> DROPEFF
         .unwrap_or(DROPEFFECT_NONE)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::resolve_cursor_effect;
-    use windows::Win32::System::Ole::{
-        DROPEFFECT_COPY, DROPEFFECT_LINK, DROPEFFECT_MOVE, DROPEFFECT_NONE,
-    };
-
-    #[test]
-    fn chooses_an_effect_allowed_by_the_drag_source() {
-        assert_eq!(
-            resolve_cursor_effect(true, DROPEFFECT_LINK),
-            DROPEFFECT_LINK
-        );
-        assert_eq!(
-            resolve_cursor_effect(true, DROPEFFECT_MOVE | DROPEFFECT_LINK),
-            DROPEFFECT_LINK
-        );
-        assert_eq!(
-            resolve_cursor_effect(true, DROPEFFECT_COPY | DROPEFFECT_LINK),
-            DROPEFFECT_COPY
-        );
-    }
-
-    #[test]
-    fn rejects_invalid_or_unsupported_drops() {
-        assert_eq!(
-            resolve_cursor_effect(false, DROPEFFECT_COPY),
-            DROPEFFECT_NONE
-        );
-        assert_eq!(
-            resolve_cursor_effect(true, DROPEFFECT_NONE),
-            DROPEFFECT_NONE
-        );
-    }
-}
-
 #[allow(non_snake_case)]
 impl IDropTarget_Impl for ShellDropTarget_Impl {
     fn DragEnter(
@@ -429,4 +393,40 @@ pub fn install(window: &tauri::WebviewWindow) -> Result<usize, String> {
         return Err("No WebView drag-drop target was found".to_string());
     }
     Ok(installed_count)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_cursor_effect;
+    use windows::Win32::System::Ole::{
+        DROPEFFECT_COPY, DROPEFFECT_LINK, DROPEFFECT_MOVE, DROPEFFECT_NONE,
+    };
+
+    #[test]
+    fn chooses_an_effect_allowed_by_the_drag_source() {
+        assert_eq!(
+            resolve_cursor_effect(true, DROPEFFECT_LINK),
+            DROPEFFECT_LINK
+        );
+        assert_eq!(
+            resolve_cursor_effect(true, DROPEFFECT_MOVE | DROPEFFECT_LINK),
+            DROPEFFECT_LINK
+        );
+        assert_eq!(
+            resolve_cursor_effect(true, DROPEFFECT_COPY | DROPEFFECT_LINK),
+            DROPEFFECT_COPY
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_or_unsupported_drops() {
+        assert_eq!(
+            resolve_cursor_effect(false, DROPEFFECT_COPY),
+            DROPEFFECT_NONE
+        );
+        assert_eq!(
+            resolve_cursor_effect(true, DROPEFFECT_NONE),
+            DROPEFFECT_NONE
+        );
+    }
 }

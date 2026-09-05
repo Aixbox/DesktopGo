@@ -61,8 +61,8 @@ pub(super) async fn chat(
     let request_messages = build_chat_messages(&config, messages);
     let client = LlmClient::from_config(&config);
     let run_id = format!("chat-{}", Uuid::new_v4());
-    let observed =
-        ObservedLlmRequest::new(request_messages, false, window, &run_id, "chat").with_cancel(cancel);
+    let observed = ObservedLlmRequest::new(request_messages, false, window, &run_id, "chat")
+        .with_cancel(cancel);
     let response = client.complete_json_observed(&config, observed).await?;
     let content = response.content.trim().to_string();
     if content.is_empty() {
@@ -147,10 +147,7 @@ fn build_client(error_prefix: &str) -> Result<reqwest::Client, String> {
         .map_err(|error| format!("{error_prefix}：{error}"))
 }
 
-fn build_chat_messages(
-    config: &AiConfig,
-    messages: Vec<AiChatMessageInput>,
-) -> Vec<LlmMessage> {
+fn build_chat_messages(config: &AiConfig, messages: Vec<AiChatMessageInput>) -> Vec<LlmMessage> {
     let mut request_messages = vec![LlmMessage::new(
         "system",
         "你是 DesktopGo 的桌面整理助手。默认进行自然、简洁的上下文对话；不要擅自生成图标布局或声称已经整理桌面。只有用户明确使用整理图标指令时，应用才会进入整理流程。",

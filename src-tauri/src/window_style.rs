@@ -405,22 +405,6 @@ pub(crate) fn set_main_window_persistent_enabled(state: &MainWindowState, enable
         .store(enabled, Ordering::SeqCst);
 }
 
-#[cfg(test)]
-mod tests {
-    use super::resolve_window_persistent_enabled;
-
-    #[test]
-    fn window_persistent_defaults_to_enabled_without_a_saved_value() {
-        assert!(resolve_window_persistent_enabled(None));
-    }
-
-    #[test]
-    fn window_persistent_preserves_saved_boolean_values() {
-        assert!(!resolve_window_persistent_enabled(Some(false)));
-        assert!(resolve_window_persistent_enabled(Some(true)));
-    }
-}
-
 fn main_window_should_always_on_top(state: &MainWindowState) -> bool {
     !state.window_persistent_enabled.load(Ordering::SeqCst)
         || state.manual_always_on_top_enabled.load(Ordering::SeqCst)
@@ -446,4 +430,20 @@ pub(crate) fn set_main_window_manual_always_on_top_enabled(state: &MainWindowSta
     state
         .manual_always_on_top_enabled
         .store(enabled, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_window_persistent_enabled;
+
+    #[test]
+    fn window_persistent_defaults_to_enabled_without_a_saved_value() {
+        assert!(resolve_window_persistent_enabled(None));
+    }
+
+    #[test]
+    fn window_persistent_preserves_saved_boolean_values() {
+        assert!(!resolve_window_persistent_enabled(Some(false)));
+        assert!(resolve_window_persistent_enabled(Some(true)));
+    }
 }

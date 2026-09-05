@@ -453,10 +453,7 @@ mod tests {
 
         // 「全部」哨兵 = 不过滤。
         let everything = collect_launcher_catalog(config(vec![folder(&root, 2, true)], &["*"]));
-        assert!(
-            names(&everything).contains(&"plugin.dll"),
-            "勾了全部就全收"
-        );
+        assert!(names(&everything).contains(&"plugin.dll"), "勾了全部就全收");
 
         // 点号与大小写都应被容忍。
         let tolerant = collect_launcher_catalog(config(vec![folder(&root, 2, true)], &[".EXE"]));
