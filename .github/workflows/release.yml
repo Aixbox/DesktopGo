@@ -93,12 +93,12 @@ jobs:
           $releaseName = "DesktopGo 测试构建 v$packageVersion（构建 $buildId）"
           $releaseNotes = Get-Content -LiteralPath $releaseNotesPath -Raw -Encoding UTF8
           $releaseBody = @"
-> [!WARNING]
-> **测试构建**：应用版本 $packageVersion，运行号 $runNumber，重试序号 $runAttempt（构建号 $buildId）。
-> 发布前请核对标题、说明和附件。
+          > [!WARNING]
+          > **测试构建**：应用版本 $packageVersion，运行号 $runNumber，重试序号 $runAttempt（构建号 $buildId）。
+          > 发布前请核对标题、说明和附件。
 
-$releaseNotes
-"@
+          $releaseNotes
+          "@
           $delimiter = [guid]::NewGuid().Guid
 
           "version=$packageVersion" >> $env:GITHUB_OUTPUT
