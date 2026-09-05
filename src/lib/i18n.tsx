@@ -9,7 +9,6 @@ export { getCurrentLanguage, getIntlLocale } from './i18n/language'
 
 const ZH_MESSAGES: Record<string, string> = {
   'Loading...': '加载中...',
-  'No desktop shortcuts found': '没有找到桌面快捷方式',
   'Identifier: {identifier}': '标识符：{identifier}',
   'Runtime: Tauri {version}': '运行时：Tauri {version}',
   'Search dependency: Installed Everything': '搜索依赖：已安装 Everything',
@@ -479,8 +478,10 @@ const EN_MESSAGES: Record<string, string> = {
   重新加载: 'Reload',
   '图标库加载失败，请重试。': 'Could not load the icon library. Please try again.',
   '现有布局不会被修改。': 'Your existing layout will not be changed.',
-  '添加应用、快捷方式或网页，开始创建你的启动台。':
-    'Add an app, shortcut, or website to start building your launchpad.',
+  启动台还是空的: 'Your launchpad is empty',
+  把图标拖到这里导入: 'Drop icons here to import',
+  '从桌面或资源管理器把应用、快捷方式或文件拖进窗口即可导入，也可以手动添加。':
+    'Drag apps, shortcuts, or files from the desktop or File Explorer into the window to import them, or add them manually.',
   启动失败: 'Launch failed',
   '无法打开所选项目，请检查目标是否仍然可用。':
     'Could not open the selected item. Check that the target is still available.',
