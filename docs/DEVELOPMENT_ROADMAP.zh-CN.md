@@ -1,5 +1,5 @@
-- 添加在第一次安装后启动的时候的提示，提示用户可以拖动图标导入
-- 设置中的AI测试连接失败
+- 已完成：添加在第一次安装后启动的时候的提示，提示用户可以拖动图标导入
+- 已完成：设置中的AI测试连接失败
 - 右键文件夹添加解散按钮，右键图标添加删除
 - 优化图标整理的思维链组件，可以参考 https://heroui.pro/docs/react/components/chain-of-thought
   - ChainOfThought（根容器，Disclosure 可折叠）
