@@ -9,6 +9,7 @@ mod search_icon_plan;
 mod service;
 #[cfg(windows)]
 mod shell_icon_windows;
+mod url_shortcut;
 mod website;
 
 pub use models::{CreateIconEntryInput, IconMutationTarget, UpdateIconEntryInput};

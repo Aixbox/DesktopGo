@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::icons::models::{ScannedDesktopItem, SnapshotIconItem};
 use crate::icons::platform_windows::resolve_lnk;
 use crate::icons::search_icon_plan::is_special_shell_path;
+use crate::icons::url_shortcut::{is_url_shortcut, read_url_shortcut};
 
 use super::image::build_scanned_icon_path;
 use super::source::{IconSource, AUTOMATIC_TARGET_ICON_CACHE_VERSION};
@@ -39,6 +40,15 @@ pub(super) fn build_scanned_item_from_path(path: &Path) -> Option<ScannedDesktop
     let (target_path, item_type) = if has_extension(path, "lnk") {
         (
             resolve_lnk(path).unwrap_or_default(),
+            "shortcut".to_string(),
+        )
+    } else if is_url_shortcut(path) {
+        // Steam 的游戏快捷方式是 .url 文件；按 shortcut 处理让图标提取走
+        // IconFile 链路，target 记录 URL= 值用于启动与去重。
+        (
+            read_url_shortcut(path)
+                .map(|info| info.target)
+                .unwrap_or_default(),
             "shortcut".to_string(),
         )
     } else if path.is_dir() {

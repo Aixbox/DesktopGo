@@ -326,6 +326,16 @@ unsafe fn extract_resource_icon(path: &str, icon_index: i32, size: i32) -> Optio
 }
 
 #[cfg(windows)]
+fn resolve_url_icon_location(path: &Path) -> Option<(String, i32)> {
+    if !crate::icons::url_shortcut::is_url_shortcut(path) {
+        return None;
+    }
+    let info = crate::icons::url_shortcut::read_url_shortcut(path)?;
+    let icon_file = info.icon_file.trim().to_string();
+    (!icon_file.is_empty()).then_some((icon_file, info.icon_index))
+}
+
+#[cfg(windows)]
 fn shortcut_icon_lookup_paths(item_path: &Path, target_path: &str) -> Vec<String> {
     let shortcut_path = item_path.to_string_lossy().into_owned();
     let mut paths = vec![shortcut_path.clone()];
@@ -389,7 +399,9 @@ pub(super) fn extract_icon_for_item(
             }
             "shortcut" => {
                 for (path, index) in shortcut_icon_resource_candidates(
-                    resolve_lnk_icon_location(item_path),
+                    resolve_lnk_icon_location(item_path)
+                        .or_else(|| resolve_url_icon_location(item_path))
+                        .or_else(|| resolve_url_icon_location(Path::new(target_path))),
                     target_path,
                 ) {
                     if let Some(b64) = extract_resource_icon(&path, index, icon_size) {

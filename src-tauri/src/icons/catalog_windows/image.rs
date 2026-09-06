@@ -9,6 +9,7 @@ use crate::icons::platform_windows::{
     extract_icon_for_item, extract_special_shell_icon, get_dpi_scale, resolve_lnk,
 };
 use crate::icons::search_icon_plan::is_special_shell_path;
+use crate::icons::url_shortcut::{is_url_shortcut, read_url_shortcut};
 
 use super::item::{build_scanned_item_from_path, has_extension};
 use super::source::IconSource;
@@ -79,6 +80,13 @@ fn shortcut_image_target(item: &ScannedDesktopItem) -> Option<PathBuf> {
     if item.item_type != "shortcut" {
         return None;
     }
+    // Steam .url 快捷方式的游戏图（.ico/.jpg）记录在 IconFile 里，直接读图
+    // 比走 Shell 提取更清晰可靠。
+    if is_url_shortcut(Path::new(item.path.trim())) {
+        let icon_file = read_url_shortcut(Path::new(item.path.trim()))?.icon_file;
+        let icon_path = PathBuf::from(icon_file.trim());
+        return is_supported_image_file(&icon_path).then_some(icon_path);
+    }
     let target = PathBuf::from(item.target_path.trim());
     is_supported_image_file(&target).then_some(target)
 }
@@ -101,6 +109,13 @@ pub(in crate::icons) fn get_path_icon_base64_windows(path: &str, icon_size: i32)
     let item_path_text = item_path.to_string_lossy().to_string();
     let (target_path, item_type) = if has_extension(&item_path, "lnk") {
         (resolve_lnk(&item_path).unwrap_or_default(), "shortcut")
+    } else if is_url_shortcut(&item_path) {
+        (
+            read_url_shortcut(&item_path)
+                .map(|info| info.target)
+                .unwrap_or_default(),
+            "shortcut",
+        )
     } else if item_path.is_dir() {
         (item_path_text.clone(), "folder")
     } else if has_extension(&item_path, "exe") {
