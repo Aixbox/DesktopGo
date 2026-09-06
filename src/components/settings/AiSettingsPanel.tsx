@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { translate, useI18n } from '@/lib/i18n'
+import { createAiOrganizeId } from '@/lib/aiOrganizeSessions'
 import {
   AI_COMPATIBLE_PROTOCOLS,
   AI_PROVIDERS,
@@ -97,6 +98,7 @@ export function AiSettingsPanel() {
     setTesting(true)
     try {
       await invoke('ai_chat', {
+        requestId: createAiOrganizeId('ai-test'),
         config: {
           provider: config.provider,
           base_url: config.baseUrl.trim(),
