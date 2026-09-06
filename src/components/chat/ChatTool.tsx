@@ -77,6 +77,7 @@ export function ChatTool({
 const TOOL_LABELS: Record<string, string> = {
   list_icons: '查看图标库',
   organize_icons: '整理图标',
+  get_icon_categories: '查看图标分类',
 }
 
 interface ChatToolRecordProps {

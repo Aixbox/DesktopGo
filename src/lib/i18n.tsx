@@ -3,6 +3,7 @@ import type { TranslationParams } from './i18n/context'
 import { getCurrentLanguage } from './i18n/language'
 import { EN_SEARCH_MESSAGES } from './i18n/searchMessages'
 import { EN_APPEARANCE_MESSAGES } from './i18n/appearanceMessages'
+import { EN_AI_MESSAGES } from './i18n/aiMessages'
 
 export { useI18n } from './i18n/context'
 export { getCurrentLanguage, getIntlLocale } from './i18n/language'
@@ -719,6 +720,7 @@ const EN_MESSAGES: Record<string, string> = {
   '运行时间 升序': 'Run time ascending',
   '运行时间 降序': 'Run time descending',
   ...EN_SEARCH_MESSAGES,
+  ...EN_AI_MESSAGES,
   '更新配置已刷新。': 'Updater configuration refreshed.',
   '读取更新配置失败：{error}': 'Failed to read updater configuration: {error}',
   '安装程序即将接管，应用会自动退出。':
@@ -802,32 +804,6 @@ const EN_MESSAGES: Record<string, string> = {
   '构建 AI 请求内容失败。': 'Failed to build the AI request payload.',
   'AI 返回格式无法解析。': 'Could not parse the AI response format.',
   上下文记录遇到问题: 'Context recording hit a problem',
-  'AI Agent 已完成分析': 'AI Agent finished analysis',
-  失败: 'Failed',
-  成功: 'Succeeded',
-  待配置: 'Needs config',
-  无可用分组: 'No usable groups',
-  应用中: 'Applying',
-  进行中: 'Running',
-  '正在准备 AI 请求': 'Preparing AI request',
-  请求成功: 'Request succeeded',
-  请求失败: 'Request failed',
-  'AI 配置不完整': 'AI config incomplete',
-  没有可用分组: 'No usable groups',
-  正在应用整理结果: 'Applying organization result',
-  等待开始: 'Waiting to start',
-  思考中: 'Thinking',
-  思考过程: 'Thought process',
-  '已深度思考 {time}': 'Thought for {time}',
-  已生成布局预览: 'Layout preview ready',
-  '{count} 个分组 · {icons} 个图标': '{count} groups · {icons} icons',
-  整理图标: 'Organize icons',
-  查看图标库: 'View icon library',
-  调用参数: 'Arguments',
-  执行结果: 'Result',
-  我们可以从这些方式开始: 'Here are some ways to start',
-  '点击建议立即执行，也可以在下方输入自己的要求。':
-    'Click a suggestion to run it right away, or type your own request below.',
   正在回复: 'Replying',
   停止生成: 'Stop generating',
   '已停止生成。': 'Stopped.',
