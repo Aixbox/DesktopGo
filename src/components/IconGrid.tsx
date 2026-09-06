@@ -48,7 +48,10 @@ import { OuterGridView } from './icon-grid/views/OuterGridView'
 import { EdgeGlow } from './icon-grid/views/EdgeGlow'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
 import { DockBar } from './icon-grid/views/DockBar'
-import { getFolderChildSelectionsByIds } from './icon-grid/domain/folderPolicy'
+import {
+  dissolveFolderInTopLevelLayout,
+  getFolderChildSelectionsByIds,
+} from './icon-grid/domain/folderPolicy'
 import {
   buildGridGeometryKey as buildGeometryKey,
   getLayoutNormalizationMetrics,
@@ -640,6 +643,27 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     setOuterSlots(compactedOuterSlots)
   }
 
+  const handleDissolveFolder = (folderId: string) => {
+    const result = dissolveFolderInTopLevelLayout(
+      itemsRef.current,
+      outerSlotsRef.current,
+      dockKeysRef.current,
+      folderId,
+      { columns: Math.max(1, columns), pageSize: Math.max(1, pageSizeRef.current) }
+    )
+    if (!result) return
+
+    itemsRef.current = result.items
+    outerSlotsRef.current = result.outerSlots
+    dockKeysRef.current = result.dockKeys
+    setItems(result.items)
+    setOuterSlots(result.outerSlots)
+    setDockKeys(result.dockKeys)
+    if (openFolderId === folderId) {
+      closeFolderImmediately()
+    }
+  }
+
   const pageItems = useMemo(() => {
     const start = currentPage * pageSize
     const currentSlice = [...renderOrder.slice(start, start + pageSize)]
@@ -805,6 +829,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
               void launchApp(path)
             }}
             onResizeFolder={handleResizeFolder}
+            onDissolveFolder={handleDissolveFolder}
             bindTileRef={(id, node) => {
               if (node) tileRefs.current.set(id, node)
               else tileRefs.current.delete(id)

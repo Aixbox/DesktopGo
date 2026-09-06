@@ -11,7 +11,7 @@ import type { DesktopIcon } from '../types'
 import { getIconGridLayoutRowHeight, getIconGridRowHeight, ICON_SIZE_CONFIG } from '../types'
 import { useIconStore } from '../stores/iconStore'
 import { getId, type GridItem, type IconItem } from './icon-grid/model'
-import { DRAG_HOLE_ID } from './icon-grid/domain/slots'
+import { DRAG_HOLE_ID, getOccupiedPageCountForSlots } from './icon-grid/domain/slots'
 import { clampNumber } from './icon-grid/domain/geometry'
 import type { DragState } from './icon-grid/state/types'
 import { useScrollableIconGridDragWorkflow } from './icon-grid/scroll/useScrollableIconGridDragWorkflow'
@@ -82,17 +82,6 @@ interface IconGridProps {
 }
 
 const EVASION_COOLDOWN_MS = 120
-const getOccupiedPageCountForSlots = (slots: Array<string | null>, pageSize: number) => {
-  const safePageSize = Math.max(1, pageSize)
-  let lastOccupiedIndex = -1
-  for (let index = slots.length - 1; index >= 0; index -= 1) {
-    const slot = slots[index]
-    if (typeof slot !== 'string' || slot === DRAG_HOLE_ID) continue
-    lastOccupiedIndex = index
-    break
-  }
-  return Math.max(1, Math.ceil((lastOccupiedIndex + 1) / safePageSize))
-}
 
 export function ScrollableIconGrid({
   icons,
@@ -199,6 +188,7 @@ export function ScrollableIconGrid({
     folderItemWidth,
     folderOrder,
     folderPanelRef,
+    handleDissolveFolder,
     handleResizeFolder,
     openFolder,
     openFolderWithAnimation,
@@ -212,6 +202,7 @@ export function ScrollableIconGrid({
     outerSlotsRef,
     setOuterSlots,
     dockKeysRef,
+    setDockKeys,
     dockEnabled,
     columns,
     pageSizeRef,
@@ -219,6 +210,7 @@ export function ScrollableIconGrid({
     columnWidth,
     rowHeight,
   })
+
   const selectedSet = useMemo(() => new Set(selectedIconKeys), [selectedIconKeys])
   const iconConfig = ICON_SIZE_CONFIG[iconSize]
   const captureFinishedScrollDrag = useCallback(
@@ -782,6 +774,7 @@ export function ScrollableIconGrid({
               void launchApp(path)
             }}
             onResizeFolder={handleResizeFolder}
+            onDissolveFolder={handleDissolveFolder}
             bindTileRef={(id, node) => {
               if (node) tileRefs.current.set(id, node)
               else tileRefs.current.delete(id)
@@ -844,6 +837,7 @@ export function ScrollableIconGrid({
                   void launchApp(path)
                 }}
                 onResizeFolder={handleResizeFolder}
+                onDissolveFolder={handleDissolveFolder}
                 bindTileRef={(id, node) => {
                   if (node) tileRefs.current.set(id, node)
                   else tileRefs.current.delete(id)

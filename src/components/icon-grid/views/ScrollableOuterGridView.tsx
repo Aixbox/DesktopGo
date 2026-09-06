@@ -77,6 +77,7 @@ interface ScrollableOuterGridViewProps {
   onOpenFolder: (folderId: string) => void
   onLaunchIcon: (path: string) => void
   onResizeFolder: (folderId: string, size: FolderSize) => void
+  onDissolveFolder: (folderId: string) => void
   bindTileRef: (id: string, node: HTMLDivElement | null) => void
   bindGridPageRef: (page: number, node: HTMLDivElement | null) => void
   externalGridFlipPositionsRef: MutableRefObject<Map<string, GridItemPosition> | null>
@@ -149,6 +150,7 @@ export function ScrollableOuterGridView({
   onOpenFolder,
   onLaunchIcon,
   onResizeFolder,
+  onDissolveFolder,
   bindTileRef,
   bindGridPageRef,
   externalGridFlipPositionsRef,
@@ -378,6 +380,7 @@ export function ScrollableOuterGridView({
                                 onOpenFolder={onOpenFolder}
                                 onLaunchIcon={onLaunchIcon}
                                 onResizeFolder={onResizeFolder}
+                                onDissolveFolder={onDissolveFolder}
                               />
                             )}
                           </div>
@@ -421,6 +424,7 @@ export function ScrollableOuterGridView({
                           onOpenFolder={NOOP}
                           onLaunchIcon={NOOP}
                           onResizeFolder={NOOP}
+                          onDissolveFolder={NOOP}
                         />
                       )}
                     </div>

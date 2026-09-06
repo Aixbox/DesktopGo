@@ -61,6 +61,7 @@ interface IconStore {
   clearSelection: () => void
   hideSelectedIcons: () => Promise<void>
   hideIcon: (icon: DesktopIcon) => Promise<void>
+  deleteIcon: (icon: DesktopIcon) => Promise<void>
   deleteSelectedIcons: () => Promise<void>
   showShellContextMenu: (icon: DesktopIcon) => Promise<void>
   applyWindowMode: (mode: WindowMode) => Promise<void>
@@ -279,6 +280,18 @@ export const useIconStore = create<IconStore>((set, get) => ({
       await get().fetchIcons()
     } catch (e) {
       console.error('Failed to hide icon:', e)
+    }
+  },
+
+  deleteIcon: async (icon: DesktopIcon) => {
+    try {
+      await invoke<number>('delete_icons', { targets: [{ id: icon.id }] })
+      set(state => ({
+        selectedIconKeys: state.selectedIconKeys.filter(key => key !== buildIconSelectionKey(icon)),
+      }))
+      await get().fetchIcons()
+    } catch (e) {
+      console.error('Failed to delete icon:', e)
     }
   },
 

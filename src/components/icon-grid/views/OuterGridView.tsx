@@ -51,6 +51,7 @@ interface OuterGridViewProps {
   onOpenFolder: (folderId: string) => void
   onLaunchIcon: (path: string) => void
   onResizeFolder: (folderId: string, size: FolderSize) => void
+  onDissolveFolder: (folderId: string) => void
   bindTileRef: (id: string, node: HTMLDivElement | null) => void
   reorderAnimationMs: number
   canGoLeft: boolean
@@ -99,6 +100,7 @@ export function OuterGridView({
   onOpenFolder,
   onLaunchIcon,
   onResizeFolder,
+  onDissolveFolder,
   bindTileRef,
   reorderAnimationMs,
   canGoLeft,
@@ -311,6 +313,7 @@ export function OuterGridView({
                     onOpenFolder={onOpenFolder}
                     onLaunchIcon={onLaunchIcon}
                     onResizeFolder={onResizeFolder}
+                    onDissolveFolder={onDissolveFolder}
                   />
                 )}
               </div>

@@ -1,5 +1,6 @@
 import type { GridItem, IconItem } from '../model'
 import { DRAG_HOLE_ID } from './slots'
+import { canPlaceItemAtAnchorIndex } from './topLevelLayout'
 
 export const FOLDER_AUTO_OPEN_DWELL_MS = 500
 export const FOLDER_EXIT_DWELL_MS = 200
@@ -166,5 +167,88 @@ export const finalizeFolderExtractionInTopLevelLayout = (
   }
 
   nextItems.splice(index, 1)
+  return { items: nextItems, outerSlots: nextOuterSlots, dockKeys: nextDockKeys }
+}
+
+export interface DissolveFolderLayoutOptions {
+  columns: number
+  pageSize: number
+}
+
+const findFreeAnchorIndexFrom = (
+  slots: Array<string | null>,
+  items: GridItem[],
+  startIndex: number,
+  columns: number,
+  pageSize: number
+): number => {
+  for (let offset = 0; offset < slots.length; offset += 1) {
+    const index = (startIndex + offset) % slots.length
+    if (canPlaceItemAtAnchorIndex(slots, items, index, { cols: 1, rows: 1 }, columns, pageSize)) {
+      return index
+    }
+  }
+  return -1
+}
+
+/**
+ * 解散文件夹：成员图标按原位返回顶层网格，文件夹自身从布局与 Dock 中移除。
+ * 第一个成员优先占用文件夹原锚点（或 Dock 槽位），其余成员从该位置向后寻找
+ * 最近空闲槽位；现有其他条目的位置保持不变。
+ */
+export const dissolveFolderInTopLevelLayout = (
+  items: GridItem[],
+  outerSlots: Array<string | null>,
+  dockKeys: Array<string | null>,
+  folderId: string,
+  options: DissolveFolderLayoutOptions
+): {
+  items: GridItem[]
+  outerSlots: Array<string | null>
+  dockKeys: Array<string | null>
+} | null => {
+  const index = findFolderIndexById(items, folderId)
+  if (index < 0) return null
+  const folder = items[index]
+  if (!folder || folder.kind !== 'folder') return null
+
+  const folderSlotId = `folder:${folderId}`
+  const columns = Math.max(1, Math.floor(options.columns))
+  const pageSize = Math.max(1, Math.floor(options.pageSize))
+  const children = [...folder.children]
+  const nextItems = [...items.slice(0, index), ...children, ...items.slice(index + 1)]
+
+  let nextDockKeys = dockKeys
+  let nextOuterSlots = [...outerSlots]
+  while (nextOuterSlots.length < pageSize) {
+    nextOuterSlots.push(null)
+  }
+  const dockSlotIndex = dockKeys.indexOf(folderSlotId)
+
+  // Dock 中的文件夹：第一个成员顶替其 Dock 槽位，其余成员落入顶层网格。
+  let cursor = outerSlots.indexOf(folderSlotId)
+  let firstChildIndex = 0
+  if (dockSlotIndex >= 0) {
+    nextDockKeys = dockKeys.map(key => (key === folderSlotId ? children[0].key : key))
+    firstChildIndex = 1
+    if (cursor < 0) cursor = 0
+  } else if (cursor >= 0) {
+    nextOuterSlots[cursor] = children[0].key
+    firstChildIndex = 1
+    cursor += 1
+  } else {
+    cursor = 0
+  }
+
+  for (let childIndex = firstChildIndex; childIndex < children.length; childIndex += 1) {
+    let anchorIndex = findFreeAnchorIndexFrom(nextOuterSlots, nextItems, cursor, columns, pageSize)
+    if (anchorIndex < 0) {
+      nextOuterSlots = [...nextOuterSlots, ...Array.from({ length: pageSize }, () => null)]
+      anchorIndex = nextOuterSlots.length - pageSize
+    }
+    nextOuterSlots[anchorIndex] = children[childIndex].key
+    cursor = anchorIndex + 1
+  }
+
   return { items: nextItems, outerSlots: nextOuterSlots, dockKeys: nextDockKeys }
 }

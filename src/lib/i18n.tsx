@@ -286,6 +286,8 @@ const EN_MESSAGES: Record<string, string> = {
   输入自定义应用文件夹绝对路径: 'Enter the absolute path to the custom app folder',
   选择文件夹: 'Choose folder',
   打开文件夹: 'Open folder',
+  文件夹大小: 'Folder size',
+  解散文件夹: 'Disband folder',
   保存路径: 'Save path',
   恢复默认路径: 'Restore default path',
   桌面来源: 'Desktop source',
@@ -520,6 +522,7 @@ const EN_MESSAGES: Record<string, string> = {
   添加快捷入口: 'Add shortcut',
   '确定要删除已选中的 {count} 个图标吗？此操作无法撤销。':
     'Delete the {count} selected icons? This action cannot be undone.',
+  '确定要删除“{name}”吗？此操作无法撤销。': 'Delete "{name}"? This action cannot be undone.',
   打开: 'Open',
   '移出 Dock': 'Remove from Dock',
   图标库: 'Icon Library',

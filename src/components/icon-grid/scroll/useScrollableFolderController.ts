@@ -12,6 +12,7 @@ import {
   resizeSlotPages,
 } from '../domain/topLevelLayout'
 import { compactEmptyPages } from '../domain/slots'
+import { dissolveFolderInTopLevelLayout } from '../domain/folderPolicy'
 import { getDefaultFolderColumnCount, getLayoutNormalizationMetrics } from '../domain/gridGeometry'
 import type { LayoutDimensionsTracker } from '../state/layoutDimensionsTracker'
 import { FOLDER_MODAL_MAX_WIDTH } from '../views/folderVisualPolicy'
@@ -24,6 +25,7 @@ interface UseScrollableFolderControllerParams {
   outerSlotsRef: MutableRefObject<Array<string | null>>
   setOuterSlots: (slots: Array<string | null>) => void
   dockKeysRef: MutableRefObject<Array<string | null>>
+  setDockKeys: (keys: Array<string | null>) => void
   dockEnabled: boolean
   columns: number
   pageSizeRef: MutableRefObject<number>
@@ -69,6 +71,7 @@ export function useScrollableFolderController({
   outerSlotsRef,
   setOuterSlots,
   dockKeysRef,
+  setDockKeys,
   dockEnabled,
   columns,
   pageSizeRef,
@@ -296,6 +299,27 @@ export function useScrollableFolderController({
     setOuterSlots(nextOuterSlots)
   }
 
+  const handleDissolveFolder = (folderId: string) => {
+    const result = dissolveFolderInTopLevelLayout(
+      itemsRef.current,
+      outerSlotsRef.current,
+      dockKeysRef.current,
+      folderId,
+      { columns: Math.max(1, columns), pageSize: Math.max(1, pageSizeRef.current) }
+    )
+    if (!result) return
+
+    itemsRef.current = result.items
+    outerSlotsRef.current = result.outerSlots
+    dockKeysRef.current = result.dockKeys
+    setItems(result.items)
+    setOuterSlots(result.outerSlots)
+    setDockKeys(result.dockKeys)
+    if (openFolderId === folderId) {
+      closeFolderImmediately()
+    }
+  }
+
   return {
     closeFolderImmediately,
     closeFolderWithAnimation,
@@ -307,6 +331,7 @@ export function useScrollableFolderController({
     folderItemWidth,
     folderOrder,
     folderPanelRef,
+    handleDissolveFolder,
     handleResizeFolder,
     openFolder,
     openFolderId,

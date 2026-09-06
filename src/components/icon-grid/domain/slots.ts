@@ -181,3 +181,18 @@ export const findNearestEmptyOnPageByManhattan = (
   }
   return bestIndex
 }
+
+export const getOccupiedPageCountForSlots = (
+  slots: Array<string | null>,
+  pageSize: number
+): number => {
+  const safePageSize = Math.max(1, pageSize)
+  let lastOccupiedIndex = -1
+  for (let index = slots.length - 1; index >= 0; index -= 1) {
+    const slot = slots[index]
+    if (typeof slot !== 'string' || slot === DRAG_HOLE_ID) continue
+    lastOccupiedIndex = index
+    break
+  }
+  return Math.max(1, Math.ceil((lastOccupiedIndex + 1) / safePageSize))
+}

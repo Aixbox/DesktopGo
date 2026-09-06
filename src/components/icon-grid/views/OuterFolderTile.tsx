@@ -1,4 +1,4 @@
-import { AppWindow } from 'lucide-react'
+import { AppWindow, Ungroup } from 'lucide-react'
 import { motion } from 'framer-motion'
 import {
   memo,
@@ -10,6 +10,7 @@ import {
   ICON_GRID_TILE_PADDING_Y,
   ICON_GRID_TITLE_GAP,
 } from '../../../types'
+import { translate } from '../../../lib/i18n'
 import { useIconStore } from '../../../stores/iconStore'
 import {
   ContextMenu,
@@ -45,6 +46,7 @@ interface OuterFolderTileProps {
   onOpenFolder: (folderId: string) => void
   onLaunchIcon: (path: string) => void
   onResizeFolder: (folderId: string, size: FolderSize) => void
+  onDissolveFolder: (folderId: string) => void
 }
 
 const FOLDER_SIZES: Array<{ value: FolderSize; label: string; span: GridSpan }> = [
@@ -53,8 +55,9 @@ const FOLDER_SIZES: Array<{ value: FolderSize; label: string; span: GridSpan }> 
   { value: '2x1', label: '2x1', span: { cols: 2, rows: 1 } },
   { value: '2x2', label: '2x2', span: { cols: 2, rows: 2 } },
 ]
-const MENU_OPEN_LABEL = 'Open Folder'
-const MENU_SIZE_LABEL = 'Folder Size'
+const MENU_OPEN_LABEL = '打开文件夹'
+const MENU_SIZE_LABEL = '文件夹大小'
+const MENU_DISSOLVE_LABEL = '解散文件夹'
 
 const TILE_PADDING = ICON_GRID_TILE_PADDING_Y
 const BODY_TITLE_GAP = ICON_GRID_TITLE_GAP
@@ -393,6 +396,7 @@ function OuterFolderTileComponent({
   onOpenFolder,
   onLaunchIcon,
   onResizeFolder,
+  onDissolveFolder,
 }: OuterFolderTileProps) {
   const titleLineCount = useIconStore(state => state.titleLineCount)
   const titleMetrics = getIconGridTitleMetrics(titleLineCount)
@@ -485,11 +489,20 @@ function OuterFolderTileComponent({
               onOpenFolder(folder.id)
             }}
           >
-            {MENU_OPEN_LABEL}
+            {translate(MENU_OPEN_LABEL)}
+          </ContextMenuItem>
+          <ContextMenuItem
+            className="gap-2 rounded-xl px-3 py-2 text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/25 dark:focus:text-red-100"
+            onSelect={() => {
+              onDissolveFolder(folder.id)
+            }}
+          >
+            <Ungroup className="h-4 w-4" aria-hidden="true" />
+            <span>{translate(MENU_DISSOLVE_LABEL)}</span>
           </ContextMenuItem>
           <ContextMenuSeparator className="mx-1 my-1 bg-border/70" />
           <ContextMenuLabel className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-            {MENU_SIZE_LABEL}
+            {translate(MENU_SIZE_LABEL)}
           </ContextMenuLabel>
           <ContextMenuRadioGroup
             value={folder.size}
@@ -533,5 +546,6 @@ export const OuterFolderTile = memo(
     previous.onClickCapture === next.onClickCapture &&
     previous.onOpenFolder === next.onOpenFolder &&
     previous.onLaunchIcon === next.onLaunchIcon &&
-    previous.onResizeFolder === next.onResizeFolder
+    previous.onResizeFolder === next.onResizeFolder &&
+    previous.onDissolveFolder === next.onDissolveFolder
 )
