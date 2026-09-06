@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use tokio_util::sync::CancellationToken;
-use uuid::Uuid;
 
 use super::endpoint::{
     normalize_anthropic_messages_url, normalize_chat_completions_url, normalize_responses_url,
@@ -14,7 +13,6 @@ use super::models::{
 };
 use super::policy::{build_system_prompt, parse_model_payload, sanitize_groups};
 use super::stream::{read_anthropic_stream, read_chat_completions_stream, read_response_stream};
-use crate::agent::llm::{LlmClient, LlmMessage, ObservedLlmRequest};
 
 pub(super) async fn classify_icons(
     config: AiConfig,
@@ -58,17 +56,15 @@ pub(super) async fn chat(
     messages: Vec<AiChatMessageInput>,
 ) -> Result<AiChatResult, String> {
     validate_config(&config)?;
-    let request_messages = build_chat_messages(&config, messages);
-    let client = LlmClient::from_config(&config);
-    let run_id = format!("chat-{}", Uuid::new_v4());
-    let observed = ObservedLlmRequest::new(request_messages, false, window, &run_id, "chat")
-        .with_cancel(cancel);
-    let response = client.complete_json_observed(&config, observed).await?;
-    let content = response.content.trim().to_string();
-    if content.is_empty() {
-        return Err("AI 接口未返回有效内容。".to_string());
-    }
-    Ok(AiChatResult { content })
+    // 多轮 agent 循环：模型可思考 → 调用工具（查看图标库/整理图标）→ 再思考。
+    let outcome =
+        crate::agent::chat_agent::run_chat_agent(window, cancel, &config, messages).await?;
+    Ok(AiChatResult {
+        content: outcome.content,
+        groups: outcome.groups,
+        leftover: outcome.leftover,
+        run_id: outcome.organize_run_id,
+    })
 }
 
 fn build_responses_request<'a>(
@@ -145,43 +141,6 @@ fn build_client(error_prefix: &str) -> Result<reqwest::Client, String> {
         .timeout(Duration::from_secs(DEFAULT_REQUEST_TIMEOUT_SECS))
         .build()
         .map_err(|error| format!("{error_prefix}：{error}"))
-}
-
-fn build_chat_messages(config: &AiConfig, messages: Vec<AiChatMessageInput>) -> Vec<LlmMessage> {
-    let mut request_messages = vec![LlmMessage::new(
-        "system",
-        "你是 DesktopGo 的桌面整理助手。默认进行自然、简洁的上下文对话；不要擅自生成图标布局或声称已经整理桌面。只有用户明确使用整理图标指令时，应用才会进入整理流程。",
-    )];
-
-    if let Some(extra) = config
-        .custom_prompt
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-    {
-        request_messages.push(LlmMessage::new(
-            "system",
-            format!("用户对助手的附加偏好：{}", extra.trim()),
-        ));
-    }
-
-    for message in messages
-        .into_iter()
-        .filter(|message| !message.content.trim().is_empty())
-        .rev()
-        .take(12)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-    {
-        let role = if message.role == "assistant" {
-            "assistant"
-        } else {
-            "user"
-        };
-        request_messages.push(LlmMessage::new(role, message.content.trim().to_string()));
-    }
-
-    request_messages
 }
 
 async fn execute_streaming_request(

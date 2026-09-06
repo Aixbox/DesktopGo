@@ -106,6 +106,13 @@ pub struct AiChatMessageInput {
 #[derive(Debug, Clone, Serialize)]
 pub struct AiChatResult {
     pub content: String,
+    /// 对话中通过 organize_icons 工具生成分组时返回，驱动前端创建布局预览。
+    #[serde(default)]
+    pub groups: Vec<AiGroup>,
+    #[serde(default)]
+    pub leftover: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
 }
 
 #[derive(Clone, Serialize)]

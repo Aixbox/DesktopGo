@@ -1,3 +1,4 @@
+pub(crate) mod chat_agent;
 pub(crate) mod event;
 pub(crate) mod icon_agent;
 pub(crate) mod llm;
