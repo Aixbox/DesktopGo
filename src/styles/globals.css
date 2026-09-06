@@ -401,8 +401,9 @@ body,
   --font-sans:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', Arial,
     sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
-    'Courier New', monospace;
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -1448,5 +1449,38 @@ textarea {
   [data-launchpad-background='custom'] .launchpad-wallpaper-text {
     color: CanvasText;
     text-shadow: none;
+  }
+}
+
+/* AI 会话：流式/思考中的文字微光扫过效果（HeroUI TextShimmer 风格）。 */
+@keyframes chat-text-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.chat-text-shimmer {
+  background: linear-gradient(
+    90deg,
+    currentColor 38%,
+    color-mix(in oklch, currentColor 30%, transparent) 50%,
+    currentColor 62%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: chat-text-shimmer 1.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-text-shimmer {
+    animation: none;
+    background: none;
+    color: inherit;
   }
 }

@@ -11,7 +11,7 @@ import {
 } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion, useReducedMotion } from 'framer-motion'
-import { Bot, MessageSquareText } from 'lucide-react'
+import { Bot } from 'lucide-react'
 import { NativeScrollArea } from '@/components/ui/native-scroll-area'
 import { translate } from '@/lib/i18n'
 import { useToast } from '@/components/ui/toast'
@@ -25,18 +25,18 @@ import {
   type AiOrganizeSession,
   type AiOrganizeSnapshot,
 } from '@/lib/aiOrganizeSessions'
-import type { DesktopIcon } from '@/types'
 import { AiOrganizeComposer } from './AiOrganizeComposer'
-import { AiOrganizeEmptyState } from './AiOrganizeEmptyState'
 import { AiOrganizePanelHeaderActions } from './AiOrganizePanelHeaderActions'
 import { AiOrganizeHistoryMenu } from './AiOrganizeHistoryMenu'
 import { AiMarkdown } from './AiMarkdown'
 import { AiMessageActions } from './AiMessageActions'
-import { AiOrganizeSnapshotPreview } from './AiOrganizeSnapshotPreview'
 import { AiResponseTime } from './AiResponseTime'
 import { AiScrollToBottomButton } from './AiScrollToBottomButton'
-import { AiThinkingBlock } from './AiThinkingBlock'
-import { AiWaitingDots } from './AiWaitingDots'
+import { ChatAgentTrace } from '@/components/chat/ChatAgentTrace'
+import { ChatLoaderDots } from '@/components/chat/ChatLoader'
+import { ChatMessageAssistant, ChatMessageUser } from '@/components/chat/ChatMessage'
+import { AiOrganizeMessagePreview } from './AiOrganizeMessagePreview'
+import { AiOrganizeSuggestions } from './AiOrganizeSuggestions'
 import {
   getComposerCommandLabel,
   isNearScrollBottom,
@@ -55,6 +55,7 @@ import { useQueuedPrompts } from './useQueuedPrompts'
 import type { AiOrganizePanelHandle, AiOrganizePanelProps } from './aiOrganizePanelTypes'
 import { useAiOrganizeRunState } from './useAiOrganizeRunState'
 import { useAiOrganizeLayoutPreview } from './useAiOrganizeLayoutPreview'
+import { useAiIconNameResolver } from './useAiIconNameResolver'
 import { isAiOrganizePreviewRefreshError } from './useAiOrganizeLayoutPreview.helpers'
 import {
   resolveAiOrganizeComposerKeyAction,
@@ -126,23 +127,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       setPresetsExpanded,
     })
 
-    const iconByKey = useMemo(() => {
-      const map = new Map<string, DesktopIcon>()
-      icons.forEach(icon => {
-        map.set(icon.id, icon)
-      })
-      return map
-    }, [icons])
-
-    const resolveIconName = useCallback(
-      (key: string): string => {
-        const icon = iconByKey.get(key)
-        if (!icon) return key
-        const custom = customNames[icon.path]
-        return (custom && custom.trim()) || icon.name
-      },
-      [customNames, iconByKey]
-    )
+    const { iconByKey, resolveIconName } = useAiIconNameResolver(icons, customNames)
 
     const activeSession = useMemo(
       () => sessions.find(session => session.id === activeSessionId) ?? null,
@@ -394,10 +379,6 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       []
     )
 
-    const handleInsertOrganizeCommand = useCallback(() => {
-      insertComposerCommand({ kind: 'organize' }, translate('按用途整理当前图标库。'))
-    }, [insertComposerCommand])
-
     const handleInsertEditCommand = useCallback(
       async (snapshot: AiOrganizeSnapshot) => {
         if (activeSession) {
@@ -454,10 +435,10 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
     )
 
     const {
-      activeRunKind,
       elapsedMs,
       isAnswerStreaming,
       reasoningActive,
+      reasoningSegments,
       reasoningText,
       regenerateMessage,
       resetExecution,
@@ -466,6 +447,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       statusTitle,
       stopRun,
       streamedContentLength,
+      toolCallRecords,
       waitingForOutput,
     } = useAiOrganizeExecution({
       open,
@@ -637,12 +619,9 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       async (prompt: string, command?: ComposerCommand | null, label?: string) => {
         const normalizedPrompt = prompt.trim()
         if (command) {
-          const instruction =
-            normalizedPrompt ||
-            (command.kind === 'edit'
-              ? translate('参考此版布局继续优化。')
-              : translate('按用途整理当前图标库。'))
-          await runClassification(instruction, label ?? getComposerCommandLabel(command))
+          // 剩余指令只有「修改布局」：参考当前预览上下文走整理通道。
+          const instruction = normalizedPrompt || translate('参考此版布局继续优化。')
+          await runClassification(instruction, label ?? getComposerCommandLabel())
           return
         }
 
@@ -661,9 +640,9 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
     )
 
     const sendPrompt = useCallback(
-      (prompt: string, label?: string) => {
+      (prompt: string, label?: string, commandOverride?: ComposerCommand) => {
         const normalizedPrompt = prompt.trim()
-        const command = composerCommand
+        const command = commandOverride ?? composerCommand
         if (!normalizedPrompt && !command) return
         if (!sessionsLoaded || phase === 'applying') return
         shouldStickToBottomRef.current = true
@@ -706,8 +685,8 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       [composerCommand, composerValue, sendPrompt]
     )
 
+    // 快捷提示：只填充输入框，发送后由对话 agent 自行调用整理工具。
     const handleSelectPreset = useCallback((prompt: string) => {
-      setComposerCommand({ kind: 'organize' })
       setComposerValue(prompt)
       setPresetsExpanded(false)
       window.requestAnimationFrame(() => composerRef.current?.focus())
@@ -846,7 +825,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
                   onScroll={handleTranscriptScroll}
                   className="-mr-4 min-h-0 flex-1 overflow-y-auto py-4 pr-4"
                 >
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {activeSession?.messages.length ? (
                       activeSession.messages.map((message, index) => {
                         const isUser = message.role === 'user'
@@ -854,9 +833,26 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
                         const running = message.status === 'running'
                         // 生成中实时计时；完成后展示持久化的总耗时。
                         const responseTimeMs = running ? elapsedMs : message.responseMs
-                        const showWaitingDots =
+                        const chainText = running ? reasoningText : (message.reasoning ?? '')
+                        // 思考链流式：推理输出中，或运行仍在等待可见输出（整理全程）。
+                        const chainStreaming = running && (reasoningActive || waitingForOutput)
+                        const chainReasoningMs = running ? 0 : (message.reasoningMs ?? 0)
+                        // 多轮 agent 循环：分段推理 + 工具调用交错渲染。
+                        const messageSegments = running
+                          ? reasoningSegments
+                          : (message.reasoningSegments ?? [])
+                        const messageToolCalls = running
+                          ? toolCallRecords
+                          : (message.toolCalls ?? [])
+                        const hasAgentTrace =
+                          messageSegments.length > 0 || messageToolCalls.length > 0
+                        const hasChain = Boolean(chainText.trim())
+                        const showLoaderRow =
                           running &&
-                          (waitingForOutput || (activeRunKind === 'organize' && !reasoningActive))
+                          !hasChain &&
+                          messageSegments.length === 0 &&
+                          !failed &&
+                          message.content.trim().length === 0
                         const snapshotIndex =
                           !isUser && message.snapshotId
                             ? activeSnapshots.findIndex(
@@ -865,97 +861,87 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
                             : -1
                         const messageSnapshot =
                           snapshotIndex >= 0 ? activeSnapshots[snapshotIndex] : null
+                        const isLatestMessage = index === (activeSession?.messages.length ?? 0) - 1
+
+                        if (isUser) {
+                          return (
+                            <ChatMessageUser key={message.id}>
+                              <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                            </ChatMessageUser>
+                          )
+                        }
+
+                        if (showLoaderRow) {
+                          return <ChatLoaderDots key={message.id} />
+                        }
+
                         return (
-                          <div
-                            key={message.id}
-                            className={`group flex ${isUser ? 'justify-end' : 'justify-start'}`}
-                          >
-                            <div
-                              className={`flex flex-col ${
-                                isUser ? 'max-w-[92%] items-end' : 'max-w-full items-start'
-                              }`}
-                            >
-                              <div
-                                className={`text-sm leading-5 ${
-                                  isUser
-                                    ? 'rounded-lg border border-primary/25 bg-primary/12 px-3 py-2 text-foreground'
-                                    : failed
-                                      ? 'py-0.5 text-red-700 dark:text-red-200'
-                                      : 'py-0.5 text-foreground'
-                                }`}
-                              >
-                                <div className="flex items-start gap-2">
-                                  {!isUser ? (
-                                    <MessageSquareText className="accent-foreground mt-0.5 h-3.5 w-3.5 shrink-0" />
-                                  ) : null}
-                                  <div className="min-w-0 flex-1">
-                                    <AiResponseTime ms={responseTimeMs} />
-                                    {!isUser && (running ? reasoningText : message.reasoning) ? (
-                                      <AiThinkingBlock
-                                        text={running ? reasoningText : (message.reasoning ?? '')}
-                                        streaming={running && reasoningActive}
-                                      />
-                                    ) : null}
-                                    {isUser || failed ? (
-                                      <p className="whitespace-pre-wrap break-words">
-                                        {message.content}
-                                        {showWaitingDots ? <AiWaitingDots /> : null}
-                                      </p>
-                                    ) : (
-                                      <>
-                                        <AiMarkdown
-                                          content={
-                                            isAnswerStreaming
-                                              ? `${message.content}▍`
-                                              : message.content
-                                          }
-                                        />
-                                        {showWaitingDots ? <AiWaitingDots /> : null}
-                                      </>
-                                    )}
-                                    {message.error ? (
-                                      <p className="mt-1 break-words text-xs opacity-80">
-                                        {message.error}
-                                      </p>
-                                    ) : null}
-                                  </div>
-                                </div>
-                              </div>
-                              {!isUser && !running ? (
-                                <AiMessageActions
-                                  content={message.content}
-                                  failed={failed}
-                                  alwaysVisible={
-                                    index === (activeSession?.messages.length ?? 0) - 1
+                          <ChatMessageAssistant key={message.id}>
+                            <AiResponseTime ms={responseTimeMs} />
+                            {hasAgentTrace || hasChain ? (
+                              <ChatAgentTrace
+                                messageKey={message.id}
+                                segments={messageSegments}
+                                toolCalls={messageToolCalls}
+                                streamingText={chainText}
+                                streaming={chainStreaming}
+                                running={running}
+                                streamingReasoningMs={chainReasoningMs}
+                              />
+                            ) : null}
+                            {failed ? (
+                              <p className="whitespace-pre-wrap break-words text-sm leading-5 text-red-700 dark:text-red-200">
+                                {message.content}
+                              </p>
+                            ) : (
+                              <div className="text-sm leading-5 text-foreground">
+                                <AiMarkdown
+                                  content={
+                                    isAnswerStreaming ? `${message.content}▍` : message.content
                                   }
-                                  onRegenerate={() => regenerateMessage(message)}
                                 />
-                              ) : null}
-                              {messageSnapshot ? (
-                                <AiOrganizeSnapshotPreview
-                                  snapshot={messageSnapshot}
-                                  snapshotIndex={snapshotIndex}
-                                  activeSnapshotId={activeSnapshotId}
-                                  editingSnapshotId={editingSnapshotId}
-                                  groups={groups}
-                                  phase={phase}
-                                  iconByKey={iconByKey}
-                                  resolveIconName={resolveIconName}
-                                  onPreviewSnapshot={handlePreviewSnapshot}
-                                  onInsertEditCommand={handleInsertEditCommand}
-                                  onExitEditSnapshot={handleExitEditSnapshot}
-                                  onRenameGroup={handleRenameGroup}
-                                  onDropGroup={handleDropGroup}
-                                  onRemoveIcon={handleRemoveIcon}
-                                />
-                              ) : null}
-                            </div>
-                          </div>
+                              </div>
+                            )}
+                            {message.error ? (
+                              <p className="mt-1 break-words text-xs opacity-80">{message.error}</p>
+                            ) : null}
+                            {!running ? (
+                              <AiMessageActions
+                                content={message.content}
+                                failed={failed}
+                                alwaysVisible={isLatestMessage}
+                                onRegenerate={() => regenerateMessage(message)}
+                              />
+                            ) : null}
+                            {messageSnapshot ? (
+                              <AiOrganizeMessagePreview
+                                messageKey={message.id}
+                                snapshot={messageSnapshot}
+                                snapshotIndex={snapshotIndex}
+                                isActive={messageSnapshot.id === activeSnapshotId}
+                                isLatestMessage={isLatestMessage}
+                                activeSnapshotId={activeSnapshotId}
+                                editingSnapshotId={editingSnapshotId}
+                                groups={groups}
+                                phase={phase}
+                                iconByKey={iconByKey}
+                                resolveIconName={resolveIconName}
+                                onPreviewSnapshot={handlePreviewSnapshot}
+                                onInsertEditCommand={handleInsertEditCommand}
+                                onExitEditSnapshot={handleExitEditSnapshot}
+                                onRenameGroup={handleRenameGroup}
+                                onDropGroup={handleDropGroup}
+                                onRemoveIcon={handleRemoveIcon}
+                              />
+                            ) : null}
+                          </ChatMessageAssistant>
                         )
                       })
-                    ) : (
-                      <AiOrganizeEmptyState />
-                    )}
+                    ) : sessionsLoaded ? (
+                      <AiOrganizeSuggestions
+                        onSelectPreset={(prompt, label) => sendPrompt(prompt, label)}
+                      />
+                    ) : null}
                   </div>
                 </div>
               </NativeScrollArea>
@@ -982,7 +968,6 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
                   aiConfig={aiConfig}
                   onUpdateAiConfig={updateAiConfig}
                   onComposerKeyDown={handleComposerKeyDown}
-                  onInsertOrganizeCommand={handleInsertOrganizeCommand}
                   onSelectPreset={handleSelectPreset}
                   onSendPrompt={sendPrompt}
                   onStopRun={stopRun}

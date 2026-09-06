@@ -66,7 +66,7 @@ export interface QueuedAiPrompt {
 }
 
 export interface AiComposerCommand {
-  kind: 'organize' | 'edit'
+  kind: 'edit'
   snapshotId?: string
 }
 
@@ -76,6 +76,10 @@ export interface AiAgentRunResult extends AiClassifyResult {
 
 export interface AiChatResult {
   content: string
+  /** 对话中通过 organize_icons 工具生成分组时返回，驱动前端创建布局预览。 */
+  groups?: AiGroup[]
+  leftover?: string[]
+  run_id?: string
 }
 
 export interface AiAgentEvent {
@@ -240,5 +244,4 @@ export const formatAiDuration = (ms: number) => {
 export const isNearScrollBottom = (element: HTMLElement, threshold = 48) =>
   element.scrollHeight - element.scrollTop - element.clientHeight <= threshold
 
-export const getComposerCommandLabel = (command: AiComposerCommand) =>
-  command.kind === 'edit' ? translate('修改布局') : translate('整理图标')
+export const getComposerCommandLabel = () => translate('修改布局')

@@ -12,6 +12,22 @@ export const MAX_REASONING_TRACE_CHARS = 6000
 export type AiOrganizeMessageRole = 'user' | 'assistant'
 export type AiOrganizeMessageStatus = 'running' | 'success' | 'failed'
 
+/** 多轮 agent 循环中的一段独立推理（工具调用会切分推理流）。 */
+export interface AiReasoningSegment {
+  text: string
+  /** 该段思考耗时（毫秒）。 */
+  ms?: number
+}
+
+/** 多轮 agent 循环中的一次工具调用记录。 */
+export interface AiToolCallRecord {
+  id: string
+  name: string
+  argsText?: string
+  resultText?: string
+  state: 'success' | 'error'
+}
+
 export interface AiOrganizeMessage {
   id: string
   role: AiOrganizeMessageRole
@@ -26,6 +42,9 @@ export interface AiOrganizeMessage {
   reasoningMs?: number
   /** 整轮回复总耗时（毫秒，从发出请求到收尾），完成后在操作栏展示“用时 Xs”。 */
   responseMs?: number
+  /** 多轮 agent 循环的分段推理；与 reasoning 单流并存，渲染时优先。 */
+  reasoningSegments?: AiReasoningSegment[]
+  toolCalls?: AiToolCallRecord[]
 }
 
 export interface AiOrganizeSnapshot {
@@ -123,6 +142,45 @@ const normalizeGroups = (value: unknown): AiGroup[] => {
     .filter(group => group.folder_name.length > 0 && group.icon_keys.length > 0)
 }
 
+const MAX_REASONING_SEGMENTS = 12
+const MAX_TOOL_CALLS = 12
+
+const normalizeReasoningSegments = (value: unknown): AiReasoningSegment[] | undefined => {
+  if (!Array.isArray(value)) return undefined
+  const segments = value
+    .filter(isRecord)
+    .map(segment => ({
+      text: asString(segment.text),
+      ms:
+        typeof segment.ms === 'number' && Number.isFinite(segment.ms) && segment.ms > 0
+          ? Math.round(segment.ms)
+          : undefined,
+    }))
+    .filter(segment => segment.text.trim().length > 0)
+    .map(segment => ({
+      ...segment,
+      text: segment.text.slice(-MAX_REASONING_TRACE_CHARS),
+    }))
+    .slice(-MAX_REASONING_SEGMENTS)
+  return segments.length > 0 ? segments : undefined
+}
+
+const normalizeToolCalls = (value: unknown): AiToolCallRecord[] | undefined => {
+  if (!Array.isArray(value)) return undefined
+  const records = value
+    .filter(isRecord)
+    .map((record, index) => ({
+      id: asString(record.id, `ai-tool-${index}`),
+      name: asString(record.name).trim(),
+      argsText: asString(record.argsText).slice(0, MAX_REASONING_TRACE_CHARS) || undefined,
+      resultText: asString(record.resultText).slice(0, MAX_REASONING_TRACE_CHARS) || undefined,
+      state: record.state === 'error' ? ('error' as const) : ('success' as const),
+    }))
+    .filter(record => record.name.length > 0)
+    .slice(-MAX_TOOL_CALLS)
+  return records.length > 0 ? records : undefined
+}
+
 const normalizeMessage = (value: unknown): AiOrganizeMessage | null => {
   if (!isRecord(value)) return null
   const role = value.role === 'user' || value.role === 'assistant' ? value.role : null
@@ -156,6 +214,8 @@ const normalizeMessage = (value: unknown): AiOrganizeMessage | null => {
       value.responseMs > 0
         ? Math.round(value.responseMs)
         : undefined,
+    reasoningSegments: normalizeReasoningSegments(value.reasoningSegments),
+    toolCalls: normalizeToolCalls(value.toolCalls),
   }
 }
 

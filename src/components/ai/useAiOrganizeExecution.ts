@@ -21,6 +21,8 @@ import {
   type AiOrganizeMessage,
   type AiOrganizeSession,
   type AiOrganizeSnapshot,
+  type AiReasoningSegment,
+  type AiToolCallRecord,
 } from '@/lib/aiOrganizeSessions'
 import type { DesktopIcon } from '@/types'
 import { findAiRegenerateSourcePrompt } from './aiOrganizePanelInteraction'
@@ -99,6 +101,9 @@ export function useAiOrganizeExecution({
   const [runKind, setRunKind] = useState<'chat' | 'organize' | null>(null)
   const [waitingForOutput, setWaitingForOutput] = useState(true)
   const [elapsedMs, setElapsedMs] = useState(0)
+  // 多轮 agent 循环：工具调用把推理流切成多段，工具记录与段落交错渲染。
+  const [reasoningSegments, setReasoningSegments] = useState<AiReasoningSegment[]>([])
+  const [toolCallRecords, setToolCallRecords] = useState<AiToolCallRecord[]>([])
   const runSeqRef = useRef(0)
   const runStartedAtRef = useRef<number | null>(null)
   const activeRequestIdRef = useRef<string | null>(null)
@@ -110,6 +115,9 @@ export function useAiOrganizeExecution({
   // 思考阶段计时：首条思考增量到首个可见输出（或运行结束）之间视为思考耗时。
   const reasoningStartedAtRef = useRef<number | null>(null)
   const reasoningEndedAtRef = useRef<number | null>(null)
+  const reasoningSegmentsRef = useRef<AiReasoningSegment[]>([])
+  const reasoningSegmentStartedAtRef = useRef<number | null>(null)
+  const toolCallRecordsRef = useRef<AiToolCallRecord[]>([])
   const chatAnswerTextRef = useRef('')
   const chatAnswerBufferRef = useRef('')
   const chatAnswerFlushTimerRef = useRef<number | null>(null)
@@ -158,6 +166,7 @@ export function useAiOrganizeExecution({
   const appendReasoningDelta = useCallback(
     (delta: string) => {
       reasoningStartedAtRef.current ??= Date.now()
+      reasoningSegmentStartedAtRef.current ??= Date.now()
       reasoningEndedAtRef.current = null
       reasoningBufferRef.current = `${reasoningBufferRef.current}${delta}`
       reasoningFirstBufferedAtRef.current ??= Date.now()
@@ -192,22 +201,106 @@ export function useAiOrganizeExecution({
     return startedAt ? Math.max(0, Date.now() - startedAt) : undefined
   }, [])
 
+  // 工具调用边界：把当前推理流封存为一段（多轮思考的切分点）。
+  const sealReasoningSegment = useCallback(() => {
+    flushReasoningBuffer()
+    const trace = reasoningTraceRef.current.trim()
+    reasoningTraceRef.current = ''
+    reasoningBufferRef.current = ''
+    reasoningFirstBufferedAtRef.current = null
+    const startedAt = reasoningSegmentStartedAtRef.current
+    reasoningSegmentStartedAtRef.current = null
+    reasoningStartedAtRef.current = null
+    if (!trace) return
+    const segment: AiReasoningSegment = {
+      text: trace.slice(-MAX_REASONING_TRACE_CHARS),
+      ms: startedAt ? Math.max(0, Date.now() - startedAt) : undefined,
+    }
+    reasoningSegmentsRef.current = [...reasoningSegmentsRef.current, segment].slice(-12)
+    setReasoningSegments(reasoningSegmentsRef.current)
+  }, [flushReasoningBuffer])
+
+  const recordToolCall = useCallback((name: string, argsText: string) => {
+    if (!name.trim()) return
+    const record: AiToolCallRecord = {
+      id: createAiOrganizeId('ai-tool'),
+      name: name.trim(),
+      argsText: argsText || undefined,
+      state: 'success',
+    }
+    toolCallRecordsRef.current = [...toolCallRecordsRef.current, record].slice(-12)
+    setToolCallRecords(toolCallRecordsRef.current)
+  }, [])
+
+  const attachToolResult = useCallback((resultText: string) => {
+    const records = [...toolCallRecordsRef.current]
+    const last = records[records.length - 1]
+    if (!last) return
+    let state: AiToolCallRecord['state'] = 'success'
+    try {
+      if (JSON.parse(resultText)?.ok === false) state = 'error'
+    } catch {
+      // 非 JSON 结果按成功处理。
+    }
+    records[records.length - 1] = { ...last, resultText: resultText || undefined, state }
+    toolCallRecordsRef.current = records
+    setToolCallRecords(records)
+  }, [])
+
+  // 工具请求 JSON 不属于回答正文：清空缓冲与消息占位，等待下一轮回答。
+  const resetChatAnswerForTool = useCallback(() => {
+    if (chatAnswerFlushTimerRef.current !== null) {
+      window.clearTimeout(chatAnswerFlushTimerRef.current)
+      chatAnswerFlushTimerRef.current = null
+    }
+    chatAnswerTextRef.current = ''
+    chatAnswerBufferRef.current = ''
+    chatAnswerFirstBufferedAtRef.current = null
+    setStreamedContentLength(0)
+    const messageId = chatAnswerMessageIdRef.current
+    if (messageId) updateMessageContent(messageId, '')
+  }, [updateMessageContent])
+
   // 取走思考轨迹与各类耗时（先冲刷缓冲），没有内容时字段为 undefined 以省略。
   const finalizeRun = useCallback((): {
     reasoning?: string
     reasoningMs?: number
     responseMs?: number
+    reasoningSegments?: AiReasoningSegment[]
+    toolCalls?: AiToolCallRecord[]
   } => {
     flushReasoningBuffer()
+    sealReasoningSegment()
     markReasoningEnded()
+    const segments = reasoningSegmentsRef.current
     const trace = reasoningTraceRef.current.trim()
-    const reasoning = trace.length > 0 ? trace.slice(-MAX_REASONING_TRACE_CHARS) : undefined
+    const reasoning =
+      segments.length > 0
+        ? segments
+            .map(segment => segment.text)
+            .join('\n\n')
+            .slice(-MAX_REASONING_TRACE_CHARS) || undefined
+        : trace.length > 0
+          ? trace.slice(-MAX_REASONING_TRACE_CHARS)
+          : undefined
+    const totalSegmentMs = segments.reduce((total, segment) => total + (segment.ms ?? 0), 0)
     const reasoningMs =
-      reasoning && reasoningStartedAtRef.current && reasoningEndedAtRef.current
-        ? Math.max(0, reasoningEndedAtRef.current - reasoningStartedAtRef.current)
-        : undefined
-    return { reasoning, reasoningMs, responseMs: finalizeResponseMs() }
-  }, [flushReasoningBuffer, finalizeResponseMs, markReasoningEnded])
+      segments.length > 0
+        ? totalSegmentMs > 0
+          ? totalSegmentMs
+          : undefined
+        : reasoning && reasoningStartedAtRef.current && reasoningEndedAtRef.current
+          ? Math.max(0, reasoningEndedAtRef.current - reasoningStartedAtRef.current)
+          : undefined
+    return {
+      reasoning,
+      reasoningMs,
+      responseMs: finalizeResponseMs(),
+      reasoningSegments: segments.length > 0 ? segments : undefined,
+      toolCalls:
+        toolCallRecordsRef.current.length > 0 ? [...toolCallRecordsRef.current] : undefined,
+    }
+  }, [flushReasoningBuffer, sealReasoningSegment, finalizeResponseMs, markReasoningEnded])
 
   const resetChatAnswer = useCallback(() => {
     if (chatAnswerFlushTimerRef.current !== null) {
@@ -268,6 +361,11 @@ export function useAiOrganizeExecution({
     setAgentEvents([])
     resetReasoningOutput()
     resetChatAnswer()
+    reasoningSegmentsRef.current = []
+    reasoningSegmentStartedAtRef.current = null
+    setReasoningSegments([])
+    toolCallRecordsRef.current = []
+    setToolCallRecords([])
     chatAnswerMessageIdRef.current = null
     setWaitingForOutput(true)
     setRunId(null)
@@ -373,21 +471,48 @@ export function useAiOrganizeExecution({
         if (!isCurrentRun()) return
 
         flushChatAnswerBuffer()
-        await commitSession({
+        // 对话中调用了 organize_icons 工具：为本次回复创建布局快照并应用预览。
+        const organizeGroups = result.groups ?? []
+        const snapshot: AiOrganizeSnapshot | null =
+          organizeGroups.length > 0 || (result.leftover?.length ?? 0) > 0
+            ? {
+                id: createAiOrganizeId('ai-snapshot'),
+                createdAt: Date.now(),
+                prompt: normalizedInstruction,
+                groups: organizeGroups,
+                leftover: result.leftover ?? [],
+                runId: result.run_id ?? requestId,
+                summary: summarizeGroups(organizeGroups),
+              }
+            : null
+        const successSession: AiOrganizeSession = {
           ...runningSession,
           updatedAt: Date.now(),
+          activeSnapshotId: snapshot?.id ?? runningSession.activeSnapshotId,
+          snapshots: snapshot
+            ? [...runningSession.snapshots, snapshot].slice(-12)
+            : runningSession.snapshots,
           messages: runningSession.messages.map(message =>
             message.id === runningMessage.id
               ? {
                   ...message,
                   content: result.content,
                   status: 'success',
+                  runId: snapshot ? (result.run_id ?? requestId) : message.runId,
+                  snapshotId: snapshot?.id ?? message.snapshotId,
                   ...finalizeRun(),
                 }
               : message
           ),
-        })
-        setPhase(groupsRef.current.length > 0 ? 'preview' : 'idle')
+        }
+        await commitSession(successSession)
+        if (snapshot) {
+          setRunId(result.run_id ?? requestId)
+          activateSnapshot(successSession, snapshot)
+          await applyLayoutPreview(organizeGroups)
+        } else {
+          setPhase(groupsRef.current.length > 0 ? 'preview' : 'idle')
+        }
       } catch (caughtError) {
         if (!isCurrentRun()) return
         flushChatAnswerBuffer()
@@ -432,6 +557,8 @@ export function useAiOrganizeExecution({
     },
     [
       activeSessionIdRef,
+      activateSnapshot,
+      applyLayoutPreview,
       beginRun,
       commitSession,
       finalizeRun,
@@ -442,6 +569,7 @@ export function useAiOrganizeExecution({
       setError,
       setNotConfigured,
       setPhase,
+      setRunId,
       setRunKind,
     ]
   )
@@ -699,6 +827,17 @@ export function useAiOrganizeExecution({
           }
           return
         }
+        if (payload.phase === 'toolCall') {
+          // 多轮循环的边界：封存当前思考段、登记工具调用、清空工具请求 JSON 的正文占位。
+          sealReasoningSegment()
+          recordToolCall(payload.toolName ?? '', payload.detail ?? '')
+          if (runKindRef.current === 'chat') resetChatAnswerForTool()
+          return
+        }
+        if (payload.phase === 'toolResult') {
+          attachToolResult(payload.detail ?? '')
+          return
+        }
         setAgentEvents(current => [...current, payload].slice(-MAX_AGENT_EVENTS))
       })
       .then(fn => {
@@ -726,9 +865,13 @@ export function useAiOrganizeExecution({
   }, [
     appendChatAnswerDelta,
     appendReasoningDelta,
+    attachToolResult,
     markReasoningEnded,
     open,
+    recordToolCall,
+    resetChatAnswerForTool,
     resetExecution,
+    sealReasoningSegment,
     setError,
     setNotConfigured,
     setPhase,
@@ -796,6 +939,8 @@ export function useAiOrganizeExecution({
     elapsedMs,
     isAnswerStreaming,
     reasoningActive,
+    // 多轮 agent 循环的分段推理与工具记录（仅运行中；完成后随消息持久化）。
+    reasoningSegments,
     reasoningText,
     regenerateMessage,
     resetExecution,
@@ -805,6 +950,7 @@ export function useAiOrganizeExecution({
     streamedContentLength,
     statusTitle,
     stopRun,
+    toolCallRecords,
     waitingForOutput,
   }
 }

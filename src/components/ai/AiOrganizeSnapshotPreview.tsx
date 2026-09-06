@@ -128,22 +128,17 @@ export function AiOrganizeSnapshotPreview({
   }
 
   const groupedIconKeys = new Set(previewGroups.flatMap(group => group.iconKeys))
-  const groupedIconCount = groupedIconKeys.size
   const ungroupedIconCount = Array.from(iconByKey.keys()).filter(
     key => !groupedIconKeys.has(key)
   ).length
-  const applicableGroupCount = previewGroups.filter(group => group.iconKeys.length >= 2).length
 
   return (
-    <div className="mt-2 w-full">
-      <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border/50 pb-2 text-[11px] text-muted-foreground">
-        <span className="font-medium text-foreground">{translate('布局预览')}</span>
-        <span>{translate('{count} 个分组', { count: applicableGroupCount })}</span>
-        <span>{translate('{count} 个图标', { count: groupedIconCount })}</span>
-        {ungroupedIconCount > 0 ? (
-          <span>{translate('未整理 {count} 个图标', { count: ungroupedIconCount })}</span>
-        ) : null}
-      </div>
+    <div className="w-full">
+      {ungroupedIconCount > 0 ? (
+        <p className="mb-2.5 text-[11px] text-muted-foreground">
+          {translate('未整理 {count} 个图标', { count: ungroupedIconCount })}
+        </p>
+      ) : null}
 
       <div className="space-y-3.5">
         {previewGroups.map(group => (

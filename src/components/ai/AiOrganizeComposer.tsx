@@ -8,16 +8,7 @@ import {
   type SetStateAction,
 } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import {
-  Check,
-  ChevronDown,
-  FolderClosed,
-  Gauge,
-  SendHorizontal,
-  Sparkles,
-  Square,
-  X,
-} from 'lucide-react'
+import { Check, ChevronDown, Gauge, SendHorizontal, Sparkles, Square, X } from 'lucide-react'
 import { translate } from '@/lib/i18n'
 import {
   AI_REASONING_EFFORTS,
@@ -50,7 +41,6 @@ interface AiOrganizeComposerProps {
   aiConfig: AiConfig | null
   onUpdateAiConfig: (patch: Partial<AiConfig>) => void
   onComposerKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void
-  onInsertOrganizeCommand: () => void
   onSelectPreset: (prompt: string) => void
   onSendPrompt: (prompt: string) => void
   onStopRun: () => void
@@ -78,7 +68,6 @@ export function AiOrganizeComposer({
   aiConfig,
   onUpdateAiConfig,
   onComposerKeyDown,
-  onInsertOrganizeCommand,
   onSelectPreset,
   onSendPrompt,
   onStopRun,
@@ -158,9 +147,7 @@ export function AiOrganizeComposer({
               count: queuedPrompts.length,
               prompt:
                 queuedPrompts[0].label ??
-                (queuedPrompts[0].command
-                  ? getComposerCommandLabel(queuedPrompts[0].command)
-                  : queuedPrompts[0].prompt),
+                (queuedPrompts[0].command ? getComposerCommandLabel() : queuedPrompts[0].prompt),
             })}
           </span>
           <button
@@ -220,12 +207,8 @@ export function AiOrganizeComposer({
             </button>
             {composerCommand ? (
               <span className="accent-tonal inline-flex max-w-full shrink-0 items-center gap-1 rounded-md border px-1.5 py-0 text-[11px] font-medium leading-5">
-                {composerCommand.kind === 'edit' ? (
-                  <Sparkles className="h-3 w-3 shrink-0" />
-                ) : (
-                  <FolderClosed className="h-3 w-3 shrink-0" />
-                )}
-                <span className="truncate">{getComposerCommandLabel(composerCommand)}</span>
+                <Sparkles className="h-3 w-3 shrink-0" />
+                <span className="truncate">{getComposerCommandLabel()}</span>
                 <button
                   type="button"
                   onClick={() => setComposerCommand(null)}
@@ -239,16 +222,6 @@ export function AiOrganizeComposer({
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
-            <button
-              type="button"
-              onClick={onInsertOrganizeCommand}
-              disabled={!canUseControls}
-              aria-label={translate('插入整理图标指令')}
-              title={translate('插入整理图标指令')}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <FolderClosed className="h-4 w-4" />
-            </button>
             <button
               ref={presetsButtonRef}
               type="button"
