@@ -23,7 +23,7 @@ mod window_style;
 mod windows_drag_drop;
 
 use agent::icon_agent::{ai_organize_icons_agent, ai_organize_record_apply};
-use ai::{ai_cancel, ai_chat, ai_classify_icons};
+use ai::{ai_cancel, ai_chat, ai_classify_icons, get_builtin_icon_categories};
 use commands::{
     activate_main_window, activate_settings_window, apply_window_style, check_for_app_update,
     close_settings_window, create_icon_entry, delete_icons, extract_website_icon,
@@ -145,6 +145,7 @@ pub fn run() {
             update_launch_on_startup_enabled,
             ai_classify_icons,
             ai_chat,
+            get_builtin_icon_categories,
             ai_cancel,
             ai_organize_icons_agent,
             ai_organize_record_apply

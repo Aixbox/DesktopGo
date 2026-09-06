@@ -7,6 +7,7 @@ mod stream;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use serde::Serialize;
 use tokio_util::sync::CancellationToken;
 
 /// 用户主动停止生成时返回给前端的哨兵错误信息。
@@ -84,6 +85,20 @@ pub async fn ai_classify_icons(
     icons: Vec<AiIconInput>,
 ) -> Result<AiClassifyResult, String> {
     operation::classify_icons(config, icons).await
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AiIconCategoryList {
+    pub entries: Vec<crate::agent::icon_categories::AiIconCategoryEntry>,
+}
+
+/// 内置的「应用 → 分类」参考表，供设置页展示；用户条目存放在布局 KV
+/// 并在运行时覆盖同名内置项。
+#[tauri::command]
+pub fn get_builtin_icon_categories() -> AiIconCategoryList {
+    AiIconCategoryList {
+        entries: crate::agent::icon_categories::builtin_icon_categories(),
+    }
 }
 
 #[tauri::command]

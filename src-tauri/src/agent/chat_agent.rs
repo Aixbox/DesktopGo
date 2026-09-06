@@ -11,6 +11,9 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::agent::event::{emit_agent_event, AgentEvent, AgentEventPhase};
+use crate::agent::icon_categories::{
+    load_effective_icon_categories, match_icon_category, AiIconCategoryEntry,
+};
 use crate::agent::llm::{LlmClient, LlmMessage, ObservedLlmRequest};
 use crate::agent::memory;
 use crate::ai::models::{AiChatMessageInput, AiClassifyResult, AiConfig, AiIconInput};
@@ -20,6 +23,7 @@ use crate::icons::get_icons;
 
 pub(crate) const LIST_ICONS_TOOL: &str = "list_icons";
 pub(crate) const ORGANIZE_ICONS_TOOL: &str = "organize_icons";
+pub(crate) const GET_ICON_CATEGORIES_TOOL: &str = "get_icon_categories";
 const MAX_AGENT_TURNS: usize = 4;
 const MAX_LIST_ICONS: usize = 120;
 const MAX_TOOL_RESULT_CHARS: usize = 4000;
@@ -37,16 +41,29 @@ struct ToolRequest {
     args: Value,
 }
 
-/// 单次 agent 会话的共享上下文：窗口、配置、运行 ID 与图标清单。
+/// 图标清单条目：agent 使用的输入 + 原始路径 + 知识库命中的分类（如有）。
+struct AgentIcon {
+    input: AiIconInput,
+    path: String,
+    category: Option<String>,
+}
+
+/// 单次 agent 会话的共享上下文：窗口、配置、运行 ID、图标清单与分类知识库。
 struct ChatAgentContext<'a> {
     window: &'a tauri::Window,
     app_handle: &'a tauri::AppHandle,
     config: &'a AiConfig,
     run_id: &'a str,
-    icons: &'a [AiIconInput],
+    icons: &'a [AgentIcon],
+    categories: &'a [AiIconCategoryEntry],
 }
 
 impl ChatAgentContext<'_> {
+    /// 校验工具所需的纯输入列表。
+    fn icon_inputs(&self) -> Vec<AiIconInput> {
+        self.icons.iter().map(|icon| icon.input.clone()).collect()
+    }
+
     fn emit_tool_event(
         &self,
         phase: AgentEventPhase,
@@ -80,13 +97,15 @@ pub(crate) async fn run_chat_agent(
     let run_id = format!("chat-{}", Uuid::new_v4());
     let app_handle = window.app_handle().clone();
     let client = LlmClient::from_config(config);
-    let icons = load_agent_icons(&app_handle);
+    let categories = load_effective_icon_categories(&app_handle);
+    let icons = load_agent_icons(&app_handle, &categories);
     let context = ChatAgentContext {
         window,
         app_handle: &app_handle,
         config,
         run_id: &run_id,
         icons: &icons,
+        categories: &categories,
     };
 
     let mut loop_messages = build_agent_messages(config, history);
@@ -225,6 +244,7 @@ fn execute_tool(
     match request.name.as_str() {
         LIST_ICONS_TOOL => tool_list_icons(context, request),
         ORGANIZE_ICONS_TOOL => tool_organize_icons(context, request, pending_organize),
+        GET_ICON_CATEGORIES_TOOL => tool_get_icon_categories(context),
         other => tool_error_json(&format!("未知工具：{other}")),
     }
 }
@@ -237,13 +257,16 @@ fn tool_list_icons(context: &ChatAgentContext<'_>, request: &ToolRequest) -> Str
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_lowercase);
-    let all_icons = get_icons(context.app_handle.clone(), 32);
-    let matched: Vec<&_> = all_icons
+    let matched: Vec<&AgentIcon> = context
+        .icons
         .iter()
         .filter(|icon| {
             keyword.as_ref().is_none_or(|keyword| {
-                icon.name.to_lowercase().contains(keyword)
-                    || icon.path.to_lowercase().contains(keyword)
+                icon.input.name.to_lowercase().contains(keyword)
+                    || icon
+                        .category
+                        .as_ref()
+                        .is_some_and(|category| category.to_lowercase().contains(keyword))
             })
         })
         .collect();
@@ -252,18 +275,37 @@ fn tool_list_icons(context: &ChatAgentContext<'_>, request: &ToolRequest) -> Str
         .iter()
         .take(MAX_LIST_ICONS)
         .map(|icon| {
-            json!({
-                "id": icon.id,
-                "name": icon.name,
-                "type": icon.item_type,
+            let mut item = json!({
+                "id": icon.input.key,
+                "name": icon.input.name,
+                "type": icon.input.item_type,
                 "path": icon.path,
-            })
+            });
+            if let Some(category) = &icon.category {
+                item["category"] = Value::String(category.clone());
+            }
+            item
         })
         .collect();
     json!({
         "total": total,
         "truncated": total > items.len(),
         "icons": items,
+    })
+    .to_string()
+}
+
+/// 知识库全量参考：内置表 + 用户自定义条目（同名覆盖）。
+fn tool_get_icon_categories(context: &ChatAgentContext<'_>) -> String {
+    let entries: Vec<Value> = context
+        .categories
+        .iter()
+        .map(|entry| json!({ "name": entry.name, "category": entry.category }))
+        .collect();
+    json!({
+        "total": entries.len(),
+        "note": "这是「应用 → 分类」参考知识库（含用户自定义条目）；整理图标时优先沿用这里的分类名。",
+        "categories": entries,
     })
     .to_string()
 }
@@ -284,7 +326,7 @@ fn tool_organize_icons(
         Ok(payload) => payload,
         Err(error) => return tool_error_json(&format!("分组格式不合法：{error}")),
     };
-    let result = sanitize_groups(payload, context.icons);
+    let result = sanitize_groups(payload, &context.icon_inputs());
     if result.groups.is_empty() {
         return tool_error_json(
             "没有得到有效分组：每组至少需要 2 个有效图标 ID，请先用 list_icons 确认。",
@@ -297,6 +339,7 @@ fn tool_organize_icons(
         .map(|group| group.icon_keys.len())
         .sum();
     let config = context.config;
+    let icon_inputs = context.icon_inputs();
     memory::save_draft(
         context.app_handle,
         memory::DraftRecordInput {
@@ -304,7 +347,7 @@ fn tool_organize_icons(
             model: &config.model,
             custom_prompt: config.custom_prompt.as_deref(),
             result: &result,
-            icons: context.icons,
+            icons: &icon_inputs,
         },
     )
     .unwrap_or_else(|error| {
@@ -357,18 +400,28 @@ fn tool_error_json(message: &str) -> String {
 }
 
 /// 图标库快照转成工具与校验使用的紧凑输入（key 即布局体系的图标 ID）。
-fn load_agent_icons(app_handle: &tauri::AppHandle) -> Vec<AiIconInput> {
+fn load_agent_icons(
+    app_handle: &tauri::AppHandle,
+    categories: &[AiIconCategoryEntry],
+) -> Vec<AgentIcon> {
     get_icons(app_handle.clone(), 32)
         .into_iter()
-        .map(|icon| AiIconInput {
-            key: icon.id,
-            name: icon.name,
-            target_leaf: std::path::Path::new(&icon.target_path)
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or_default()
-                .to_string(),
-            item_type: icon.item_type,
+        .map(|icon| {
+            let category = match_icon_category(&icon.name, categories);
+            AgentIcon {
+                input: AiIconInput {
+                    key: icon.id,
+                    name: icon.name,
+                    target_leaf: std::path::Path::new(&icon.target_path)
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or_default()
+                        .to_string(),
+                    item_type: icon.item_type,
+                },
+                path: icon.path,
+                category,
+            }
         })
         .collect()
 }
@@ -378,15 +431,17 @@ fn build_agent_messages(config: &AiConfig, history: Vec<AiChatMessageInput>) -> 
         "system",
         r#"你是 DesktopGo 的桌面整理助手，可以在回答前调用工具获取真实数据。
 可用工具：
-1. list_icons - 查看当前图标库（名称/类型/路径）。参数：{"keyword": "可选，按名称或路径过滤"}
+1. list_icons - 查看当前图标库（名称/类型/路径，带 category 字段时表示知识库命中的分类）。参数：{"keyword": "可选，按名称或分类过滤"}
 2. organize_icons - 生成图标分组布局预览。参数：{"groups": [{"folder_name": "分组名", "icon_keys": ["图标ID"]}]}
    icon_keys 必须来自 list_icons 返回的 id 字段；每组至少 2 个图标；不确定归属的图标不要放进任何组。
+3. get_icon_categories - 查看「应用 → 分类」参考知识库（含用户自定义条目）。整理前若不确定某些应用的归类，先调用它。
 
 需要调用工具时，只输出一个如下形式的 JSON 对象，不要附加任何其他文字或代码块：
 {"tool": "工具名", "args": { ... }}
 
 规则：
 - 收到「工具执行结果」后继续思考；整理成功后用一两句话总结分组结果。
+- 整理图标时优先沿用知识库给出的分类名，保持文件夹命名与用户习惯一致。
 - 不需要工具时，用简洁自然的中文直接回答，不要输出 JSON。
 - 只在用户明确想整理/分组图标时才调用 organize_icons；日常问答直接回答。"#
             .to_string(),
