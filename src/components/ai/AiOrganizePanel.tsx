@@ -30,7 +30,6 @@ import { AiOrganizePanelHeaderActions } from './AiOrganizePanelHeaderActions'
 import { AiOrganizeHistoryMenu } from './AiOrganizeHistoryMenu'
 import { AiMarkdown } from './AiMarkdown'
 import { AiMessageActions } from './AiMessageActions'
-import { AiResponseTime } from './AiResponseTime'
 import { AiScrollToBottomButton } from './AiScrollToBottomButton'
 import { ChatAgentTrace } from '@/components/chat/ChatAgentTrace'
 import { ChatLoaderDots } from '@/components/chat/ChatLoader'
@@ -832,11 +831,9 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
                         const failed = message.status === 'failed'
                         const running = message.status === 'running'
                         // 生成中实时计时；完成后展示持久化的总耗时。
-                        const responseTimeMs = running ? elapsedMs : message.responseMs
                         const chainText = running ? reasoningText : (message.reasoning ?? '')
                         // 思考链流式：推理输出中，或运行仍在等待可见输出（整理全程）。
                         const chainStreaming = running && (reasoningActive || waitingForOutput)
-                        const chainReasoningMs = running ? 0 : (message.reasoningMs ?? 0)
                         // 多轮 agent 循环：分段推理 + 工具调用交错渲染。
                         const messageSegments = running
                           ? reasoningSegments
@@ -877,8 +874,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
 
                         return (
                           <ChatMessageAssistant key={message.id}>
-                            <AiResponseTime ms={responseTimeMs} />
-                            {hasAgentTrace || hasChain ? (
+                            {hasAgentTrace || hasChain || running || message.responseMs ? (
                               <ChatAgentTrace
                                 messageKey={message.id}
                                 segments={messageSegments}
@@ -886,7 +882,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
                                 streamingText={chainText}
                                 streaming={chainStreaming}
                                 running={running}
-                                streamingReasoningMs={chainReasoningMs}
+                                responseMs={running ? elapsedMs : message.responseMs}
                               />
                             ) : null}
                             {failed ? (

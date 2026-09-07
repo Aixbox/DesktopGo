@@ -30,8 +30,8 @@ interface ChatMessageAssistantProps {
  */
 export function ChatMessageAssistant({ children }: ChatMessageAssistantProps) {
   return (
-    <div className="group flex justify-start">
-      <div className="flex max-w-full items-start gap-2">
+    <div className="group flex w-full justify-start">
+      <div className="flex w-full max-w-full items-start gap-2">
         <ChatAssistantAvatar />
         <ChatMessageBody>{children}</ChatMessageBody>
       </div>

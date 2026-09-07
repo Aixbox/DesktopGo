@@ -58,5 +58,5 @@ interface ChatMessageBodyProps {
 
 /** 助手消息头像右侧的内容列：思考块、正文、操作都收在这里。 */
 export function ChatMessageBody({ children }: ChatMessageBodyProps) {
-  return <div className="min-w-0 flex-1">{children}</div>
+  return <div className="w-0 min-w-0 flex-1">{children}</div>
 }

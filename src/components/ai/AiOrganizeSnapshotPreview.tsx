@@ -180,7 +180,7 @@ export function AiOrganizeSnapshotPreview({
                     </button>
                   ) : null}
                 </div>
-                <div className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-1">
+                <div className="mt-2 grid min-w-0 grid-cols-2 gap-1">
                   {group.iconKeys.map(key => {
                     const icon = iconByKey.get(key)
                     return (

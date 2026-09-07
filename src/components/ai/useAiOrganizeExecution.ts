@@ -208,13 +208,11 @@ export function useAiOrganizeExecution({
     reasoningTraceRef.current = ''
     reasoningBufferRef.current = ''
     reasoningFirstBufferedAtRef.current = null
-    const startedAt = reasoningSegmentStartedAtRef.current
     reasoningSegmentStartedAtRef.current = null
     reasoningStartedAtRef.current = null
     if (!trace) return
     const segment: AiReasoningSegment = {
       text: trace.slice(-MAX_REASONING_TRACE_CHARS),
-      ms: startedAt ? Math.max(0, Date.now() - startedAt) : undefined,
     }
     reasoningSegmentsRef.current = [...reasoningSegmentsRef.current, segment].slice(-12)
     setReasoningSegments(reasoningSegmentsRef.current)
@@ -283,18 +281,10 @@ export function useAiOrganizeExecution({
         : trace.length > 0
           ? trace.slice(-MAX_REASONING_TRACE_CHARS)
           : undefined
-    const totalSegmentMs = segments.reduce((total, segment) => total + (segment.ms ?? 0), 0)
-    const reasoningMs =
-      segments.length > 0
-        ? totalSegmentMs > 0
-          ? totalSegmentMs
-          : undefined
-        : reasoning && reasoningStartedAtRef.current && reasoningEndedAtRef.current
-          ? Math.max(0, reasoningEndedAtRef.current - reasoningStartedAtRef.current)
-          : undefined
     return {
       reasoning,
-      reasoningMs,
+      // 思考过程不单独计时；整轮耗时由 responseMs 统一记录。
+      reasoningMs: undefined,
       responseMs: finalizeResponseMs(),
       reasoningSegments: segments.length > 0 ? segments : undefined,
       toolCalls:
