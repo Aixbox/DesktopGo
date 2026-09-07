@@ -72,7 +72,7 @@ const ContextMenuContent = React.forwardRef<
       )}
       {...props}
     >
-      <NativeScrollArea asChild>
+      <NativeScrollArea asChild gutter="auto">
         <div className="max-h-[var(--radix-context-menu-content-available-height)] overflow-y-auto overflow-x-hidden">
           <div className="p-1">{children}</div>
         </div>

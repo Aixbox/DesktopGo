@@ -54,7 +54,7 @@ export function AiOrganizeHistoryMenu({
               {translate('新对话')}
             </button>
           </div>
-          <NativeScrollArea asChild>
+          <NativeScrollArea asChild gutter="auto">
             <div className="max-h-72 overflow-y-auto p-2">
               {!sessionsLoaded ? (
                 <div className="flex h-12 items-center gap-2 px-2 text-xs text-muted-foreground">

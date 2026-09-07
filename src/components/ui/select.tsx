@@ -389,7 +389,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
                   ['--select-menu-viewport-max-height' as string]: viewportMaxHeight,
                 }}
               >
-                <NativeScrollArea asChild>
+                <NativeScrollArea asChild gutter="auto">
                   <div className="max-h-[var(--select-menu-viewport-max-height)] overflow-y-auto overflow-x-hidden">
                     <div className="p-1">
                       {options.length === 0 ? (

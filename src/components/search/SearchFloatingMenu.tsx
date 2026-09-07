@@ -153,7 +153,7 @@ export function SearchFloatingMenu({
         ['--search-floating-menu-viewport-max-height' as string]: viewportMaxHeight,
       }}
     >
-      <NativeScrollArea asChild>
+      <NativeScrollArea asChild gutter="auto">
         <div
           className={cn(
             'max-h-[var(--search-floating-menu-viewport-max-height)] overflow-y-auto overflow-x-hidden',
