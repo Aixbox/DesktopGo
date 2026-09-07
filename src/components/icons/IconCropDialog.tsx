@@ -760,7 +760,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
                       setCropSize(nextCropSize ?? undefined)
                     }}
                     mediaProps={{ draggable: false, alt: '' }}
-                    classes={{ cropAreaClassName: '!border-2 !border-foreground' }}
+                    classes={{ cropAreaClassName: 'corner-round !border-2 !border-foreground' }}
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
@@ -771,7 +771,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
 
               {cropSize ? (
                 <div
-                  className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
+                  className="corner-round pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
                   style={{
                     width: cropSize.width,
                     height: cropSize.height,

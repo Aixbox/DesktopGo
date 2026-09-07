@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import './corners.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -132,6 +133,8 @@ body,
 }
 
 .launchpad-icon-artwork {
+  /* 图片沿用独立的圆弧裁切，不参与界面容器的连续圆角。 */
+  corner-shape: round;
   border-radius: var(--launchpad-icon-corner-radius, 25%);
   clip-path: inset(0 round var(--launchpad-icon-corner-radius, 25%));
   opacity: var(--launchpad-icon-opacity, 1);
@@ -404,16 +407,6 @@ body,
   --font-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
     monospace;
-  /* HeroUI 的 8 / 12 / 14px 层级以全局 --radius 为基准。 */
-  --radius-sm: calc(var(--radius) - 0.25rem);
-  --radius-md: calc(var(--radius) - 0.125rem);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 0.125rem);
-  --radius-2xl: calc(var(--radius) + 0.25rem);
-  --radius-3xl: calc(var(--radius) + 0.5rem);
-  --radius-4xl: calc(var(--radius) + 0.75rem);
-  /* 图标磁贴与拖拽占位保留原有圆角，独立于通用 UI。 */
-  --radius-icon-tile: 18px;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -449,7 +442,6 @@ body,
 }
 
 :root {
-  --radius: 0.75rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -628,7 +620,7 @@ textarea {
   height: 40px;
   width: 100%;
   border: 1px solid transparent;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-field);
   background: color-mix(in oklch, var(--foreground) 4%, transparent);
   cursor: pointer;
   overflow: hidden;
@@ -644,7 +636,7 @@ textarea {
 .scrubber-fill {
   position: absolute;
   inset: 0 auto 0 0;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-field);
   background: color-mix(in oklch, var(--foreground) 6%, transparent);
   pointer-events: none;
 }
@@ -661,6 +653,7 @@ textarea {
   width: 1px;
   height: 8px;
   border-radius: 999px;
+  corner-shape: round;
   background: color-mix(in oklch, var(--foreground) 20%, transparent);
   transform: translate(-50%) translateY(-50%);
 }
@@ -678,6 +671,7 @@ textarea {
   width: 5px;
   height: 26px;
   border-radius: 999px;
+  corner-shape: round;
   background: color-mix(in oklch, var(--foreground) 90%, transparent);
   opacity: 0.15;
   transform: scaleX(0.7) scaleY(0.7);
@@ -734,7 +728,8 @@ textarea {
   gap: 3px;
   padding: 3px;
   border: 1px solid var(--input);
-  border-radius: var(--radius);
+  border-radius: var(--radius-button);
+  corner-shape: round;
   background: var(--background);
   scrollbar-width: none;
 }
@@ -752,7 +747,8 @@ textarea {
   justify-content: center;
   gap: 0.4rem;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-button);
+  corner-shape: round;
   padding: 0 0.75rem;
   color: var(--muted-foreground);
   font-size: 0.875rem;
@@ -1205,6 +1201,7 @@ textarea {
   width: 3px;
   height: 1.75rem;
   border-radius: 999px;
+  corner-shape: round;
   background: var(--search-split-grip);
   transition:
     background-color 140ms ease,

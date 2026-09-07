@@ -629,7 +629,7 @@ export function DockBar({
     >
       <div
         ref={panelRef}
-        className="launchpad-glass-panel relative overflow-hidden rounded-2xl px-4 py-3 transition-[width] duration-[220ms]"
+        className="launchpad-glass-panel relative overflow-hidden rounded-dock px-4 py-3 transition-[width] duration-[220ms]"
         style={{
           maxWidth: alignToContentColumn
             ? `calc(100vw - var(--scroll-grid-sidebar-width) - ${DOCK_PANEL_VIEWPORT_MARGIN * 2}px)`
@@ -847,7 +847,7 @@ export function DockBar({
                     )
                   ) : (
                     <div
-                      className={`pointer-events-none flex items-center justify-center rounded-[18px] border border-dashed transition ${
+                      className={`pointer-events-none flex items-center justify-center rounded-icon-tile border border-dashed transition ${
                         hasVisibleItems
                           ? 'border-border/35 bg-background/36 dark:border-white/18 dark:bg-white/[0.04]'
                           : 'border-border/45 bg-background/48 dark:border-white/24 dark:bg-white/[0.06]'

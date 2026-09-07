@@ -200,7 +200,7 @@ export function AboutPanel() {
 
   return (
     <div className="space-y-8">
-      <section className="relative overflow-hidden rounded-4xl border border-border/90 bg-gradient-to-br from-card via-muted to-background px-6 py-6 shadow-sm">
+      <section className="relative overflow-hidden rounded-card-lg border border-border/90 bg-gradient-to-br from-card via-muted to-background px-6 py-6 shadow-sm">
         <div className="pointer-events-none absolute inset-0 opacity-70">
           <div className="absolute -right-12 top-0 h-36 w-36 rounded-full bg-blue-500/10 blur-3xl" />
           <div className="absolute bottom-0 left-0 h-28 w-28 rounded-full bg-emerald-500/10 blur-3xl" />
@@ -229,14 +229,14 @@ export function AboutPanel() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:w-[24rem]">
-            <div className="rounded-xl border border-border/85 bg-card p-4 shadow-sm">
+            <div className="rounded-card border border-border/85 bg-card p-4 shadow-sm">
               <LogoText size="sm" />
               <p className="mt-2 text-base font-medium text-foreground">{translate('本地优先')}</p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 {translate('没有账号系统；主要设置、布局和搜索配置都保存在本地环境。')}
               </p>
             </div>
-            <div className="rounded-xl border border-border/85 bg-card p-4 shadow-sm">
+            <div className="rounded-card border border-border/85 bg-card p-4 shadow-sm">
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                 {translate('支持入口')}
               </p>
@@ -252,7 +252,7 @@ export function AboutPanel() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
-        <div className="space-y-4 rounded-xl border border-border/90 bg-card p-5 shadow-sm">
+        <div className="space-y-4 rounded-card border border-border/90 bg-card p-5 shadow-sm">
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
               {translate('功能概览')}
@@ -266,7 +266,7 @@ export function AboutPanel() {
             {featureCards.map(card => (
               <article
                 key={card.title}
-                className="rounded-xl border border-border/85 bg-background p-4 shadow-sm transition-colors hover:bg-accent"
+                className="rounded-card border border-border/85 bg-background p-4 shadow-sm transition-colors hover:bg-accent"
               >
                 <p className="text-sm font-medium text-foreground">{card.title}</p>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">{card.description}</p>
@@ -278,7 +278,7 @@ export function AboutPanel() {
           </div>
         </div>
 
-        <div className="space-y-4 rounded-xl border border-border/90 bg-card p-5 shadow-sm">
+        <div className="space-y-4 rounded-card border border-border/90 bg-card p-5 shadow-sm">
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
               {translate('项目入口')}
@@ -315,7 +315,7 @@ export function AboutPanel() {
             </Button>
           </div>
 
-          <div className="rounded-xl border border-border/85 bg-background p-4 shadow-sm">
+          <div className="rounded-card border border-border/85 bg-background p-4 shadow-sm">
             <div className="flex items-start gap-3">
               <Package2 className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
               <div>
@@ -329,7 +329,7 @@ export function AboutPanel() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border/85 bg-background p-4 shadow-sm">
+          <div className="rounded-card border border-border/85 bg-background p-4 shadow-sm">
             <div className="flex items-start gap-3">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
               <div>
@@ -346,7 +346,7 @@ export function AboutPanel() {
           <button
             type="button"
             onClick={() => void openExternalLink(ABOUT_REPOSITORY_URL, translate('项目主页'))}
-            className="group flex w-full items-center justify-between rounded-xl border border-border/85 bg-background px-4 py-3 text-left shadow-sm transition-colors hover:bg-accent"
+            className="group flex w-full items-center justify-between rounded-card border border-border/85 bg-background px-4 py-3 text-left shadow-sm transition-colors hover:bg-accent"
           >
             <div>
               <p className="text-sm font-medium text-foreground">{translate('项目主页')}</p>

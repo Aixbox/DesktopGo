@@ -1,0 +1,57 @@
+@theme inline {
+  --radius-sm: calc((var(--radius) - 0.25rem) * var(--ui-corner-radius-scale));
+  --radius-md: calc((var(--radius) - 0.125rem) * var(--ui-corner-radius-scale));
+  --radius-lg: calc(var(--radius) * var(--ui-corner-radius-scale));
+  --radius-xl: calc((var(--radius) + 0.25rem) * var(--ui-corner-radius-scale));
+  --radius-2xl: calc((var(--radius) + 0.5rem) * var(--ui-corner-radius-scale));
+  --radius-3xl: calc((var(--radius) + 0.75rem) * var(--ui-corner-radius-scale));
+  --radius-4xl: calc((var(--radius) + 1.25rem) * var(--ui-corner-radius-scale));
+
+  /* HeroUI v3 官网基准：表单 12px，按钮/卡片/弹层 24px，菜单项 16px，大容器 32px。 */
+  --radius-field: var(--radius-lg);
+  --radius-field-inner: max(0px, calc(var(--radius-field) - 0.25rem));
+  --radius-button: calc(var(--radius) * 2);
+  --radius-menu-item: var(--radius-xl);
+  --radius-card: var(--radius-3xl);
+  --radius-card-lg: var(--radius-4xl);
+  --radius-popover: var(--radius-card);
+  --radius-dock: var(--radius-card);
+  --radius-icon-tile: calc(18px * var(--ui-corner-radius-scale));
+}
+
+@layer base {
+  :root {
+    --radius: 0.75rem;
+    --ui-corner-shape: superellipse(1.2);
+    --ui-corner-radius-scale: 1;
+  }
+
+  @supports (corner-shape: superellipse(1.2)) {
+    :root {
+      /* 补偿连续曲线的视觉收缩，令 45° 处的切入量接近同半径的普通圆弧。 */
+      --ui-corner-radius-scale: 1.125;
+    }
+
+    *,
+    ::before,
+    ::after {
+      corner-shape: var(--ui-corner-shape);
+    }
+  }
+}
+
+/* 官网的常规按钮为胶囊形；所有按钮尺寸共用半径，不随 sm/lg 改变。 */
+@utility rounded-button {
+  border-radius: var(--radius-button);
+  corner-shape: round;
+}
+
+/* 扩展 Tailwind 的同名工具类，同时保留它生成的满圆角半径及状态变体。 */
+@utility rounded-full {
+  corner-shape: round;
+}
+
+/* 用于需要与原始图像或导出几何保持一致的圆弧。 */
+@utility corner-round {
+  corner-shape: round;
+}

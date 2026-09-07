@@ -26,7 +26,7 @@ export function SettingGroup({ title, children }: SettingGroupProps) {
     <div className="space-y-2.5">
       {title ? <h3 className="text-sm font-medium text-muted-foreground">{title}</h3> : null}
       <SettingGroupContext.Provider value={true}>
-        <div className="divide-y divide-border/70 overflow-hidden rounded-xl border border-border/80 bg-card">
+        <div className="divide-y divide-border/70 overflow-hidden rounded-card border border-border/80 bg-card">
           {children}
         </div>
       </SettingGroupContext.Provider>
@@ -48,7 +48,7 @@ export function SettingCard({ label, desc, children }: SettingCardProps) {
       className={
         grouped
           ? 'space-y-3 px-4 py-3.5'
-          : 'space-y-3 rounded-xl border border-border/80 bg-card p-4'
+          : 'space-y-3 rounded-card border border-border/80 bg-card p-4'
       }
     >
       <div className="space-y-1">
@@ -113,7 +113,7 @@ export function ToggleRow({
   return (
     <div
       className={`flex min-h-20 items-center justify-between gap-4 px-4 py-3.5 ${
-        grouped ? '' : 'rounded-xl border border-border/80 bg-card'
+        grouped ? '' : 'rounded-card border border-border/80 bg-card'
       }`}
     >
       <div className="min-w-0 space-y-1">
@@ -139,7 +139,7 @@ export function OptionButton({ label, selected, onClick }: OptionButtonProps) {
       type="button"
       aria-pressed={selected}
       onClick={onClick}
-      className={`shrink-0 whitespace-nowrap rounded-lg border px-3 py-2 text-sm transition-all duration-150 cursor-pointer ${
+      className={`shrink-0 whitespace-nowrap rounded-button border px-3 py-2 text-sm transition-all duration-150 cursor-pointer ${
         selected ? 'setting-option-selected' : 'setting-option-default'
       }`}
     >

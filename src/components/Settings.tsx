@@ -77,7 +77,7 @@ function WindowControlButton({
       onPointerDown={event => event.stopPropagation()}
       onDoubleClick={event => event.stopPropagation()}
       onClick={onClick}
-      className={`flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-sm transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
+      className={`flex h-8 w-8 items-center justify-center rounded-button border border-transparent text-sm transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
         tone === 'danger'
           ? 'text-muted-foreground hover:bg-red-500/12 hover:text-red-500 dark:hover:text-red-300'
           : 'text-muted-foreground hover:bg-accent hover:text-foreground'
@@ -234,7 +234,7 @@ export function Settings() {
               <li key={item.key}>
                 <button
                   onClick={() => setActiveNav(item.key)}
-                  className={`settings-nav-item flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors cursor-pointer ${
+                  className={`settings-nav-item flex w-full items-center gap-2.5 rounded-menu-item border px-3 py-2 text-sm transition-colors cursor-pointer ${
                     activeNav === item.key
                       ? 'settings-nav-item-active border-transparent text-foreground font-medium'
                       : 'border-transparent text-muted-foreground hover:text-foreground'

@@ -344,7 +344,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
           aria-expanded={open}
           data-state={open ? 'open' : 'closed'}
           className={cn(
-            'flex h-9 w-full items-center justify-between gap-3 rounded-lg border border-input bg-background px-3 py-2 text-sm transition-colors disabled:pointer-events-none disabled:opacity-50',
+            'flex h-9 w-full items-center justify-between gap-3 rounded-field border border-input bg-background px-3 py-2 text-sm transition-colors disabled:pointer-events-none disabled:opacity-50',
             formControlFocusClassName,
             !hasValue && 'text-muted-foreground',
             open && formControlActiveClassName,
@@ -381,7 +381,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
                 role="listbox"
                 aria-labelledby={triggerId}
                 className={cn(
-                  'overflow-hidden rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur-sm',
+                  'overflow-hidden rounded-popover border border-border bg-background/95 shadow-xl backdrop-blur-sm',
                   contentClassName
                 )}
                 style={{
@@ -409,7 +409,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
                                 aria-selected={selected}
                                 disabled={option.disabled}
                                 className={cn(
-                                  'flex w-full items-center justify-between rounded-sm px-3 py-2 text-left text-sm transition-colors disabled:pointer-events-none disabled:opacity-50',
+                                  'flex w-full items-center justify-between rounded-menu-item px-3 py-2 text-left text-sm transition-colors disabled:pointer-events-none disabled:opacity-50',
                                   selected
                                     ? 'bg-accent text-accent-foreground'
                                     : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',

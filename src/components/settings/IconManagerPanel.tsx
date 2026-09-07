@@ -383,7 +383,7 @@ export function IconManagerPanel() {
           </Button>
         </div>
 
-        <div className="min-w-0 space-y-3 rounded-xl border border-border/80 bg-card p-4">
+        <div className="min-w-0 space-y-3 rounded-card border border-border/80 bg-card p-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex min-w-0 flex-[1_1_24rem] flex-wrap items-center gap-2">
               <Input
@@ -435,7 +435,7 @@ export function IconManagerPanel() {
               >
                 {layoutResetting ? translate('重置中...') : translate('重置布局')}
               </Button>
-              <div className="inline-flex h-9 rounded-lg border border-border/90 bg-background p-1">
+              <div className="inline-flex h-9 rounded-button border border-border/90 bg-background p-1">
                 {ICON_MANAGER_VIEW_MODE_OPTIONS.map(option => {
                   const selected = viewMode === option.value
                   return (
@@ -447,7 +447,7 @@ export function IconManagerPanel() {
                       aria-pressed={selected}
                       onClick={() => handleViewModeChange(option.value)}
                       className={cn(
-                        'inline-flex h-full w-8 items-center justify-center rounded-sm transition-colors',
+                        'inline-flex h-full w-8 items-center justify-center rounded-button transition-colors',
                         selected
                           ? 'bg-accent text-foreground'
                           : 'text-muted-foreground hover:text-foreground'
@@ -539,8 +539,8 @@ export function IconManagerPanel() {
                     className={cn(
                       'border border-border/80 bg-background',
                       viewMode === 'grid'
-                        ? 'rounded-xl p-3'
-                        : 'flex flex-wrap items-center gap-3 rounded-xl p-3'
+                        ? 'rounded-card p-3'
+                        : 'flex flex-wrap items-center gap-3 rounded-card p-3'
                     )}
                   >
                     <div className="flex min-w-0 flex-[1_1_16rem] items-start gap-3">
@@ -632,7 +632,7 @@ export function IconManagerPanel() {
 
       {pendingMutation && mutationDialogText ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/22 p-4 backdrop-blur-[1px] dark:bg-black/45">
-          <div className="w-full max-w-md rounded-xl border border-border bg-background p-5 shadow-xl">
+          <div className="w-full max-w-md rounded-card border border-border bg-background p-5 shadow-xl">
             <h3 className="text-base font-semibold">{mutationDialogText.title}</h3>
             <p className="mt-2 text-sm text-muted-foreground">{mutationDialogText.desc}</p>
             <div className="mt-5 flex justify-end gap-2">
@@ -663,7 +663,7 @@ export function IconManagerPanel() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="invalid-icon-scan-title"
-            className="flex max-h-[min(42rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-xl"
+            className="flex max-h-[min(42rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-card border border-border bg-background shadow-xl"
           >
             <div className="flex items-start justify-between gap-4 border-b border-border/80 px-4 py-4 sm:px-5">
               <div className="min-w-0 space-y-1">
@@ -737,7 +737,7 @@ export function IconManagerPanel() {
                       return (
                         <label
                           key={key}
-                          className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/80 bg-background p-3 transition-colors hover:bg-muted/20"
+                          className="flex cursor-pointer items-start gap-3 rounded-card border border-border/80 bg-background p-3 transition-colors hover:bg-muted/20"
                         >
                           <input
                             type="checkbox"

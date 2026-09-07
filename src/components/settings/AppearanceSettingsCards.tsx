@@ -310,7 +310,7 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
         label={translate('自定义背景')}
         desc={translate('选择 JPG、PNG 或 WebP 图片，应用会压缩后保存在本机。')}
       >
-        <div className="relative aspect-video w-full max-w-sm overflow-hidden rounded-xl border border-border/80 bg-muted">
+        <div className="relative aspect-video w-full max-w-sm overflow-hidden rounded-card border border-border/80 bg-muted">
           {appearance.backgroundImage ? (
             <>
               <div
