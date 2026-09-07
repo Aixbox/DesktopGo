@@ -478,7 +478,7 @@ export function AddIconMetadataFields({
         <AddIconFormRow label={translate('高级启动选项')}>
           <div
             className={cn(
-              'overflow-hidden rounded-lg border transition-[border-color,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none',
+              'overflow-hidden rounded-xl border transition-[border-color,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none',
               advancedOpen
                 ? 'border-border bg-muted/20 shadow-sm'
                 : 'border-border/70 bg-muted/10 hover:border-border hover:bg-muted/20'

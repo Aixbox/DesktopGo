@@ -404,13 +404,16 @@ body,
   --font-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
     monospace;
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  /* HeroUI 的 8 / 12 / 14px 层级以全局 --radius 为基准。 */
+  --radius-sm: calc(var(--radius) - 0.25rem);
+  --radius-md: calc(var(--radius) - 0.125rem);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
-  --radius-3xl: calc(var(--radius) + 12px);
-  --radius-4xl: calc(var(--radius) + 16px);
+  --radius-xl: calc(var(--radius) + 0.125rem);
+  --radius-2xl: calc(var(--radius) + 0.25rem);
+  --radius-3xl: calc(var(--radius) + 0.5rem);
+  --radius-4xl: calc(var(--radius) + 0.75rem);
+  /* 图标磁贴与拖拽占位保留原有圆角，独立于通用 UI。 */
+  --radius-icon-tile: 18px;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -446,7 +449,7 @@ body,
 }
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0.75rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -625,7 +628,7 @@ textarea {
   height: 40px;
   width: 100%;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: color-mix(in oklch, var(--foreground) 4%, transparent);
   cursor: pointer;
   overflow: hidden;
@@ -641,7 +644,7 @@ textarea {
 .scrubber-fill {
   position: absolute;
   inset: 0 auto 0 0;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: color-mix(in oklch, var(--foreground) 6%, transparent);
   pointer-events: none;
 }
@@ -749,7 +752,7 @@ textarea {
   justify-content: center;
   gap: 0.4rem;
   border: 1px solid transparent;
-  border-radius: calc(var(--radius) - 2px);
+  border-radius: var(--radius-sm);
   padding: 0 0.75rem;
   color: var(--muted-foreground);
   font-size: 0.875rem;

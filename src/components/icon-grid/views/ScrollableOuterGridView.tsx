@@ -437,7 +437,7 @@ export function ScrollableOuterGridView({
                     aria-label={addIconLabel}
                     title={addIconLabel}
                     disabled={addIconDisabled || !onAddIcon}
-                    className="icon-item group relative flex flex-col items-center justify-start justify-self-center self-start rounded-2xl border-none px-3 text-muted-foreground shadow-none transition-opacity duration-200 hover:bg-foreground/6 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:bg-foreground/10 disabled:pointer-events-none disabled:opacity-45 dark:hover:bg-white/10 dark:active:bg-white/20"
+                    className="icon-item group relative flex flex-col items-center justify-start justify-self-center self-start rounded-icon-tile border-none px-3 text-muted-foreground shadow-none transition-opacity duration-200 hover:bg-foreground/6 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:bg-foreground/10 disabled:pointer-events-none disabled:opacity-45 dark:hover:bg-white/10 dark:active:bg-white/20"
                     style={{
                       gridColumn: addIconCol + 1,
                       gridRow: addIconRow + 1,
@@ -459,7 +459,7 @@ export function ScrollableOuterGridView({
                       style={{ width: iconConfig.imgSize, height: iconConfig.imgSize }}
                     >
                       <span
-                        className="flex shrink-0 items-center justify-center rounded-md border border-dashed border-border/80 bg-foreground/3 transition-colors group-hover:border-foreground/35 group-hover:bg-accent dark:border-white/18 dark:bg-white/4"
+                        className="flex shrink-0 items-center justify-center rounded-[8px] border border-dashed border-border/80 bg-foreground/3 transition-colors group-hover:border-foreground/35 group-hover:bg-accent dark:border-white/18 dark:bg-white/4"
                         style={{ width: iconConfig.imgSize, height: iconConfig.imgSize }}
                       >
                         <Plus className="h-5 w-5" />

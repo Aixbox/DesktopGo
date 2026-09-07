@@ -29,7 +29,7 @@ function WindowControlButton({
         event.stopPropagation()
         onClick()
       }}
-      className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-transparent text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
+      className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-sm border border-transparent text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
         active
           ? 'accent-tonal'
           : tone === 'danger'
@@ -65,7 +65,7 @@ export function LaunchpadWindowControls({
 }: LaunchpadWindowControlsProps) {
   return (
     <div data-no-window-drag="true" className="absolute right-5 top-5 z-40 flex items-center gap-2">
-      <div className="launchpad-glass-panel-strong flex items-center rounded-lg border border-border/80 px-1.5 py-1">
+      <div className="launchpad-glass-panel-strong flex items-center rounded-xl border border-border/80 px-1.5 py-1">
         <WindowControlButton
           label={
             aiOrganizeMode && aiSidebarOpen ? translate('收起 AI 整理') : translate('打开 AI 整理')
@@ -78,7 +78,7 @@ export function LaunchpadWindowControls({
       </div>
       {windowPersistentEnabled ? (
         <>
-          <div className="launchpad-glass-panel-strong flex items-center rounded-lg border border-border/80 px-1.5 py-1">
+          <div className="launchpad-glass-panel-strong flex items-center rounded-xl border border-border/80 px-1.5 py-1">
             <WindowControlButton
               label={alwaysOnTopEnabled ? translate('取消置顶') : translate('置顶窗口')}
               onClick={onToggleAlwaysOnTop}
@@ -86,7 +86,7 @@ export function LaunchpadWindowControls({
               <Pin className={`h-4 w-4 ${alwaysOnTopEnabled ? 'accent-foreground' : ''}`} />
             </WindowControlButton>
           </div>
-          <div className="launchpad-glass-panel-strong flex items-center gap-1 rounded-lg border border-border/80 px-1.5 py-1">
+          <div className="launchpad-glass-panel-strong flex items-center gap-1 rounded-xl border border-border/80 px-1.5 py-1">
             <WindowControlButton label={translate('最小化')} onClick={onMinimize}>
               <Minus className="h-4 w-4" />
             </WindowControlButton>

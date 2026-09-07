@@ -44,7 +44,7 @@ export const AiOrganizePanelHeaderActions = ({
         aria-label={historyLabel}
         title={historyLabel}
         onClick={onToggleHistory}
-        className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+        className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
           historyExpanded
             ? 'bg-primary/10 accent-foreground'
             : 'text-muted-foreground hover:bg-accent hover:text-foreground'
@@ -58,7 +58,7 @@ export const AiOrganizePanelHeaderActions = ({
         title={newChatLabel}
         onClick={onNewSession}
         disabled={isBusy}
-        className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Plus className="h-4 w-4" />
       </button>
@@ -68,7 +68,7 @@ export const AiOrganizePanelHeaderActions = ({
         aria-pressed={isExpanded}
         title={expandActionLabel}
         onClick={onToggleExpanded}
-        className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
       </button>
@@ -78,7 +78,7 @@ export const AiOrganizePanelHeaderActions = ({
         title={closeLabel}
         onClick={onClose}
         disabled={closeDisabled}
-        className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
       >
         <X className="h-4 w-4" />
       </button>

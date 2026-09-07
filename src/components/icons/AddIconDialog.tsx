@@ -717,7 +717,7 @@ function AddIconDialogSession({
                       onClick={() => handleEntryKindChange('app')}
                       disabled={submitting}
                       className={cn(
-                        'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+                        'inline-flex h-7 items-center gap-1.5 rounded-sm px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
                         entryKind === 'app'
                           ? 'bg-background text-foreground shadow-sm'
                           : 'text-muted-foreground hover:text-foreground'
@@ -733,7 +733,7 @@ function AddIconDialogSession({
                       onClick={() => handleEntryKindChange('website')}
                       disabled={submitting}
                       className={cn(
-                        'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+                        'inline-flex h-7 items-center gap-1.5 rounded-sm px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
                         entryKind === 'website'
                           ? 'bg-background text-foreground shadow-sm'
                           : 'text-muted-foreground hover:text-foreground'
@@ -782,13 +782,13 @@ function AddIconDialogSession({
                           {targetPickerOpen ? (
                             <div
                               role="menu"
-                              className="absolute right-0 top-full z-20 mt-1.5 w-40 overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-lg"
+                              className="absolute right-0 top-full z-20 mt-1.5 w-40 overflow-hidden rounded-xl border border-border bg-popover p-1 shadow-lg"
                             >
                               <button
                                 type="button"
                                 role="menuitem"
                                 onClick={() => void handlePickTarget(false)}
-                                className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
+                                className="flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-sm text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
                               >
                                 <FileSearch className="h-4 w-4 text-muted-foreground" />
                                 {translate('选择文件')}
@@ -797,7 +797,7 @@ function AddIconDialogSession({
                                 type="button"
                                 role="menuitem"
                                 onClick={() => void handlePickTarget(true)}
-                                className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
+                                className="flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-sm text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
                               >
                                 <FolderOpen className="h-4 w-4 text-muted-foreground" />
                                 {translate('选择文件夹')}

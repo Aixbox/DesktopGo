@@ -137,7 +137,7 @@ export const Icon = memo(function Icon({
         data-icon
         data-selection-key={selectionKey}
         data-selection-mode={selectionMode ? 'on' : 'off'}
-        className={`icon-item relative flex flex-col items-center justify-start rounded-2xl border-none px-3 shadow-none cursor-pointer group ${
+        className={`icon-item relative flex flex-col items-center justify-start rounded-icon-tile border-none px-3 shadow-none cursor-pointer group ${
           usesScrollMotion ? 'scroll-grid-icon-tile' : 'transition-all duration-200'
         } ${buttonStateClass} ${layerClass} ${
           highlighted ? 'launchpad-import-highlight-edge' : ''

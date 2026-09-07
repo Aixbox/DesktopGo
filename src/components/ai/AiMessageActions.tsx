@@ -55,7 +55,7 @@ export function AiMessageActions({
         disabled={copied}
         aria-label={translate('复制')}
         title={translate('复制')}
-        className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-default"
+        className="flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-default"
       >
         {copied ? (
           <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-300" />
@@ -68,7 +68,7 @@ export function AiMessageActions({
         onClick={onRegenerate}
         aria-label={regenerateLabel}
         title={regenerateLabel}
-        className="flex h-6 items-center justify-center gap-1 rounded px-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        className="flex h-6 items-center justify-center gap-1 rounded-sm px-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         <RefreshCw className="h-3.5 w-3.5" />
         {failed ? <span className="text-[11px]">{regenerateLabel}</span> : null}

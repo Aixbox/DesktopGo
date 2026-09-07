@@ -21,7 +21,7 @@ export const FOLDER_SHARED_LAYOUT_TRANSITION = {
   mass: 0.9,
 } as const
 export const FOLDER_SURFACE_CLASS =
-  'relative h-full w-full overflow-hidden rounded-lg border border-border/35 bg-background/42 shadow-[0_4px_12px_rgba(15,23,42,0.1)] backdrop-blur-lg dark:border-white/14 dark:bg-black/24 dark:shadow-[0_4px_12px_rgba(0,0,0,0.18)]'
+  'relative h-full w-full overflow-hidden rounded-[10px] border border-border/35 bg-background/42 shadow-[0_4px_12px_rgba(15,23,42,0.1)] backdrop-blur-lg dark:border-white/14 dark:bg-black/24 dark:shadow-[0_4px_12px_rgba(0,0,0,0.18)]'
 export const DESKTOP_FOLDER_SURFACE_CLASS =
   'relative h-full w-full overflow-hidden border border-border/45 bg-background/48 shadow-[0_6px_18px_rgba(15,23,42,0.12)] backdrop-blur-lg dark:border-white/16 dark:bg-black/30 dark:shadow-[0_6px_18px_rgba(0,0,0,0.18)]'
 export const DOCK_FOLDER_SURFACE_CLASS =

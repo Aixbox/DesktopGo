@@ -81,7 +81,7 @@ function ToastViewport({
             key={toast.id}
             role={toast.tone === 'error' ? 'alert' : 'status'}
             className={cn(
-              'pointer-events-auto rounded-2xl border bg-card/95 px-4 py-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/85',
+              'pointer-events-auto rounded-xl border bg-card/95 px-4 py-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/85',
               toast.tone === 'success' && 'border-emerald-500/25',
               toast.tone === 'error' && 'border-red-500/25',
               toast.tone === 'info' && 'border-blue-500/20'
@@ -101,7 +101,7 @@ function ToastViewport({
                       onDismiss(toast.id)
                       toast.action?.onClick()
                     }}
-                    className="mt-1 rounded-md border border-border/80 bg-background px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+                    className="mt-1 rounded-sm border border-border/80 bg-background px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent"
                   >
                     {toast.action.label}
                   </button>
@@ -111,7 +111,7 @@ function ToastViewport({
                 type="button"
                 aria-label={translate('关闭提示')}
                 onClick={() => onDismiss(toast.id)}
-                className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="shrink-0 rounded-sm p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
                 <X className="h-4 w-4" />
               </button>

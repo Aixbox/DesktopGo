@@ -226,7 +226,7 @@ export function OuterGridView({
               <div
                 key={`cell-${currentPage}-${index}`}
                 data-grid-item
-                className="h-full w-full rounded-2xl border border-transparent bg-transparent"
+                className="h-full w-full rounded-icon-tile border border-transparent bg-transparent"
                 style={{ minHeight: `${itemHeight}px` }}
                 aria-hidden="true"
               />
@@ -235,7 +235,7 @@ export function OuterGridView({
 
           {dragContext === 'outer' && dragPreviewSlotIndex !== null && previewFootprint !== null ? (
             <div
-              className="pointer-events-none rounded-2xl border border-border/60 bg-background/35 dark:border-white/22 dark:bg-white/8"
+              className="pointer-events-none rounded-icon-tile border border-border/60 bg-background/35 dark:border-white/22 dark:bg-white/8"
               style={{
                 gridColumn: `${previewFootprint.col + 1} / span ${previewFootprint.span.cols}`,
                 gridRow: `${previewFootprint.row + 1} / span ${previewFootprint.span.rows}`,

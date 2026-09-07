@@ -40,7 +40,7 @@ export function AiOrganizeHistoryMenu({
           animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
           exit={prefersReducedMotion ? undefined : { opacity: 0, y: -6, scale: 0.98 }}
           transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-          className="absolute right-3 top-[calc(100%-0.25rem)] z-20 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-lg border border-border/85 bg-background shadow-xl"
+          className="absolute right-3 top-[calc(100%-0.25rem)] z-20 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border/85 bg-background shadow-xl"
         >
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-3 py-2">
             <span className="text-xs font-medium text-foreground">{translate('会话历史')}</span>
@@ -48,7 +48,7 @@ export function AiOrganizeHistoryMenu({
               type="button"
               onClick={onNewSession}
               disabled={isBusy}
-              className="inline-flex h-7 items-center gap-1 rounded-md border border-border/80 px-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-7 items-center gap-1 rounded-sm border border-border/80 px-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="h-3.5 w-3.5" />
               {translate('新对话')}
@@ -72,7 +72,7 @@ export function AiOrganizeHistoryMenu({
                     return (
                       <div
                         key={session.id}
-                        className={`group flex items-stretch rounded-md transition-colors ${
+                        className={`group flex items-stretch rounded-lg transition-colors ${
                           isActiveSession
                             ? 'bg-primary/10 text-foreground'
                             : 'text-muted-foreground hover:bg-accent hover:text-foreground'
@@ -82,7 +82,7 @@ export function AiOrganizeHistoryMenu({
                           type="button"
                           onClick={() => onSelectSession(session)}
                           disabled={isBusy}
-                          className="min-w-0 flex-1 rounded-l-md px-2.5 py-2 text-left disabled:cursor-not-allowed disabled:opacity-50"
+                          className="min-w-0 flex-1 rounded-l-[inherit] px-2.5 py-2 text-left disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <div className="truncate text-xs font-medium">{session.title}</div>
                           <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
@@ -98,7 +98,7 @@ export function AiOrganizeHistoryMenu({
                           disabled={isBusy}
                           aria-label={translate('删除会话')}
                           title={translate('删除会话')}
-                          className="flex w-9 shrink-0 items-center justify-center rounded-r-md text-muted-foreground opacity-70 transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 group-hover:opacity-100 dark:hover:text-red-300"
+                          className="flex w-9 shrink-0 items-center justify-center rounded-r-[inherit] text-muted-foreground opacity-70 transition-colors hover:bg-red-500/10 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 group-hover:opacity-100 dark:hover:text-red-300"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>

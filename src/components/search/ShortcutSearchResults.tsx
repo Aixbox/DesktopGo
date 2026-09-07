@@ -173,7 +173,7 @@ export function ShortcutSearchResults({
               <button
                 type="button"
                 aria-current={selectedIndex === index ? 'true' : undefined}
-                className={`flex h-12 min-w-0 items-center gap-2.5 rounded-md px-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 ${
+                className={`flex h-12 min-w-0 items-center gap-2.5 rounded-lg px-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 ${
                   selectedIndex === index
                     ? 'bg-primary/18 ring-1 ring-inset ring-primary/55 dark:bg-primary/24 dark:ring-primary/65'
                     : 'hover:bg-accent/55'
@@ -232,7 +232,7 @@ export function ShortcutSearchResults({
                   type="button"
                   data-shortcut-index={index}
                   aria-current={selectedIndex === index ? 'true' : undefined}
-                  className={`group relative flex cursor-pointer flex-col items-center gap-2 rounded-md border-none p-3 shadow-none ${
+                  className={`group relative flex cursor-pointer flex-col items-center gap-2 rounded-lg border-none p-3 shadow-none ${
                     selectedIndex === index
                       ? 'bg-primary/12 ring-1 ring-primary/40 dark:bg-primary/18 dark:ring-primary/45'
                       : 'bg-transparent hover:bg-accent/60 active:bg-accent'

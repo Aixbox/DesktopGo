@@ -75,7 +75,7 @@ export function SearchResultSelectionHighlight({
         contain: 'layout paint style',
       }}
     >
-      <div className="h-full w-full rounded-md bg-primary/18 ring-1 ring-inset ring-primary/55 dark:bg-primary/24 dark:ring-primary/65" />
+      <div className="h-full w-full rounded-lg bg-primary/18 ring-1 ring-inset ring-primary/55 dark:bg-primary/24 dark:ring-primary/65" />
     </div>
   )
 }

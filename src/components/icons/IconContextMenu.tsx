@@ -79,20 +79,17 @@ export function IconContextMenu({
       <ContextMenuTrigger asChild onContextMenuCapture={handleContextMenuCapture}>
         {children}
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-56 rounded-xl p-1 shadow-xl">
-        <ContextMenuItem className="gap-2 rounded-lg px-2.5 py-2" onSelect={handleOpen}>
+      <ContextMenuContent className="w-56 p-1 shadow-xl">
+        <ContextMenuItem className="gap-2 px-2.5 py-2" onSelect={handleOpen}>
           <Play className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <span>{translate('打开')}</span>
         </ContextMenuItem>
-        <ContextMenuItem
-          className="gap-2 rounded-lg px-2.5 py-2"
-          onSelect={() => requestIconEdit(icon)}
-        >
+        <ContextMenuItem className="gap-2 px-2.5 py-2" onSelect={() => requestIconEdit(icon)}>
           <Pencil className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <span>{translate('编辑图标信息')}</span>
         </ContextMenuItem>
         <ContextMenuItem
-          className="gap-2 rounded-lg px-2.5 py-2"
+          className="gap-2 px-2.5 py-2"
           onSelect={() => {
             void hideIcon(icon)
           }}
@@ -101,7 +98,7 @@ export function IconContextMenu({
           <span>{translate('从启动台隐藏')}</span>
         </ContextMenuItem>
         <ContextMenuItem
-          className="gap-2 rounded-lg px-2.5 py-2 text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/25 dark:focus:text-red-100"
+          className="gap-2 px-2.5 py-2 text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/25 dark:focus:text-red-100"
           onSelect={handleDelete}
         >
           <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -109,7 +106,7 @@ export function IconContextMenu({
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem
-          className="gap-2 rounded-lg px-2.5 py-2"
+          className="gap-2 px-2.5 py-2"
           onSelect={() => {
             window.setTimeout(openSystemMenu, 0)
           }}

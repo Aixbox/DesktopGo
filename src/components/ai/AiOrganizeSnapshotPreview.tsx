@@ -52,7 +52,7 @@ function AiFolderGridPreview({ group, iconByKey }: AiFolderGridPreviewProps) {
   return (
     <div className="flex w-16 shrink-0 flex-col items-center gap-1" title={translate('文件夹预览')}>
       <div
-        className={`${DESKTOP_FOLDER_SURFACE_CLASS} grid shrink-0 place-items-center rounded-xl p-1.5`}
+        className={`${DESKTOP_FOLDER_SURFACE_CLASS} grid shrink-0 place-items-center rounded-[14px] p-1.5`}
         style={{
           width: `${layout.width}px`,
           height: `${layout.height}px`,

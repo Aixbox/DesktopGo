@@ -662,7 +662,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
-        className="relative flex max-h-[calc(100vh-1.5rem)] w-full max-w-[25rem] flex-col overflow-hidden rounded-lg border border-border bg-background shadow-2xl sm:max-h-[calc(100vh-2.5rem)]"
+        className="relative flex max-h-[calc(100vh-1.5rem)] w-full max-w-[25rem] flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl sm:max-h-[calc(100vh-2.5rem)]"
         onKeyDown={handleKeyDown}
       >
         <Button

@@ -77,7 +77,7 @@ function WindowControlButton({
       onPointerDown={event => event.stopPropagation()}
       onDoubleClick={event => event.stopPropagation()}
       onClick={onClick}
-      className={`flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-sm transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
+      className={`flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-sm transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
         tone === 'danger'
           ? 'text-muted-foreground hover:bg-red-500/12 hover:text-red-500 dark:hover:text-red-300'
           : 'text-muted-foreground hover:bg-accent hover:text-foreground'
@@ -234,7 +234,7 @@ export function Settings() {
               <li key={item.key}>
                 <button
                   onClick={() => setActiveNav(item.key)}
-                  className={`settings-nav-item flex w-full items-center gap-2.5 rounded-md border px-3 py-2 text-sm transition-colors cursor-pointer ${
+                  className={`settings-nav-item flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors cursor-pointer ${
                     activeNav === item.key
                       ? 'settings-nav-item-active border-transparent text-foreground font-medium'
                       : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -280,7 +280,7 @@ export function Settings() {
         </header>
 
         <NativeScrollArea asChild>
-          <main className="settings-content-surface settings-main-scroll min-h-0 flex-1 overflow-y-auto rounded-tl-xl border-l border-t border-border/80 bg-background px-6 py-6 xl:px-8">
+          <main className="settings-content-surface settings-main-scroll min-h-0 flex-1 overflow-y-auto rounded-tl-4xl border-l border-t border-border/80 bg-background px-6 py-6 xl:px-8">
             <div className={cn('mx-auto w-full', NAV_CONTENT_WIDTH[activeNav])}>
               {activeNav === 'settings' && <GeneralSettingsPanel />}
               {activeNav === 'search' && (

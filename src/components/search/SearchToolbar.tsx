@@ -38,7 +38,7 @@ function MatcherToggleRow({ active, label, onClick }: MatcherToggleRowProps) {
   return (
     <button
       type="button"
-      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition ${
+      className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-sm transition ${
         active
           ? 'bg-accent/80 text-foreground'
           : 'text-muted-foreground hover:bg-accent/55 hover:text-foreground'
@@ -140,7 +140,7 @@ export function SearchToolbar({
           type="button"
           aria-label={translate('搜索排序')}
           aria-expanded={sortMenuOpen}
-          className={`group relative inline-flex h-full max-w-[10rem] items-center justify-center rounded-md px-3 text-xs font-medium transition-colors duration-200 ${
+          className={`group relative inline-flex h-full max-w-[10rem] items-center justify-center rounded-sm px-3 text-xs font-medium transition-colors duration-200 ${
             sortMenuOpen ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
           }`}
           onClick={() =>
@@ -153,7 +153,7 @@ export function SearchToolbar({
             })
           }
         >
-          {sortMenuOpen && <div className="search-control-indicator absolute inset-0 rounded-md" />}
+          {sortMenuOpen && <div className="search-control-indicator absolute inset-0 rounded-[inherit]" />}
 
           <span className="relative z-10 flex items-center gap-1.5">
             <ArrowUpDown className="h-3.5 w-3.5 shrink-0" />
@@ -184,7 +184,7 @@ export function SearchToolbar({
                       <button
                         key={option.value}
                         type="button"
-                        className={`group flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-all duration-200 ${
+                        className={`group flex w-full items-center justify-between rounded-sm px-3 py-2 text-left text-sm transition-all duration-200 ${
                           sort === option.value
                             ? 'bg-accent/85 text-foreground shadow-sm ring-1 ring-border/70'
                             : 'text-muted-foreground hover:bg-accent/55 hover:text-foreground active:scale-[0.98]'
@@ -217,7 +217,7 @@ export function SearchToolbar({
           type="button"
           aria-label={translate('搜索选项')}
           aria-expanded={matcherMenuOpen}
-          className={`relative inline-flex h-full w-8 items-center justify-center rounded-md transition-colors duration-200 ${
+          className={`relative inline-flex h-full w-8 items-center justify-center rounded-sm transition-colors duration-200 ${
             matcherMenuOpen || hasActiveMatcher
               ? 'text-foreground'
               : 'text-muted-foreground hover:text-foreground'
@@ -233,7 +233,7 @@ export function SearchToolbar({
           }
         >
           {(matcherMenuOpen || hasActiveMatcher) && (
-            <div className="search-control-indicator absolute inset-0 rounded-md" />
+            <div className="search-control-indicator absolute inset-0 rounded-[inherit]" />
           )}
 
           <span className="relative z-10 flex items-center justify-center">
@@ -289,12 +289,12 @@ export function SearchToolbar({
         type="button"
         title={previewVisible ? translate('隐藏预览') : translate('显示预览')}
         aria-label={previewVisible ? translate('隐藏预览') : translate('显示预览')}
-        className={`relative inline-flex h-full w-8 items-center justify-center rounded-md transition-colors duration-200 ${
+        className={`relative inline-flex h-full w-8 items-center justify-center rounded-sm transition-colors duration-200 ${
           previewVisible ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
         }`}
         onClick={onPreviewToggle}
       >
-        {previewVisible && <div className="search-control-indicator absolute inset-0 rounded-md" />}
+        {previewVisible && <div className="search-control-indicator absolute inset-0 rounded-[inherit]" />}
         <span className="relative z-10 flex items-center justify-center">
           {previewVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </span>

@@ -208,7 +208,7 @@ const GROUP_ICON_COMPONENTS: Record<ScrollGroupIcon, LucideIcon> = Object.fromEn
 function CustomGroupIcon({ icon }: { icon: ScrollGroupIcon }) {
   const Glyph = GROUP_ICON_COMPONENTS[icon]
   return (
-    <span className="scroll-grid-custom-group-icon flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
+    <span className="scroll-grid-custom-group-icon flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px]">
       <Glyph className="h-3.5 w-3.5" />
     </span>
   )
@@ -247,20 +247,20 @@ function GroupPreviewGlyph({ item, compact = false }: { item: GridItem; compact?
 function GroupPreviewIcon({ items }: { items: GridItem[] }) {
   if (items.length === 0) {
     return (
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-foreground/6 text-muted-foreground dark:bg-white/8">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-foreground/6 text-muted-foreground dark:bg-white/8">
         <AppWindow className="h-3.5 w-3.5" />
       </span>
     )
   }
   if (items.length === 1) {
     return (
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-foreground/6 dark:bg-white/8">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-foreground/6 dark:bg-white/8">
         <GroupPreviewGlyph item={items[0]} />
       </span>
     )
   }
   return (
-    <span className="grid h-7 w-7 shrink-0 grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-md bg-foreground/6 p-1 dark:bg-white/8">
+    <span className="grid h-7 w-7 shrink-0 grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-[8px] bg-foreground/6 p-1 dark:bg-white/8">
       {items.map(item => (
         <span key={item.kind === 'folder' ? item.id : item.key} className="overflow-hidden">
           <GroupPreviewGlyph item={item} compact />
@@ -559,15 +559,12 @@ export function ScrollableGroupNavigation({
                             </div>
                           </ContextMenuTrigger>
                           <ContextMenuContent className="w-40">
-                            <ContextMenuItem
-                              className="rounded-md"
-                              onSelect={() => openGroupEditor(section)}
-                            >
+                            <ContextMenuItem onSelect={() => openGroupEditor(section)}>
                               {translate('编辑分组')}
                             </ContextMenuItem>
                             <ContextMenuItem
                               disabled={sections.length <= 1}
-                              className="rounded-md text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/20 dark:focus:text-red-100"
+                              className="text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/20 dark:focus:text-red-100"
                               onSelect={() => onDeleteGroup(section.index)}
                             >
                               {translate('删除分组')}

@@ -287,7 +287,7 @@ export function FolderModalView({
               transition={prefersReducedMotion ? { duration: 0 } : FOLDER_SHARED_LAYOUT_TRANSITION}
               data-icon
               ref={folderPanelRef}
-              className="launchpad-glass-panel-strong relative overflow-hidden rounded-2xl p-5 will-change-[transform,border-radius]"
+              className="launchpad-glass-panel-strong relative overflow-hidden rounded-[18px] p-5 will-change-[transform,border-radius]"
               style={{
                 width: `${panelWidth}px`,
                 maxHeight: `min(80vh, ${maxModalHeight}px)`,
@@ -324,7 +324,7 @@ export function FolderModalView({
                             <div
                               key={`folder-${showDropSlot ? 'drop' : 'empty'}-${index}`}
                               data-folder-grid-item
-                              className={`h-full w-full rounded-2xl ${
+                              className={`h-full w-full rounded-icon-tile ${
                                 showDropSlot
                                   ? 'border border-border/60 bg-background/35 dark:border-white/20 dark:bg-white/8'
                                   : 'border border-transparent bg-transparent'

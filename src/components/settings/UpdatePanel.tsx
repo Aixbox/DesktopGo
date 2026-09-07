@@ -283,7 +283,7 @@ export function UpdatePanel() {
     <div className="space-y-6">
       <div className="grid gap-6 xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] xl:items-start">
         <div className="space-y-4">
-          <div className="rounded-md border border-border/80 bg-card p-4">
+          <div className="rounded-xl border border-border/80 bg-card p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-1">
                 <p className="text-sm font-medium text-foreground">{translate('应用更新')}</p>
@@ -333,7 +333,7 @@ export function UpdatePanel() {
             </div>
           </div>
 
-          <div className="rounded-md border border-border/80 bg-card p-4">
+          <div className="rounded-xl border border-border/80 bg-card p-4">
             <div className="flex items-start gap-3">
               {configStatus?.configured ? (
                 <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
@@ -350,7 +350,7 @@ export function UpdatePanel() {
                     : translate('当前尚未接入 updater 配置，检查更新与安装功能暂时不可用。')}
                 </p>
                 {!configStatus?.configured ? (
-                  <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-900/80 dark:text-foreground/80">
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-900/80 dark:text-foreground/80">
                     {translate(
                       '还缺少 updater 配置。请在 src-tauri/tauri.conf.json 中设置 plugins.updater.pubkey 和 plugins.updater.endpoints。正式发布时还需要 TAURI_SIGNING_PRIVATE_KEY 用于生成签名更新包。'
                     )}
@@ -361,7 +361,7 @@ export function UpdatePanel() {
           </div>
 
           {installStage !== 'idle' ? (
-            <div className="rounded-md border border-border/80 bg-card p-4">
+            <div className="rounded-xl border border-border/80 bg-card p-4">
               <div className="flex items-start gap-3">
                 {installStage === 'finished' ? (
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
@@ -411,7 +411,7 @@ export function UpdatePanel() {
 
         <div className="space-y-4">
           {updateInfo ? (
-            <div className="rounded-md border border-border/80 bg-card p-4">
+            <div className="rounded-xl border border-border/80 bg-card p-4">
               <div className="flex items-start gap-3">
                 <Sparkles className="accent-foreground mt-0.5 h-4 w-4 shrink-0" />
                 <div className="space-y-3">
@@ -428,7 +428,7 @@ export function UpdatePanel() {
                       })}
                     </p>
                   </div>
-                  <div className="rounded-md border border-border/75 bg-background px-3 py-2 text-xs leading-5 text-muted-foreground">
+                  <div className="rounded-lg border border-border/75 bg-background px-3 py-2 text-xs leading-5 text-muted-foreground">
                     {updateInfo.body?.trim() ? (
                       <p className="whitespace-pre-wrap">{updateInfo.body}</p>
                     ) : (

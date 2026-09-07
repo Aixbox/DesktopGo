@@ -125,7 +125,7 @@ interface GhostPreviewIconProps {
 function GhostPreviewIcon({ iconBase64, name, size }: GhostPreviewIconProps) {
   return (
     <div
-      className="flex items-center justify-center rounded-2xl"
+      className="flex items-center justify-center rounded-icon-tile"
       style={{ width: `${size}px`, height: `${size}px` }}
     >
       {iconBase64 ? (

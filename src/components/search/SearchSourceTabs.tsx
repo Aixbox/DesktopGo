@@ -28,7 +28,7 @@ export function SearchSourceTabs({ source, onChange }: SearchSourceTabsProps) {
             key={tab.id}
             type="button"
             aria-pressed={isActive}
-            className={`relative inline-flex h-full items-center justify-center rounded-md px-3 text-xs font-medium transition-colors duration-200 ${
+            className={`relative inline-flex h-full items-center justify-center rounded-sm px-3 text-xs font-medium transition-colors duration-200 ${
               isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             }`}
             onClick={() => onChange(tab.id as SearchSource)}
@@ -36,7 +36,7 @@ export function SearchSourceTabs({ source, onChange }: SearchSourceTabsProps) {
             {isActive && (
               <motion.div
                 layoutId="search-source-tab-indicator"
-                className="search-control-indicator absolute inset-0 rounded-md"
+                className="search-control-indicator absolute inset-0 rounded-[inherit]"
                 transition={{ type: 'spring', bounce: 0.15, duration: 0.4 }}
               />
             )}

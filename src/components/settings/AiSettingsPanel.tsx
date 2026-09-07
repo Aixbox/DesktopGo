@@ -367,7 +367,7 @@ export function AiSettingsPanel() {
                     onClick={() => removeIconCategory(index)}
                     aria-label={translate('删除')}
                     title={translate('删除')}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -386,7 +386,7 @@ export function AiSettingsPanel() {
           </Button>
 
           {builtinCategories.length > 0 ? (
-            <details className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
+            <details className="rounded-xl border border-border/70 bg-muted/20 px-3 py-2">
               <summary className="cursor-pointer select-none text-xs font-medium text-foreground/85">
                 {translate('内置分类（{count} 条，只读）', { count: builtinCategories.length })}
               </summary>
@@ -407,7 +407,7 @@ export function AiSettingsPanel() {
         </div>
       </SettingCard>
 
-      <div className="rounded-lg border border-amber-500/30 bg-amber-500/8 p-4">
+      <div className="rounded-xl border border-amber-500/30 bg-amber-500/8 p-4">
         <div className="flex items-start gap-3">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" />
           <div className="space-y-1">

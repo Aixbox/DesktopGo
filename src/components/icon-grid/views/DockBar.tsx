@@ -699,7 +699,7 @@ export function DockBar({
                             title={customNames[item.icon.path] ?? item.icon.name}
                             aria-label={customNames[item.icon.path] ?? item.icon.name}
                             aria-pressed={selectionMode ? selectedSet.has(id) : undefined}
-                            className={`relative flex cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
+                            className={`relative flex cursor-pointer items-center justify-center rounded-icon-tile border-none bg-transparent p-0 shadow-none transition ${
                               selectionMode ? '' : 'hover:-translate-y-0.5 active:translate-y-0'
                             }`}
                             style={{ width: dockButtonSize, height: dockButtonSize }}
@@ -778,7 +778,7 @@ export function DockBar({
                               type="button"
                               title={item.name}
                               aria-label={item.name}
-                              className={`relative flex cursor-pointer items-center justify-center rounded-2xl border-none bg-transparent p-0 shadow-none transition ${
+                              className={`relative flex cursor-pointer items-center justify-center rounded-icon-tile border-none bg-transparent p-0 shadow-none transition ${
                                 selectionMode ? '' : 'hover:-translate-y-0.5 active:translate-y-0'
                               }`}
                               style={{ width: dockButtonSize, height: dockButtonSize }}
@@ -823,10 +823,10 @@ export function DockBar({
                         {!selectionMode ? (
                           <ContextMenuContent
                             data-dock-menu="true"
-                            className="w-44 rounded-lg p-1.5 shadow-xl backdrop-blur-xl"
+                            className="w-44 p-1.5 shadow-xl backdrop-blur-xl"
                           >
                             <ContextMenuItem
-                              className="rounded-xl px-3 py-2 text-foreground/85 focus:bg-accent focus:text-foreground"
+                              className="px-3 py-2 text-foreground/85 focus:bg-accent focus:text-foreground"
                               onSelect={() => {
                                 onOpenFolder(item.id)
                               }}
@@ -834,7 +834,7 @@ export function DockBar({
                               {translate(MENU_OPEN_LABEL)}
                             </ContextMenuItem>
                             <ContextMenuItem
-                              className="rounded-xl px-3 py-2 text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/20 dark:focus:text-red-100"
+                              className="px-3 py-2 text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/20 dark:focus:text-red-100"
                               onSelect={() => {
                                 onRemoveItem(id)
                               }}

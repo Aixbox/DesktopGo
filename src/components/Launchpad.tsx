@@ -639,14 +639,14 @@ export function Launchpad() {
                     menuRef={filterMenuRef}
                     width={192}
                     align="start"
-                    className="launchpad-glass-panel-strong overflow-hidden rounded-lg shadow-xl"
+                    className="launchpad-glass-panel-strong overflow-hidden rounded-xl shadow-xl"
                     contentClassName="p-1.5"
                   >
                     {searchFilterOptions.map(entry => (
                       <button
                         key={entry.value}
                         type="button"
-                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
+                        className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-sm transition ${
                           searchFilter === entry.value
                             ? 'bg-accent text-foreground'
                             : 'text-foreground/70 hover:bg-accent hover:text-foreground'
@@ -871,7 +871,7 @@ export function Launchpad() {
             </div>
           ) : icons.length === 0 ? (
             <div className="flex max-w-md flex-col items-center gap-4 px-6 text-center">
-              <div className="flex h-28 w-44 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-foreground/30 bg-background/35 text-foreground/55 backdrop-blur-sm">
+              <div className="flex h-28 w-44 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-foreground/30 bg-background/35 text-foreground/55 backdrop-blur-sm">
                 <Import className="h-6 w-6" />
                 <span className="launchpad-wallpaper-text text-xs">
                   {translate('把图标拖到这里导入')}

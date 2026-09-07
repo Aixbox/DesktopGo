@@ -141,7 +141,7 @@ export function AiOrganizeComposer({
   return (
     <>
       {queuedPrompts.length > 0 ? (
-        <div className="accent-tonal mb-2 flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-xs">
+        <div className="accent-tonal mb-2 flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-xs">
           <span className="min-w-0 truncate">
             {translate('已排队 {count} 条：{prompt}', {
               count: queuedPrompts.length,
@@ -153,7 +153,7 @@ export function AiOrganizeComposer({
           <button
             type="button"
             onClick={clearQueuedPrompts}
-            className="shrink-0 rounded px-1.5 py-0.5 text-[11px] transition-colors hover:bg-primary/10"
+            className="shrink-0 rounded-sm px-1.5 py-0.5 text-[11px] transition-colors hover:bg-primary/10"
           >
             {translate('清空')}
           </button>
@@ -186,7 +186,7 @@ export function AiOrganizeComposer({
               aria-haspopup="menu"
               aria-expanded={modelMenuOpen}
               title={translate('切换模型')}
-              className="inline-flex min-w-0 max-w-[45%] items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex min-w-0 max-w-[45%] items-center gap-1 rounded-sm px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
               <span className="truncate">{aiConfig?.model.trim() || translate('未配置模型')}</span>
               <ChevronDown className="h-3 w-3 shrink-0" />
@@ -199,14 +199,14 @@ export function AiOrganizeComposer({
               aria-haspopup="menu"
               aria-expanded={effortMenuOpen}
               title={translate('思考程度')}
-              className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Gauge className="h-3 w-3 shrink-0" />
               <span>{effortLabel(aiConfig?.reasoningEffort ?? 'none')}</span>
               <ChevronDown className="h-3 w-3 shrink-0" />
             </button>
             {composerCommand ? (
-              <span className="accent-tonal inline-flex max-w-full shrink-0 items-center gap-1 rounded-md border px-1.5 py-0 text-[11px] font-medium leading-5">
+              <span className="accent-tonal inline-flex max-w-full shrink-0 items-center gap-1 rounded-sm border px-1.5 py-0 text-[11px] font-medium leading-5">
                 <Sparkles className="h-3 w-3 shrink-0" />
                 <span className="truncate">{getComposerCommandLabel()}</span>
                 <button
@@ -214,7 +214,7 @@ export function AiOrganizeComposer({
                   onClick={() => setComposerCommand(null)}
                   aria-label={translate('移除指令')}
                   title={translate('移除指令')}
-                  className="accent-foreground -mr-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded opacity-80 transition-colors hover:bg-primary/15 hover:opacity-100"
+                  className="accent-foreground -mr-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm opacity-80 transition-colors hover:bg-primary/15 hover:opacity-100"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -265,7 +265,7 @@ export function AiOrganizeComposer({
               animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
               exit={prefersReducedMotion ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
               transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute bottom-[calc(100%+0.5rem)] right-0 z-20 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-lg border border-border/85 bg-background p-1.5 shadow-xl"
+              className="absolute bottom-[calc(100%+0.5rem)] right-0 z-20 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border/85 bg-background p-1.5 shadow-xl"
             >
               {PROMPT_PRESETS.map(preset => (
                 <button
@@ -273,7 +273,7 @@ export function AiOrganizeComposer({
                   type="button"
                   onClick={() => onSelectPreset(preset.prompt)}
                   title={translate(preset.description)}
-                  className="block w-full rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent hover:text-foreground"
+                  className="block w-full rounded-sm px-2.5 py-2 text-left transition-colors hover:bg-accent hover:text-foreground"
                 >
                   <div className="text-xs font-medium text-foreground">
                     {translate(preset.label)}
@@ -292,7 +292,7 @@ export function AiOrganizeComposer({
               animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
               exit={prefersReducedMotion ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
               transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute bottom-[calc(100%+0.5rem)] left-0 z-20 w-60 overflow-hidden rounded-lg border border-border/85 bg-background p-1.5 shadow-xl"
+              className="absolute bottom-[calc(100%+0.5rem)] left-0 z-20 w-60 overflow-hidden rounded-xl border border-border/85 bg-background p-1.5 shadow-xl"
               role="menu"
             >
               {modelOptions.length > 0 ? (
@@ -305,7 +305,7 @@ export function AiOrganizeComposer({
                       role="menuitemradio"
                       aria-checked={active}
                       onClick={() => handleSelectModel(model)}
-                      className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-accent hover:text-foreground"
+                      className="flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left transition-colors hover:bg-accent hover:text-foreground"
                     >
                       <span className="min-w-0 flex-1 truncate text-xs text-foreground">
                         {model}
@@ -328,7 +328,7 @@ export function AiOrganizeComposer({
               animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
               exit={prefersReducedMotion ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
               transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute bottom-[calc(100%+0.5rem)] left-0 z-20 w-44 overflow-hidden rounded-lg border border-border/85 bg-background p-1.5 shadow-xl"
+              className="absolute bottom-[calc(100%+0.5rem)] left-0 z-20 w-44 overflow-hidden rounded-xl border border-border/85 bg-background p-1.5 shadow-xl"
               role="menu"
             >
               {AI_REASONING_EFFORTS.map(effort => {
@@ -340,7 +340,7 @@ export function AiOrganizeComposer({
                     role="menuitemradio"
                     aria-checked={active}
                     onClick={() => handleSelectEffort(effort)}
-                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-accent hover:text-foreground"
+                    className="flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left transition-colors hover:bg-accent hover:text-foreground"
                   >
                     <span className="min-w-0 flex-1 truncate text-xs text-foreground">
                       {effortLabel(effort)}

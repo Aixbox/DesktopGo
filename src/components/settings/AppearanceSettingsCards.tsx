@@ -266,7 +266,7 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
               title={color}
               onClick={() => handleAccentColor(color)}
               className={cn(
-                'size-8 cursor-pointer rounded-md border-2 transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                'size-8 cursor-pointer rounded-lg border-2 transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                 appearance.accentColor === color
                   ? 'border-foreground'
                   : 'border-transparent hover:border-foreground/30'
@@ -276,7 +276,7 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
           ))}
           <label
             className={cn(
-              'relative size-8 cursor-pointer overflow-hidden rounded-md border border-input bg-background',
+              'relative size-8 cursor-pointer overflow-hidden rounded-lg border border-input bg-background',
               formControlFocusWithinClassName
             )}
             title={translate('选择自定义主题色')}
@@ -310,7 +310,7 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
         label={translate('自定义背景')}
         desc={translate('选择 JPG、PNG 或 WebP 图片，应用会压缩后保存在本机。')}
       >
-        <div className="relative aspect-video w-full max-w-sm overflow-hidden rounded-md border border-border/80 bg-muted">
+        <div className="relative aspect-video w-full max-w-sm overflow-hidden rounded-xl border border-border/80 bg-muted">
           {appearance.backgroundImage ? (
             <>
               <div

@@ -383,7 +383,7 @@ export function IconManagerPanel() {
           </Button>
         </div>
 
-        <div className="min-w-0 space-y-3 rounded-md border border-border/80 bg-card p-4">
+        <div className="min-w-0 space-y-3 rounded-xl border border-border/80 bg-card p-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex min-w-0 flex-[1_1_24rem] flex-wrap items-center gap-2">
               <Input
@@ -447,7 +447,7 @@ export function IconManagerPanel() {
                       aria-pressed={selected}
                       onClick={() => handleViewModeChange(option.value)}
                       className={cn(
-                        'inline-flex h-full w-8 items-center justify-center rounded-md transition-colors',
+                        'inline-flex h-full w-8 items-center justify-center rounded-sm transition-colors',
                         selected
                           ? 'bg-accent text-foreground'
                           : 'text-muted-foreground hover:text-foreground'
@@ -539,8 +539,8 @@ export function IconManagerPanel() {
                     className={cn(
                       'border border-border/80 bg-background',
                       viewMode === 'grid'
-                        ? 'rounded-lg p-3'
-                        : 'flex flex-wrap items-center gap-3 rounded-lg p-3'
+                        ? 'rounded-xl p-3'
+                        : 'flex flex-wrap items-center gap-3 rounded-xl p-3'
                     )}
                   >
                     <div className="flex min-w-0 flex-[1_1_16rem] items-start gap-3">
@@ -737,7 +737,7 @@ export function IconManagerPanel() {
                       return (
                         <label
                           key={key}
-                          className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/80 bg-background p-3 transition-colors hover:bg-muted/20"
+                          className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/80 bg-background p-3 transition-colors hover:bg-muted/20"
                         >
                           <input
                             type="checkbox"

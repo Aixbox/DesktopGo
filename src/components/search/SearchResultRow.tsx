@@ -60,7 +60,7 @@ export const SearchResultRow = memo(function SearchResultRow({
       <button
         type="button"
         aria-current={selected ? 'true' : undefined}
-        className={`relative z-10 flex h-full w-full items-center gap-3 rounded-md py-2 pl-4 pr-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 ${
+        className={`relative z-10 flex h-full w-full items-center gap-3 rounded-lg py-2 pl-4 pr-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 ${
           selected ? '' : 'hover:bg-accent/55'
         }`}
         onMouseEnter={() => onHover(index)}

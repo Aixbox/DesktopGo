@@ -46,13 +46,13 @@ export function FileResultContextMenu({ path, children, onOpen }: FileResultCont
       <ContextMenuTrigger asChild onContextMenuCapture={handleContextMenuCapture}>
         {children}
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-56 rounded-xl p-1 shadow-xl">
-        <ContextMenuItem className="gap-2 rounded-lg px-2.5 py-2" onSelect={onOpen}>
+      <ContextMenuContent className="w-56 p-1 shadow-xl">
+        <ContextMenuItem className="gap-2 px-2.5 py-2" onSelect={onOpen}>
           <Play className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <span>{translate('打开')}</span>
         </ContextMenuItem>
         <ContextMenuItem
-          className="gap-2 rounded-lg px-2.5 py-2"
+          className="gap-2 px-2.5 py-2"
           onSelect={() => {
             void revealItemInDir(path).catch(error => {
               console.error('打开所在文件夹失败：', error)
@@ -63,7 +63,7 @@ export function FileResultContextMenu({ path, children, onOpen }: FileResultCont
           <span>{translate('打开所在文件夹')}</span>
         </ContextMenuItem>
         <ContextMenuItem
-          className="gap-2 rounded-lg px-2.5 py-2"
+          className="gap-2 px-2.5 py-2"
           onSelect={() => {
             void navigator.clipboard?.writeText(path).catch(error => {
               console.error('复制路径失败：', error)
@@ -75,7 +75,7 @@ export function FileResultContextMenu({ path, children, onOpen }: FileResultCont
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem
-          className="gap-2 rounded-lg px-2.5 py-2"
+          className="gap-2 px-2.5 py-2"
           onSelect={() => {
             window.setTimeout(openSystemMenu, 0)
           }}

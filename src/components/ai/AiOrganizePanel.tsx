@@ -812,7 +812,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
             <div className="relative flex h-full min-h-0 flex-col px-4">
               {sessionSaveError ? (
                 <div className="shrink-0 py-2">
-                  <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-200">
+                  <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-200">
                     {translate('会话保存失败：{error}', { error: sessionSaveError })}
                   </div>
                 </div>

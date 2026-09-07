@@ -148,7 +148,7 @@ function PreviewIconButton({
     <button
       type="button"
       aria-label={name}
-      className={`group flex items-center justify-center rounded-2xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 ${
+      className={`group flex items-center justify-center rounded-icon-tile transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 ${
         selectionMode ? 'cursor-pointer' : 'cursor-pointer active:scale-[0.97]'
       }`}
       style={{ width: `${size}px`, height: `${size}px` }}
@@ -482,9 +482,9 @@ function OuterFolderTileComponent({
       </ContextMenuTrigger>
 
       {!selectionMode ? (
-        <ContextMenuContent className="w-44 rounded-lg p-1.5 shadow-xl backdrop-blur-xl">
+        <ContextMenuContent className="w-44 p-1.5 shadow-xl backdrop-blur-xl">
           <ContextMenuItem
-            className="rounded-xl px-3 py-2 text-foreground/85 focus:bg-accent focus:text-foreground"
+            className="px-3 py-2 text-foreground/85 focus:bg-accent focus:text-foreground"
             onSelect={() => {
               onOpenFolder(folder.id)
             }}
@@ -492,7 +492,7 @@ function OuterFolderTileComponent({
             {translate(MENU_OPEN_LABEL)}
           </ContextMenuItem>
           <ContextMenuItem
-            className="gap-2 rounded-xl px-3 py-2 text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/25 dark:focus:text-red-100"
+            className="gap-2 px-3 py-2 text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/25 dark:focus:text-red-100"
             onSelect={() => {
               onDissolveFolder(folder.id)
             }}
@@ -514,7 +514,7 @@ function OuterFolderTileComponent({
               <ContextMenuRadioItem
                 key={option.value}
                 value={option.value}
-                className="rounded-xl px-3 py-1.5 text-foreground/85 focus:bg-accent focus:text-foreground data-[state=checked]:bg-accent/80 data-[state=checked]:text-foreground"
+                className="px-3 py-1.5 text-foreground/85 focus:bg-accent focus:text-foreground data-[state=checked]:bg-accent/80 data-[state=checked]:text-foreground"
               >
                 <div className="flex items-center gap-3 pr-4">
                   <FolderSizePreview span={option.span} active={folder.size === option.value} />
