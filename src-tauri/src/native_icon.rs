@@ -6,9 +6,12 @@ use tauri::image::Image;
 
 const LOGO_ICO: &[u8] = include_bytes!("../../public/logo.ico");
 
-pub(crate) fn from_ico(target_size: u32) -> io::Result<Image<'static>> {
-    let icon_dir = IconDir::read(Cursor::new(LOGO_ICO))?;
-    let entry = icon_dir
+fn read_ico() -> io::Result<IconDir> {
+    IconDir::read(Cursor::new(LOGO_ICO))
+}
+
+fn select_entry(icon_dir: &IconDir, target_size: u32) -> io::Result<&ico::IconDirEntry> {
+    icon_dir
         .entries()
         .iter()
         .filter(|entry| entry.width() == entry.height())
@@ -16,10 +19,12 @@ pub(crate) fn from_ico(target_size: u32) -> io::Result<Image<'static>> {
             let distance = entry.width().abs_diff(target_size);
             (distance, Reverse(entry.width()))
         })
-        .ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "logo.ico has no square frames")
-        })?;
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "logo.ico has no square frames"))
+}
 
+pub(crate) fn from_ico(target_size: u32) -> io::Result<Image<'static>> {
+    let icon_dir = read_ico()?;
+    let entry = select_entry(&icon_dir, target_size)?;
     let image = entry.decode()?;
     let width = image.width();
     let height = image.height();

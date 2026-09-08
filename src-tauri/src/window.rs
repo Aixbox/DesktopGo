@@ -91,6 +91,9 @@ pub(crate) fn show_main_window(app: &tauri::AppHandle) {
         sync_main_window_dom_visibility(&window, delayed_reveal);
         let _ = window.unminimize();
         let _ = window.show();
+        if let Err(error) = crate::window_icon::refresh(&window) {
+            eprintln!("Warning: Failed to refresh main window icon after showing: {error}");
+        }
         let _ = activate_webview_window(&window);
         let _ = window.emit(MAIN_WINDOW_SHOWN_EVENT, ());
 
@@ -174,9 +177,13 @@ pub(crate) fn create_main_window(app: &tauri::AppHandle) {
     let dark = resolved_theme_is_dark(app, None);
     let background_color = resolve_main_window_background_color(transparent_surface, dark);
 
+    let window_icon = crate::native_icon::from_ico(crate::window_icon::MAX_WINDOW_ICON_SIZE)
+        .expect("public/logo.ico must contain a valid window icon frame");
     let builder =
         tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
             .title("DesktopGo")
+            .icon(window_icon)
+            .expect("Failed to configure main window icon")
             .inner_size(initial_width, initial_height)
             .background_color(background_color)
             .fullscreen(false)
@@ -224,33 +231,53 @@ fn create_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
     }
 
     let bootstrap_script = build_window_bootstrap_script(app, false);
-    tauri::WebviewWindowBuilder::new(
+    let window_icon = crate::native_icon::from_ico(crate::window_icon::MAX_WINDOW_ICON_SIZE)
+        .map_err(|error| format!("Failed to load settings window icon: {error}"))?;
+    let builder = tauri::WebviewWindowBuilder::new(
         app,
         "settings",
         tauri::WebviewUrl::App("index.html?page=settings".into()),
     )
     .title(settings_window_title(app))
-    .inner_size(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
-    .min_inner_size(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
-    .center()
-    .resizable(true)
-    .decorations(false)
-    .shadow(false)
-    .visible(false)
-    .initialization_script(bootstrap_script)
-    .build()
-    .map_err(|error| format!("Failed to create settings window: {error}"))
-    .and_then(|window| {
-        crate::window_icon::install(&window)
-            .map_err(|error| format!("Failed to install settings window icon: {error}"))?;
-        Ok(window)
-    })
-    .map(|window| {
-        #[cfg(windows)]
-        if let Err(error) = crate::window_style::remove_native_window_border(&window) {
-            eprintln!("Warning: {error}");
+    .icon(window_icon)
+    .map_err(|error| format!("Failed to configure settings window icon: {error}"))?
+    .on_page_load(|window, payload| {
+        if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+            if let Err(error) = crate::window_icon::refresh(&window) {
+                eprintln!(
+                    "Warning: Failed to refresh settings window icon after page load: {error}"
+                );
+            }
+            if let Err(error) = window.set_skip_taskbar(false) {
+                eprintln!(
+                    "Warning: Failed to add settings window to taskbar after page load: {error}"
+                );
+            }
         }
-    })
+    });
+    builder
+        .inner_size(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
+        .min_inner_size(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
+        .center()
+        .resizable(true)
+        .decorations(false)
+        .shadow(false)
+        .skip_taskbar(true)
+        .visible(false)
+        .initialization_script(bootstrap_script)
+        .build()
+        .map_err(|error| format!("Failed to create settings window: {error}"))
+        .and_then(|window| {
+            crate::window_icon::install(&window)
+                .map_err(|error| format!("Failed to install settings window icon: {error}"))?;
+            Ok(window)
+        })
+        .map(|window| {
+            #[cfg(windows)]
+            if let Err(error) = crate::window_style::remove_native_window_border(&window) {
+                eprintln!("Warning: {error}");
+            }
+        })
 }
 
 pub(crate) fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
@@ -262,6 +289,18 @@ pub(crate) fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String>
         .ok_or_else(|| "Settings window not found".to_string())?;
     let _ = settings_window.unminimize();
     let _ = settings_window.show();
+    if let Err(error) = crate::window_icon::refresh(&settings_window) {
+        eprintln!("Warning: Failed to refresh settings window icon after showing: {error}");
+    }
+    #[cfg(windows)]
+    {
+        if let Err(error) = settings_window.set_skip_taskbar(true) {
+            eprintln!("Warning: Failed to remove stale settings taskbar tab: {error}");
+        }
+        if let Err(error) = settings_window.set_skip_taskbar(false) {
+            eprintln!("Warning: Failed to recreate settings taskbar tab: {error}");
+        }
+    }
     #[cfg(windows)]
     if let Err(error) = crate::window_style::remove_native_window_border(&settings_window) {
         eprintln!("Warning: {error}");
