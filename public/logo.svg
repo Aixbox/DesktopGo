@@ -1,20 +1,171 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80">
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="rgba(255,255,255,0.12)"/>
-      <stop offset="100%" stop-color="rgba(255,255,255,0.04)"/>
-    </linearGradient>
+    <!-- Outer silhouette: hand-traceable Bézier path, equivalent to a Pen Tool path -->
+    <path id="outerPath" d="
+      M 112 0
+      C 46 0 0 46 0 112
+      L 0 400
+      C 0 466 46 512 112 512
+      L 400 512
+      C 466 512 512 466 512 400
+      L 512 112
+      C 512 46 466 0 400 0 Z"/>
+
+    <!-- Mask used to create the inset dark face without embedding/rasterizing the source image -->
+    <mask id="faceMask" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+      <rect width="512" height="512" fill="black"/>
+      <path d="
+        M 113 14
+        C 55 14 14 55 14 113
+        L 14 399
+        C 14 457 55 498 113 498
+        L 399 498
+        C 457 498 498 457 498 399
+        L 498 113
+        C 498 55 457 14 399 14 Z" fill="white"/>
+    </mask>
   </defs>
-  <!-- 深色底 -->
-  <rect width="80" height="80" rx="20" fill="#1a1a2e"/>
-  <!-- 背景渐变 -->
-  <rect width="80" height="80" rx="20" fill="url(#bg)"/>
-  <!-- 左上 - 高亮紫色 -->
-  <rect x="16" y="16" width="20" height="20" rx="6" fill="rgba(167,139,250,0.6)" stroke="#a78bfa" stroke-width="2"/>
-  <!-- 右上 -->
-  <rect x="44" y="16" width="20" height="20" rx="6" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2"/>
-  <!-- 左下 -->
-  <rect x="16" y="44" width="20" height="20" rx="6" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2"/>
-  <!-- 右下 -->
-  <rect x="44" y="44" width="20" height="20" rx="6" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2"/>
+
+  <!-- Outer Pen Tool path -->
+  <path d="
+    M 112 0
+    C 46 0 0 46 0 112
+    L 0 400
+    C 0 466 46 512 112 512
+    L 400 512
+    C 466 512 512 466 512 400
+    L 512 112
+    C 512 46 466 0 400 0 Z"
+    fill="#484864"/>
+
+  <!-- Dark face, clipped by an SVG mask -->
+  <g mask="url(#faceMask)">
+    <path d="
+      M 113 14
+      C 55 14 14 55 14 113
+      L 14 399
+      C 14 457 55 498 113 498
+      L 399 498
+      C 457 498 498 457 498 399
+      L 498 113
+      C 498 55 457 14 399 14 Z"
+      fill="#252543"/>
+  </g>
+
+  <!-- Top-left selected tile: outer Pen Tool path -->
+  <path d="
+    M 137 103
+    L 195 103
+    C 216 103 230 117 230 138
+    L 230 195
+    C 230 216 216 230 195 230
+    L 137 230
+    C 116 230 102 216 102 195
+    L 102 138
+    C 102 117 116 103 137 103 Z"
+    fill="#A78BFA"/>
+
+  <!-- Selected tile interior, clipped by a mask -->
+  <mask id="selectedFillMask" maskUnits="userSpaceOnUse" x="102" y="103" width="128" height="127">
+    <rect x="102" y="103" width="128" height="127" fill="black"/>
+    <path d="
+      M 138 116
+      L 194 116
+      C 208 116 217 125 217 139
+      L 217 194
+      C 217 208 208 217 194 217
+      L 138 217
+      C 124 217 115 208 115 194
+      L 115 139
+      C 115 125 124 116 138 116 Z"
+      fill="white"/>
+  </mask>
+  <g mask="url(#selectedFillMask)">
+    <path d="
+      M 138 116
+      L 194 116
+      C 208 116 217 125 217 139
+      L 217 194
+      C 217 208 208 217 194 217
+      L 138 217
+      C 124 217 115 208 115 194
+      L 115 139
+      C 115 125 124 116 138 116 Z"
+      fill="#7463B3"/>
+  </g>
+
+  <!-- Top-right outlined tile -->
+  <path d="
+    M 317 103
+    L 375 103
+    C 396 103 410 117 410 138
+    L 410 195
+    C 410 216 396 230 375 230
+    L 317 230
+    C 296 230 282 216 282 195
+    L 282 138
+    C 282 117 296 103 317 103 Z"
+    fill="#AAAAAF"/>
+
+  <path d="
+    M 318 116
+    L 374 116
+    C 388 116 397 125 397 139
+    L 397 194
+    C 397 208 388 217 374 217
+    L 318 217
+    C 304 217 295 208 295 194
+    L 295 139
+    C 295 125 304 116 318 116 Z"
+    fill="#252543"/>
+
+  <!-- Bottom-left outlined tile -->
+  <path d="
+    M 137 281
+    L 195 281
+    C 216 281 230 295 230 316
+    L 230 373
+    C 230 394 216 408 195 408
+    L 137 408
+    C 116 408 102 394 102 373
+    L 102 316
+    C 102 295 116 281 137 281 Z"
+    fill="#AAAAAF"/>
+
+  <path d="
+    M 138 294
+    L 194 294
+    C 208 294 217 303 217 317
+    L 217 372
+    C 217 386 208 395 194 395
+    L 138 395
+    C 124 395 115 386 115 372
+    L 115 317
+    C 115 303 124 294 138 294 Z"
+    fill="#252543"/>
+
+  <!-- Bottom-right outlined tile -->
+  <path d="
+    M 317 281
+    L 375 281
+    C 396 281 410 295 410 316
+    L 410 373
+    C 410 394 396 408 375 408
+    L 317 408
+    C 296 408 282 394 282 373
+    L 282 316
+    C 282 295 296 281 317 281 Z"
+    fill="#AAAAAF"/>
+
+  <path d="
+    M 318 294
+    L 374 294
+    C 388 294 397 303 397 317
+    L 397 372
+    C 397 386 388 395 374 395
+    L 318 395
+    C 304 395 295 386 295 372
+    L 295 317
+    C 295 303 304 294 318 294 Z"
+    fill="#252543"/>
 </svg>

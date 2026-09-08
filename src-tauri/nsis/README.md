@@ -31,11 +31,15 @@ generated output. Every Tauri build runs this check through `beforeBuildCommand`
 ## Branding bitmaps
 
 The header and welcome/finish sidebar use 3x-density BMP files so MUI2 can scale from a sharp
-source at common Windows DPI settings. Regenerate both assets from `icon-512.png` with:
+source at common Windows DPI settings. Regenerate all native icon assets from `public/logo.svg`
+with:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-nsis-branding.ps1
+pnpm branding:generate
 ```
+
+The generated PNG, ICO, ICNS, and BMP files under `src-tauri/icons` are build artifacts and are
+not committed. `public/logo.svg` is the single source of truth for DesktopGo branding.
 
 The script preserves the logical MUI2 aspect ratios (`150x57` and `164x314`); the committed
 bitmaps are `450x171` and `492x942`. `installer-hooks.nsh` selects `AspectFitHeight` instead of

@@ -6,6 +6,7 @@ on:
       - desktop
     paths:
       - 'website/**'
+      - 'public/logo.svg'
       - '.github/workflows/deploy-website.yml'
   workflow_dispatch:
 
@@ -29,7 +30,10 @@ jobs:
           node-version: 22
 
       - name: prepare website entrypoint
-        run: cp website/landing.html website/index.html
+        run: |
+          cp website/landing.html website/index.html
+          mkdir -p website/public
+          cp public/logo.svg website/public/logo.svg
 
       - name: install wrangler
         run: npm install --global wrangler@4.79.0

@@ -908,6 +908,7 @@ dependencies = [
  "base64 0.22.1",
  "dirs",
  "futures-util",
+ "ico",
  "image",
  "libloading 0.8.9",
  "once_cell",

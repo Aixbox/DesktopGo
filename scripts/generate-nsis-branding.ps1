@@ -9,7 +9,7 @@ Add-Type -AssemblyName System.Drawing
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $iconsDirectory = Join-Path $repositoryRoot 'src-tauri\icons'
-$sourceIconPath = Join-Path $iconsDirectory 'icon-512.png'
+$sourceIconPath = Join-Path $iconsDirectory 'icon.png'
 $headerOutputPath = Join-Path $iconsDirectory 'nsis-header.bmp'
 $sidebarOutputPath = Join-Path $iconsDirectory 'nsis-sidebar.bmp'
 

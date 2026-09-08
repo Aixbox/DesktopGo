@@ -12,6 +12,15 @@ dist
 dist-ssr
 *.local
 
+# Native branding assets are generated from public/logo.svg before packaging.
+src-tauri/icons/*.png
+src-tauri/icons/*.ico
+src-tauri/icons/*.icns
+src-tauri/icons/*.bmp
+src-tauri/icons/android/
+src-tauri/icons/ios/
+website/public/logo.svg
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
