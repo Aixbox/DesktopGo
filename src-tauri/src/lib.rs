@@ -9,6 +9,7 @@ mod icons;
 mod launcher_catalog;
 mod launchpad_shortcut;
 mod layout_db;
+mod native_icon;
 mod search_preview;
 mod shell_context_menu;
 mod shortcut_target;
@@ -18,6 +19,7 @@ mod tray;
 mod tray_icon;
 mod updater;
 mod window;
+mod window_icon;
 mod window_style;
 #[cfg(windows)]
 mod windows_drag_drop;

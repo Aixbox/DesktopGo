@@ -196,6 +196,9 @@ pub(crate) fn create_main_window(app: &tauri::AppHandle) {
 
     match builder.build() {
         Ok(window) => {
+            if let Err(error) = crate::window_icon::install(&window) {
+                eprintln!("Warning: Failed to install main window icon: {error}");
+            }
             #[cfg(windows)]
             if let Err(error) = crate::windows_drag_drop::install(&window) {
                 eprintln!("Warning: Failed to install Windows Shell drag-drop support: {error}");
@@ -236,13 +239,18 @@ fn create_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
     .visible(false)
     .initialization_script(bootstrap_script)
     .build()
+    .map_err(|error| format!("Failed to create settings window: {error}"))
+    .and_then(|window| {
+        crate::window_icon::install(&window)
+            .map_err(|error| format!("Failed to install settings window icon: {error}"))?;
+        Ok(window)
+    })
     .map(|window| {
         #[cfg(windows)]
         if let Err(error) = crate::window_style::remove_native_window_border(&window) {
             eprintln!("Warning: {error}");
         }
     })
-    .map_err(|error| format!("Failed to create settings window: {error}"))
 }
 
 pub(crate) fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
