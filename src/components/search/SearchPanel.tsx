@@ -481,7 +481,7 @@ export function SearchPanel({
   return (
     <div
       data-search-placeholder
-      className="launchpad-search-shell absolute top-[4.6rem] z-30 mx-auto w-full max-w-2xl px-6"
+      className="launchpad-search-shell absolute inset-x-0 top-[4.6rem] z-30 mx-auto w-full max-w-2xl px-6"
     >
       <AnimatePresence initial={false}>
         {visible ? (

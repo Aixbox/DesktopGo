@@ -10,7 +10,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Bot, Check, ChevronDown, Import, Plus, RefreshCw } from 'lucide-react'
+import { Check, ChevronDown, Import, Plus, RefreshCw } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
 import { recordSearchResultRun } from '@/lib/search/api'
 import { getSearchFilterLabel, getSearchFilterOptions } from '@/lib/search/filters'
@@ -27,6 +27,8 @@ import {
 import { LaunchpadContextMenuContent } from '@/components/launchpad/LaunchpadContextMenuContent'
 import { LaunchpadIconImportLayer } from '@/components/launchpad/LaunchpadIconImportLayer'
 import { LaunchpadWindowControls } from '@/components/launchpad/LaunchpadWindowControls'
+import { LaunchpadAiOrganizePane } from '@/components/launchpad/LaunchpadAiOrganizePane'
+import { LaunchpadAiOrganizeToolbar } from '@/components/launchpad/LaunchpadAiOrganizeToolbar'
 import { useLaunchpadIconImportController } from '@/components/launchpad/useLaunchpadIconImportController'
 import { useLaunchpadSurfaceInteractions } from '@/components/launchpad/useLaunchpadSurfaceInteractions'
 import { useLaunchpadWindowController } from '@/components/launchpad/useLaunchpadWindowController'
@@ -43,13 +45,8 @@ const loadScrollableIconGrid = () => import('./ScrollableIconGrid')
 const ScrollableIconGrid = lazy(() =>
   loadScrollableIconGrid().then(module => ({ default: module.ScrollableIconGrid }))
 )
-
 const loadIconGrid = () => import('./IconGrid')
 const IconGrid = lazy(() => loadIconGrid().then(module => ({ default: module.IconGrid })))
-
-const AiOrganizePanel = lazy(() =>
-  import('./ai/AiOrganizePanel').then(module => ({ default: module.AiOrganizePanel }))
-)
 
 const SearchPanel = lazy(() =>
   import('./search/SearchPanel').then(module => ({ default: module.SearchPanel }))
@@ -179,6 +176,7 @@ export function Launchpad() {
     searchInputRef,
     setLayoutResetToken,
     preloadGridView,
+    aiOrganizeSidebarOpen: isAiOrganizeSidebarOpen,
   })
   const {
     handleMinimizeWindow,
@@ -187,10 +185,14 @@ export function Launchpad() {
     isBackgroundCloseSuppressed,
     launchpadSurfaceRef,
     mainWindowAlwaysOnTopEnabled,
+    aiOrganizeSidebarReady,
+    aiOrganizeMainWindowWidth,
     openSettings,
     requestCloseLaunchpad,
     windowPersistentEnabled,
   } = windowController
+  const aiOrganizeLayoutOpen = isAiOrganizeSidebarOpen || aiOrganizeSidebarReady
+  const aiOrganizeUiActive = isAiOrganizeMode || aiOrganizeSidebarReady
   const resetAiOrganizeRunState = useCallback(() => {
     setAiOrganizeRunState({
       canApply: false,
@@ -198,6 +200,16 @@ export function Launchpad() {
       hasPreview: false,
     })
   }, [])
+
+  const handleAiOrganizePreviewed = useCallback(async () => {
+    setLayoutResetToken(current => current + 1)
+    await fetchIcons()
+  }, [fetchIcons, setLayoutResetToken])
+
+  const handleAiOrganizeApplied = useCallback(async () => {
+    setLayoutResetToken(current => current + 1)
+    await fetchIcons()
+  }, [fetchIcons, setLayoutResetToken])
 
   const enterAiOrganizeMode = useCallback(() => {
     clearSelection()
@@ -236,7 +248,7 @@ export function Launchpad() {
     return getSearchFilterOptions()
   }, [language])
   const hasSearchKeyword = keyword.trim().length > 0
-  const isSearchPanelVisible = isSearchPanelOpen && !isAiOrganizeMode && !selectionMode
+  const isSearchPanelVisible = isSearchPanelOpen && !aiOrganizeUiActive && !selectionMode
 
   const { results: iconSearchResults, recordLaunch: recordShortcutLaunch } =
     useShortcutSearchResults(
@@ -253,7 +265,7 @@ export function Launchpad() {
     setSelectedIconKeys,
     clearSelection,
     enterSelectionMode: handleEnterSelectionMode,
-    isAiOrganizeMode,
+    isAiOrganizeMode: aiOrganizeUiActive,
     hasSearchKeyword,
     isSearchPanelOpen: isSearchPanelVisible,
     closeSearchPanel: () => setIsSearchPanelOpen(false),
@@ -549,17 +561,26 @@ export function Launchpad() {
   return (
     <ContextMenu>
       {/* 自定义背景图层：位于启动台之前，因此模糊只作用于图片本身 */}
-      <div className="launchpad-background-layer" aria-hidden="true" />
+      <div
+        className={`launchpad-background-layer ${aiOrganizeLayoutOpen ? 'rounded-r-2xl' : ''}`}
+        aria-hidden="true"
+        style={
+          aiOrganizeLayoutOpen && aiOrganizeMainWindowWidth !== null
+            ? { width: `${aiOrganizeMainWindowWidth}px`, right: 'auto' }
+            : undefined
+        }
+      />
       <ContextMenuTrigger asChild>
         <div
           ref={launchpadSurfaceRef}
           tabIndex={-1}
           className={[
-            'launchpad-bg relative flex h-screen w-screen select-none flex-col items-center justify-center',
+            'launchpad-bg relative flex h-screen w-full select-none flex-col items-center justify-center overflow-hidden',
             launchpadGridViewMode === 'scroll' ? 'launchpad-scroll-layout' : '',
             launchpadGridViewMode === 'scroll' && isScrollSidebarCompact
               ? 'launchpad-scroll-sidebar-compact'
               : '',
+            aiOrganizeLayoutOpen ? 'launchpad-ai-organize-open' : '',
           ].join(' ')}
           onPointerDownCapture={handleSurfacePointerDownCapture}
           onPointerDown={handleBackgroundPointerDown}
@@ -569,8 +590,9 @@ export function Launchpad() {
           onClick={handleBackgroundClick}
         >
           <LaunchpadWindowControls
-            aiOrganizeMode={isAiOrganizeMode}
-            aiSidebarOpen={isAiOrganizeSidebarOpen}
+            aiOrganizeMode={aiOrganizeUiActive}
+            aiSidebarOpen={aiOrganizeLayoutOpen}
+            mainWindowWidth={aiOrganizeMainWindowWidth}
             windowPersistentEnabled={windowPersistentEnabled}
             alwaysOnTopEnabled={mainWindowAlwaysOnTopEnabled}
             onToggleAi={toggleAiOrganizeSidebar}
@@ -586,358 +608,357 @@ export function Launchpad() {
             />
           ) : null}
 
-          <div
-            data-search-placeholder
-            className="launchpad-search-shell absolute top-6 z-40 mx-auto w-full max-w-2xl px-6"
-          >
-            <div className="relative min-w-0">
-              {isAiOrganizeMode ? (
-                <div
-                  data-ai-organize-toolbar
-                  className="launchpad-glass-panel-strong mx-auto flex w-fit max-w-full flex-wrap items-center justify-center gap-2 rounded-full border border-primary/20 px-3 py-2 text-sm text-foreground/90"
-                >
-                  <span className="flex items-center gap-2 px-1.5 font-medium">
-                    <Bot className="accent-foreground h-4 w-4" />
-                    {translate('AI 整理模式')}
-                  </span>
-                  <span className="hidden text-xs text-muted-foreground md:inline">
-                    {aiOrganizeRunState.applying
-                      ? translate('正在保存 AI 预览...')
-                      : aiOrganizeRunState.hasPreview
-                        ? translate('预览已生成，可保存或不保存退出。')
-                        : translate('从右侧选择预设或输入要求开始整理。')}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={toggleAiOrganizeSidebar}
-                    className="launchpad-glass-button rounded-full px-3 py-1 text-xs transition-colors"
-                  >
-                    {isAiOrganizeSidebarOpen ? translate('收起侧栏') : translate('展开侧栏')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAiOrganizeSidebarOpen(true)
-                      aiOrganizePanelRef.current?.applyPreview()
-                    }}
-                    disabled={!aiOrganizeRunState.canApply || aiOrganizeRunState.applying}
-                    className="accent-tonal rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-primary/18 disabled:cursor-not-allowed disabled:opacity-45 dark:hover:bg-primary/25"
-                  >
-                    {aiOrganizeRunState.applying ? translate('保存中...') : translate('保存预览')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={exitAiOrganizeMode}
-                    disabled={aiOrganizeRunState.applying}
-                    className="launchpad-glass-button rounded-full px-3 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    {translate('不保存退出')}
-                  </button>
+          <div className="flex min-h-0 w-full flex-1 items-center justify-start">
+            <div
+              className="relative h-full min-h-0 min-w-0 shrink-0 rounded-r-2xl"
+              style={
+                aiOrganizeLayoutOpen && aiOrganizeMainWindowWidth !== null
+                  ? { width: `${aiOrganizeMainWindowWidth}px` }
+                  : { flex: '1 1 0%' }
+              }
+            >
+              <div
+                data-search-placeholder
+                className="launchpad-search-shell absolute inset-x-0 top-6 z-40 mx-auto w-full max-w-2xl px-6"
+              >
+                <div className="relative min-w-0">
+                  {aiOrganizeUiActive ? (
+                    <LaunchpadAiOrganizeToolbar
+                      sidebarOpen={isAiOrganizeSidebarOpen}
+                      runState={aiOrganizeRunState}
+                      onToggleSidebar={toggleAiOrganizeSidebar}
+                      onApplyPreview={() => {
+                        setIsAiOrganizeSidebarOpen(true)
+                        aiOrganizePanelRef.current?.applyPreview()
+                      }}
+                      onExit={exitAiOrganizeMode}
+                    />
+                  ) : selectionMode ? (
+                    <div
+                      data-selection-toolbar
+                      className="launchpad-glass-panel-strong mx-auto flex w-fit max-w-full flex-wrap items-center justify-center gap-2 rounded-full px-3 py-2 text-sm text-foreground/90"
+                    >
+                      <span className="px-2">
+                        {translate('已选择：{count}', { count: selectedIconKeys.length })}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleHideSelected}
+                        className="launchpad-glass-button rounded-full px-3 py-1 text-xs transition-colors"
+                      >
+                        {translate('隐藏')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDeleteSelected}
+                        className="rounded-full border border-red-500/30 px-3 py-1 text-xs text-red-700 transition-colors hover:bg-red-500/12 hover:text-red-800 dark:text-red-200 dark:hover:bg-red-500/25 dark:hover:text-red-100"
+                      >
+                        {translate('删除')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearSelection}
+                        className="launchpad-glass-button rounded-full px-3 py-1 text-xs transition-colors"
+                      >
+                        {translate('取消')}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        ref={searchInputRef}
+                        data-search-placeholder
+                        type="text"
+                        value={keyword}
+                        onChange={e => {
+                          setKeyword(e.target.value)
+                          setCombinedSelectedIndex(-1)
+                          if (!isSearchPanelOpen) {
+                            openSearchPanel()
+                          }
+                        }}
+                        onFocus={() => {
+                          openSearchPanel()
+                        }}
+                        onKeyDown={handleSearchInputKeyDown}
+                        placeholder={
+                          searchSource === 'all'
+                            ? translate('搜索应用、快捷入口、文件和文件夹...')
+                            : searchSource === 'everything'
+                              ? translate('搜索文件和文件夹...')
+                              : translate('搜索快捷入口...')
+                        }
+                        aria-label={
+                          searchSource === 'all'
+                            ? translate('搜索全部内容')
+                            : searchSource === 'everything'
+                              ? translate('搜索文件')
+                              : translate('搜索快捷入口')
+                        }
+                        className={`launchpad-glass-panel h-11 w-full rounded-full px-4 text-sm text-foreground/90 outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 ${
+                          searchSource !== 'icons' ? 'pr-36' : ''
+                        }`}
+                      />
+
+                      {searchSource !== 'icons' ? (
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                          <button
+                            ref={filterButtonRef}
+                            data-search-placeholder
+                            type="button"
+                            className="launchpad-glass-button inline-flex h-8 items-center gap-1 rounded-full px-3 text-xs transition-colors"
+                            onClick={() => setIsFilterMenuOpen(open => !open)}
+                          >
+                            <span className="truncate">
+                              {searchSource === 'all'
+                                ? `${translate('文件')} · ${selectedFilterLabel}`
+                                : selectedFilterLabel}
+                            </span>
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          </button>
+
+                          <SearchFloatingMenu
+                            open={isFilterMenuOpen}
+                            triggerRef={filterButtonRef}
+                            menuRef={filterMenuRef}
+                            width={192}
+                            align="start"
+                            className="launchpad-glass-panel-strong overflow-hidden rounded-xl shadow-xl"
+                            contentClassName="p-1.5"
+                          >
+                            {searchFilterOptions.map(entry => (
+                              <button
+                                key={entry.value}
+                                type="button"
+                                className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-sm transition ${
+                                  searchFilter === entry.value
+                                    ? 'bg-accent text-foreground'
+                                    : 'text-foreground/70 hover:bg-accent hover:text-foreground'
+                                }`}
+                                onClick={() => {
+                                  setCombinedSelectedIndex(-1)
+                                  setSearchFilter(entry.value)
+                                  setIsFilterMenuOpen(false)
+                                }}
+                              >
+                                <span>{entry.label}</span>
+                                {searchFilter === entry.value ? (
+                                  <Check className="accent-foreground h-4 w-4" />
+                                ) : null}
+                              </button>
+                            ))}
+                          </SearchFloatingMenu>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
                 </div>
-              ) : selectionMode ? (
-                <div
-                  data-selection-toolbar
-                  className="launchpad-glass-panel-strong mx-auto flex w-fit max-w-full flex-wrap items-center justify-center gap-2 rounded-full px-3 py-2 text-sm text-foreground/90"
-                >
-                  <span className="px-2">
-                    {translate('已选择：{count}', { count: selectedIconKeys.length })}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleHideSelected}
-                    className="launchpad-glass-button rounded-full px-3 py-1 text-xs transition-colors"
-                  >
-                    {translate('隐藏')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDeleteSelected}
-                    className="rounded-full border border-red-500/30 px-3 py-1 text-xs text-red-700 transition-colors hover:bg-red-500/12 hover:text-red-800 dark:text-red-200 dark:hover:bg-red-500/25 dark:hover:text-red-100"
-                  >
-                    {translate('删除')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={clearSelection}
-                    className="launchpad-glass-button rounded-full px-3 py-1 text-xs transition-colors"
-                  >
-                    {translate('取消')}
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <input
-                    ref={searchInputRef}
-                    data-search-placeholder
-                    type="text"
-                    value={keyword}
-                    onChange={e => {
-                      setKeyword(e.target.value)
-                      setCombinedSelectedIndex(-1)
-                      if (!isSearchPanelOpen) {
-                        openSearchPanel()
+              </div>
+
+              {searchPanelLoaded && !aiOrganizeUiActive && !selectionMode ? (
+                <Suspense fallback={null}>
+                  <SearchPanel
+                    source={searchSource}
+                    keyword={keyword}
+                    onSourceChange={handleSearchSourceChange}
+                    visible={isSearchPanelOpen}
+                    loading={searchLoading}
+                    searchPending={searchPending}
+                    loadingMore={searchLoadingMore}
+                    error={searchError}
+                    onRetry={submitSearch}
+                    runtimeState={searchRuntimeState}
+                    totalResults={searchTotalResults}
+                    loadedCount={searchLoadedCount}
+                    pageSize={searchSettings.maxResultsPerPage}
+                    hasCommittedQuery={hasCommittedQuery}
+                    getItemAt={getSearchItemAt}
+                    selectedItem={selectedSearchItem}
+                    selectedIndex={
+                      searchSource === 'all' && unifiedSelectedShortcutIndex >= 0
+                        ? -1
+                        : selectedIndex
+                    }
+                    iconResults={iconSearchResults}
+                    selectedIconIndex={
+                      searchSource === 'all'
+                        ? unifiedSelectedShortcutIndex
+                        : effectiveSelectedIconResultIndex
+                    }
+                    onSelectIcon={index => {
+                      if (searchSource === 'all') {
+                        selectUnifiedSearchIndex(index)
+                      } else {
+                        setSelectedIconResultIndex(index)
                       }
                     }}
-                    onFocus={() => {
-                      openSearchPanel()
+                    onActivateIcon={item => {
+                      void activateBestMatch(item)
                     }}
-                    onKeyDown={handleSearchInputKeyDown}
-                    placeholder={
-                      searchSource === 'all'
-                        ? translate('搜索应用、快捷入口、文件和文件夹...')
-                        : searchSource === 'everything'
-                          ? translate('搜索文件和文件夹...')
-                          : translate('搜索快捷入口...')
-                    }
-                    aria-label={
-                      searchSource === 'all'
-                        ? translate('搜索全部内容')
-                        : searchSource === 'everything'
-                          ? translate('搜索文件')
-                          : translate('搜索快捷入口')
-                    }
-                    className={`launchpad-glass-panel h-11 w-full rounded-full px-4 text-sm text-foreground/90 outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 ${
-                      searchSource !== 'icons' ? 'pr-36' : ''
-                    }`}
+                    onShortcutColumnCountChange={setShortcutGridColumnCount}
+                    matchPath={searchMatchPath}
+                    onMatchPathChange={setSearchMatchPath}
+                    matchCase={searchMatchCase}
+                    onMatchCaseChange={setSearchMatchCase}
+                    regex={searchRegex}
+                    onRegexChange={setSearchRegex}
+                    wholeWord={searchWholeWord}
+                    onWholeWordChange={setSearchWholeWord}
+                    sort={searchSort}
+                    onSortChange={setSearchSort}
+                    history={searchHistory}
+                    onHistorySelect={entry => {
+                      setCombinedSelectedIndex(-1)
+                      applyHistoryEntry(entry)
+                    }}
+                    onHistoryRemove={id => {
+                      void removeHistoryEntry(id)
+                    }}
+                    onHistoryClear={() => {
+                      void clearHistory()
+                    }}
+                    preview={searchPreview}
+                    previewLoading={searchPreviewLoading}
+                    previewError={searchPreviewError}
+                    previewVisible={isSearchPreviewVisible}
+                    onPreviewToggle={() => {
+                      setIsSearchPreviewVisible(visible => !visible)
+                    }}
+                    onVisibleRangeChange={setSearchVisibleRange}
+                    onSelect={index => {
+                      if (searchSource === 'all') {
+                        selectUnifiedFileIndex(index)
+                      } else {
+                        setSelectedIndex(index)
+                      }
+                    }}
+                    allowDoubleClickOpen={searchSettings.openOnDoubleClick}
+                    onActivate={item => {
+                      void launchSearchItem(item.path)
+                    }}
                   />
+                </Suspense>
+              ) : null}
 
-                  {searchSource !== 'icons' ? (
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                      <button
-                        ref={filterButtonRef}
-                        data-search-placeholder
-                        type="button"
-                        className="launchpad-glass-button inline-flex h-8 items-center gap-1 rounded-full px-3 text-xs transition-colors"
-                        onClick={() => setIsFilterMenuOpen(open => !open)}
-                      >
-                        <span className="truncate">
-                          {searchSource === 'all'
-                            ? `${translate('文件')} · ${selectedFilterLabel}`
-                            : selectedFilterLabel}
-                        </span>
-                        <ChevronDown className="h-3.5 w-3.5" />
-                      </button>
+              {marquee ? (
+                <div
+                  className="pointer-events-none fixed z-40 rounded-sm border border-primary/60 bg-primary/15 shadow-sm"
+                  style={{
+                    left: Math.min(marquee.startX, marquee.currentX),
+                    top: Math.min(marquee.startY, marquee.currentY),
+                    width: Math.abs(marquee.currentX - marquee.startX),
+                    height: Math.abs(marquee.currentY - marquee.startY),
+                  }}
+                />
+              ) : null}
 
-                      <SearchFloatingMenu
-                        open={isFilterMenuOpen}
-                        triggerRef={filterButtonRef}
-                        menuRef={filterMenuRef}
-                        width={192}
-                        align="start"
-                        className="launchpad-glass-panel-strong overflow-hidden rounded-xl shadow-xl"
-                        contentClassName="p-1.5"
+              <div className="flex h-full min-h-0 items-center justify-center">
+                {loading ? (
+                  <div className="flex items-center gap-3">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/40 border-t-foreground" />
+                    <span className="launchpad-wallpaper-text text-lg text-foreground/70">
+                      {translate('Loading...')}
+                    </span>
+                  </div>
+                ) : iconLoadError && icons.length === 0 ? (
+                  <div
+                    role="alert"
+                    className="flex max-w-md flex-col items-center gap-3 px-6 text-center"
+                  >
+                    <div className="space-y-1">
+                      <p className="launchpad-wallpaper-text text-sm font-medium text-foreground">
+                        {translate('图标库加载失败，请重试。')}
+                      </p>
+                      <p
+                        className="launchpad-wallpaper-text break-words text-xs leading-5 text-muted-foreground"
+                        title={iconLoadError}
                       >
-                        {searchFilterOptions.map(entry => (
-                          <button
-                            key={entry.value}
-                            type="button"
-                            className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-sm transition ${
-                              searchFilter === entry.value
-                                ? 'bg-accent text-foreground'
-                                : 'text-foreground/70 hover:bg-accent hover:text-foreground'
-                            }`}
-                            onClick={() => {
-                              setCombinedSelectedIndex(-1)
-                              setSearchFilter(entry.value)
-                              setIsFilterMenuOpen(false)
-                            }}
-                          >
-                            <span>{entry.label}</span>
-                            {searchFilter === entry.value ? (
-                              <Check className="accent-foreground h-4 w-4" />
-                            ) : null}
-                          </button>
-                        ))}
-                      </SearchFloatingMenu>
+                        {translate('现有布局不会被修改。')}
+                      </p>
                     </div>
-                  ) : null}
-                </>
-              )}
+                    <Button type="button" size="sm" onClick={() => void fetchIcons()}>
+                      <RefreshCw className="h-4 w-4" />
+                      {translate('重试')}
+                    </Button>
+                  </div>
+                ) : icons.length === 0 ? (
+                  <div className="flex max-w-md flex-col items-center gap-4 px-6 text-center">
+                    <div className="flex h-28 w-44 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-foreground/30 bg-background/35 text-foreground/55 backdrop-blur-sm">
+                      <Import className="h-6 w-6" />
+                      <span className="launchpad-wallpaper-text text-xs">
+                        {translate('把图标拖到这里导入')}
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="launchpad-wallpaper-text text-sm font-medium text-foreground">
+                        {translate('启动台还是空的')}
+                      </p>
+                      <p className="launchpad-wallpaper-text text-xs leading-5 text-muted-foreground">
+                        {translate(
+                          '从桌面或资源管理器把应用、快捷方式或文件拖进窗口即可导入，也可以手动添加。'
+                        )}
+                      </p>
+                    </div>
+                    <Button type="button" size="sm" onClick={() => handleAddIcons()}>
+                      <Plus className="h-4 w-4" />
+                      {translate('添加图标')}
+                    </Button>
+                  </div>
+                ) : launchpadGridViewMode === 'scroll' ? (
+                  <Suspense
+                    fallback={
+                      <div className="flex items-center gap-3">
+                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/40 border-t-foreground" />
+                        <span className="launchpad-wallpaper-text text-lg text-foreground/70">
+                          {translate('Loading...')}
+                        </span>
+                      </div>
+                    }
+                  >
+                    <ScrollableIconGrid
+                      icons={icons}
+                      layoutResetToken={layoutResetToken}
+                      sidebarCompact={isScrollSidebarCompact}
+                      onToggleSidebarCompact={() => setIsScrollSidebarCompact(current => !current)}
+                      importPlacementRequest={importPlacementRequest}
+                      addIconDisabled={isImportingDrop || addIconDialogOpen}
+                      onAddIcon={handleAddIcons}
+                    />
+                  </Suspense>
+                ) : (
+                  <Suspense
+                    fallback={
+                      <span className="launchpad-wallpaper-text text-sm text-foreground/70">
+                        {translate('Loading...')}
+                      </span>
+                    }
+                  >
+                    <IconGrid
+                      icons={icons}
+                      layoutResetToken={layoutResetToken}
+                      importPlacementRequest={importPlacementRequest}
+                    />
+                  </Suspense>
+                )}
+              </div>
             </div>
+
+            {aiOrganizeUiActive ? (
+              <LaunchpadAiOrganizePane
+                reserved={aiOrganizeSidebarReady}
+                open={isAiOrganizeSidebarOpen && aiOrganizeSidebarReady}
+                panelRef={aiOrganizePanelRef}
+                layoutViewMode={launchpadGridViewMode}
+                icons={icons}
+                customNames={customNames}
+                onRunStateChange={setAiOrganizeRunState}
+                onCollapse={() => setIsAiOrganizeSidebarOpen(false)}
+                onClose={exitAiOrganizeMode}
+                onPreviewed={handleAiOrganizePreviewed}
+                onApplied={handleAiOrganizeApplied}
+              />
+            ) : null}
           </div>
-
-          {searchPanelLoaded && !isAiOrganizeMode && !selectionMode ? (
-            <Suspense fallback={null}>
-              <SearchPanel
-                source={searchSource}
-                keyword={keyword}
-                onSourceChange={handleSearchSourceChange}
-                visible={isSearchPanelOpen}
-                loading={searchLoading}
-                searchPending={searchPending}
-                loadingMore={searchLoadingMore}
-                error={searchError}
-                onRetry={submitSearch}
-                runtimeState={searchRuntimeState}
-                totalResults={searchTotalResults}
-                loadedCount={searchLoadedCount}
-                pageSize={searchSettings.maxResultsPerPage}
-                hasCommittedQuery={hasCommittedQuery}
-                getItemAt={getSearchItemAt}
-                selectedItem={selectedSearchItem}
-                selectedIndex={
-                  searchSource === 'all' && unifiedSelectedShortcutIndex >= 0 ? -1 : selectedIndex
-                }
-                iconResults={iconSearchResults}
-                selectedIconIndex={
-                  searchSource === 'all'
-                    ? unifiedSelectedShortcutIndex
-                    : effectiveSelectedIconResultIndex
-                }
-                onSelectIcon={index => {
-                  if (searchSource === 'all') {
-                    selectUnifiedSearchIndex(index)
-                  } else {
-                    setSelectedIconResultIndex(index)
-                  }
-                }}
-                onActivateIcon={item => {
-                  void activateBestMatch(item)
-                }}
-                onShortcutColumnCountChange={setShortcutGridColumnCount}
-                matchPath={searchMatchPath}
-                onMatchPathChange={setSearchMatchPath}
-                matchCase={searchMatchCase}
-                onMatchCaseChange={setSearchMatchCase}
-                regex={searchRegex}
-                onRegexChange={setSearchRegex}
-                wholeWord={searchWholeWord}
-                onWholeWordChange={setSearchWholeWord}
-                sort={searchSort}
-                onSortChange={setSearchSort}
-                history={searchHistory}
-                onHistorySelect={entry => {
-                  setCombinedSelectedIndex(-1)
-                  applyHistoryEntry(entry)
-                }}
-                onHistoryRemove={id => {
-                  void removeHistoryEntry(id)
-                }}
-                onHistoryClear={() => {
-                  void clearHistory()
-                }}
-                preview={searchPreview}
-                previewLoading={searchPreviewLoading}
-                previewError={searchPreviewError}
-                previewVisible={isSearchPreviewVisible}
-                onPreviewToggle={() => {
-                  setIsSearchPreviewVisible(visible => !visible)
-                }}
-                onVisibleRangeChange={setSearchVisibleRange}
-                onSelect={index => {
-                  if (searchSource === 'all') {
-                    selectUnifiedFileIndex(index)
-                  } else {
-                    setSelectedIndex(index)
-                  }
-                }}
-                allowDoubleClickOpen={searchSettings.openOnDoubleClick}
-                onActivate={item => {
-                  void launchSearchItem(item.path)
-                }}
-              />
-            </Suspense>
-          ) : null}
-
-          {marquee ? (
-            <div
-              className="pointer-events-none fixed z-40 rounded-sm border border-primary/60 bg-primary/15 shadow-sm"
-              style={{
-                left: Math.min(marquee.startX, marquee.currentX),
-                top: Math.min(marquee.startY, marquee.currentY),
-                width: Math.abs(marquee.currentX - marquee.startX),
-                height: Math.abs(marquee.currentY - marquee.startY),
-              }}
-            />
-          ) : null}
-
-          {loading ? (
-            <div className="flex items-center gap-3">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/40 border-t-foreground" />
-              <span className="launchpad-wallpaper-text text-lg text-foreground/70">
-                {translate('Loading...')}
-              </span>
-            </div>
-          ) : iconLoadError && icons.length === 0 ? (
-            <div
-              role="alert"
-              className="flex max-w-md flex-col items-center gap-3 px-6 text-center"
-            >
-              <div className="space-y-1">
-                <p className="launchpad-wallpaper-text text-sm font-medium text-foreground">
-                  {translate('图标库加载失败，请重试。')}
-                </p>
-                <p
-                  className="launchpad-wallpaper-text break-words text-xs leading-5 text-muted-foreground"
-                  title={iconLoadError}
-                >
-                  {translate('现有布局不会被修改。')}
-                </p>
-              </div>
-              <Button type="button" size="sm" onClick={() => void fetchIcons()}>
-                <RefreshCw className="h-4 w-4" />
-                {translate('重试')}
-              </Button>
-            </div>
-          ) : icons.length === 0 ? (
-            <div className="flex max-w-md flex-col items-center gap-4 px-6 text-center">
-              <div className="flex h-28 w-44 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-foreground/30 bg-background/35 text-foreground/55 backdrop-blur-sm">
-                <Import className="h-6 w-6" />
-                <span className="launchpad-wallpaper-text text-xs">
-                  {translate('把图标拖到这里导入')}
-                </span>
-              </div>
-              <div className="space-y-1">
-                <p className="launchpad-wallpaper-text text-sm font-medium text-foreground">
-                  {translate('启动台还是空的')}
-                </p>
-                <p className="launchpad-wallpaper-text text-xs leading-5 text-muted-foreground">
-                  {translate(
-                    '从桌面或资源管理器把应用、快捷方式或文件拖进窗口即可导入，也可以手动添加。'
-                  )}
-                </p>
-              </div>
-              <Button type="button" size="sm" onClick={() => handleAddIcons()}>
-                <Plus className="h-4 w-4" />
-                {translate('添加图标')}
-              </Button>
-            </div>
-          ) : launchpadGridViewMode === 'scroll' ? (
-            <Suspense
-              fallback={
-                <div className="flex items-center gap-3">
-                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/40 border-t-foreground" />
-                  <span className="launchpad-wallpaper-text text-lg text-foreground/70">
-                    {translate('Loading...')}
-                  </span>
-                </div>
-              }
-            >
-              <ScrollableIconGrid
-                icons={icons}
-                layoutResetToken={layoutResetToken}
-                sidebarCompact={isScrollSidebarCompact}
-                onToggleSidebarCompact={() => setIsScrollSidebarCompact(current => !current)}
-                importPlacementRequest={importPlacementRequest}
-                addIconDisabled={isImportingDrop || addIconDialogOpen}
-                onAddIcon={handleAddIcons}
-              />
-            </Suspense>
-          ) : (
-            <Suspense
-              fallback={
-                <span className="launchpad-wallpaper-text text-sm text-foreground/70">
-                  {translate('Loading...')}
-                </span>
-              }
-            >
-              <IconGrid
-                icons={icons}
-                layoutResetToken={layoutResetToken}
-                importPlacementRequest={importPlacementRequest}
-              />
-            </Suspense>
-          )}
         </div>
       </ContextMenuTrigger>
 
@@ -949,31 +970,6 @@ export function Launchpad() {
         onOpenSettings={openSettings}
       />
       <LaunchpadIconImportLayer controller={iconImport} />
-
-      <Suspense fallback={null}>
-        {isAiOrganizeMode ? (
-          <AiOrganizePanel
-            ref={aiOrganizePanelRef}
-            visible={isAiOrganizeSidebarOpen}
-            layoutViewMode={launchpadGridViewMode}
-            icons={icons}
-            customNames={customNames}
-            onRunStateChange={setAiOrganizeRunState}
-            onCollapse={() => setIsAiOrganizeSidebarOpen(false)}
-            onClose={exitAiOrganizeMode}
-            onPreviewed={async () => {
-              setLayoutResetToken(current => current + 1)
-              await fetchIcons()
-            }}
-            onApplied={async () => {
-              // 与设置页「重置布局」一致：递增令牌强制 IconGrid 丢弃旧内存布局，
-              // 重新从磁盘 hydrate 出 AI 整理后的结果。
-              setLayoutResetToken(current => current + 1)
-              await fetchIcons()
-            }}
-          />
-        ) : null}
-      </Suspense>
     </ContextMenu>
   )
 }

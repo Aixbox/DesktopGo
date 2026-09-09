@@ -8,7 +8,13 @@ import {
 } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
+import {
+  currentMonitor,
+  getCurrentWindow,
+  LogicalSize,
+  PhysicalPosition,
+  PhysicalSize,
+} from '@tauri-apps/api/window'
 import { translate } from '@/lib/i18n'
 import { getSetting } from '@/lib/settingsStore'
 import { applyTheme, getSavedTheme } from '@/lib/theme'
@@ -29,6 +35,7 @@ const LAUNCHPAD_SHOWN_EVENT = 'launchpad:shown'
 const SETTINGS_WINDOW_WIDTH = 800
 const SETTINGS_WINDOW_HEIGHT = 600
 const EXTERNAL_SHOW_CLICK_GUARD_MS = 350
+export const AI_ORGANIZE_PANEL_WIDTH = 460
 
 const waitForWindowGeometrySync = async () => {
   await new Promise<void>(resolve => {
@@ -67,6 +74,7 @@ interface UseLaunchpadWindowControllerParams {
   searchInputRef: MutableRefObject<HTMLInputElement | null>
   setLayoutResetToken: (update: (current: number) => number) => void
   preloadGridView: (mode: 'paged' | 'scroll') => void
+  aiOrganizeSidebarOpen: boolean
 }
 
 export function useLaunchpadWindowController({
@@ -76,13 +84,91 @@ export function useLaunchpadWindowController({
   searchInputRef,
   setLayoutResetToken,
   preloadGridView,
+  aiOrganizeSidebarOpen,
 }: UseLaunchpadWindowControllerParams) {
   const toast = useToast()
   const launchpadSurfaceRef = useRef<HTMLDivElement | null>(null)
   const bypassNextFocusGuardRef = useRef(false)
   const suppressBackgroundClickUntilRef = useRef(0)
+  const aiOrganizeWindowSnapshotRef = useRef<{
+    size: PhysicalSize
+    position: PhysicalPosition
+  } | null>(null)
+  const aiOrganizeResizeOperationRef = useRef<Promise<void>>(Promise.resolve())
   const [windowPersistentEnabled, setWindowPersistentEnabled] = useState(false)
   const [mainWindowAlwaysOnTopEnabled, setMainWindowAlwaysOnTopEnabled] = useState(false)
+  const [aiOrganizeSidebarReady, setAiOrganizeSidebarReady] = useState(false)
+  const [aiOrganizeMainWindowWidth, setAiOrganizeMainWindowWidth] = useState<number | null>(null)
+
+  useEffect(() => {
+    const window = getCurrentWindow()
+    aiOrganizeResizeOperationRef.current = aiOrganizeResizeOperationRef.current
+      .then(async () => {
+        if (aiOrganizeSidebarOpen) {
+          if (aiOrganizeWindowSnapshotRef.current) return
+
+          const [innerSize, outerSize, outerPosition, monitor] = await Promise.all([
+            window.innerSize(),
+            window.outerSize(),
+            window.outerPosition(),
+            currentMonitor(),
+          ])
+          const scaleFactor = monitor?.scaleFactor ?? (await window.scaleFactor())
+          const panelWidth = Math.round(AI_ORGANIZE_PANEL_WIDTH * scaleFactor)
+          const mainWindowWidth = innerSize.width / scaleFactor
+          setAiOrganizeMainWindowWidth(mainWindowWidth)
+
+          let nextX = outerPosition.x
+          if (monitor) {
+            const workAreaLeft = monitor.workArea.position.x
+            const workAreaRight = workAreaLeft + monitor.workArea.size.width
+            const desiredRight = outerPosition.x + outerSize.width + panelWidth
+            if (desiredRight > workAreaRight) {
+              nextX = Math.max(workAreaLeft, workAreaRight - outerSize.width - panelWidth)
+            }
+          }
+
+          await window.setSize(new PhysicalSize(innerSize.width + panelWidth, innerSize.height))
+          await window.setPosition(new PhysicalPosition(nextX, outerPosition.y))
+          await waitForWindowGeometrySync()
+          await window.setPosition(new PhysicalPosition(nextX, outerPosition.y))
+          const resizedSize = await window.innerSize()
+          if (resizedSize.width < innerSize.width + panelWidth - 2) {
+            throw new Error(
+              `AI organize window resize was clamped at ${resizedSize.width}px instead of ${innerSize.width + panelWidth}px`
+            )
+          }
+
+          aiOrganizeWindowSnapshotRef.current = {
+            size: innerSize,
+            position: outerPosition,
+          }
+          setAiOrganizeSidebarReady(true)
+          return
+        }
+
+        const snapshot = aiOrganizeWindowSnapshotRef.current
+        if (!snapshot) {
+          setAiOrganizeSidebarReady(false)
+          setAiOrganizeMainWindowWidth(null)
+          return
+        }
+        aiOrganizeWindowSnapshotRef.current = null
+        await window.setSize(snapshot.size)
+        await window.setPosition(snapshot.position)
+        setAiOrganizeSidebarReady(false)
+        setAiOrganizeMainWindowWidth(null)
+      })
+      .catch(error => {
+        setAiOrganizeSidebarReady(false)
+        setAiOrganizeMainWindowWidth(null)
+        console.error('Failed to resize launchpad for AI organize panel:', error)
+        toast.error(translate('无法展开 AI 整理面板，请重试。'), {
+          key: 'ai-organize-window-resize',
+          title: translate('AI 智能整理'),
+        })
+      })
+  }, [aiOrganizeSidebarOpen, toast])
 
   const syncWindowPersistentState = useCallback(async () => {
     try {
@@ -382,5 +468,7 @@ export function useLaunchpadWindowController({
     openSettings,
     requestCloseLaunchpad,
     windowPersistentEnabled,
+    aiOrganizeSidebarReady,
+    aiOrganizeMainWindowWidth,
   }
 }

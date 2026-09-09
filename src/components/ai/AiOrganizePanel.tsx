@@ -763,13 +763,15 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
     )
 
     if (!open || !visible) return null
-
     const collapseOrClose = onCollapse ?? onClose
+    const panelShellClassName = isExpanded
+      ? 'fixed inset-0 z-[60] flex justify-end bg-black/[0.08] p-[5px] backdrop-blur-[1px] dark:bg-black/20'
+      : 'relative h-full w-full'
     return (
       <div
         data-ai-organize-sidebar="true"
         data-no-window-drag="true"
-        className="fixed inset-0 z-[60] flex justify-end bg-black/[0.08] backdrop-blur-[1px] dark:bg-black/20"
+        className={panelShellClassName}
         onPointerDown={event => event.stopPropagation()}
         onClick={event => {
           event.stopPropagation()
@@ -783,9 +785,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
           initial={prefersReducedMotion ? false : { x: 28, opacity: 0 }}
           animate={prefersReducedMotion ? undefined : { x: 0, opacity: 1 }}
           transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-          className={`flex h-full ${
-            isExpanded ? 'w-full' : 'w-[min(460px,100vw)]'
-          } flex-col overflow-hidden border-l border-border/85 bg-background/95 shadow-2xl backdrop-blur-xl`}
+          className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-border/85 bg-background/95 shadow-2xl backdrop-blur-xl"
           onClick={event => event.stopPropagation()}
         >
           <div className="relative flex items-center justify-between border-b border-border/80 px-4 py-3.5">

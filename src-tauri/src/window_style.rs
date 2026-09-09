@@ -268,6 +268,7 @@ pub(crate) fn build_window_bootstrap_script(
         r#"
 (() => {{
   const root = document.documentElement;
+  if (!root) return;
   const themeMode = {theme_mode:?};
   const windowStyle = {window_style:?};
   const windowPersistentEnabled = {window_persistent_enabled};

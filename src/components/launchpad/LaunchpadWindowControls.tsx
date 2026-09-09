@@ -47,6 +47,7 @@ interface LaunchpadWindowControlsProps {
   aiSidebarOpen: boolean
   windowPersistentEnabled: boolean
   alwaysOnTopEnabled: boolean
+  mainWindowWidth: number | null
   onToggleAi: () => void
   onToggleAlwaysOnTop: () => void
   onMinimize: () => void
@@ -58,13 +59,22 @@ export function LaunchpadWindowControls({
   aiSidebarOpen,
   windowPersistentEnabled,
   alwaysOnTopEnabled,
+  mainWindowWidth,
   onToggleAi,
   onToggleAlwaysOnTop,
   onMinimize,
   onClose,
 }: LaunchpadWindowControlsProps) {
   return (
-    <div data-no-window-drag="true" className="absolute right-5 top-5 z-40 flex items-center gap-2">
+    <div
+      data-no-window-drag="true"
+      className="absolute top-5 z-40 flex items-center gap-2"
+      style={
+        aiSidebarOpen && mainWindowWidth !== null
+          ? { right: `calc(100% - ${mainWindowWidth}px + 20px)` }
+          : { right: '20px' }
+      }
+    >
       <div className="launchpad-glass-panel-strong flex items-center rounded-xl border border-border/80 px-1.5 py-1">
         <WindowControlButton
           label={
