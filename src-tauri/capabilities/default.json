@@ -28,6 +28,7 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-unminimize",
     "core:window:allow-unmaximize",
+    "core:webview:allow-set-webview-background-color",
     "core:webview:allow-create-webview-window",
     "opener:default",
     "opener:allow-open-path",

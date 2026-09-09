@@ -189,6 +189,7 @@ pub(crate) fn create_main_window(app: &tauri::AppHandle) {
             .fullscreen(false)
             .resizable(false)
             .decorations(false)
+            .shadow(false)
             .transparent(transparent_surface)
             .always_on_top(true)
             .skip_taskbar(true)
@@ -213,6 +214,12 @@ pub(crate) fn create_main_window(app: &tauri::AppHandle) {
             state
                 .transparent_surface_enabled
                 .store(transparent_surface, Ordering::SeqCst);
+            if let Err(error) = window.set_background_color(Some(background_color)) {
+                eprintln!(
+                    "Warning: Failed to set transparent main WebView background: {}",
+                    error
+                );
+            }
             if let Err(error) = apply_main_window_style(app, None, None) {
                 eprintln!(
                     "Warning: Failed to apply saved main window style: {}",
