@@ -24,8 +24,12 @@ body,
   height: 100%;
   overflow: hidden;
   background: transparent;
+}
+
+#root {
   border-radius: var(--radius-2xl);
   corner-shape: round;
+  isolation: isolate;
 }
 
 :root {

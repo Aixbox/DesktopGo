@@ -9,7 +9,7 @@ use window_vibrancy::{apply_acrylic, apply_mica, clear_acrylic, clear_mica};
 #[cfg(windows)]
 use windows::Win32::Graphics::Dwm::{
     DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE, DWMWA_USE_IMMERSIVE_DARK_MODE,
-    DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DWM_WINDOW_CORNER_PREFERENCE,
+    DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DWM_WINDOW_CORNER_PREFERENCE,
 };
 #[cfg(windows)]
 use winreg::{enums::HKEY_CURRENT_USER, RegKey};
@@ -168,11 +168,11 @@ fn set_window_immersive_dark_mode(window: &tauri::WebviewWindow, dark: bool) -> 
 }
 
 #[cfg(windows)]
-fn set_window_corner_preference(window: &tauri::WebviewWindow) -> Result<(), String> {
+fn disable_window_corner_preference(window: &tauri::WebviewWindow) -> Result<(), String> {
     let hwnd = window
         .hwnd()
         .map_err(|error| format!("Failed to resolve main HWND: {}", error))?;
-    let preference: DWM_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND;
+    let preference: DWM_WINDOW_CORNER_PREFERENCE = DWMWCP_DONOTROUND;
 
     unsafe {
         DwmSetWindowAttribute(
@@ -181,7 +181,7 @@ fn set_window_corner_preference(window: &tauri::WebviewWindow) -> Result<(), Str
             &preference as *const _ as _,
             std::mem::size_of_val(&preference) as u32,
         )
-        .map_err(|error| format!("Failed to set main window corner preference: {}", error))
+        .map_err(|error| format!("Failed to disable native window corner rounding: {}", error))
     }
 }
 
@@ -212,18 +212,14 @@ fn apply_window_style_to_window(
     let dark = resolved_theme_is_dark(app, theme_mode_override);
     let persistent_enabled = main_window_persistent_enabled(app.state::<MainWindowState>().inner());
     let backdrop = resolve_main_window_backdrop(style, persistent_enabled);
-    let transparent_surface = main_window_should_use_transparent_surface(style, persistent_enabled);
     let use_native_backdrop = !matches!(backdrop, MainWindowBackdrop::Default);
     let acrylic_tint = if dark {
         (24, 28, 36, 96)
     } else {
         (250, 250, 250, 4)
     };
-    let background_color = resolve_main_window_background_color(transparent_surface, dark);
-
-    let _ = set_window_corner_preference(window);
+    let _ = disable_window_corner_preference(window);
     let _ = set_window_immersive_dark_mode(window, use_native_backdrop && dark);
-    let _ = window.set_background_color(Some(background_color));
     let _ = clear_acrylic(window);
     let _ = clear_mica(window);
 
@@ -242,7 +238,11 @@ fn apply_window_style_to_window(
             let _ = set_window_immersive_dark_mode(window, false);
             Ok(())
         }
-    }
+    }?;
+
+    // Native backdrops can restore the DWM border, so clear it after the backdrop is applied.
+    let _ = remove_native_window_border(window);
+    Ok(())
 }
 
 #[cfg(not(windows))]
