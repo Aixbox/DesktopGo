@@ -877,6 +877,18 @@ textarea {
   display: none;
 }
 
+.launchpad-background-fill {
+  display: none;
+}
+
+[data-launchpad-background='custom'] .launchpad-background-fill {
+  position: absolute;
+  display: block;
+  inset: var(--launchpad-background-bleed, 0px);
+  background: var(--muted);
+  pointer-events: none;
+}
+
 [data-launchpad-background='custom'] .launchpad-background-layer {
   position: absolute;
   display: block;

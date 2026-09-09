@@ -265,7 +265,7 @@ export function ScrollableOuterGridView({
           <div
             ref={containerRef}
             className={`scroll-grid-content-scroll min-h-0 min-w-0 overflow-x-hidden overflow-y-auto px-6 pt-24 ${
-              dockEnabled ? 'pb-32' : 'pb-12'
+              dockEnabled ? 'pb-40' : 'pb-12'
             }`}
           >
             <div className="flex min-h-full justify-center">

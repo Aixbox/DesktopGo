@@ -725,7 +725,7 @@ export function ScrollableIconGrid({
         className={
           launchpadGridViewMode === 'scroll'
             ? 'scroll-grid-shell relative h-full w-full'
-            : `relative h-full w-full px-16 pt-24 ${dockEnabled ? 'pb-32' : 'pb-12'}`
+            : `relative h-full w-full px-16 pt-24 ${dockEnabled ? 'pb-40' : 'pb-12'}`
         }
         onWheel={launchpadGridViewMode === 'paged' ? handleWheelPageSwitch : undefined}
       >

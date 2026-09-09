@@ -562,6 +562,15 @@ export function Launchpad() {
     <ContextMenu>
       {/* 自定义背景图层：位于启动台之前，因此模糊只作用于图片本身 */}
       <div
+        className="launchpad-background-fill"
+        aria-hidden="true"
+        style={
+          aiOrganizeLayoutOpen && aiOrganizeMainWindowWidth !== null
+            ? { width: `${aiOrganizeMainWindowWidth}px`, right: 'auto' }
+            : undefined
+        }
+      />
+      <div
         className="launchpad-background-layer rounded-2xl"
         aria-hidden="true"
         style={

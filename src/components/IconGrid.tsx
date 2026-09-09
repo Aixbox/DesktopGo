@@ -786,7 +786,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   return (
     <LayoutGroup id="folder-shell-layout">
       <div
-        className={`relative h-full w-full px-16 pt-24 ${dockEnabled ? 'pb-32' : 'pb-12'}`}
+        className={`relative h-full w-full px-16 pt-24 ${dockEnabled ? 'pb-40' : 'pb-12'}`}
         onWheel={handleWheelPageSwitch}
       >
         <EdgeGlow direction="left" active={dragEdgeDirection === 'left'} />
