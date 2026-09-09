@@ -24,6 +24,8 @@ body,
   height: 100%;
   overflow: hidden;
   background: transparent;
+  border-radius: var(--radius-2xl);
+  corner-shape: round;
 }
 
 :root {

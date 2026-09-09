@@ -18,9 +18,7 @@
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE5MkY4QkFCNUZBNjVEMDcKUldRSFhhWmZxNHN2R1hIRysxOUwxOFlCbEs3aS9KVVJMMXNFUXJKNzhHN3BXa2g3Ri9lckFrcDEK",
-      "endpoints": [
-        "https://github.com/Aixbox/DesktopGo/releases/latest/download/latest.json"
-      ],
+      "endpoints": ["https://github.com/Aixbox/DesktopGo/releases/latest/download/latest.json"],
       "windows": {
         "installMode": "passive"
       }
@@ -45,20 +43,14 @@
         "headerImage": "icons/nsis-header.bmp",
         "sidebarImage": "icons/nsis-sidebar.bmp",
         "displayLanguageSelector": true,
-        "languages": [
-          "SimpChinese",
-          "English"
-        ],
+        "languages": ["SimpChinese", "English"],
         "customLanguageFiles": {
           "SimpChinese": "nsis/SimpChinese.nsh",
           "English": "nsis/English.nsh"
         }
       }
     },
-    "resources": [
-      "resources/everything/**/*",
-      "resources/everything-installer/**/*"
-    ],
+    "resources": ["resources/everything/**/*", "resources/everything-installer/**/*"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
