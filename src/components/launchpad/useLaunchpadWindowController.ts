@@ -442,7 +442,9 @@ export function useLaunchpadWindowController({
       center: true,
       resizable: true,
       decorations: false,
-      shadow: true,
+      shadow: false,
+      transparent: true,
+      backgroundColor: [0, 0, 0, 0],
       visible: false,
     })
     settingsWindow.once('tauri://created', async () => {

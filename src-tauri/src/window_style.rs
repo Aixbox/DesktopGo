@@ -168,7 +168,9 @@ fn set_window_immersive_dark_mode(window: &tauri::WebviewWindow, dark: bool) -> 
 }
 
 #[cfg(windows)]
-fn disable_window_corner_preference(window: &tauri::WebviewWindow) -> Result<(), String> {
+pub(crate) fn disable_window_corner_preference(
+    window: &tauri::WebviewWindow,
+) -> Result<(), String> {
     let hwnd = window
         .hwnd()
         .map_err(|error| format!("Failed to resolve main HWND: {}", error))?;

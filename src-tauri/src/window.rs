@@ -259,6 +259,8 @@ fn create_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
     builder
         .inner_size(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
         .min_inner_size(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
+        .background_color(tauri::utils::config::Color(0, 0, 0, 0))
+        .transparent(true)
         .center()
         .resizable(true)
         .decorations(false)
@@ -271,14 +273,18 @@ fn create_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
         .and_then(|window| {
             crate::window_icon::install(&window)
                 .map_err(|error| format!("Failed to install settings window icon: {error}"))?;
+            #[cfg(windows)]
+            {
+                if let Err(error) = crate::window_style::disable_window_corner_preference(&window) {
+                    eprintln!("Warning: {error}");
+                }
+                if let Err(error) = crate::window_style::remove_native_window_border(&window) {
+                    eprintln!("Warning: {error}");
+                }
+            }
             Ok(window)
         })
-        .map(|window| {
-            #[cfg(windows)]
-            if let Err(error) = crate::window_style::remove_native_window_border(&window) {
-                eprintln!("Warning: {error}");
-            }
-        })
+        .map(|_| ())
 }
 
 pub(crate) fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
@@ -303,8 +309,13 @@ pub(crate) fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String>
         }
     }
     #[cfg(windows)]
-    if let Err(error) = crate::window_style::remove_native_window_border(&settings_window) {
-        eprintln!("Warning: {error}");
+    {
+        if let Err(error) = crate::window_style::disable_window_corner_preference(&settings_window) {
+            eprintln!("Warning: {error}");
+        }
+        if let Err(error) = crate::window_style::remove_native_window_border(&settings_window) {
+            eprintln!("Warning: {error}");
+        }
     }
     activate_webview_window(&settings_window)?;
     hide_main_window(app);

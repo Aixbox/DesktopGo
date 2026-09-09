@@ -218,7 +218,7 @@ export function Settings() {
   }
 
   return (
-    <div className="settings-shell flex h-screen w-screen text-foreground">
+    <div className="settings-shell flex h-screen w-screen overflow-hidden rounded-2xl text-foreground">
       <aside className="settings-sidebar-surface flex w-48 shrink-0 flex-col">
         <div
           onPointerDown={handleWindowDragStart}
