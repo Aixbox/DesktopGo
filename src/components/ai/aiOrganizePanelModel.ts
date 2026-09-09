@@ -1,7 +1,11 @@
 import { translate } from '@/lib/i18n'
 import type { AiConfig } from '@/lib/aiConfigStore'
 import { normalizeAiFolderSize, type AiClassifyResult, type AiGroup } from '@/lib/aiOrganize'
-import { createAiOrganizeId, type AiOrganizeSession } from '@/lib/aiOrganizeSessions'
+import {
+  createAiOrganizeId,
+  type AiOrganizeSession,
+  type AiWebsiteAddition,
+} from '@/lib/aiOrganizeSessions'
 import type { FolderSize } from '@/components/icon-grid/model'
 
 export type AiOrganizePhase = 'idle' | 'loading' | 'preview' | 'applying'
@@ -80,6 +84,7 @@ export interface AiChatResult {
   groups?: AiGroup[]
   leftover?: string[]
   run_id?: string
+  website_additions?: AiWebsiteAddition[]
 }
 
 export interface AiAgentEvent {

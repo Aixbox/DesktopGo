@@ -1,6 +1,15 @@
 import { invoke } from '@tauri-apps/api/core'
 import { normalizeAiFolderSize, type AiGroup } from './aiOrganize'
 
+export type AiWebsitePlacement = 'grid' | 'dock' | 'folder'
+
+export interface AiWebsiteAddition {
+  url: string
+  display_name: string
+  placement: AiWebsitePlacement
+  folder_name?: string
+}
+
 const AI_ORGANIZE_SESSIONS_KEY = 'desktopgo.ai.organize.sessions.v1'
 const MAX_AI_ORGANIZE_SESSIONS = 18
 const MAX_AI_ORGANIZE_MESSAGES = 48
@@ -55,6 +64,7 @@ export interface AiOrganizeSnapshot {
   leftover: string[]
   runId?: string
   summary?: string
+  websiteAdditions?: AiWebsiteAddition[]
 }
 
 export interface AiOrganizeSession {
@@ -225,6 +235,22 @@ const normalizeSnapshot = (value: unknown): AiOrganizeSnapshot | null => {
   const leftover = Array.isArray(value.leftover)
     ? value.leftover.filter((key): key is string => typeof key === 'string')
     : []
+  const websiteAdditions: AiWebsiteAddition[] = []
+  if (Array.isArray(value.websiteAdditions)) {
+    value.websiteAdditions.filter(isRecord).forEach(addition => {
+      const placement = addition.placement
+      if (placement !== 'grid' && placement !== 'dock' && placement !== 'folder') return
+      const url = asString(addition.url).trim()
+      const displayName = asString(addition.display_name ?? addition.displayName).trim()
+      if (!url || !displayName) return
+      websiteAdditions.push({
+        url,
+        display_name: displayName,
+        placement,
+        folder_name: asString(addition.folder_name ?? addition.folderName).trim() || undefined,
+      })
+    })
+  }
 
   return {
     id: asString(value.id, createAiOrganizeId('ai-snapshot')),
@@ -234,6 +260,7 @@ const normalizeSnapshot = (value: unknown): AiOrganizeSnapshot | null => {
     leftover,
     runId: asString(value.runId) || undefined,
     summary: asString(value.summary) || undefined,
+    websiteAdditions: websiteAdditions.length ? websiteAdditions : undefined,
   }
 }
 

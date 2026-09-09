@@ -44,6 +44,7 @@ import {
   type AiOrganizeRunStatus,
   type EditableAiGroup,
 } from './aiOrganizePanelModel'
+import type { AiWebsiteAddition } from '@/lib/aiOrganizeSessions'
 
 const STREAM_FLUSH_INTERVAL_MS = 48
 const STREAM_FLUSH_SOFT_CHARS = 56
@@ -65,7 +66,7 @@ interface UseAiOrganizeExecutionParams {
   commitSession: (session: AiOrganizeSession) => Promise<void>
   updateMessageContent: (messageId: string, content: string) => void
   activateSnapshot: (session: AiOrganizeSession, snapshot?: AiOrganizeSnapshot) => void
-  applyLayoutPreview: (groups: AiGroup[]) => Promise<void>
+  applyLayoutPreview: (groups: AiGroup[], websites?: AiWebsiteAddition[]) => Promise<void>
   setPhase: Dispatch<SetStateAction<AiOrganizePhase>>
   setError: Dispatch<SetStateAction<string | null>>
   setNotConfigured: Dispatch<SetStateAction<boolean>>
@@ -463,8 +464,11 @@ export function useAiOrganizeExecution({
         flushChatAnswerBuffer()
         // 对话中调用了 organize_icons 工具：为本次回复创建布局快照并应用预览。
         const organizeGroups = result.groups ?? []
+        const websiteAdditions = result.website_additions ?? []
         const snapshot: AiOrganizeSnapshot | null =
-          organizeGroups.length > 0 || (result.leftover?.length ?? 0) > 0
+          organizeGroups.length > 0 ||
+          (result.leftover?.length ?? 0) > 0 ||
+          websiteAdditions.length > 0
             ? {
                 id: createAiOrganizeId('ai-snapshot'),
                 createdAt: Date.now(),
@@ -473,6 +477,7 @@ export function useAiOrganizeExecution({
                 leftover: result.leftover ?? [],
                 runId: result.run_id ?? requestId,
                 summary: summarizeGroups(organizeGroups),
+                websiteAdditions,
               }
             : null
         const successSession: AiOrganizeSession = {
@@ -499,7 +504,9 @@ export function useAiOrganizeExecution({
         if (snapshot) {
           setRunId(result.run_id ?? requestId)
           activateSnapshot(successSession, snapshot)
-          await applyLayoutPreview(organizeGroups)
+          if (organizeGroups.length > 0 || websiteAdditions.length > 0) {
+            await applyLayoutPreview(organizeGroups, websiteAdditions)
+          }
         } else {
           setPhase(groupsRef.current.length > 0 ? 'preview' : 'idle')
         }

@@ -16,7 +16,9 @@ use crate::agent::icon_categories::{
 };
 use crate::agent::llm::{LlmClient, LlmMessage, ObservedLlmRequest};
 use crate::agent::memory;
-use crate::ai::models::{AiChatMessageInput, AiClassifyResult, AiConfig, AiIconInput};
+use crate::ai::models::{
+    AiChatMessageInput, AiClassifyResult, AiConfig, AiIconInput, AiWebsiteAddition,
+};
 use crate::ai::parse_model_payload;
 use crate::ai::sanitize_groups;
 use crate::icons::get_icons;
@@ -24,6 +26,7 @@ use crate::icons::get_icons;
 pub(crate) const LIST_ICONS_TOOL: &str = "list_icons";
 pub(crate) const ORGANIZE_ICONS_TOOL: &str = "organize_icons";
 pub(crate) const GET_ICON_CATEGORIES_TOOL: &str = "get_icon_categories";
+pub(crate) const ADD_WEBSITE_ICON_TOOL: &str = "add_website_icon";
 const MAX_AGENT_TURNS: usize = 4;
 const MAX_LIST_ICONS: usize = 120;
 const MAX_TOOL_RESULT_CHARS: usize = 4000;
@@ -34,6 +37,7 @@ pub(crate) struct ChatAgentOutcome {
     pub leftover: Vec<String>,
     /// 对话中通过 organize_icons 工具生成布局预览时，携带本次运行的 id。
     pub organize_run_id: Option<String>,
+    pub website_additions: Vec<AiWebsiteAddition>,
 }
 
 struct ToolRequest {
@@ -110,6 +114,7 @@ pub(crate) async fn run_chat_agent(
 
     let mut loop_messages = build_agent_messages(config, history);
     let mut pending_organize: Option<AiClassifyResult> = None;
+    let mut pending_website_additions: Vec<AiWebsiteAddition> = Vec::new();
     let mut last_content = String::new();
 
     for turn in 0..MAX_AGENT_TURNS {
@@ -136,7 +141,12 @@ pub(crate) async fn run_chat_agent(
             if content.is_empty() {
                 return Err("AI 接口未返回有效内容。".to_string());
             }
-            return Ok(build_outcome(content, pending_organize, &run_id));
+            return Ok(build_outcome(
+                content,
+                pending_organize,
+                pending_website_additions,
+                &run_id,
+            ));
         };
         last_content = content.clone();
 
@@ -146,7 +156,12 @@ pub(crate) async fn run_chat_agent(
             "调用工具。",
             &tool_request.args.to_string(),
         );
-        let tool_result = execute_tool(&context, &tool_request, &mut pending_organize);
+        let tool_result = execute_tool(
+            &context,
+            &tool_request,
+            &mut pending_organize,
+            &mut pending_website_additions,
+        );
         context.emit_tool_event(
             AgentEventPhase::ToolResult,
             &tool_request.name,
@@ -165,12 +180,18 @@ pub(crate) async fn run_chat_agent(
     if parse_tool_request(&last_content).is_some() {
         last_content = "本轮工具调用次数已达上限，请继续对话或换个说法。".to_string();
     }
-    Ok(build_outcome(last_content, pending_organize, &run_id))
+    Ok(build_outcome(
+        last_content,
+        pending_organize,
+        pending_website_additions,
+        &run_id,
+    ))
 }
 
 fn build_outcome(
     content: String,
     pending_organize: Option<AiClassifyResult>,
+    website_additions: Vec<AiWebsiteAddition>,
     run_id: &str,
 ) -> ChatAgentOutcome {
     let organize_run_id = pending_organize.as_ref().map(|_| run_id.to_string());
@@ -182,6 +203,7 @@ fn build_outcome(
         groups,
         leftover,
         organize_run_id,
+        website_additions,
     }
 }
 
@@ -240,11 +262,13 @@ fn execute_tool(
     context: &ChatAgentContext<'_>,
     request: &ToolRequest,
     pending_organize: &mut Option<AiClassifyResult>,
+    pending_website_additions: &mut Vec<AiWebsiteAddition>,
 ) -> String {
     match request.name.as_str() {
         LIST_ICONS_TOOL => tool_list_icons(context, request),
         ORGANIZE_ICONS_TOOL => tool_organize_icons(context, request, pending_organize),
         GET_ICON_CATEGORIES_TOOL => tool_get_icon_categories(context),
+        ADD_WEBSITE_ICON_TOOL => tool_add_website_icon(request, pending_website_additions),
         other => tool_error_json(&format!("未知工具：{other}")),
     }
 }
@@ -395,6 +419,76 @@ fn tool_organize_icons(
     summary.to_string()
 }
 
+fn tool_add_website_icon(
+    request: &ToolRequest,
+    pending_website_additions: &mut Vec<AiWebsiteAddition>,
+) -> String {
+    let Some(raw_url) = request.args.get("url").and_then(Value::as_str) else {
+        return tool_error_json("缺少 url 参数。");
+    };
+    let trimmed_url = raw_url.trim();
+    if trimmed_url.is_empty() {
+        return tool_error_json("网页地址不能为空。");
+    }
+    let candidate = if trimmed_url.contains("://") {
+        trimmed_url.to_string()
+    } else {
+        format!("https://{trimmed_url}")
+    };
+    let Ok(parsed) = url::Url::parse(&candidate) else {
+        return tool_error_json("网页地址无法解析。");
+    };
+    if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+        return tool_error_json("只支持 http 或 https 网页地址。");
+    }
+
+    let placement = request
+        .args
+        .get("placement")
+        .and_then(Value::as_str)
+        .unwrap_or("grid")
+        .trim()
+        .to_lowercase();
+    if !matches!(placement.as_str(), "grid" | "dock" | "folder") {
+        return tool_error_json("placement 只能是 grid、dock 或 folder。");
+    }
+    let display_name = request
+        .args
+        .get("display_name")
+        .or_else(|| request.args.get("name"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| parsed.host_str().unwrap_or("网页"))
+        .chars()
+        .take(64)
+        .collect::<String>();
+    let folder_name = request
+        .args
+        .get("folder_name")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.chars().take(64).collect::<String>());
+    if placement == "folder" && folder_name.is_none() {
+        return tool_error_json("folder placement 需要 folder_name。");
+    }
+
+    let normalized_url = parsed.to_string();
+    pending_website_additions.push(AiWebsiteAddition {
+        url: normalized_url.clone(),
+        display_name: display_name.clone(),
+        placement: placement.clone(),
+        folder_name,
+    });
+    json!({
+        "ok": true,
+        "message": format!("已准备添加网页图标：{display_name}，目标位置：{placement}。"),
+        "url": normalized_url,
+    })
+    .to_string()
+}
+
 fn tool_error_json(message: &str) -> String {
     json!({ "ok": false, "error": message }).to_string()
 }
@@ -435,6 +529,7 @@ fn build_agent_messages(config: &AiConfig, history: Vec<AiChatMessageInput>) -> 
 2. organize_icons - 生成图标分组布局预览。参数：{"groups": [{"folder_name": "分组名", "icon_keys": ["图标ID"]}]}
    icon_keys 必须来自 list_icons 返回的 id 字段；每组至少 2 个图标；不确定归属的图标不要放进任何组。
 3. get_icon_categories - 查看「应用 → 分类」参考知识库（含用户自定义条目）。整理前若不确定某些应用的归类，先调用它。
+4. add_website_icon - 准备添加一个网页图标。参数：{"url":"https://example.com","display_name":"可选名称","placement":"grid|dock|folder","folder_name":"文件夹名（placement=folder 时必填）"}
 
 需要调用工具时，只输出一个如下形式的 JSON 对象，不要附加任何其他文字或代码块：
 {"tool": "工具名", "args": { ... }}
@@ -521,11 +616,12 @@ mod tests {
                 groups: vec![],
                 leftover: vec![],
             }),
+            vec![],
             "chat-1",
         );
         assert_eq!(outcome.organize_run_id.as_deref(), Some("chat-1"));
 
-        let plain = build_outcome("普通回答".to_string(), None, "chat-2");
+        let plain = build_outcome("普通回答".to_string(), None, vec![], "chat-2");
         assert!(plain.organize_run_id.is_none());
         assert!(plain.groups.is_empty());
     }

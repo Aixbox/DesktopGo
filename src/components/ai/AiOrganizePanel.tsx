@@ -86,6 +86,9 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
     const [error, setError] = useState<string | null>(null)
     const [notConfigured, setNotConfigured] = useState(false)
     const [groups, setGroups] = useState<EditableGroup[]>([])
+    const [websiteAdditions, setWebsiteAdditions] = useState<
+      AiOrganizeSnapshot['websiteAdditions']
+    >([])
     const [runId, setRunId] = useState<string | null>(null)
     const [sessions, setSessions] = useState<AiOrganizeSession[]>([])
     const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
@@ -110,7 +113,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
     const historyMenuRef = useRef<HTMLDivElement | null>(null)
     const presetsButtonRef = useRef<HTMLButtonElement | null>(null)
     const presetsMenuRef = useRef<HTMLDivElement | null>(null)
-    const { applyAiOrganizeLayout, applyLayoutPreview, restoreLayoutPreview, markApplied } =
+    const { applyAiChanges, applyLayoutPreview, restoreLayoutPreview, markApplied } =
       useAiOrganizeLayoutPreview({ icons, layoutViewMode, onPreviewed })
 
     const { aiConfig, updateAiConfig } = useAiOrganizeConfig(open)
@@ -226,6 +229,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
           setActiveSnapshotId(null)
           setEditingSnapshotId(null)
           setGroups([])
+          setWebsiteAdditions([])
           setPhase('idle')
           setRunId(null)
           setError(null)
@@ -238,6 +242,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
         const nextGroups = toEditableGroups(snapshot.groups)
         groupsRef.current = nextGroups
         setGroups(nextGroups)
+        setWebsiteAdditions(snapshot.websiteAdditions ?? [])
         setPhase('preview')
         setRunId(snapshot.runId ?? null)
         setError(null)
@@ -255,6 +260,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
         const nextGroups = toEditableGroups(snapshot.groups)
         groupsRef.current = nextGroups
         setGroups(nextGroups)
+        setWebsiteAdditions(snapshot.websiteAdditions ?? [])
         setRunId(snapshot.runId ?? null)
         setError(null)
         setNotConfigured(false)
@@ -270,6 +276,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       setActiveSnapshotId(null)
       setEditingSnapshotId(null)
       setGroups([])
+      setWebsiteAdditions([])
       setPhase('idle')
       setRunId(null)
       setError(null)
@@ -337,8 +344,8 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
     )
 
     const handleLayoutPreview = useCallback(
-      (aiGroups: AiGroup[]) => {
-        void applyLayoutPreview(aiGroups).catch(error => {
+      (aiGroups: AiGroup[], websites = activeSnapshotId ? (websiteAdditions ?? []) : []) => {
+        void applyLayoutPreview(aiGroups, websites).catch(error => {
           if (isAiOrganizePreviewRefreshError(error)) {
             console.error('Failed to refresh AI organize layout preview:', error.cause)
             toast.error(translate('预览已写入但刷新失败，可关闭以恢复布局。'), {
@@ -355,13 +362,13 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
           })
         })
       },
-      [applyLayoutPreview, toast]
+      [activeSnapshotId, applyLayoutPreview, toast, websiteAdditions]
     )
 
     const handlePreviewSnapshot = useCallback(
       (snapshot: AiOrganizeSnapshot) => {
         handleSelectSnapshot(snapshot)
-        handleLayoutPreview(snapshot.groups)
+        handleLayoutPreview(snapshot.groups, snapshot.websiteAdditions ?? [])
       },
       [handleLayoutPreview, handleSelectSnapshot]
     )
@@ -500,6 +507,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       setActiveSnapshotId(null)
       setEditingSnapshotId(null)
       setGroups([])
+      setWebsiteAdditions([])
       setComposerValue('')
       setComposerCommand(null)
       setError(null)
@@ -561,6 +569,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
         active = false
         restoreLayoutPreviewAfterClose()
         setGroups([])
+        setWebsiteAdditions([])
         sessionsRef.current = []
         activeSessionIdRef.current = null
         activeSnapshotIdRef.current = null
@@ -612,7 +621,12 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       [groups]
     )
 
-    useAiOrganizeRunState(phase, applicableGroups.length, groups.length, onRunStateChange)
+    useAiOrganizeRunState(
+      phase,
+      applicableGroups.length + (websiteAdditions?.length ?? 0),
+      groups.length + (websiteAdditions?.length ?? 0),
+      onRunStateChange
+    )
 
     const dispatchPrompt = useCallback(
       async (prompt: string, command?: ComposerCommand | null, label?: string) => {
@@ -684,7 +698,6 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
       [composerCommand, composerValue, sendPrompt]
     )
 
-    // 快捷提示：只填充输入框，发送后由对话 agent 自行调用整理工具。
     const handleSelectPreset = useCallback((prompt: string) => {
       setComposerValue(prompt)
       setPresetsExpanded(false)
@@ -692,7 +705,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
     }, [])
 
     const handleApply = useCallback(async () => {
-      if (applicableGroups.length === 0) {
+      if (applicableGroups.length === 0 && (websiteAdditions?.length ?? 0) === 0) {
         toast.info(translate('没有可应用的分组。'), {
           key: 'ai-organize',
           title: translate('AI 智能整理'),
@@ -707,8 +720,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
           icon_keys: group.iconKeys,
           folder_size: group.folderSize,
         }))
-        // 与「重置布局」一致：清空 slots/dock，交给 IconGrid 重新 hydrate。
-        await applyAiOrganizeLayout(aiGroups)
+        await applyAiChanges(aiGroups, websiteAdditions ?? [])
         markApplied()
         if (runId) {
           await invoke('ai_organize_record_apply', { runId, groups: aiGroups }).catch(e => {
@@ -717,8 +729,9 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
         }
         await onApplied()
         toast.success(
-          translate('已应用 AI 整理：新建 {count} 个分组文件夹。', {
+          translate('已应用 AI 整理：新建 {count} 个分组文件夹，添加 {websites} 个网页图标。', {
             count: applicableGroups.length,
+            websites: websiteAdditions?.length ?? 0,
           }),
           {
             key: 'ai-organize',
@@ -730,7 +743,16 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
         setError(String(e))
         setPhase('preview')
       }
-    }, [applicableGroups, applyAiOrganizeLayout, markApplied, onApplied, onClose, runId, toast])
+    }, [
+      applicableGroups,
+      applyAiChanges,
+      markApplied,
+      onApplied,
+      onClose,
+      runId,
+      toast,
+      websiteAdditions,
+    ])
 
     useImperativeHandle(
       ref,

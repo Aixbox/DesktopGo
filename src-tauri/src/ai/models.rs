@@ -111,8 +111,19 @@ pub struct AiChatResult {
     pub groups: Vec<AiGroup>,
     #[serde(default)]
     pub leftover: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub website_additions: Vec<AiWebsiteAddition>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiWebsiteAddition {
+    pub url: String,
+    pub display_name: String,
+    pub placement: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder_name: Option<String>,
 }
 
 #[derive(Clone, Serialize)]

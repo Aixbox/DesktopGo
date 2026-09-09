@@ -1,4 +1,4 @@
-import { AppWindow, FolderClosed, X } from 'lucide-react'
+import { AppWindow, FolderClosed, Globe2, X } from 'lucide-react'
 import { translate } from '@/lib/i18n'
 import { Input } from '@/components/ui/input'
 import { normalizeAiFolderSize } from '@/lib/aiOrganize'
@@ -121,9 +121,16 @@ export function AiOrganizeSnapshotPreview({
 
   if (previewGroups.length === 0) {
     return (
-      <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-        {translate('这次没有生成可用分组。')}
-      </p>
+      <div className="space-y-2">
+        {snapshot.websiteAdditions?.map(addition => (
+          <WebsiteAdditionRow key={`${addition.url}-${addition.placement}`} addition={addition} />
+        ))}
+        {snapshot.websiteAdditions?.length ? null : (
+          <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+            {translate('这次没有生成可用分组。')}
+          </p>
+        )}
+      </div>
     )
   }
 
@@ -223,6 +230,13 @@ export function AiOrganizeSnapshotPreview({
           </div>
         ))}
       </div>
+      {snapshot.websiteAdditions?.length ? (
+        <div className="mt-3.5 space-y-2 border-t border-border/55 pt-3">
+          {snapshot.websiteAdditions.map(addition => (
+            <WebsiteAdditionRow key={`${addition.url}-${addition.placement}`} addition={addition} />
+          ))}
+        </div>
+      ) : null}
 
       <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
         <span className="min-w-0 truncate">
@@ -276,6 +290,30 @@ export function AiOrganizeSnapshotPreview({
             </button>
           )}
         </span>
+      </div>
+    </div>
+  )
+}
+
+function WebsiteAdditionRow({
+  addition,
+}: {
+  addition: NonNullable<AiOrganizeSnapshot['websiteAdditions']>[number]
+}) {
+  const placementLabel =
+    addition.placement === 'dock'
+      ? translate('底部固定栏')
+      : addition.placement === 'folder'
+        ? translate('文件夹：{name}', { name: addition.folder_name ?? translate('未指定') })
+        : translate('图标网格')
+  return (
+    <div className="flex min-w-0 items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
+      <Globe2 className="h-4 w-4 shrink-0 text-primary" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-medium text-foreground">{addition.display_name}</p>
+        <p className="truncate text-[11px] text-muted-foreground" title={addition.url}>
+          {placementLabel}
+        </p>
       </div>
     </div>
   )

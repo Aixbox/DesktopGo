@@ -39,6 +39,11 @@ export interface AiOrganizeLayoutWrite {
   scrollGroups?: ScrollGroupMeta[]
 }
 
+interface WriteAiOrganizeLayoutStateOptions extends BuildAiOrganizeLayoutWriteOptions {
+  slots?: Array<string | null>
+  dockKeys?: Array<string | null>
+}
+
 const normalizeLegacySlotIds = (slots: Array<string | null> | null | undefined) =>
   (slots ?? []).map(itemId => (itemId ? itemId.replace(/^(desktop|customapp):/, '') : null))
 
@@ -71,6 +76,22 @@ export const writeAiOrganizeLayout = async ({
   baselineLayout,
   defaultScrollGroupName,
 }: BuildAiOrganizeLayoutWriteOptions) => {
+  await writeAiOrganizeLayoutState({
+    viewMode,
+    items,
+    baselineLayout,
+    defaultScrollGroupName,
+  })
+}
+
+export const writeAiOrganizeLayoutState = async ({
+  viewMode,
+  items,
+  baselineLayout,
+  defaultScrollGroupName,
+  slots,
+  dockKeys,
+}: WriteAiOrganizeLayoutStateOptions) => {
   const { writeLayout }: Pick<LayoutStore, 'writeLayout'> =
     await import('../icon-grid/services/layoutStore')
   const { scope, scrollGroups } = buildAiOrganizeLayoutWrite({
@@ -79,5 +100,14 @@ export const writeAiOrganizeLayout = async ({
     baselineLayout,
     defaultScrollGroupName,
   })
-  await writeLayout(items, [], [], undefined, undefined, undefined, scrollGroups, scope)
+  await writeLayout(
+    items,
+    slots ?? baselineLayout?.slots ?? [],
+    dockKeys ?? baselineLayout?.dockKeys ?? [],
+    undefined,
+    undefined,
+    undefined,
+    scrollGroups,
+    scope
+  )
 }

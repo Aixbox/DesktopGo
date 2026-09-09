@@ -63,6 +63,7 @@ pub(super) async fn chat(
         content: outcome.content,
         groups: outcome.groups,
         leftover: outcome.leftover,
+        website_additions: outcome.website_additions,
         run_id: outcome.organize_run_id,
     })
 }

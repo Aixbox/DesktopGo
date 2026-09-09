@@ -53,10 +53,11 @@ export function AiOrganizeMessagePreview({
       key={`${messageKey}-tool-${isActive ? 'active' : 'idle'}`}
       title={translate('已生成布局预览')}
       meta={
-        snapshot.groups.length > 0
-          ? translate('{count} 个分组 · {icons} 个图标', {
+        snapshot.groups.length > 0 || (snapshot.websiteAdditions?.length ?? 0) > 0
+          ? translate('{count} 个分组 · {icons} 个图标 · {websites} 个网页', {
               count: snapshot.groups.length,
               icons: iconCount,
+              websites: snapshot.websiteAdditions?.length ?? 0,
             })
           : undefined
       }
