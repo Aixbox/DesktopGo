@@ -27,8 +27,11 @@ body,
 }
 
 #root {
+  position: relative;
+  overflow: hidden;
   border-radius: var(--radius-2xl);
   corner-shape: round;
+  clip-path: inset(0 round var(--radius-2xl));
   isolation: isolate;
 }
 
@@ -875,9 +878,14 @@ textarea {
 }
 
 [data-launchpad-background='custom'] .launchpad-background-layer {
-  position: fixed;
+  position: absolute;
   display: block;
   inset: var(--launchpad-background-bleed, 0px);
+  overflow: hidden;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  clip-path: inset(0 round var(--radius-2xl));
   background-image: var(--launchpad-background-image);
   background-position: center;
   background-repeat: no-repeat;
@@ -887,6 +895,10 @@ textarea {
 }
 
 [data-launchpad-background='custom'] .launchpad-bg {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  background-clip: padding-box;
   background-color: transparent;
   background-image: linear-gradient(
     rgb(var(--launchpad-background-scrim-rgb) / var(--launchpad-background-overlay, 0.2)),
