@@ -884,7 +884,7 @@ export function DockBar({
             >
               <div
                 ref={indicatorThumbRef}
-                className={`absolute top-1/2 h-[var(--native-scrollbar-thumb-size)] -translate-y-1/2 rounded-full will-change-transform transition-[width,opacity,background-color] duration-150 ${
+                className={`absolute top-1/2 h-[var(--native-scrollbar-thumb-size)] -translate-y-1/2 rounded-full transition-[width,opacity,background-color] duration-150 ${
                   isIndicatorDragging
                     ? 'cursor-grabbing bg-[var(--native-scrollbar-thumb-active)]'
                     : 'cursor-grab bg-[var(--native-scrollbar-thumb-rest)] group-hover/dock-scrollbar:bg-[var(--native-scrollbar-thumb-hover)]'

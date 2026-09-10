@@ -491,7 +491,7 @@ export function SearchPanel({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={panelTransition}
-            className="launchpad-glass-panel-strong search-panel-surface pointer-events-auto relative overflow-hidden rounded-xl will-change-opacity"
+            className="launchpad-glass-panel-strong search-panel-surface pointer-events-auto relative overflow-hidden rounded-xl"
           >
             <div className="relative z-10">
               <div className="flex items-center justify-between gap-3 border-b border-border/70 px-3 py-2">

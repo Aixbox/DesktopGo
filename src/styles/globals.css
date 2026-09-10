@@ -92,6 +92,21 @@ body,
   --scroll-grid-sidebar-width: 12rem;
 }
 
+/*
+ * WebView2 透明窗口撕裂修复：
+ * 透明窗口（WS_EX_NOREDIRECTIONBITMAP + DWM 重定向）上，每个 backdrop-filter
+ * 元素都是一个 backdrop root，合成器必须为其维护"背景读回"。侧栏玻璃、搜索
+ * 输入玻璃与搜索面板同时在场时，读回链路会损坏 WebView2 的合成状态，表现为
+ * 随机的整窗撕裂（侧栏消失、灰色条带、样式崩坏），GPU / 软件合成路径均复现。
+ * scroll 布局子树内一刀切禁用 backdrop-filter（含根元素自身），由底色不透明度
+ * 兜底视觉；分页布局不在此子树内，毛玻璃原样保留。
+ */
+.launchpad-scroll-layout,
+.launchpad-scroll-layout * {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
 .launchpad-scroll-layout.launchpad-scroll-sidebar-compact {
   --scroll-grid-sidebar-width: 4.5rem;
 }
@@ -132,12 +147,12 @@ body,
 }
 
 .scroll-grid-icon-surface {
+  /* 常驻 will-change / drop-shadow 会把每个图标强制成独立合成层，
+     是透明窗口合成压力来源之一，清理之；hover 态瞬时投影保留。 */
   transform: translate3d(0, 0, 0) scale(1);
-  filter: drop-shadow(0 2px 3px color-mix(in oklch, var(--foreground) 8%, transparent));
   transition:
     transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
     filter 220ms ease;
-  will-change: transform;
 }
 
 .launchpad-icon-artwork {
@@ -177,17 +192,15 @@ body,
   pointer-events: none;
   opacity: 0;
   background-color: color-mix(in oklch, var(--background) 58%, transparent);
-  -webkit-backdrop-filter: blur(0);
-  backdrop-filter: blur(0);
   transform: translate3d(-50%, -50%, 0);
+  /* idle 态不再挂 backdrop-filter: blur(0)——视觉上无差别，却常驻创建
+     backdrop root，是透明窗口合成状态损坏的触发源之一。 */
   transition:
     width 150ms cubic-bezier(0.22, 1, 0.36, 1),
     height 150ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 150ms ease-out,
-    background-color 150ms ease-out,
-    -webkit-backdrop-filter 150ms ease-out,
-    backdrop-filter 150ms ease-out;
-  will-change: width, height, opacity, backdrop-filter;
+    background-color 150ms ease-out;
+  will-change: width, height, opacity;
 }
 
 .folder-drop-receiver-backdrop[data-folder-drop-receiver='active'] {
