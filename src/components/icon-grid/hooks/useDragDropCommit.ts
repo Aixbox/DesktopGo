@@ -34,7 +34,7 @@ import {
   getFolderPreviewFrameSize,
   getFolderPreviewSlotSize,
 } from '../views/folderVisualPolicy'
-import { normalizeOuterSlots, repairPathologicallySparsePages } from '../domain/topLevelLayout'
+import { normalizeOuterSlots } from '../domain/topLevelLayout'
 
 interface IconConfigLike {
   imgSize: number
@@ -183,13 +183,11 @@ export function useDragDropCommit({
       pageSizeRef.current,
       Math.max(1, columns)
     )
-    const repairedOuterSlots = repairPathologicallySparsePages(
-      normalizedOuterSlots,
-      filterItemsByIds(nextItems, nextOuterItemIds),
-      pageSizeRef.current,
-      Math.max(1, columns)
-    )
-    const compactedOuterSlots = compactEmptyPages(repairedOuterSlots, pageSizeRef.current)
+    // 不做稀疏页"修复"：这里的 slots 是用户拖拽的实时结果，把图标分摊到
+    // 多页是合法意图（例如每页只放一两个图标）。repairPathologicallySparsePages
+    // 会把"页数 >= 紧凑页数+2"的分布误判为数据损坏并强行压回第一页。
+    // 空页与越界槽位由 normalizeOuterSlots + compactEmptyPages 清理。
+    const compactedOuterSlots = compactEmptyPages(normalizedOuterSlots, pageSizeRef.current)
     itemsRef.current = nextItems
     outerSlotsRef.current = compactedOuterSlots
     dockKeysRef.current = normalizedDockKeys

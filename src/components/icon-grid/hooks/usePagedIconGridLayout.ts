@@ -16,7 +16,6 @@ import {
   canPlaceItemAtAnchorIndex,
   getFootprintIndices,
   normalizeOuterSlots,
-  repairPathologicallySparsePages,
   resizeSlotPages,
 } from '../domain/topLevelLayout'
 import { resolveOuterItemIds } from '../domain/dock'
@@ -383,13 +382,9 @@ export function usePagedIconGridLayout({
         )
     layoutBaselineRef.current = true
 
-    const repaired = repairPathologicallySparsePages(
-      normalized,
-      outerItems,
-      layoutMetrics.pageSize,
-      layoutMetrics.columns
-    )
-    const compacted = compactEmptyPages(repaired, layoutMetrics.pageSize)
+    // 不做稀疏页"修复"：用户把图标分摊到多页是合法布局，页数多不等于数据损坏。
+    // 此处只做空页压缩；若未来出现真正的数据损坏场景，应从源头修复而非压扁用户布局。
+    const compacted = compactEmptyPages(normalized, layoutMetrics.pageSize)
     if (areSlotsEqual(compacted, outerSlotsRef.current)) return
     outerSlotsRef.current = compacted
     setOuterSlots(compacted)

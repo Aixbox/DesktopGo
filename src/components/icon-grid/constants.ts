@@ -3,7 +3,10 @@ export const PAGINATION_OFFSET = 14
 export const PAGINATION_DOT_SIZE = 8
 export const PAGINATION_DOT_GAP = 10
 export const PAGINATION_ACTIVE_WIDTH = 18
-export const SIDE_ARROW_OFFSET = 66
+// 66 是按“窗口带 8px DWM 隐藏边框”时代校准的；shadow(false) 后窗口边缘与
+// 画面边缘重合，66 会让左右分页按钮贴死窗口边缘（可见部分被裁 2px）。
+// 56 = 按钮可见部分距窗口边缘约 8px，恢复旧版观感。
+export const SIDE_ARROW_OFFSET = 56
 export const DRAG_EDGE_SWITCH_ZONE = 72
 export const DRAG_EDGE_SWITCH_MS = 600
 export const WHEEL_PAGE_DELTA_THRESHOLD = 54

@@ -1,7 +1,6 @@
 import {
   buildTopLevelOccupancy,
   buildPersistedItemCoordinates,
-  repairPathologicallySparsePages,
   resizeSlotPages,
 } from './topLevelLayout.ts'
 
@@ -99,110 +98,6 @@ assert(
   JSON.stringify(multiPageShrinkResult) ===
     JSON.stringify(['a', 'b', 'c', 'e', 'f', 'g', 'i', 'j', 'd', 'h', null, null]),
   '缩窗时，下一页图标保持原位，溢出项填入下一页空位，而不是挤占已有图标'
-)
-
-const sparseItems = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(makeIcon)
-const pathologicallySparseSlots = [
-  'a',
-  'b',
-  null,
-  null,
-  null,
-  null,
-  'c',
-  'd',
-  null,
-  null,
-  null,
-  null,
-  'e',
-  'f',
-  null,
-  null,
-  null,
-  null,
-  'g',
-  'h',
-  null,
-  null,
-  null,
-  null,
-]
-const repairedSparseSlots = repairPathologicallySparsePages(
-  pathologicallySparseSlots,
-  sparseItems,
-  6,
-  3
-)
-
-assert(repairedSparseSlots.length === 12, '异常四页稀疏布局应恢复为容纳图标所需的两页')
-assert(
-  JSON.stringify(repairedSparseSlots.filter(Boolean)) ===
-    JSON.stringify(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']),
-  '异常稀疏布局恢复时应保持原有图标顺序'
-)
-
-const intentionalTwoPageSlots = [
-  'a',
-  null,
-  null,
-  null,
-  null,
-  null,
-  'b',
-  'c',
-  null,
-  null,
-  null,
-  null,
-]
-const preservedTwoPageSlots = repairPathologicallySparsePages(
-  intentionalTwoPageSlots,
-  sparseItems.slice(0, 3),
-  6,
-  3
-)
-
-assert(
-  JSON.stringify(preservedTwoPageSlots) === JSON.stringify(intentionalTwoPageSlots),
-  '仅多一页的用户自定义稀疏布局不应被自动收紧'
-)
-
-const mixedItems = [folderItem, ...['a', 'b', 'c', 'd'].map(makeIcon)]
-const mixedSparseSlots = [
-  'folder:docs',
-  null,
-  null,
-  null,
-  null,
-  null,
-  'a',
-  null,
-  null,
-  null,
-  null,
-  null,
-  'b',
-  'c',
-  null,
-  null,
-  null,
-  null,
-  'd',
-  null,
-  null,
-  null,
-  null,
-  null,
-]
-const repairedMixedSlots = repairPathologicallySparsePages(mixedSparseSlots, mixedItems, 6, 3)
-const mixedOccupancy = buildTopLevelOccupancy(repairedMixedSlots, mixedItems, 3, 6)
-
-assert(repairedMixedSlots.length === 12, '包含 2x2 项的异常稀疏布局应安全恢复到两页')
-assert(mixedOccupancy.anchorIndexById.size === mixedItems.length, '混合尺寸恢复后不得丢失图标')
-assert(
-  mixedOccupancy.cells.filter(id => id === 'folder:docs').length === 4,
-  '混合尺寸恢复后 2x2 项必须保留完整且不重叠的 footprint'
 )
 
 console.log('topLevelLayout 稳定坐标测试通过')
