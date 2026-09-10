@@ -1,5 +1,7 @@
 export const GRID_GAP = 8
-export const PAGINATION_OFFSET = 14
+// scroll 模式指示器相对滚动内容底边的偏移（分页模式的指示器已改为固定
+// bottom 定位、紧贴 dock 上方，不再使用此常量）。
+export const PAGINATION_OFFSET = 40
 export const PAGINATION_DOT_SIZE = 8
 export const PAGINATION_DOT_GAP = 10
 export const PAGINATION_ACTIVE_WIDTH = 18

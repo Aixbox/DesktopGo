@@ -54,19 +54,23 @@ interface OuterGridViewProps {
   onDissolveFolder: (folderId: string) => void
   bindTileRef: (id: string, node: HTMLDivElement | null) => void
   reorderAnimationMs: number
-  canGoLeft: boolean
-  canGoRight: boolean
-  sideArrowOffset: number
-  onGoLeft: () => void
-  onGoRight: () => void
-  paginationOffset: number
-  paginationDotGap: number
-  paginationDotSize: number
-  paginationActiveWidth: number
-  pageCount: number
-  hoverPage: number | null
-  onHoverPage: (page: number | null) => void
-  onSwitchPage: (page: number) => void
+  /** 左右翻页按钮（相对内容底边垂直居中）。仅 scroll 模式使用；分页模式的
+      翻页按钮在 IconGrid 容器层垂直居中于窗口，不传则不渲染。 */
+  canGoLeft?: boolean
+  canGoRight?: boolean
+  sideArrowOffset?: number
+  onGoLeft?: () => void
+  onGoRight?: () => void
+  /** 分页指示器（相对内容底边定位）。仅 scroll 模式使用；分页模式的指示器
+      已上移到 IconGrid 容器层固定贴 dock，不传则不渲染。 */
+  paginationOffset?: number
+  paginationDotGap?: number
+  paginationDotSize?: number
+  paginationActiveWidth?: number
+  pageCount?: number
+  hoverPage?: number | null
+  onHoverPage?: (page: number | null) => void
+  onSwitchPage?: (page: number) => void
 }
 
 export function OuterGridView({
@@ -348,41 +352,49 @@ export function OuterGridView({
         </button>
       ) : null}
 
-      <div
-        data-pagination
-        className="absolute left-1/2 z-10 -translate-x-1/2 px-3 py-1.5"
-        style={{ top: `calc(100% + ${paginationOffset}px)` }}
-        onMouseLeave={() => onHoverPage(null)}
-      >
-        <div className="flex items-center" style={{ columnGap: `${paginationDotGap}px` }}>
-          {Array.from({ length: pageCount }, (_, index) => {
-            const isCurrent = currentPage === index
-            const isHovered = hoverPage === index
-            const shouldExpand = isCurrent || isHovered
-            return (
-              <button
-                key={index}
-                data-pagination
-                type="button"
-                aria-label={`Switch to page ${index + 1}`}
-                onMouseEnter={() => onHoverPage(index)}
-                onClick={() => onSwitchPage(index)}
-                className={`relative rounded-full transition-all duration-250 ease-out ${
-                  isCurrent
-                    ? 'bg-foreground/88 shadow-[0_0_10px_rgba(15,23,42,0.25)] dark:bg-white/95 dark:shadow-[0_0_10px_rgba(255,255,255,0.75)]'
-                    : isHovered
-                      ? 'bg-foreground/45 dark:bg-white/55'
-                      : 'bg-foreground/25 hover:bg-foreground/35 dark:bg-white/35 dark:hover:bg-white/45'
-                }`}
-                style={{
-                  width: `${shouldExpand ? paginationActiveWidth : paginationDotSize}px`,
-                  height: `${paginationDotSize}px`,
-                }}
-              />
-            )
-          })}
+      {/* 分页指示器（仅 scroll 模式传入 paginationOffset 时渲染；分页模式的
+          指示器在 IconGrid 容器层固定贴 dock）。 */}
+      {paginationOffset != null ? (
+        <div
+          data-pagination
+          className="absolute left-1/2 z-10 -translate-x-1/2 px-3 py-1.5"
+          style={{ top: `calc(100% + ${paginationOffset}px)` }}
+          onMouseLeave={() => onHoverPage?.(null)}
+        >
+          <div
+            className="flex items-center"
+            style={{ columnGap: `${paginationDotGap ?? 10}px` }}
+          >
+            {Array.from({ length: pageCount ?? 0 }, (_, index) => {
+              const isCurrent = currentPage === index
+              const isHovered = hoverPage === index
+              const shouldExpand = isCurrent || isHovered
+              return (
+                <button
+                  key={index}
+                  data-pagination
+                  type="button"
+                  aria-label={`Switch to page ${index + 1}`}
+                  onMouseEnter={() => onHoverPage?.(index)}
+                  onClick={() => onSwitchPage?.(index)}
+                  className={`relative rounded-full transition-all duration-250 ease-out ${
+                    isCurrent
+                      ? 'bg-foreground/88 shadow-[0_0_10px_rgba(15,23,42,0.25)] dark:bg-white/95 dark:shadow-[0_0_10px_rgba(255,255,255,0.75)]'
+                      : isHovered
+                        ? 'bg-foreground/45 dark:bg-white/55'
+                        : 'bg-foreground/25 hover:bg-foreground/35 dark:bg-white/35 dark:hover:bg-white/45'
+                  }`}
+                  style={{
+                    width: `${shouldExpand ? (paginationActiveWidth ?? 18) : (paginationDotSize ?? 8)}px`,
+                    height: `${paginationDotSize ?? 8}px`,
+                  }}
+                />
+              )
+            })}
+          </div>
         </div>
-      </div>
+      ) : null}
+
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { LayoutGroup } from 'framer-motion'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   useEffect,
   useEffectEvent,
@@ -71,7 +72,6 @@ import {
   PAGINATION_ACTIVE_WIDTH,
   PAGINATION_DOT_GAP,
   PAGINATION_DOT_SIZE,
-  PAGINATION_OFFSET,
   REORDER_ANIMATION_MS,
   SIDE_ARROW_OFFSET,
   WHEEL_PAGE_COOLDOWN_MS,
@@ -786,12 +786,17 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   return (
     <LayoutGroup id="folder-shell-layout">
       <div
-        className={`relative h-full w-full px-16 pt-24 ${dockEnabled ? 'pb-40' : 'pb-12'}`}
+        /* pb-32：底部内边距每 +8px 都可能跨过一个行位（行高 112+8），pb-40 会让
+           medium 图标在 720px 窗口下从 4 行掉到 3 行，故分页网格固定 pb-32。
+           pt-28：网格顶部对齐后，搜索框底（68px）到网格顶 112px，间距恰好
+           一个搜索框高（44px）。items-start：图标少时网格贴顶排列，
+           不再被垂直居中推到窗口中部。 */
+        className={`relative h-full w-full px-16 pt-28 ${dockEnabled ? 'pb-32' : 'pb-12'}`}
         onWheel={handleWheelPageSwitch}
       >
         <EdgeGlow direction="left" active={dragEdgeDirection === 'left'} />
         <EdgeGlow direction="right" active={dragEdgeDirection === 'right'} />
-        <div ref={containerRef} className="flex h-full w-full items-center justify-center">
+        <div ref={containerRef} className="flex h-full w-full items-start justify-center">
           <OuterGridView
             gridRef={gridRef}
             gridWidth={gridWidth}
@@ -835,31 +840,82 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
               else tileRefs.current.delete(id)
             }}
             reorderAnimationMs={REORDER_ANIMATION_MS}
-            canGoLeft={canGoLeft}
-            canGoRight={canGoRight}
-            sideArrowOffset={SIDE_ARROW_OFFSET}
-            onGoLeft={() => {
+          />
+        </div>
+
+        {/* 左右翻页按钮：垂直居中于容器（翻的是整个网格，不应跟随网格内容高度），
+            水平贴网格内容左右缘外 sideArrowOffset 处（网格居中，位置用 calc 推导）。 */}
+        {canGoLeft ? (
+          <button
+            type="button"
+            aria-label="Previous page"
+            className="absolute top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-background/78 text-foreground/80 shadow-[0_8px_24px_rgba(15,23,42,0.1)] backdrop-blur-sm transition-colors hover:bg-background/92 dark:border-white/25 dark:bg-black/35 dark:text-white/85 dark:hover:bg-black/55"
+            style={{ left: `calc(50% - ${gridWidth / 2 + SIDE_ARROW_OFFSET}px)` }}
+            onClick={() => {
               const nextPage = Math.max(0, currentPage - 1)
               currentPageRef.current = nextPage
               setCurrentPage(nextPage)
             }}
-            onGoRight={() => {
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+        ) : null}
+        {canGoRight ? (
+          <button
+            type="button"
+            aria-label="Next page"
+            className="absolute top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-background/78 text-foreground/80 shadow-[0_8px_24px_rgba(15,23,42,0.1)] backdrop-blur-sm transition-colors hover:bg-background/92 dark:border-white/25 dark:bg-black/35 dark:text-white/85 dark:hover:bg-black/55"
+            style={{ right: `calc(50% - ${gridWidth / 2 + SIDE_ARROW_OFFSET}px)` }}
+            onClick={() => {
               const nextPage = Math.min(pageCount - 1, currentPage + 1)
               currentPageRef.current = nextPage
               setCurrentPage(nextPage)
             }}
-            paginationOffset={PAGINATION_OFFSET}
-            paginationDotGap={PAGINATION_DOT_GAP}
-            paginationDotSize={PAGINATION_DOT_SIZE}
-            paginationActiveWidth={PAGINATION_ACTIVE_WIDTH}
-            pageCount={pageCount}
-            hoverPage={hoverPage}
-            onHoverPage={setHoverPage}
-            onSwitchPage={index => {
-              currentPageRef.current = index
-              setCurrentPage(index)
-            }}
-          />
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        ) : null}
+
+        {/* 分页指示器：固定挂在容器底部内边距区（bottom = pb 值），位置恒定、
+            紧贴 dock 上方，不随网格内容高度（行数/图标尺寸）浮动。 */}
+        <div
+          data-pagination
+          className={`absolute left-1/2 z-10 -translate-x-1/2 px-3 py-1.5 ${
+            dockEnabled ? 'bottom-32' : 'bottom-12'
+          }`}
+          onMouseLeave={() => setHoverPage(null)}
+        >
+          <div className="flex items-center" style={{ columnGap: `${PAGINATION_DOT_GAP}px` }}>
+            {Array.from({ length: pageCount }, (_, index) => {
+              const isCurrent = currentPage === index
+              const isHovered = hoverPage === index
+              const shouldExpand = isCurrent || isHovered
+              return (
+                <button
+                  key={index}
+                  data-pagination
+                  type="button"
+                  aria-label={`Switch to page ${index + 1}`}
+                  onMouseEnter={() => setHoverPage(index)}
+                  onClick={() => {
+                    currentPageRef.current = index
+                    setCurrentPage(index)
+                  }}
+                  className={`relative rounded-full transition-all duration-250 ease-out ${
+                    isCurrent
+                      ? 'bg-foreground/88 shadow-[0_0_10px_rgba(15,23,42,0.25)] dark:bg-white/95 dark:shadow-[0_0_10px_rgba(255,255,255,0.75)]'
+                      : isHovered
+                        ? 'bg-foreground/45 dark:bg-white/55'
+                        : 'bg-foreground/25 hover:bg-foreground/35 dark:bg-white/35 dark:hover:bg-white/45'
+                  }`}
+                  style={{
+                    width: `${shouldExpand ? PAGINATION_ACTIVE_WIDTH : PAGINATION_DOT_SIZE}px`,
+                    height: `${PAGINATION_DOT_SIZE}px`,
+                  }}
+                />
+              )
+            })}
+          </div>
         </div>
 
         {dockEnabled ? (
