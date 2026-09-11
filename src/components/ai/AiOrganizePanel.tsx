@@ -785,7 +785,7 @@ export const AiOrganizePanel = forwardRef<AiOrganizePanelHandle, AiOrganizePanel
           initial={prefersReducedMotion ? false : { x: 28, opacity: 0 }}
           animate={prefersReducedMotion ? undefined : { x: 0, opacity: 1 }}
           transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-          className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-border/85 bg-background/95 shadow-2xl backdrop-blur-xl"
+          className={`flex h-full w-full flex-col overflow-hidden rounded-2xl border border-border/85 bg-background/95 backdrop-blur-xl ${isExpanded ? 'shadow-2xl' : 'shadow-none'}`}
           onClick={event => event.stopPropagation()}
         >
           <div className="relative flex items-center justify-between border-b border-border/80 px-4 py-3.5">

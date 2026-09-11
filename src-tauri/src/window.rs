@@ -289,12 +289,14 @@ fn create_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
 }
 
 pub(crate) fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
+    eprintln!("[icon-diag] show_settings_window entered");
     create_settings_window(app)?;
     refresh_settings_window_title(app);
 
     let settings_window = app
         .get_webview_window("settings")
         .ok_or_else(|| "Settings window not found".to_string())?;
+    eprintln!("[icon-diag] show_settings_window resolved window");
     let _ = settings_window.unminimize();
     let _ = settings_window.show();
     if let Err(error) = crate::window_icon::refresh(&settings_window) {

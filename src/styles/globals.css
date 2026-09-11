@@ -917,6 +917,23 @@ textarea {
 }
 
 /*
+ * AI 侧栏的底衬要和主窗口圆角处透出的底色读成同一张底：那里是
+ * .launchpad-background-fill（--muted）再被 .launchpad-bg 的蒙版压一层。侧栏自己画
+ * 的 --muted 会盖住父级蒙版，所以这里补同一道蒙版，两侧才不会一亮一暗。
+ * 底衬只有 5px，AiOrganizePanel 内嵌时同样不投影，否则阴影会把下沿压暗、上沿留白。
+ */
+.launchpad-ai-organize-pane {
+  background-color: var(--muted);
+}
+
+[data-launchpad-background='custom'] .launchpad-ai-organize-pane {
+  background-image: linear-gradient(
+    rgb(var(--launchpad-background-scrim-rgb) / var(--launchpad-background-overlay, 0.2)),
+    rgb(var(--launchpad-background-scrim-rgb) / var(--launchpad-background-overlay, 0.2))
+  );
+}
+
+/*
  * 蒙版可以调到很低，直接压在壁纸上的文字不能再依赖主题前景色。改用系统桌面图标的
  * 处理：统一白字 + 紧凑深色投影。深色投影读起来是「深度」而不是「发光」，因此在
  * 浅色壁纸上也不会像反色光晕那样抢视线。

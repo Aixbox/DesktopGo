@@ -39,7 +39,11 @@ export function LaunchpadAiOrganizePane({
 }: LaunchpadAiOrganizePaneProps) {
   return (
     <div
-      className={reserved ? 'relative z-30 h-full shrink-0 overflow-hidden bg-muted p-[5px]' : 'hidden'}
+      className={
+        reserved
+          ? 'launchpad-ai-organize-pane relative z-30 h-full shrink-0 overflow-hidden p-[5px]'
+          : 'hidden'
+      }
       style={{ width: `${AI_ORGANIZE_PANEL_WIDTH}px` }}
     >
       {open ? (
