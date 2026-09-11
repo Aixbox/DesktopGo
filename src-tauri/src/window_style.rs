@@ -112,6 +112,10 @@ enum MainWindowBackdrop {
 
 #[cfg(windows)]
 fn resolve_main_window_backdrop(style: &str, persistent_enabled: bool) -> MainWindowBackdrop {
+    if !main_window_should_use_transparent_surface(style, persistent_enabled) {
+        return MainWindowBackdrop::Default;
+    }
+
     match normalize_window_style(style).unwrap_or("default") {
         "nativeAcrylic" if persistent_enabled => MainWindowBackdrop::Mica,
         "nativeAcrylic" => MainWindowBackdrop::Acrylic,
@@ -124,7 +128,11 @@ pub(crate) fn main_window_should_use_transparent_surface(
     _style: &str,
     _persistent_enabled: bool,
 ) -> bool {
-    true
+    // WebView2 transparent child surfaces are unstable on some Windows GPU/driver
+    // combinations: activating the search panel can expose the desktop behind the
+    // whole WebView and drop the panel's painted styles. The launchpad already paints
+    // its wallpaper and surfaces in the document, so an opaque host is a safe fallback.
+    false
 }
 
 pub(crate) fn resolve_main_window_background_color(

@@ -31,7 +31,6 @@ body,
   overflow: hidden;
   border-radius: var(--radius-2xl);
   corner-shape: round;
-  clip-path: inset(0 round var(--radius-2xl));
   isolation: isolate;
 }
 
@@ -98,11 +97,23 @@ body,
  * 元素都是一个 backdrop root，合成器必须为其维护"背景读回"。侧栏玻璃、搜索
  * 输入玻璃与搜索面板同时在场时，读回链路会损坏 WebView2 的合成状态，表现为
  * 随机的整窗撕裂（侧栏消失、灰色条带、样式崩坏），GPU / 软件合成路径均复现。
- * scroll 布局子树内一刀切禁用 backdrop-filter（含根元素自身），由底色不透明度
- * 兜底视觉；分页布局不在此子树内，毛玻璃原样保留。
+ * 启动台子树内统一禁用 backdrop-filter（含根元素自身），由宿主不透明背景和
+ * 普通底色兜底视觉，避免分页/滚动模式在透明表面上走不稳定的背景读回路径。
  */
 .launchpad-scroll-layout,
 .launchpad-scroll-layout * {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/*
+ * 主启动台运行在透明 WebView2 表面上。分页模式也会同时挂载根窗口、搜索框、
+ * 搜索结果和浮动菜单的 backdrop root；在部分 Intel Arc + WebView2 环境中，
+ * 任意一个新面板加入后都会让整张 WebView 进入错误的透明度/重绘状态。
+ * 主启动台统一使用普通背景色，避免依赖 backdrop 采样恢复玻璃效果。
+ */
+.launchpad-bg,
+.launchpad-bg * {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
@@ -890,6 +901,11 @@ textarea {
   display: none;
 }
 
+/* 壁纸滤镜同样会创建大面积合成层，透明表面下统一关闭。 */
+.launchpad-background-layer {
+  filter: none !important;
+}
+
 .launchpad-background-fill {
   display: none;
 }
@@ -910,7 +926,6 @@ textarea {
   border: 0;
   outline: 0;
   box-shadow: none;
-  clip-path: inset(0 round var(--radius-2xl));
   background-image: var(--launchpad-background-image);
   background-position: center;
   background-repeat: no-repeat;
