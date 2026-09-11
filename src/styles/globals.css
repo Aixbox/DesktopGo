@@ -624,6 +624,15 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/*
+ * WebView2 窗口获得系统焦点时，Blink 会把 DOM 焦点回落到 body 并匹配 :focus-visible；
+ * UA 的 outline: auto 叠加 Tailwind base 给所有元素设置的 outline-color: var(--ring)，
+ * 会沿整个视口画一圈主题色细线。body 不可通过 Tab 聚焦，此 outline 无可访问性价值，直接移除。
+ */
+body:focus-visible {
+  outline: none;
+}
+
 button,
 input,
 select,
@@ -866,31 +875,6 @@ textarea {
   background: rgba(30, 30, 40, 0.85);
 }
 
-.window-style-native-acrylic .launchpad-bg {
-  /* Dynamic transparency and blur predominantly handled by native vibrancy */
-  background: transparent;
-  backdrop-filter: blur(3px) saturate(180%) brightness(1.25);
-  -webkit-backdrop-filter: blur(3px) saturate(180%) brightness(1.25);
-}
-
-.dark.window-style-native-acrylic .launchpad-bg {
-  background: rgba(7, 10, 16, 0.08);
-  backdrop-filter: blur(4px) saturate(145%) brightness(0.92);
-  -webkit-backdrop-filter: blur(4px) saturate(145%) brightness(0.92);
-}
-
-.window-style-native-mica .launchpad-bg {
-  background: rgba(238, 242, 248, 0.18);
-  backdrop-filter: blur(6px) saturate(140%) brightness(1.02);
-  -webkit-backdrop-filter: blur(6px) saturate(140%) brightness(1.02);
-}
-
-.dark.window-style-native-mica .launchpad-bg {
-  background: rgba(10, 14, 22, 0.2);
-  backdrop-filter: blur(8px) saturate(130%) brightness(0.96);
-  -webkit-backdrop-filter: blur(8px) saturate(130%) brightness(0.96);
-}
-
 /*
  * 自定义背景分两层绘制：
  * - .launchpad-background-layer 是 .launchpad-bg 的前置兄弟节点，只承载图片与模糊，
@@ -976,76 +960,6 @@ textarea {
 [data-launchpad-background='custom'] .launchpad-glass-panel-strong .icon-label {
   color: var(--foreground);
   text-shadow: none;
-}
-
-.window-style-native-mica .launchpad-glass-panel {
-  border: 1px solid color-mix(in oklch, var(--foreground) 12%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklch, var(--background) 82%, transparent) 0%,
-    color-mix(in oklch, var(--background) 74%, transparent) 100%
-  );
-  box-shadow:
-    0 8px 24px rgba(15, 23, 42, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.52);
-  backdrop-filter: blur(22px) saturate(156%);
-  -webkit-backdrop-filter: blur(22px) saturate(156%);
-}
-
-.window-style-native-mica .launchpad-glass-panel-strong {
-  border: 1px solid color-mix(in oklch, var(--foreground) 14%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklch, var(--background) 88%, transparent) 0%,
-    color-mix(in oklch, var(--background) 80%, transparent) 100%
-  );
-  box-shadow:
-    0 12px 32px rgba(15, 23, 42, 0.13),
-    inset 0 1px 0 rgba(255, 255, 255, 0.58);
-  backdrop-filter: blur(24px) saturate(160%);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
-}
-
-.window-style-native-mica .search-panel-surface {
-  border: 1px solid color-mix(in oklch, var(--foreground) 15%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklch, var(--background) 92%, transparent) 0%,
-    color-mix(in oklch, var(--background) 84%, transparent) 100%
-  );
-  box-shadow:
-    0 14px 36px rgba(15, 23, 42, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(26px) saturate(150%);
-  -webkit-backdrop-filter: blur(26px) saturate(150%);
-}
-
-.window-style-native-mica .launchpad-glass-button {
-  border: 1px solid color-mix(in oklch, var(--foreground) 14%, transparent);
-  background: color-mix(in oklch, var(--background) 60%, transparent);
-  color: color-mix(in oklch, var(--foreground) 86%, transparent);
-}
-
-.window-style-native-mica .launchpad-glass-button:hover {
-  background: color-mix(in oklch, var(--background) 72%, transparent);
-  color: var(--foreground);
-}
-
-.window-style-native-mica .search-floating-menu {
-  border: 1px solid color-mix(in oklch, var(--foreground) 14%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklch, var(--background) 90%, transparent) 0%,
-    color-mix(in oklch, var(--background) 82%, transparent) 100%
-  );
-  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.15);
-  backdrop-filter: blur(22px) saturate(156%);
-  -webkit-backdrop-filter: blur(22px) saturate(156%);
-}
-
-.window-style-native-mica .search-surface-card {
-  border: 1px solid color-mix(in oklch, var(--foreground) 12%, transparent);
-  background: color-mix(in oklch, var(--background) 66%, transparent);
 }
 
 .launchpad-glass-panel {
@@ -1270,158 +1184,6 @@ textarea {
 .search-split-divider:focus-visible .search-split-divider-grip,
 .search-split-divider[data-resizing='true'] .search-split-divider-grip {
   height: 2.75rem;
-}
-
-.dark.window-style-native-acrylic .launchpad-glass-panel,
-.dark.window-style-native-mica .launchpad-glass-panel {
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklch, var(--background) 72%, transparent) 0%,
-    color-mix(in oklch, var(--background) 62%, transparent) 100%
-  );
-  box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.045);
-  backdrop-filter: blur(22px) saturate(152%);
-  -webkit-backdrop-filter: blur(22px) saturate(152%);
-}
-
-.dark.window-style-native-acrylic .launchpad-glass-panel-strong,
-.dark.window-style-native-mica .launchpad-glass-panel-strong {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklch, var(--background) 78%, transparent) 0%,
-    color-mix(in oklch, var(--background) 70%, transparent) 100%
-  );
-  box-shadow:
-    0 14px 36px rgba(0, 0, 0, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(24px) saturate(150%);
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
-}
-
-.dark.window-style-native-acrylic .search-panel-surface,
-.dark.window-style-native-mica .search-panel-surface {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklch, var(--background) 80%, transparent) 0%,
-    color-mix(in oklch, var(--background) 72%, transparent) 100%
-  );
-  box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(26px) saturate(152%);
-  -webkit-backdrop-filter: blur(26px) saturate(152%);
-}
-
-.dark.window-style-native-acrylic .launchpad-glass-button,
-.dark.window-style-native-mica .launchpad-glass-button {
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  background: color-mix(in oklch, var(--background) 44%, transparent);
-  color: color-mix(in oklch, var(--foreground) 86%, transparent);
-}
-
-.dark.window-style-native-acrylic .launchpad-glass-button:hover,
-.dark.window-style-native-mica .launchpad-glass-button:hover {
-  background: color-mix(in oklch, var(--background) 56%, transparent);
-  color: var(--foreground);
-}
-
-.dark.window-style-native-acrylic .search-floating-menu,
-.dark.window-style-native-mica .search-floating-menu {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklch, var(--background) 82%, transparent) 0%,
-    color-mix(in oklch, var(--background) 74%, transparent) 100%
-  );
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(22px) saturate(150%);
-  -webkit-backdrop-filter: blur(22px) saturate(150%);
-}
-
-.dark.window-style-native-acrylic .search-surface-card,
-.dark.window-style-native-mica .search-surface-card {
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  background: color-mix(in oklch, var(--background) 52%, transparent);
-}
-
-.dark.window-style-native-mica .launchpad-glass-panel {
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklch, var(--background) 90%, transparent) 0%,
-    color-mix(in oklch, var(--background) 82%, transparent) 100%
-  );
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.32),
-    0 1px 0 rgba(255, 255, 255, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  backdrop-filter: blur(24px) saturate(145%);
-  -webkit-backdrop-filter: blur(24px) saturate(145%);
-}
-
-.dark.window-style-native-mica .launchpad-glass-panel-strong {
-  border: 1px solid rgba(255, 255, 255, 0.26);
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklch, var(--background) 94%, transparent) 0%,
-    color-mix(in oklch, var(--background) 88%, transparent) 100%
-  );
-  box-shadow:
-    0 18px 44px rgba(0, 0, 0, 0.36),
-    0 1px 0 rgba(255, 255, 255, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(24px) saturate(148%);
-  -webkit-backdrop-filter: blur(24px) saturate(148%);
-}
-
-.dark.window-style-native-mica .search-panel-surface {
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklch, var(--background) 95%, transparent) 0%,
-    color-mix(in oklch, var(--background) 90%, transparent) 100%
-  );
-  box-shadow:
-    0 20px 48px rgba(0, 0, 0, 0.4),
-    0 1px 0 rgba(255, 255, 255, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(24px) saturate(148%);
-  -webkit-backdrop-filter: blur(24px) saturate(148%);
-}
-
-.dark.window-style-native-mica .launchpad-glass-button {
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: color-mix(in oklch, var(--background) 70%, transparent);
-  color: color-mix(in oklch, var(--foreground) 92%, transparent);
-}
-
-.dark.window-style-native-mica .launchpad-glass-button:hover {
-  background: color-mix(in oklch, var(--background) 82%, transparent);
-  border-color: rgba(255, 255, 255, 0.3);
-}
-
-.dark.window-style-native-mica .search-floating-menu {
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklch, var(--background) 95%, transparent) 0%,
-    color-mix(in oklch, var(--background) 90%, transparent) 100%
-  );
-  box-shadow:
-    0 18px 42px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(28px) saturate(160%);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
-}
-
-.dark.window-style-native-mica .search-surface-card {
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: color-mix(in oklch, var(--background) 76%, transparent);
 }
 
 @media (forced-colors: active) {

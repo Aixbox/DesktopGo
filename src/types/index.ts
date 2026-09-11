@@ -78,7 +78,7 @@ export const getIconGridRowHeight = (iconSize: IconSize): number =>
 
 export type WindowMode = 'fullscreen' | 'large' | 'medium' | 'small'
 
-export type WindowStyle = 'default' | 'nativeAcrylic'
+export type WindowStyle = 'default'
 
 export type LaunchpadOpenFocusTarget = 'search' | 'launchpad'
 

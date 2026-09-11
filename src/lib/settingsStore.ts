@@ -174,7 +174,7 @@ const isLaunchpadBackgroundImage = (value: unknown): value is string =>
 const isAutoExtractThemeColor = (value: unknown): value is boolean => typeof value === 'boolean'
 
 const isWindowStyle = (value: unknown): value is WindowStyle =>
-  value === 'default' || value === 'nativeAcrylic'
+  value === 'default'
 
 const isAppLanguage = (value: unknown): value is AppLanguage => value === 'zh' || value === 'en'
 

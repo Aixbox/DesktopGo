@@ -584,7 +584,7 @@ export function Launchpad() {
           ref={launchpadSurfaceRef}
           tabIndex={-1}
           className={[
-            'launchpad-bg relative flex h-screen w-full select-none flex-col items-center justify-center overflow-hidden rounded-2xl',
+            'launchpad-bg relative flex h-screen w-full select-none flex-col items-center justify-center overflow-hidden rounded-2xl outline-none',
             launchpadGridViewMode === 'scroll' ? 'launchpad-scroll-layout' : '',
             launchpadGridViewMode === 'scroll' && isScrollSidebarCompact
               ? 'launchpad-scroll-sidebar-compact'

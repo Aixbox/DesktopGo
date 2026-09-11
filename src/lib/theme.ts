@@ -1,10 +1,9 @@
-import type { ThemeMode, WindowStyle } from '@/types'
-import { invoke } from '@tauri-apps/api/core'
+import type { ThemeMode } from '@/types'
 import { getSetting, setSetting } from '@/lib/settingsStore'
-import { planThemeSyncOnSystemPreferenceChange, resolveEffectiveThemeMode } from './themePolicy'
+import { planThemeSyncOnSystemPreferenceChange } from './themePolicy'
 
 export const THEME_MODE_SYNC_EVENT = 'desktopgo:theme-mode-sync'
-export { planThemeSyncOnSystemPreferenceChange, resolveEffectiveThemeMode } from './themePolicy'
+export { planThemeSyncOnSystemPreferenceChange } from './themePolicy'
 
 function emitThemeModeSync(mode: ThemeMode) {
   window.dispatchEvent(
@@ -17,8 +16,8 @@ function emitThemeModeSync(mode: ThemeMode) {
 /**
  * 根据 ThemeMode 设置应用到 <html> 元素上的 dark class
  */
-export function applyTheme(mode: ThemeMode, windowStyle: WindowStyle = 'default') {
-  const effectiveMode = resolveEffectiveThemeMode(mode, windowStyle)
+export function applyTheme(mode: ThemeMode) {
+  const effectiveMode = mode
   const root = document.documentElement
 
   if (effectiveMode === 'dark') {
@@ -51,22 +50,15 @@ export async function saveTheme(mode: ThemeMode): Promise<void> {
  * 初始化主题，并设置系统主题变化监听
  */
 export async function initTheme(): Promise<() => void> {
-  const [mode, windowStyle] = await Promise.all([getSavedTheme(), getSetting('windowStyle')])
-  applyTheme(mode, windowStyle)
+  const mode = await getSavedTheme()
+  applyTheme(mode)
 
-  // 监听系统主题偏好变化（system 模式，或原生亚克力强制跟随系统时生效）
+  // 监听系统主题偏好变化。
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
   const handleChange = () => {
     void (async () => {
-      const [currentMode, windowStyle] = await Promise.all([
-        getSavedTheme(),
-        getSetting('windowStyle'),
-      ])
-      const plan = planThemeSyncOnSystemPreferenceChange(
-        currentMode,
-        windowStyle,
-        mediaQuery.matches
-      )
+      const currentMode = await getSavedTheme()
+      const plan = planThemeSyncOnSystemPreferenceChange(currentMode, 'default', mediaQuery.matches)
 
       if (!plan) {
         return
@@ -76,15 +68,8 @@ export async function initTheme(): Promise<() => void> {
         await saveTheme(plan.saveMode)
       }
 
-      applyTheme(plan.applyMode, windowStyle)
+      applyTheme(plan.applyMode)
       emitThemeModeSync(plan.emitMode)
-
-      if (plan.refreshNativeAcrylic) {
-        await invoke('apply_window_style', {
-          style: windowStyle,
-          themeMode: plan.applyMode,
-        })
-      }
     })().catch(e => {
       console.error('Failed to sync system theme change:', e)
     })

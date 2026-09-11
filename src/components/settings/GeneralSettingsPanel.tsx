@@ -16,10 +16,8 @@ import { translate, useI18n } from '@/lib/i18n'
 import {
   THEME_MODE_SYNC_EVENT,
   applyTheme,
-  resolveEffectiveThemeMode,
   saveTheme,
 } from '@/lib/theme'
-import { applyWindowStyle, saveWindowStyle } from '@/lib/windowStyle'
 import { DEFAULT_LAUNCHPAD_SHORTCUT, getSetting, setSetting } from '@/lib/settingsStore'
 import { DEFAULT_LAUNCHPAD_OPEN_FOCUS_TARGET } from '@/lib/launchpadOpenFocus'
 import { MAIN_WINDOW_APPEARANCE_SYNC_EVENT } from '@/lib/windowPersistent'
@@ -41,7 +39,6 @@ import type {
   ThemeMode,
   TitleLineCount,
   WindowMode,
-  WindowStyle,
 } from '@/types'
 import {
   ICON_CORNER_RADIUS_MAX,
@@ -88,23 +85,6 @@ const THEME_MODE_ICONS: Record<ThemeMode, ReactNode> = {
   light: <Sun className="h-4 w-4" />,
 }
 
-const WINDOW_STYLE_OPTIONS: {
-  label: string
-  value: WindowStyle
-  description: string
-}[] = [
-  {
-    label: '柔光玻璃',
-    value: 'default',
-    description: 'DesktopGo 自带的柔和玻璃层次，观感更稳定。',
-  },
-  {
-    label: '亚克力',
-    value: 'nativeAcrylic',
-    description: '更接近 Windows 原生磨砂亚克力，背景更透，仅主启动台窗口生效。',
-  },
-]
-
 const LANGUAGE_OPTIONS: { label: string; value: AppLanguage }[] = [
   { label: '简体中文', value: 'zh' },
   { label: 'English', value: 'en' },
@@ -134,7 +114,6 @@ export function GeneralSettingsPanel() {
     setDockEnabled,
   } = useIconStore()
   const [themeMode, setThemeMode] = useState<ThemeMode>('system')
-  const [windowStyle, setWindowStyle] = useState<WindowStyle>('default')
   const [windowPersistentEnabled, setWindowPersistentEnabled] = useState(false)
   const [launchOnStartupEnabled, setLaunchOnStartupEnabled] = useState(true)
   const [isSavingLaunchOnStartup, setIsSavingLaunchOnStartup] = useState(false)
@@ -160,7 +139,6 @@ export function GeneralSettingsPanel() {
           savedTitleLineCount,
           savedDockEnabled,
           savedThemeMode,
-          savedWindowStyle,
           savedWindowPersistent,
           savedLaunchOnStartup,
           savedLaunchpadShortcut,
@@ -173,7 +151,6 @@ export function GeneralSettingsPanel() {
           getSetting('titleLineCount'),
           getSetting('dockEnabled'),
           getSetting('themeMode'),
-          getSetting('windowStyle'),
           getSetting('windowPersistent'),
           getSetting('launchOnStartup'),
           getSetting('launchpadShortcut'),
@@ -207,7 +184,6 @@ export function GeneralSettingsPanel() {
           dockEnabled: savedDockEnabled,
         })
         setThemeMode(savedThemeMode)
-        setWindowStyle(savedWindowStyle)
         setWindowPersistentEnabled(savedWindowPersistent)
         setLaunchOnStartupEnabled(resolvedLaunchOnStartup)
         setLaunchpadShortcut(savedLaunchpadShortcut)
@@ -253,7 +229,6 @@ export function GeneralSettingsPanel() {
   const handleWindowPersistent = (value: boolean) => {
     const previousValue = windowPersistentEnabled
     setWindowPersistentEnabled(value)
-    applyWindowStyle(windowStyle, value)
     setSkipReturnToMainOnClose(!value)
     const task = (async () => {
       try {
@@ -262,7 +237,6 @@ export function GeneralSettingsPanel() {
       } catch (error) {
         console.error('Failed to save window persistent state:', error)
         setWindowPersistentEnabled(previousValue)
-        applyWindowStyle(windowStyle, previousValue)
         setSkipReturnToMainOnClose(!previousValue)
         void setSetting('windowPersistent', previousValue).catch(rollbackError => {
           console.error('Failed to rollback window persistent state:', rollbackError)
@@ -321,7 +295,7 @@ export function GeneralSettingsPanel() {
 
   const handleThemeMode = async (value: ThemeMode) => {
     setThemeMode(value)
-    applyTheme(value, windowStyle)
+    applyTheme(value)
 
     try {
       await saveTheme(value)
@@ -330,14 +304,6 @@ export function GeneralSettingsPanel() {
       console.error('Failed to save theme mode:', e)
     }
 
-    if (windowStyle === 'nativeAcrylic') {
-      void invoke('apply_window_style', {
-        style: windowStyle,
-        themeMode: resolveEffectiveThemeMode(value, windowStyle),
-      }).catch(error => {
-        console.error('Failed to refresh native acrylic after theme change:', error)
-      })
-    }
   }
 
   useEffect(() => {
@@ -352,40 +318,6 @@ export function GeneralSettingsPanel() {
       window.removeEventListener(THEME_MODE_SYNC_EVENT, handleThemeModeSync)
     }
   }, [])
-
-  const handleWindowStyle = async (value: WindowStyle) => {
-    const previousStyle = windowStyle
-    setWindowStyle(value)
-    applyWindowStyle(value, windowPersistentEnabled)
-    applyTheme(themeMode, value)
-
-    try {
-      await saveWindowStyle(value)
-    } catch (error) {
-      setWindowStyle(previousStyle)
-      applyWindowStyle(previousStyle, windowPersistentEnabled)
-      applyTheme(themeMode, previousStyle)
-      toast.error(translate('保存主题风格失败：{error}', { error: String(error) }), {
-        key: 'settings-window-style',
-        title: translate('主题风格'),
-      })
-      return
-    }
-
-    try {
-      await invoke('apply_window_style', {
-        style: value,
-        themeMode: resolveEffectiveThemeMode(themeMode, value),
-      })
-      void syncMainWindowAppearance()
-    } catch (error) {
-      console.error('Failed to apply window style:', error)
-      toast.error(translate('应用主题风格失败：{error}', { error: String(error) }), {
-        key: 'settings-window-style',
-        title: translate('主题风格'),
-      })
-    }
-  }
 
   const handleLaunchOnStartup = async (value: boolean) => {
     if (isSavingLaunchOnStartup) {
@@ -585,9 +517,6 @@ export function GeneralSettingsPanel() {
   const shortcutDisplayValue = isRecordingShortcut
     ? translate('请按下新的组合键')
     : launchpadShortcutDraft
-  const selectedWindowStyleOption =
-    WINDOW_STYLE_OPTIONS.find(option => option.value === windowStyle) ?? WINDOW_STYLE_OPTIONS[0]
-
   return (
     <div className="space-y-8">
       <section aria-labelledby="settings-appearance-heading">
@@ -623,21 +552,6 @@ export function GeneralSettingsPanel() {
               value={themeMode}
               onChange={handleThemeMode}
             />
-          </SettingCard>
-
-          <SettingCard label={translate('主题风格')}>
-            <SegmentedControl
-              ariaLabel={translate('主题风格')}
-              options={WINDOW_STYLE_OPTIONS.map(option => ({
-                ...option,
-                label: translate(option.label),
-              }))}
-              value={windowStyle}
-              onChange={value => void handleWindowStyle(value)}
-            />
-            <p className="text-xs leading-5 text-muted-foreground">
-              {translate(selectedWindowStyleOption.description)}
-            </p>
           </SettingCard>
 
           <AppearanceSettingsCards onAppearanceChange={syncMainWindowAppearance} />

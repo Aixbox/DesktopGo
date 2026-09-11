@@ -1,30 +1,21 @@
 import type { WindowStyle } from '@/types'
 import { getSetting, setSetting } from '@/lib/settingsStore'
 
-const NATIVE_ACRYLIC_CLASS = 'window-style-native-acrylic'
-const NATIVE_MICA_CLASS = 'window-style-native-mica'
-
-export function applyWindowStyle(style: WindowStyle, persistentEnabled = false) {
+export function applyWindowStyle(_style: WindowStyle = 'default', _persistentEnabled = false) {
   const root = document.documentElement
-  const useNativeAcrylic = style === 'nativeAcrylic' && !persistentEnabled
-  const useNativeMica = style === 'nativeAcrylic' && persistentEnabled
-
-  root.classList.toggle(NATIVE_ACRYLIC_CLASS, useNativeAcrylic)
-  root.classList.toggle(NATIVE_MICA_CLASS, useNativeMica)
+  root.classList.remove('window-style-native-acrylic', 'window-style-native-mica')
 }
 
 export async function getSavedWindowStyle(): Promise<WindowStyle> {
-  return getSetting('windowStyle')
+  const style = await getSetting('windowStyle')
+  return style === 'default' ? style : 'default'
 }
 
-export async function saveWindowStyle(style: WindowStyle): Promise<void> {
-  await setSetting('windowStyle', style)
+export async function saveWindowStyle(_style: WindowStyle = 'default'): Promise<void> {
+  await setSetting('windowStyle', 'default')
 }
 
 export async function initWindowStyle(): Promise<void> {
-  const [style, persistentEnabled] = await Promise.all([
-    getSavedWindowStyle(),
-    getSetting('windowPersistent'),
-  ])
-  applyWindowStyle(style, persistentEnabled)
+  await getSavedWindowStyle()
+  applyWindowStyle()
 }

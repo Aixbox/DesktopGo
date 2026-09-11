@@ -145,7 +145,6 @@ const EN_MESSAGES: Record<string, string> = {
   '当前已关闭，登录 Windows 后需要手动启动 DesktopGo。':
     'DesktopGo will not start automatically after Windows sign-in.',
   主题模式: 'Theme',
-  主题风格: 'Theme style',
   图标大小: 'Icon size',
   窗口大小: 'Window size',
   标题行数: 'Title lines',
@@ -202,14 +201,6 @@ const EN_MESSAGES: Record<string, string> = {
   跟随系统: 'System',
   深色模式: 'Dark',
   浅色模式: 'Light',
-  柔光玻璃: 'Soft Glass',
-  亚克力: 'Acrylic',
-  'DesktopGo 自带的柔和玻璃层次，观感更稳定。':
-    "DesktopGo's built-in soft glass layering with a more stable appearance.",
-  '更接近 Windows 原生磨砂亚克力，背景更透，仅主启动台窗口生效。':
-    'Closer to native Windows acrylic with a more translucent backdrop. Applies to the main launchpad window only.',
-  '保存主题风格失败：{error}': 'Failed to save theme style: {error}',
-  '应用主题风格失败：{error}': 'Failed to apply theme style: {error}',
   简体中文: 'Simplified Chinese',
   打开启动台快捷键: 'Launchpad shortcut',
   打开启动台时默认焦点: 'Default focus when opening Launchpad',

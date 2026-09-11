@@ -197,7 +197,7 @@ export function useLaunchpadWindowController({
         applySavedAppearance(),
       ])
       setWindowPersistentEnabled(persistentEnabled)
-      applyTheme(savedTheme, savedWindowStyle)
+      applyTheme(savedTheme)
       applyWindowStyle(savedWindowStyle, persistentEnabled)
     } catch (error) {
       console.error('Failed to sync launchpad appearance:', error)

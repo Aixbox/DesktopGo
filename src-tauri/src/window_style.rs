@@ -1,15 +1,13 @@
 use std::sync::atomic::Ordering;
-use std::time::Duration;
 
 use tauri::Manager;
 use tauri_plugin_store::StoreExt;
 
-#[cfg(target_os = "windows")]
-use window_vibrancy::{apply_acrylic, apply_mica, clear_acrylic, clear_mica};
 #[cfg(windows)]
 use windows::Win32::Graphics::Dwm::{
     DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE, DWMWA_USE_IMMERSIVE_DARK_MODE,
-    DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DWM_WINDOW_CORNER_PREFERENCE,
+    DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND,
+    DWM_WINDOW_CORNER_PREFERENCE,
 };
 #[cfg(windows)]
 use winreg::{enums::HKEY_CURRENT_USER, RegKey};
@@ -96,30 +94,8 @@ pub(crate) fn resolved_theme_is_dark(
 
 fn normalize_window_style(value: &str) -> Option<&'static str> {
     match value.trim() {
-        "default" => Some("default"),
-        "nativeAcrylic" => Some("nativeAcrylic"),
+        "default" | "nativeAcrylic" => Some("default"),
         _ => None,
-    }
-}
-
-#[cfg(windows)]
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum MainWindowBackdrop {
-    Default,
-    Acrylic,
-    Mica,
-}
-
-#[cfg(windows)]
-fn resolve_main_window_backdrop(style: &str, persistent_enabled: bool) -> MainWindowBackdrop {
-    if !main_window_should_use_transparent_surface(style, persistent_enabled) {
-        return MainWindowBackdrop::Default;
-    }
-
-    match normalize_window_style(style).unwrap_or("default") {
-        "nativeAcrylic" if persistent_enabled => MainWindowBackdrop::Mica,
-        "nativeAcrylic" => MainWindowBackdrop::Acrylic,
-        _ => MainWindowBackdrop::Default,
     }
 }
 
@@ -128,11 +104,8 @@ pub(crate) fn main_window_should_use_transparent_surface(
     _style: &str,
     _persistent_enabled: bool,
 ) -> bool {
-    // WebView2 transparent child surfaces are unstable on some Windows GPU/driver
-    // combinations: activating the search panel can expose the desktop behind the
-    // whole WebView and drop the panel's painted styles. The launchpad already paints
-    // its wallpaper and surfaces in the document, so an opaque host is a safe fallback.
-    false
+    // Keep the host transparent so CSS can expose the desktop at its rounded corners.
+    true
 }
 
 pub(crate) fn resolve_main_window_background_color(
@@ -179,10 +152,17 @@ fn set_window_immersive_dark_mode(window: &tauri::WebviewWindow, dark: bool) -> 
 pub(crate) fn disable_window_corner_preference(
     window: &tauri::WebviewWindow,
 ) -> Result<(), String> {
+    set_window_corner_preference(window, DWMWCP_DONOTROUND)
+}
+
+#[cfg(windows)]
+fn set_window_corner_preference(
+    window: &tauri::WebviewWindow,
+    preference: DWM_WINDOW_CORNER_PREFERENCE,
+) -> Result<(), String> {
     let hwnd = window
         .hwnd()
         .map_err(|error| format!("Failed to resolve main HWND: {}", error))?;
-    let preference: DWM_WINDOW_CORNER_PREFERENCE = DWMWCP_DONOTROUND;
 
     unsafe {
         DwmSetWindowAttribute(
@@ -191,7 +171,7 @@ pub(crate) fn disable_window_corner_preference(
             &preference as *const _ as _,
             std::mem::size_of_val(&preference) as u32,
         )
-        .map_err(|error| format!("Failed to disable native window corner rounding: {}", error))
+        .map_err(|error| format!("Failed to set native window corner preference: {}", error))
     }
 }
 
@@ -219,38 +199,9 @@ fn apply_window_style_to_window(
     style: &str,
     theme_mode_override: Option<&str>,
 ) -> Result<(), String> {
-    let dark = resolved_theme_is_dark(app, theme_mode_override);
-    let persistent_enabled = main_window_persistent_enabled(app.state::<MainWindowState>().inner());
-    let backdrop = resolve_main_window_backdrop(style, persistent_enabled);
-    let use_native_backdrop = !matches!(backdrop, MainWindowBackdrop::Default);
-    let acrylic_tint = if dark {
-        (24, 28, 36, 96)
-    } else {
-        (250, 250, 250, 4)
-    };
+    let _ = (app, style, theme_mode_override);
+    let _ = set_window_immersive_dark_mode(window, false);
     let _ = disable_window_corner_preference(window);
-    let _ = set_window_immersive_dark_mode(window, use_native_backdrop && dark);
-    let _ = clear_acrylic(window);
-    let _ = clear_mica(window);
-
-    match backdrop {
-        MainWindowBackdrop::Acrylic => apply_acrylic(window, Some(acrylic_tint))
-            .map_err(|error| format!("Failed to apply acrylic: {}", error)),
-        MainWindowBackdrop::Mica => apply_mica(window, Some(dark)).or_else(|mica_error| {
-            apply_acrylic(window, Some(acrylic_tint)).map_err(|acrylic_error| {
-                format!(
-                    "Failed to apply mica: {}. Acrylic fallback also failed: {}",
-                    mica_error, acrylic_error
-                )
-            })
-        }),
-        MainWindowBackdrop::Default => {
-            let _ = set_window_immersive_dark_mode(window, false);
-            Ok(())
-        }
-    }?;
-
-    // Native backdrops can restore the DWM border, so clear it after the backdrop is applied.
     let _ = remove_native_window_border(window);
     Ok(())
 }
@@ -286,13 +237,7 @@ pub(crate) fn build_window_bootstrap_script(
     include_window_style: bool,
 ) -> String {
     let theme_mode = read_saved_theme_mode(app).unwrap_or("system");
-    let window_style = if include_window_style {
-        read_saved_window_style(app).unwrap_or("default")
-    } else {
-        "default"
-    };
-    let window_persistent_enabled =
-        include_window_style && read_saved_window_persistent_enabled(app);
+    let _ = include_window_style;
 
     format!(
         r#"
@@ -300,12 +245,9 @@ pub(crate) fn build_window_bootstrap_script(
   const root = document.documentElement;
   if (!root) return;
   const themeMode = {theme_mode:?};
-  const windowStyle = {window_style:?};
-  const windowPersistentEnabled = {window_persistent_enabled};
-  const useDelayedReveal = windowStyle === 'nativeAcrylic' && !windowPersistentEnabled;
   root.classList.remove('dark', 'window-style-native-acrylic', 'window-style-native-mica');
-  root.style.opacity = useDelayedReveal ? '0' : '1';
-  root.style.transition = useDelayedReveal ? 'opacity 50ms ease-out' : '';
+  root.style.opacity = '1';
+  root.style.transition = '';
 
   if (
     themeMode === 'dark' ||
@@ -314,11 +256,6 @@ pub(crate) fn build_window_bootstrap_script(
     root.classList.add('dark');
   }}
 
-  if (windowStyle === 'nativeAcrylic') {{
-    root.classList.add(
-      windowPersistentEnabled ? 'window-style-native-mica' : 'window-style-native-acrylic'
-    );
-  }}
 }})();
 "#
     )
@@ -362,12 +299,8 @@ pub(crate) fn main_window_should_recreate_for_surface_mode(
 
 #[cfg(windows)]
 fn main_window_requires_focus_style_refresh(app: &tauri::AppHandle) -> bool {
-    let style = read_saved_window_style(app).unwrap_or("default");
-    let persistent_enabled = main_window_persistent_enabled(app.state::<MainWindowState>().inner());
-    matches!(
-        resolve_main_window_backdrop(style, persistent_enabled),
-        MainWindowBackdrop::Acrylic
-    )
+    let _ = app;
+    false
 }
 
 #[cfg(not(windows))]
@@ -376,18 +309,7 @@ fn main_window_requires_focus_style_refresh(_app: &tauri::AppHandle) -> bool {
 }
 
 pub(crate) fn schedule_main_window_style_refresh(app: tauri::AppHandle, delay_ms: u64) {
-    if !main_window_requires_focus_style_refresh(&app) {
-        return;
-    }
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(delay_ms));
-        if let Err(error) = apply_main_window_style(&app, None, None) {
-            eprintln!(
-                "Warning: Failed to refresh main window native backdrop after focus change: {}",
-                error
-            );
-        }
-    });
+    let _ = (app, delay_ms);
 }
 
 pub(crate) fn sync_main_window_dom_visibility(window: &tauri::WebviewWindow, delayed_reveal: bool) {
