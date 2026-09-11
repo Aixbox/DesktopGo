@@ -249,6 +249,8 @@ pub fn set_window_mode(
             let _ = window.set_fullscreen(false);
             let _ = window.unmaximize();
             if let (Some(width), Some(height)) = (width, height) {
+                let (width, height) =
+                    crate::window_style::window_size_with_shadow(width as f64, height as f64);
                 let _ = window.set_size(tauri::LogicalSize::new(width, height));
                 let _ = window.center();
             }

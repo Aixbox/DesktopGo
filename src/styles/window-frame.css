@@ -1,0 +1,63 @@
+:root {
+  --window-shadow-inset: 16px;
+  --window-edge-shadow: 0 4px 12px -3px rgb(0 0 0 / 24%), 0 0 4px rgb(0 0 0 / 12%);
+}
+
+:root.dark {
+  --window-edge-shadow: 0 4px 12px -3px rgb(0 0 0 / 42%), 0 0 4px rgb(0 0 0 / 24%);
+}
+
+:root:has(
+  .launchpad-bg[data-window-expanded='true'],
+  .settings-shell[data-window-expanded='true']
+) {
+  --window-shadow-inset: 0px;
+  --window-edge-shadow: none;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+body {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* 阴影独立于内容裁切层，透明宿主内的留白让投影不会被窗口边界截断。 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: var(--window-shadow-inset);
+  border-radius: var(--radius-2xl);
+  corner-shape: round;
+  box-shadow: var(--window-edge-shadow);
+  pointer-events: none;
+}
+
+/* 菜单滚动锁会重设 body 内边距；窗口边界直接跟随视口，不依赖 body 布局。 */
+#root {
+  position: fixed;
+  inset: var(--window-shadow-inset);
+  width: auto;
+  height: auto;
+  overflow: hidden;
+  border-radius: var(--radius-2xl);
+  corner-shape: round;
+  /* 裁切固定定位的遮罩，但保留视口坐标，避免影响拖拽和框选。 */
+  clip-path: inset(0 round var(--radius-2xl));
+  isolation: isolate;
+}
+
+/* Portal 遮罩与内容使用同一边界，避免覆盖透明阴影区和圆角。 */
+.window-portal-overlay {
+  inset: var(--window-shadow-inset);
+  border-radius: var(--radius-2xl);
+  corner-shape: round;
+  clip-path: inset(0 round var(--radius-2xl));
+}

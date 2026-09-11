@@ -32,8 +32,10 @@ import { useToast } from '@/components/ui/toast'
 import { useIconStore } from '@/stores/iconStore'
 
 const LAUNCHPAD_SHOWN_EVENT = 'launchpad:shown'
-const SETTINGS_WINDOW_WIDTH = 800
-const SETTINGS_WINDOW_HEIGHT = 600
+// 与 window-frame.css 和原生窗口尺寸计算保持一致，尺寸单位为逻辑像素。
+const WINDOW_SHADOW_INSET = 16
+const SETTINGS_WINDOW_WIDTH = 800 + WINDOW_SHADOW_INSET * 2
+const SETTINGS_WINDOW_HEIGHT = 600 + WINDOW_SHADOW_INSET * 2
 const EXTERNAL_SHOW_CLICK_GUARD_MS = 350
 export const AI_ORGANIZE_PANEL_WIDTH = 460
 
@@ -54,9 +56,18 @@ const waitForWindowGeometrySync = async () => {
 async function ensureSettingsWindowMinSize(settingsWindow: WebviewWindow) {
   const minSize = new LogicalSize(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
   await settingsWindow.setMinSize(minSize)
-  const currentSize = await settingsWindow.innerSize()
+  const [physicalSize, scaleFactor] = await Promise.all([
+    settingsWindow.innerSize(),
+    settingsWindow.scaleFactor(),
+  ])
+  const currentSize = physicalSize.toLogical(scaleFactor)
   if (currentSize.width < SETTINGS_WINDOW_WIDTH || currentSize.height < SETTINGS_WINDOW_HEIGHT) {
-    await settingsWindow.setSize(minSize)
+    await settingsWindow.setSize(
+      new LogicalSize(
+        Math.max(currentSize.width, SETTINGS_WINDOW_WIDTH),
+        Math.max(currentSize.height, SETTINGS_WINDOW_HEIGHT)
+      )
+    )
   }
 }
 
@@ -115,7 +126,9 @@ export function useLaunchpadWindowController({
           ])
           const scaleFactor = monitor?.scaleFactor ?? (await window.scaleFactor())
           const panelWidth = Math.round(AI_ORGANIZE_PANEL_WIDTH * scaleFactor)
-          const mainWindowWidth = innerSize.width / scaleFactor
+          const mainWindowWidth =
+            launchpadSurfaceRef.current?.getBoundingClientRect().width ??
+            innerSize.width / scaleFactor
           setAiOrganizeMainWindowWidth(mainWindowWidth)
 
           let nextX = outerPosition.x

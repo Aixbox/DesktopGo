@@ -16,7 +16,7 @@ use crate::window_style::{
     main_window_persistent_enabled, main_window_should_use_transparent_surface,
     main_window_uses_delayed_reveal, read_saved_window_style, resolve_initial_main_window_size,
     resolve_main_window_background_color, resolved_theme_is_dark,
-    schedule_main_window_style_refresh, sync_main_window_dom_visibility,
+    schedule_main_window_style_refresh, sync_main_window_dom_visibility, window_size_with_shadow,
 };
 use crate::MainWindowState;
 
@@ -256,9 +256,10 @@ fn create_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
             }
         }
     });
+    let (width, height) = window_size_with_shadow(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT);
     builder
-        .inner_size(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
-        .min_inner_size(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
+        .inner_size(width, height)
+        .min_inner_size(width, height)
         .background_color(tauri::utils::config::Color(0, 0, 0, 0))
         .transparent(true)
         .center()
@@ -310,7 +311,8 @@ pub(crate) fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String>
     }
     #[cfg(windows)]
     {
-        if let Err(error) = crate::window_style::disable_window_corner_preference(&settings_window) {
+        if let Err(error) = crate::window_style::disable_window_corner_preference(&settings_window)
+        {
             eprintln!("Warning: {error}");
         }
         if let Err(error) = crate::window_style::remove_native_window_border(&settings_window) {

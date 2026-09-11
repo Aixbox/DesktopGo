@@ -582,9 +582,10 @@ export function Launchpad() {
       <ContextMenuTrigger asChild>
         <div
           ref={launchpadSurfaceRef}
+          data-window-expanded={windowMode === 'fullscreen'}
           tabIndex={-1}
           className={[
-            'launchpad-bg relative flex h-screen w-full select-none flex-col items-center justify-center overflow-hidden rounded-2xl outline-none',
+            'launchpad-bg relative flex h-full w-full select-none flex-col items-center justify-center overflow-hidden rounded-2xl outline-none',
             launchpadGridViewMode === 'scroll' ? 'launchpad-scroll-layout' : '',
             launchpadGridViewMode === 'scroll' && isScrollSidebarCompact
               ? 'launchpad-scroll-sidebar-compact'

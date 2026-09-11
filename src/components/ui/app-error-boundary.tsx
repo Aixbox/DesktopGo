@@ -28,7 +28,7 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
     return (
       <div
         role="alert"
-        className="flex h-screen w-screen flex-col items-center justify-center gap-4 bg-background px-6 text-center text-foreground"
+        className="flex h-full w-full flex-col items-center justify-center gap-4 bg-background px-6 text-center text-foreground"
       >
         <TriangleAlert className="h-8 w-8 text-amber-600 dark:text-amber-300" />
         <div className="max-w-md space-y-1.5">

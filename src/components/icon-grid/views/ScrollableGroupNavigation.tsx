@@ -666,7 +666,7 @@ export function ScrollableGroupNavigation({
             <div
               data-grid-mode-nav
               data-no-window-drag="true"
-              className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/25 px-6 backdrop-blur-[2px] dark:bg-black/50"
+              className="window-portal-overlay fixed z-[200] flex items-center justify-center bg-slate-950/25 px-6 backdrop-blur-[2px] dark:bg-black/50"
               onMouseDown={event => {
                 if (event.target === event.currentTarget) closeGroupComposer()
               }}

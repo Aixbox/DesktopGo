@@ -662,7 +662,7 @@ function AddIconDialogSession({
 
   const dialogPortal = createPortal(
     <div
-      className="fixed inset-0 z-[300] flex items-center justify-center bg-black/25 p-3 backdrop-blur-[2px] dark:bg-black/55 sm:p-5"
+      className="window-portal-overlay fixed z-[300] flex items-center justify-center bg-black/25 p-3 backdrop-blur-[2px] dark:bg-black/55 sm:p-5"
       onMouseDown={event => {
         if (event.target === event.currentTarget) closeDialog()
       }}
@@ -673,7 +673,7 @@ function AddIconDialogSession({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
-        className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl sm:max-h-[calc(100vh-2.5rem)]"
+        className="flex max-h-full w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
         onKeyDown={handleDialogKeyDown}
       >
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border/80 px-4 py-3.5 sm:px-5">

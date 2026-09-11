@@ -650,7 +650,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[360] flex items-center justify-center bg-black/35 p-3 backdrop-blur-[3px] dark:bg-black/65 sm:p-5"
+      className="window-portal-overlay fixed z-[360] flex items-center justify-center bg-black/35 p-3 backdrop-blur-[3px] dark:bg-black/65 sm:p-5"
       onMouseDown={event => {
         event.stopPropagation()
         if (event.target === event.currentTarget && !applying) onCancel()
@@ -662,7 +662,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
-        className="relative flex max-h-[calc(100vh-1.5rem)] w-full max-w-[25rem] flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl sm:max-h-[calc(100vh-2.5rem)]"
+        className="relative flex max-h-full w-full max-w-[25rem] flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
         onKeyDown={handleKeyDown}
       >
         <Button

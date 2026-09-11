@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import './corners.css';
+@import './window-frame.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -15,23 +16,6 @@
     transition-delay: revert-layer !important;
     scroll-behavior: smooth !important;
   }
-}
-
-html,
-body,
-#root {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: transparent;
-}
-
-#root {
-  position: relative;
-  overflow: hidden;
-  border-radius: var(--radius-2xl);
-  corner-shape: round;
-  isolation: isolate;
 }
 
 :root {

@@ -218,7 +218,10 @@ export function Settings() {
   }
 
   return (
-    <div className="settings-shell flex h-screen w-screen overflow-hidden rounded-2xl text-foreground">
+    <div
+      data-window-expanded={isMaximized}
+      className="settings-shell flex h-full w-full overflow-hidden rounded-2xl text-foreground"
+    >
       <aside className="settings-sidebar-surface flex w-48 shrink-0 flex-col">
         <div
           onPointerDown={handleWindowDragStart}

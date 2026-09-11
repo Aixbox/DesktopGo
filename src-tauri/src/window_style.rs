@@ -6,8 +6,7 @@ use tauri_plugin_store::StoreExt;
 #[cfg(windows)]
 use windows::Win32::Graphics::Dwm::{
     DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE, DWMWA_USE_IMMERSIVE_DARK_MODE,
-    DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND,
-    DWM_WINDOW_CORNER_PREFERENCE,
+    DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DWM_WINDOW_CORNER_PREFERENCE,
 };
 #[cfg(windows)]
 use winreg::{enums::HKEY_CURRENT_USER, RegKey};
@@ -24,6 +23,15 @@ const MAIN_WINDOW_MEDIUM_WIDTH: f64 = 1280.0;
 const MAIN_WINDOW_MEDIUM_HEIGHT: f64 = 720.0;
 const MAIN_WINDOW_SMALL_WIDTH: f64 = 800.0;
 const MAIN_WINDOW_SMALL_HEIGHT: f64 = 600.0;
+// 与 window-frame.css 中的留白一致，窗口尺寸额外容纳四周阴影。
+const WINDOW_SHADOW_INSET: f64 = 16.0;
+
+pub(crate) fn window_size_with_shadow(width: f64, height: f64) -> (f64, f64) {
+    (
+        width + WINDOW_SHADOW_INSET * 2.0,
+        height + WINDOW_SHADOW_INSET * 2.0,
+    )
+}
 
 fn normalize_window_mode(value: &str) -> Option<&'static str> {
     match value.trim() {
@@ -322,14 +330,15 @@ pub(crate) fn sync_main_window_dom_visibility(window: &tauri::WebviewWindow, del
 }
 
 pub(crate) fn resolve_initial_main_window_size(app: &tauri::AppHandle) -> (f64, f64) {
-    match read_saved_window_mode(app) {
+    let (width, height) = match read_saved_window_mode(app) {
         Some("large") => (MAIN_WINDOW_LARGE_WIDTH, MAIN_WINDOW_LARGE_HEIGHT),
         Some("small") => (MAIN_WINDOW_SMALL_WIDTH, MAIN_WINDOW_SMALL_HEIGHT),
         Some("fullscreen") | Some("medium") | None => {
             (MAIN_WINDOW_MEDIUM_WIDTH, MAIN_WINDOW_MEDIUM_HEIGHT)
         }
         Some(_) => (MAIN_WINDOW_MEDIUM_WIDTH, MAIN_WINDOW_MEDIUM_HEIGHT),
-    }
+    };
+    window_size_with_shadow(width, height)
 }
 
 pub(crate) fn read_saved_window_persistent_enabled(app: &tauri::AppHandle) -> bool {
@@ -387,7 +396,27 @@ pub(crate) fn set_main_window_manual_always_on_top_enabled(state: &MainWindowSta
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_window_persistent_enabled;
+    use super::{resolve_window_persistent_enabled, window_size_with_shadow};
+
+    #[test]
+    fn framed_window_preserves_content_size_at_supported_scales() {
+        for (content_width, content_height) in [(800.0, 600.0), (1280.0, 720.0), (1600.0, 900.0)] {
+            let (width, height) = window_size_with_shadow(content_width, content_height);
+            for scale in [1.0, 1.25, 1.5, 2.0] {
+                let physical_size =
+                    tauri::LogicalSize::new(width, height).to_physical::<u32>(scale);
+                let shadow_span = 32.0 * scale;
+                assert_eq!(
+                    physical_size.width as f64 - shadow_span,
+                    content_width * scale
+                );
+                assert_eq!(
+                    physical_size.height as f64 - shadow_span,
+                    content_height * scale
+                );
+            }
+        }
+    }
 
     #[test]
     fn window_persistent_defaults_to_enabled_without_a_saved_value() {

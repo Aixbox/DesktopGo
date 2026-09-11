@@ -33,7 +33,7 @@ function App() {
       <ToastProvider>
         <AppErrorBoundary>
           {page === 'settings' ? (
-            <Suspense fallback={<div className="settings-shell h-screen w-screen bg-background" />}>
+            <Suspense fallback={<div className="settings-shell h-full w-full bg-background" />}>
               <Settings />
             </Suspense>
           ) : (
