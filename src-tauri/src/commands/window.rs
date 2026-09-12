@@ -135,6 +135,21 @@ pub fn update_launch_on_startup_enabled(
     crate::set_launch_on_startup_enabled(&app_handle, enabled)
 }
 
+/// 创建设置窗口。必须保持 async：它跑在工作线程上，`build()` 只是把建窗排队给主线程；
+/// 改成同步命令会在主线程内联建窗并嵌套消息泵，主窗口可见时直接死锁。
+#[tauri::command]
+pub async fn create_settings_window(
+    app_handle: tauri::AppHandle,
+    return_to_main: bool,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::window::create_settings_window(&app_handle, return_to_main)
+    })
+    .await
+    .map_err(|error| format!("Failed to create settings window: {error}"))?
+}
+
+/// 显示已由 `create_settings_window` 创建好的设置窗口。
 #[tauri::command]
 pub fn activate_settings_window(app_handle: tauri::AppHandle) -> Result<(), String> {
     crate::show_settings_window(&app_handle)

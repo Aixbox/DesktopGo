@@ -11,7 +11,6 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import {
   currentMonitor,
   getCurrentWindow,
-  LogicalSize,
   PhysicalPosition,
   PhysicalSize,
 } from '@tauri-apps/api/window'
@@ -32,10 +31,6 @@ import { useToast } from '@/components/ui/toast'
 import { useIconStore } from '@/stores/iconStore'
 
 const LAUNCHPAD_SHOWN_EVENT = 'launchpad:shown'
-// 与 window-frame.css 和原生窗口尺寸计算保持一致，尺寸单位为逻辑像素。
-const WINDOW_SHADOW_INSET = 16
-const SETTINGS_WINDOW_WIDTH = 800 + WINDOW_SHADOW_INSET * 2
-const SETTINGS_WINDOW_HEIGHT = 600 + WINDOW_SHADOW_INSET * 2
 const EXTERNAL_SHOW_CLICK_GUARD_MS = 350
 export const AI_ORGANIZE_PANEL_WIDTH = 460
 
@@ -51,24 +46,6 @@ const waitForWindowGeometrySync = async () => {
     const timeoutId = window.setTimeout(finish, 50)
     window.requestAnimationFrame(() => window.requestAnimationFrame(finish))
   })
-}
-
-async function ensureSettingsWindowMinSize(settingsWindow: WebviewWindow) {
-  const minSize = new LogicalSize(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
-  await settingsWindow.setMinSize(minSize)
-  const [physicalSize, scaleFactor] = await Promise.all([
-    settingsWindow.innerSize(),
-    settingsWindow.scaleFactor(),
-  ])
-  const currentSize = physicalSize.toLogical(scaleFactor)
-  if (currentSize.width < SETTINGS_WINDOW_WIDTH || currentSize.height < SETTINGS_WINDOW_HEIGHT) {
-    await settingsWindow.setSize(
-      new LogicalSize(
-        Math.max(currentSize.width, SETTINGS_WINDOW_WIDTH),
-        Math.max(currentSize.height, SETTINGS_WINDOW_HEIGHT)
-      )
-    )
-  }
 }
 
 async function waitForSettingsWindowDisposed() {
@@ -445,32 +422,19 @@ export function useLaunchpadWindowController({
       })
       await waitForSettingsWindowDisposed()
     }
-    const settingsWindow = new WebviewWindow('settings', {
-      url: 'index.html?page=settings&returnToMain=1',
-      title: translate('设置'),
-      width: SETTINGS_WINDOW_WIDTH,
-      height: SETTINGS_WINDOW_HEIGHT,
-      minWidth: SETTINGS_WINDOW_WIDTH,
-      minHeight: SETTINGS_WINDOW_HEIGHT,
-      center: true,
-      resizable: true,
-      decorations: false,
-      shadow: false,
-      transparent: true,
-      backgroundColor: [0, 0, 0, 0],
-      visible: false,
-    })
-    settingsWindow.once('tauri://created', async () => {
-      await ensureSettingsWindowMinSize(settingsWindow)
+    try {
+      // 由 Rust 侧的 builder 建窗：前端 WindowOptions 没有 icon 选项，自建窗口拿不到清晰的任务栏图标，
+      // 也没有 builder 上 on_page_load 里延后挂任务栏按钮的钩子。create 是 async 命令，在工作线程建窗，
+      // 再由同步的 activate 在主线程显示，执行模型和之前的 new WebviewWindow 一致。
+      await invoke('create_settings_window', { returnToMain: true })
       await invoke('activate_settings_window')
-    })
-    settingsWindow.once('tauri://error', error => {
-      console.error('Failed to create settings window:', error)
+    } catch (error) {
+      console.error('Failed to open settings window:', error)
       toast.error(translate('无法打开设置窗口，请重试。'), {
         key: 'settings-window',
         title: translate('设置'),
       })
-    })
+    }
   }
 
   return {

@@ -226,7 +226,15 @@ pub(crate) fn create_main_window(app: &tauri::AppHandle) {
     }
 }
 
-fn create_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
+/// 创建设置窗口；已存在则直接复用。
+///
+/// 只能在事件循环顶层（托盘回调）或工作线程（async 命令）调用：同步 Tauri 命令跑在主线程上，
+/// `build()` 会内联建窗并嵌套消息泵，主窗口可见时会把主线程卡死。
+/// `return_to_main` 决定关闭设置后是否回到启动台，前端按 URL 参数读取。
+pub(crate) fn create_settings_window(
+    app: &tauri::AppHandle,
+    return_to_main: bool,
+) -> Result<(), String> {
     if app.get_webview_window("settings").is_some() {
         return Ok(());
     }
@@ -234,28 +242,30 @@ fn create_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
     let bootstrap_script = build_window_bootstrap_script(app, false);
     let window_icon = crate::native_icon::from_ico(crate::window_icon::MAX_WINDOW_ICON_SIZE)
         .map_err(|error| format!("Failed to load settings window icon: {error}"))?;
-    let builder = tauri::WebviewWindowBuilder::new(
-        app,
-        "settings",
-        tauri::WebviewUrl::App("index.html?page=settings".into()),
-    )
-    .title(settings_window_title(app))
-    .icon(window_icon)
-    .map_err(|error| format!("Failed to configure settings window icon: {error}"))?
-    .on_page_load(|window, payload| {
-        if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
-            if let Err(error) = crate::window_icon::refresh(&window) {
-                eprintln!(
+    let url = if return_to_main {
+        "index.html?page=settings&returnToMain=1"
+    } else {
+        "index.html?page=settings"
+    };
+    let builder =
+        tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App(url.into()))
+            .title(settings_window_title(app))
+            .icon(window_icon)
+            .map_err(|error| format!("Failed to configure settings window icon: {error}"))?
+            .on_page_load(|window, payload| {
+                if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                    if let Err(error) = crate::window_icon::refresh(&window) {
+                        eprintln!(
                     "Warning: Failed to refresh settings window icon after page load: {error}"
                 );
-            }
-            if let Err(error) = window.set_skip_taskbar(false) {
-                eprintln!(
+                    }
+                    if let Err(error) = window.set_skip_taskbar(false) {
+                        eprintln!(
                     "Warning: Failed to add settings window to taskbar after page load: {error}"
                 );
-            }
-        }
-    });
+                    }
+                }
+            });
     let (width, height) = window_size_with_shadow(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT);
     builder
         .inner_size(width, height)
@@ -288,20 +298,30 @@ fn create_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
         .map(|_| ())
 }
 
+/// 打开设置窗口时是否要隐藏启动台。
+///
+/// 由「窗口常驻」决定，而不是由入口决定：
+/// - 常驻开启（默认）：启动台不置顶、失焦也不自动隐藏，是一个常规窗口，理应留在原地。
+/// - 常驻关闭：启动台是置顶的失焦即隐面板，留着会盖住设置窗口，必须隐藏。
+fn settings_should_hide_main_window(state: &MainWindowState) -> bool {
+    !main_window_persistent_enabled(state)
+}
+
+/// 显示已创建好的设置窗口。这里不建窗：本函数会从同步 Tauri 命令（主线程）调用，
+/// 建窗必须先经 [`create_settings_window`] 在托盘回调或 async 命令里完成。
 pub(crate) fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
-    eprintln!("[icon-diag] show_settings_window entered");
-    create_settings_window(app)?;
     refresh_settings_window_title(app);
 
     let settings_window = app
         .get_webview_window("settings")
         .ok_or_else(|| "Settings window not found".to_string())?;
-    eprintln!("[icon-diag] show_settings_window resolved window");
     let _ = settings_window.unminimize();
-    let _ = settings_window.show();
+    // 图标在 show() 之前再刷一次：窗口一旦可见，Shell 就会按当前图标槽创建任务栏按钮并缓存，
+    // 之后再刷新图标也改不回来。
     if let Err(error) = crate::window_icon::refresh(&settings_window) {
-        eprintln!("Warning: Failed to refresh settings window icon after showing: {error}");
+        eprintln!("Warning: Failed to refresh settings window icon before showing: {error}");
     }
+    let _ = settings_window.show();
     #[cfg(windows)]
     {
         if let Err(error) = settings_window.set_skip_taskbar(true) {
@@ -322,7 +342,9 @@ pub(crate) fn show_settings_window(app: &tauri::AppHandle) -> Result<(), String>
         }
     }
     activate_webview_window(&settings_window)?;
-    hide_main_window(app);
+    if settings_should_hide_main_window(&app.state::<MainWindowState>()) {
+        hide_main_window(app);
+    }
     Ok(())
 }
 
@@ -398,6 +420,23 @@ pub(crate) fn activate_webview_window(window: &tauri::WebviewWindow) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_hides_the_launchpad_only_when_it_is_not_persistent() {
+        let state = MainWindowState::default();
+
+        // 常驻关闭：启动台置顶且失焦即隐，留着会盖住设置窗口。
+        state
+            .window_persistent_enabled
+            .store(false, Ordering::SeqCst);
+        assert!(settings_should_hide_main_window(&state));
+
+        // 常驻开启（默认）：启动台是常规窗口，打开设置不该让它消失。
+        state
+            .window_persistent_enabled
+            .store(true, Ordering::SeqCst);
+        assert!(!settings_should_hide_main_window(&state));
+    }
 
     #[cfg(windows)]
     #[test]
