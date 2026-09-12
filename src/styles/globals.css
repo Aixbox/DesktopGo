@@ -598,6 +598,18 @@
   body {
     @apply text-foreground;
   }
+
+  /*
+   * 表单控件的字体继承必须放在 base 层：未分层规则的级联优先级高于所有 @layer
+   * （包括 utilities），会压掉控件上的 text-sm 等字号工具类，导致输入框比会话
+   * 正文大一号。Tailwind preflight 在 base 层已有同款规则，这里保持同层即可。
+   */
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
 }
 
 body {
@@ -615,13 +627,6 @@ body {
  */
 body:focus-visible {
   outline: none;
-}
-
-button,
-input,
-select,
-textarea {
-  font: inherit;
 }
 
 .number-input {
