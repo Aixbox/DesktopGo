@@ -546,7 +546,7 @@
   --border: oklch(0.88 0 0);
   --input: oklch(0.855 0 0);
   --ring: var(--appearance-accent, oklch(0.61 0.08 255));
-  --settings-chrome: oklch(0.925 0 0);
+  --settings-chrome: oklch(0.928 0.012 250);
   --settings-nav-active: color-mix(in oklab, var(--ring) 24%, var(--card));
   --settings-nav-active-border: color-mix(in oklab, var(--ring) 46%, transparent);
   --settings-nav-hover: color-mix(in oklab, var(--ring) 8%, var(--popover));
@@ -583,7 +583,7 @@
   --border: oklch(0.74 0 0 / 22%);
   --input: oklch(0.82 0 0 / 28%);
   --ring: var(--appearance-accent, oklch(0.72 0.08 255));
-  --settings-chrome: oklch(0.125 0 0);
+  --settings-chrome: oklch(0.145 0.018 260);
   --settings-content-border: color-mix(in oklch, var(--foreground) 30%, transparent);
   --settings-content-shadow:
     -8px -8px 24px -12px oklch(0.025 0 0 / 20%), inset -1px -1px 4px -1px oklch(0.025 0 0 / 6%),
