@@ -220,7 +220,7 @@ export function Settings() {
   return (
     <div
       data-window-expanded={isMaximized}
-      className="settings-shell flex h-full w-full overflow-hidden rounded-2xl text-foreground"
+      className="settings-shell flex h-full w-full overflow-hidden text-foreground"
     >
       <aside className="settings-sidebar-surface flex w-48 shrink-0 flex-col">
         <div

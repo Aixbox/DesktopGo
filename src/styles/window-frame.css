@@ -46,10 +46,13 @@ body::before {
   inset: var(--window-shadow-inset);
   width: auto;
   height: auto;
+  /* 直角裁切，只负责兜住普通后代；圆角一律交给下面的 clip-path。
+   * 这里不能再写 border-radius：它和 clip-path 几何完全重合，两层圆角裁切各自生成
+   * 半透明边缘像素、覆盖率相乘（50% × 50% = 25%），alpha 过渡变陡就是肉眼可见的锯齿。 */
   overflow: hidden;
-  border-radius: var(--radius-2xl);
+  /* 窗口圆角的唯一来源。用 clip-path 而不是 border-radius，是因为只有它能裁到
+   * position: fixed 的后代，同时保留视口坐标，不影响拖拽和框选。 */
   corner-shape: round;
-  /* 裁切固定定位的遮罩，但保留视口坐标，避免影响拖拽和框选。 */
   clip-path: inset(0 round var(--radius-2xl));
   isolation: isolate;
 }

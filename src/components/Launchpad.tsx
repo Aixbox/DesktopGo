@@ -571,7 +571,7 @@ export function Launchpad() {
         }
       />
       <div
-        className="launchpad-background-layer rounded-2xl"
+        className="launchpad-background-layer"
         aria-hidden="true"
         style={
           aiOrganizeLayoutOpen && aiOrganizeMainWindowWidth !== null
@@ -585,7 +585,7 @@ export function Launchpad() {
           data-window-expanded={windowMode === 'fullscreen'}
           tabIndex={-1}
           className={[
-            'launchpad-bg relative flex h-full w-full select-none flex-col items-center justify-center overflow-hidden rounded-2xl outline-none',
+            'launchpad-bg relative flex h-full w-full select-none flex-col items-center justify-center overflow-hidden outline-none',
             launchpadGridViewMode === 'scroll' ? 'launchpad-scroll-layout' : '',
             launchpadGridViewMode === 'scroll' && isScrollSidebarCompact
               ? 'launchpad-scroll-sidebar-compact'

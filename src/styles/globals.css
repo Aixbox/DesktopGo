@@ -535,7 +535,7 @@
 .settings-shell {
   border: 0;
   outline: 0;
-  border-radius: var(--radius-2xl);
+  /* 窗口圆角由 #root 的 clip-path 统一裁切，这里不再重复圆角，避免多一层抗锯齿边缘。 */
   --background: oklch(0.965 0 0);
   --card: oklch(0.982 0 0);
   --popover: oklch(0.99 0 0);
