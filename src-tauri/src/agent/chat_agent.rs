@@ -118,24 +118,7 @@ pub(crate) async fn run_chat_agent(
     let mut last_content = String::new();
 
     for turn in 0..MAX_AGENT_TURNS {
-        let response = client
-            .complete_json_observed(
-                config,
-                ObservedLlmRequest::new(
-                    loop_messages.clone(),
-                    false,
-                    window,
-                    &run_id,
-                    if turn == 0 {
-                        "对话推理"
-                    } else {
-                        "对话推理（工具后续轮）"
-                    },
-                )
-                .with_cancel(cancel.clone()),
-            )
-            .await?;
-        let content = response.content.trim().to_string();
+        let content = complete_turn(&context, &client, &cancel, &loop_messages, turn).await?;
 
         let Some(tool_request) = parse_tool_request(&content) else {
             if content.is_empty() {
@@ -186,6 +169,35 @@ pub(crate) async fn run_chat_agent(
         pending_website_additions,
         &run_id,
     ))
+}
+
+/// 执行单轮流式推理：按轮次标注事件阶段，返回裁剪后的模型输出。
+async fn complete_turn(
+    context: &ChatAgentContext<'_>,
+    client: &LlmClient,
+    cancel: &CancellationToken,
+    messages: &[LlmMessage],
+    turn: usize,
+) -> Result<String, String> {
+    let attempt_label = if turn == 0 {
+        "对话推理"
+    } else {
+        "对话推理（工具后续轮）"
+    };
+    let response = client
+        .complete_json_observed(
+            context.config,
+            ObservedLlmRequest::new(
+                messages.to_vec(),
+                false,
+                context.window,
+                context.run_id,
+                attempt_label,
+            )
+            .with_cancel(cancel.clone()),
+        )
+        .await?;
+    Ok(response.content.trim().to_string())
 }
 
 fn build_outcome(
