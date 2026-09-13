@@ -223,6 +223,12 @@ export function IconManagerPanel() {
     filteredIcons.length > 0 && filteredSelectedCount === filteredIcons.length
   const someFilteredSelected = filteredSelectedCount > 0 && !allFilteredSelected
 
+  // 批量删除是否作用于全部勾选项的源文件：全局开启，或勾选项全部为新建创建。
+  const bulkSelectedIcons = filteredIcons.filter(icon => selectedIconIdSet.has(icon.id))
+  const bulkDeletesSource =
+    deleteSourceFile ||
+    (deleteNewFileSource && bulkSelectedIcons.length > 0 && bulkSelectedIcons.every(icon => icon.origin === 'new'))
+
   const controlsDisabled = mutating || listLoading || layoutResetting
 
   const { handleBulkMutation } = useIconManagerBulkActions({
@@ -377,6 +383,10 @@ export function IconManagerPanel() {
     }
   }
 
+  // 该图标删除时是否会连同源文件：全局开关开启，或（仅新建开关开启且图标为新建创建）。
+  const iconDeletesSource = (icon: IconManagerItem) =>
+    deleteSourceFile || (deleteNewFileSource && icon.origin === 'new')
+
   const mutationDialogText = pendingMutation
     ? pendingMutation.type === 'hide'
       ? {
@@ -398,9 +408,13 @@ export function IconManagerPanel() {
           }
         : {
             title: translate('确认删除'),
-            desc: translate('将“{name}”移出图标库，不会删除原始程序、文件或文件夹。', {
-              name: pendingMutation.icon.name,
-            }),
+            desc: iconDeletesSource(pendingMutation.icon)
+              ? translate('将“{name}”移出图标库，并将其源文件移入回收站。', {
+                  name: pendingMutation.icon.name,
+                })
+              : translate('将“{name}”移出图标库，不会删除原始程序、文件或文件夹。', {
+                  name: pendingMutation.icon.name,
+                }),
             confirmLabel: translate('删除'),
             confirmVariant: 'destructive' as const,
           }
@@ -559,7 +573,9 @@ export function IconManagerPanel() {
                     disabled={controlsDisabled}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    {translate('删除所选（{count}）', { count: filteredSelectedCount })}
+                    {bulkDeletesSource
+                      ? translate('删除所选（同时删除源文件）')
+                      : translate('删除所选（{count}）', { count: filteredSelectedCount })}
                   </Button>
                 </div>
               </motion.div>
@@ -730,7 +746,9 @@ export function IconManagerPanel() {
                         disabled={mutating}
                         className={viewMode === 'grid' ? 'min-w-0 flex-1' : 'shrink-0'}
                       >
-                        {translate('删除')}
+                        {iconDeletesSource(icon)
+                          ? translate('删除（同时删除源文件）')
+                          : translate('删除')}
                       </Button>
                     </div>
                   </article>

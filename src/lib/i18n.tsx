@@ -692,6 +692,12 @@ const EN_MESSAGES: Record<string, string> = {
   '删除失效图标失败：{error}': 'Failed to remove invalid icons: {error}',
   '正在删除...': 'Deleting...',
   '删除所选（{count}）': 'Delete selected ({count})',
+  '删除（同时删除源文件）': 'Delete (also delete source file)',
+  '删除所选（同时删除源文件）': 'Delete selected (also delete source file)',
+  '将“{name}”移出图标库，并将其源文件移入回收站。':
+    'Move "{name}" out of the icon library and move its source file to the Recycle Bin.',
+  '确定要删除“{name}”吗？其源文件将被移入回收站。':
+    'Delete "{name}"? Its source file will be moved to the Recycle Bin.',
   '隐藏所选（{count}）': 'Hide selected ({count})',
   '显示所选（{count}）': 'Show selected ({count})',
   '确定将选中的 {count} 项移出图标库吗？不会删除原始程序、文件或文件夹。':

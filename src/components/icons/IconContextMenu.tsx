@@ -1,7 +1,8 @@
-import { type ReactElement, type MouseEvent as ReactMouseEvent } from 'react'
+import { type ReactElement, type MouseEvent as ReactMouseEvent, useEffect, useState } from 'react'
 import { EyeOff, FolderCog, Pencil, Play, Trash2 } from 'lucide-react'
 import { translate } from '@/lib/i18n'
 import { shouldOpenCustomIconContextMenu } from '@/lib/iconContextMenu'
+import { getSetting } from '@/lib/settingsStore'
 import { useIconStore } from '@/stores/iconStore'
 import type { DesktopIcon } from '@/types'
 import {
@@ -35,13 +36,39 @@ export function IconContextMenu({
     showShellContextMenu,
   } = useIconStore()
 
+  // 菜单打开时读取删除源文件的两个开关，用于刷新删除项文案。
+  const [deleteSourceAll, setDeleteSourceAll] = useState(false)
+  const [deleteSourceNew, setDeleteSourceNew] = useState(false)
+
+  const refreshDeleteSourceSettings = () => {
+    void Promise.all([
+      getSetting('deleteIconSourceFile'),
+      getSetting('deleteNewFileSource'),
+    ])
+      .then(([all, newOnly]) => {
+        setDeleteSourceAll(all)
+        setDeleteSourceNew(newOnly)
+      })
+      .catch(e => console.error('Failed to load delete source settings:', e))
+  }
+
+  useEffect(() => {
+    refreshDeleteSourceSettings()
+  }, [])
+
   const openSystemMenu = () => {
     void showShellContextMenu(icon)
   }
 
+  // 该图标删除时是否会连同源文件：全局开关开启，或（仅新建开关开启且图标为新建创建）。
+  const deleteSourceApplies =
+    deleteSourceAll || (deleteSourceNew && icon.origin === 'new')
+
   const handleDelete = () => {
     const confirmed = window.confirm(
-      translate('确定要删除“{name}”吗？此操作无法撤销。', { name: icon.name })
+      deleteSourceApplies
+        ? translate('确定要删除“{name}”吗？其源文件将被移入回收站。', { name: icon.name })
+        : translate('确定要删除“{name}”吗？此操作无法撤销。', { name: icon.name })
     )
     if (!confirmed) return
     void deleteIcon(icon)
@@ -75,7 +102,7 @@ export function IconContextMenu({
   }
 
   return (
-    <ContextMenu>
+    <ContextMenu onOpenChange={open => open && refreshDeleteSourceSettings()}>
       <ContextMenuTrigger asChild onContextMenuCapture={handleContextMenuCapture}>
         {children}
       </ContextMenuTrigger>
@@ -102,7 +129,11 @@ export function IconContextMenu({
           onSelect={handleDelete}
         >
           <Trash2 className="h-4 w-4" aria-hidden="true" />
-          <span>{translate('删除')}</span>
+          <span>
+            {deleteSourceApplies
+              ? translate('删除（同时删除源文件）')
+              : translate('删除')}
+          </span>
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem
