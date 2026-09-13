@@ -667,6 +667,10 @@ const EN_MESSAGES: Record<string, string> = {
   '删除失效图标失败：{error}': 'Failed to remove invalid icons: {error}',
   '正在删除...': 'Deleting...',
   '删除所选（{count}）': 'Delete selected ({count})',
+  '隐藏所选（{count}）': 'Hide selected ({count})',
+  '显示所选（{count}）': 'Show selected ({count})',
+  '确定将选中的 {count} 项移出图标库吗？不会删除原始程序、文件或文件夹。':
+    'Move the selected {count} item(s) out of the icon library? Original apps, files and folders will not be deleted.',
   '图标库共 {total} 项，当前显示 {filtered} 项。':
     'The icon library contains {total} item(s); {filtered} currently shown.',
   '图标库加载中...': 'Loading icon library...',

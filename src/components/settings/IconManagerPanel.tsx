@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
 import { invoke } from '@tauri-apps/api/core'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { filterIconManagerItems, getPathLeaf, type IconVisibilityFilter } from '@/lib/iconManager'
@@ -12,7 +13,9 @@ import {
 } from '@/components/icon-grid/services/layoutStore'
 import { AiOrganizePanel } from '@/components/ai/AiOrganizePanel'
 import { AddIconDialog } from '@/components/icons/AddIconDialog'
+import { useIconManagerBulkActions } from '@/components/settings/useIconManagerBulkActions'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { NativeScrollArea } from '@/components/ui/native-scroll-area'
 import { OptionButton } from '@/components/ui/setting-components'
@@ -35,6 +38,8 @@ import {
   Trash2,
   AlertTriangle,
   CheckCircle2,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 
 const ICON_VISIBILITY_FILTER_OPTIONS: { label: string; value: IconVisibilityFilter }[] = [
@@ -54,6 +59,7 @@ const ICON_MANAGER_VIEW_MODE_OPTIONS: {
 
 export function IconManagerPanel() {
   useI18n()
+  const prefersReducedMotion = useReducedMotion()
 
   const [pendingMutation, setPendingMutation] = useState<{
     type: 'hide' | 'unhide' | 'delete'
@@ -78,6 +84,7 @@ export function IconManagerPanel() {
   const [aiOrganizeLayoutViewMode, setAiOrganizeLayoutViewMode] =
     useState<LaunchpadGridViewMode | null>(null)
   const [customNames, setCustomNames] = useState<Record<string, string>>({})
+  const [selectedIconIds, setSelectedIconIds] = useState<string[]>([])
   const toast = useToast()
 
   const refreshIconManagerList = useCallback(async () => {
@@ -126,6 +133,13 @@ export function IconManagerPanel() {
     return () => window.clearTimeout(timer)
   }, [searchInput])
 
+  const notifyMainWindow = async () => {
+    const mainWindow = await WebviewWindow.getByLabel('main')
+    if (mainWindow) {
+      await mainWindow.emit(LAUNCHPAD_LAYOUT_RESET_EVENT)
+    }
+  }
+
   const filteredIcons = useMemo(
     () =>
       filterIconManagerItems(allIcons, {
@@ -135,19 +149,55 @@ export function IconManagerPanel() {
     [allIcons, visibilityFilter, searchKeyword]
   )
 
+  const selectedIconIdSet = useMemo(() => {
+    // 派生时剔除已不存在的选择项（图标库刷新后自动失效），不在 effect 里回写状态。
+    const idSet = new Set(allIcons.map(icon => icon.id))
+    return new Set(selectedIconIds.filter(id => idSet.has(id)))
+  }, [selectedIconIds, allIcons])
+  const filteredSelectedCount = useMemo(
+    () => filteredIcons.filter(icon => selectedIconIdSet.has(icon.id)).length,
+    [filteredIcons, selectedIconIdSet]
+  )
+  const allFilteredSelected =
+    filteredIcons.length > 0 && filteredSelectedCount === filteredIcons.length
+  const someFilteredSelected = filteredSelectedCount > 0 && !allFilteredSelected
+
+  const controlsDisabled =
+    mutating || listLoading || layoutResetting || scanningInvalidIcons || deletingInvalidIcons
+
+  const { handleBulkMutation } = useIconManagerBulkActions({
+    filteredIcons,
+    selectedIconIdSet,
+    busy: controlsDisabled,
+    setMutating,
+    refreshIconManagerList,
+    notifyMainWindow,
+  })
+
+  const handleToggleIconSelected = (id: string) => {
+    setSelectedIconIds(current =>
+      current.includes(id) ? current.filter(item => item !== id) : [...current, id]
+    )
+  }
+
+  const handleToggleSelectAll = () => {
+    setSelectedIconIds(current => {
+      const currentSet = new Set(current)
+      if (allFilteredSelected) {
+        filteredIcons.forEach(icon => currentSet.delete(icon.id))
+      } else {
+        filteredIcons.forEach(icon => currentSet.add(icon.id))
+      }
+      return Array.from(currentSet)
+    })
+  }
+
   const handleViewModeChange = (nextMode: IconManagerViewMode) => {
     if (nextMode === viewMode) return
     setViewMode(nextMode)
     void setSetting('iconManagerViewMode', nextMode).catch(e =>
       console.error('Failed to save icon manager view mode:', e)
     )
-  }
-
-  const notifyMainWindow = async () => {
-    const mainWindow = await WebviewWindow.getByLabel('main')
-    if (mainWindow) {
-      await mainWindow.emit(LAUNCHPAD_LAYOUT_RESET_EVENT)
-    }
   }
 
   const handleIconCreated = async () => {
@@ -358,8 +408,6 @@ export function IconManagerPanel() {
           }
     : null
 
-  const controlsDisabled =
-    mutating || listLoading || layoutResetting || scanningInvalidIcons || deletingInvalidIcons
   const selectedInvalidIconKeySet = new Set(selectedInvalidIconKeys)
   const selectedInvalidIconCount = invalidIconResults.filter(icon =>
     selectedInvalidIconKeySet.has(invalidIconKey(icon))
@@ -468,6 +516,73 @@ export function IconManagerPanel() {
             })}
           </p>
 
+          {filteredIcons.length > 0 ? (
+            <div className="rounded-card border border-border/60 bg-muted/15 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={allFilteredSelected}
+                    indeterminate={someFilteredSelected}
+                    onToggle={handleToggleSelectAll}
+                    disabled={controlsDisabled}
+                    ariaLabel={translate('全选')}
+                  />
+                  <span
+                    className="cursor-pointer select-none text-sm"
+                    onClick={() => !controlsDisabled && handleToggleSelectAll()}
+                  >
+                    {translate('全选')}
+                  </span>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {translate('已选择：{count}', { count: filteredSelectedCount })}
+                </span>
+              </div>
+              <motion.div
+                initial={false}
+                animate={{
+                  height: filteredSelectedCount > 0 ? 'auto' : 0,
+                  opacity: filteredSelectedCount > 0 ? 1 : 0,
+                }}
+                transition={{
+                  duration: prefersReducedMotion ? 0 : 0.2,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+                className="overflow-hidden"
+              >
+                <div className="flex flex-wrap items-center justify-end gap-2 pt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleBulkMutation('hide')}
+                    disabled={controlsDisabled}
+                  >
+                    <EyeOff className="h-3.5 w-3.5" />
+                    {translate('隐藏所选（{count}）', { count: filteredSelectedCount })}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleBulkMutation('unhide')}
+                    disabled={controlsDisabled}
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    {translate('显示所选（{count}）', { count: filteredSelectedCount })}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => void handleBulkMutation('delete')}
+                    disabled={controlsDisabled}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {translate('删除所选（{count}）', { count: filteredSelectedCount })}
+                  </Button>
+                </div>
+              </motion.div>
+            </div>
+          ) : null}
+
           <div
             className={cn(
               'min-h-52',
@@ -537,13 +652,32 @@ export function IconManagerPanel() {
                   <article
                     key={icon.id}
                     className={cn(
-                      'border border-border/80 bg-background',
+                      'border bg-background transition-colors',
+                      selectedIconIdSet.has(icon.id)
+                        ? 'border-primary/50 bg-primary/5'
+                        : 'border-border/80',
                       viewMode === 'grid'
                         ? 'rounded-card p-3'
                         : 'flex flex-wrap items-center gap-3 rounded-card p-3'
                     )}
                   >
+                    {viewMode === 'list' ? (
+                      <Checkbox
+                        checked={selectedIconIdSet.has(icon.id)}
+                        onToggle={() => handleToggleIconSelected(icon.id)}
+                        disabled={controlsDisabled}
+                        ariaLabel={icon.name || translate('未命名')}
+                      />
+                    ) : null}
                     <div className="flex min-w-0 flex-[1_1_16rem] items-start gap-3">
+                      {viewMode === 'grid' ? (
+                        <Checkbox
+                          checked={selectedIconIdSet.has(icon.id)}
+                          onToggle={() => handleToggleIconSelected(icon.id)}
+                          disabled={controlsDisabled}
+                          ariaLabel={icon.name || translate('未命名')}
+                        />
+                      ) : null}
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/70 bg-muted/35">
                         {icon.icon_base64 ? (
                           <img
@@ -702,20 +836,30 @@ export function IconManagerPanel() {
             ) : (
               <>
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 bg-muted/15 px-4 py-3 sm:px-5">
-                  <label className="flex cursor-pointer items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
+                  <div className="flex items-center gap-2">
+                    <Checkbox
                       checked={allInvalidIconsSelected}
-                      onChange={() =>
+                      indeterminate={selectedInvalidIconCount > 0 && !allInvalidIconsSelected}
+                      onToggle={() =>
                         setSelectedInvalidIconKeys(
                           allInvalidIconsSelected ? [] : invalidIconResults.map(invalidIconKey)
                         )
                       }
                       disabled={deletingInvalidIcons}
-                      className="h-4 w-4 rounded border-border accent-primary"
+                      ariaLabel={translate('全选')}
                     />
-                    {translate('全选')}
-                  </label>
+                    <span
+                      className="cursor-pointer select-none text-sm"
+                      onClick={() =>
+                        !deletingInvalidIcons &&
+                        setSelectedInvalidIconKeys(
+                          allInvalidIconsSelected ? [] : invalidIconResults.map(invalidIconKey)
+                        )
+                      }
+                    >
+                      {translate('全选')}
+                    </span>
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {translate('发现 {total} 项，已选择 {selected} 项。', {
                       total: invalidIconResults.length,
@@ -739,12 +883,12 @@ export function IconManagerPanel() {
                           key={key}
                           className="flex cursor-pointer items-start gap-3 rounded-card border border-border/80 bg-background p-3 transition-colors hover:bg-muted/20"
                         >
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={selectedInvalidIconKeySet.has(key)}
-                            onChange={() => handleToggleInvalidIcon(key)}
+                            onToggle={() => handleToggleInvalidIcon(key)}
                             disabled={deletingInvalidIcons}
-                            className="mt-1 h-4 w-4 shrink-0 rounded border-border accent-primary"
+                            ariaLabel={icon.name || translate('未命名')}
+                            className="mt-0.5"
                           />
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
