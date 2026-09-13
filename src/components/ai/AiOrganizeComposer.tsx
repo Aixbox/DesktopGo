@@ -178,33 +178,111 @@ export function AiOrganizeComposer({
         />
         <div className="flex min-h-8 items-center justify-between gap-2 px-2 pb-1.5 pt-0">
           <div className="flex min-w-0 flex-1 items-center gap-1">
-            <button
-              ref={modelButtonRef}
-              type="button"
-              onClick={toggleModelMenu}
-              disabled={!canUseControls}
-              aria-haspopup="menu"
-              aria-expanded={modelMenuOpen}
-              title={translate('切换模型')}
-              className="inline-flex min-w-0 max-w-[45%] items-center gap-1 rounded-sm px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <span className="truncate">{aiConfig?.model.trim() || translate('未配置模型')}</span>
-              <ChevronDown className="h-3 w-3 shrink-0" />
-            </button>
-            <button
-              ref={effortButtonRef}
-              type="button"
-              onClick={toggleEffortMenu}
-              disabled={!canUseControls}
-              aria-haspopup="menu"
-              aria-expanded={effortMenuOpen}
-              title={translate('思考程度')}
-              className="inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Gauge className="h-3 w-3 shrink-0" />
-              <span>{effortLabel(aiConfig?.reasoningEffort ?? 'none')}</span>
-              <ChevronDown className="h-3 w-3 shrink-0" />
-            </button>
+            <div className="relative min-w-0 max-w-[45%]">
+              <button
+                ref={modelButtonRef}
+                type="button"
+                onClick={toggleModelMenu}
+                disabled={!canUseControls}
+                aria-haspopup="menu"
+                aria-expanded={modelMenuOpen}
+                title={translate('切换模型')}
+                className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-sm px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span className="truncate">{aiConfig?.model.trim() || translate('未配置模型')}</span>
+                <ChevronDown className="h-3 w-3 shrink-0" />
+              </button>
+              <AnimatePresence initial={false}>
+                {modelMenuOpen ? (
+                  <motion.div
+                    ref={modelMenuRef}
+                    initial={prefersReducedMotion ? false : { opacity: 0, y: 4, scale: 0.98 }}
+                    animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
+                    exit={prefersReducedMotion ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
+                    transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+                    className="absolute bottom-full left-0 z-20 mb-1.5 w-60 overflow-hidden rounded-xl border border-border/85 bg-background p-1.5 shadow-xl"
+                    role="menu"
+                  >
+                    {modelOptions.length > 0 ? (
+                      modelOptions.map(model => {
+                        const active = aiConfig?.model.trim() === model
+                        return (
+                          <button
+                            key={model}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={active}
+                            onClick={() => handleSelectModel(model)}
+                            className="flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left transition-colors hover:bg-accent hover:text-foreground"
+                          >
+                            <span className="min-w-0 flex-1 truncate text-xs text-foreground">
+                              {model}
+                            </span>
+                            {active ? (
+                              <Check className="accent-foreground h-3.5 w-3.5 shrink-0" />
+                            ) : null}
+                          </button>
+                        )
+                      })
+                    ) : (
+                      <p className="px-2.5 py-2 text-[11px] leading-4 text-muted-foreground">
+                        {translate('还没有可选模型，请先到设置页填写模型名称。')}
+                      </p>
+                    )}
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </div>
+            <div className="relative shrink-0">
+              <button
+                ref={effortButtonRef}
+                type="button"
+                onClick={toggleEffortMenu}
+                disabled={!canUseControls}
+                aria-haspopup="menu"
+                aria-expanded={effortMenuOpen}
+                title={translate('思考程度')}
+                className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Gauge className="h-3 w-3 shrink-0" />
+                <span>{effortLabel(aiConfig?.reasoningEffort ?? 'none')}</span>
+                <ChevronDown className="h-3 w-3 shrink-0" />
+              </button>
+              <AnimatePresence initial={false}>
+                {effortMenuOpen ? (
+                  <motion.div
+                    ref={effortMenuRef}
+                    initial={prefersReducedMotion ? false : { opacity: 0, y: 4, scale: 0.98 }}
+                    animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
+                    exit={prefersReducedMotion ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
+                    transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+                    className="absolute bottom-full left-0 z-20 mb-1.5 w-44 overflow-hidden rounded-xl border border-border/85 bg-background p-1.5 shadow-xl"
+                    role="menu"
+                  >
+                    {AI_REASONING_EFFORTS.map(effort => {
+                      const active = (aiConfig?.reasoningEffort ?? 'none') === effort
+                      return (
+                        <button
+                          key={effort}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={active}
+                          onClick={() => handleSelectEffort(effort)}
+                          className="flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left transition-colors hover:bg-accent hover:text-foreground"
+                        >
+                          <span className="min-w-0 flex-1 truncate text-xs text-foreground">
+                            {effortLabel(effort)}
+                          </span>
+                          {active ? (
+                            <Check className="accent-foreground h-3.5 w-3.5 shrink-0" />
+                          ) : null}
+                        </button>
+                      )
+                    })}
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </div>
             {composerCommand ? (
               <span className="accent-tonal inline-flex max-w-full shrink-0 items-center gap-1 rounded-sm border px-1.5 py-0 text-[11px] font-medium leading-5">
                 <Sparkles className="h-3 w-3 shrink-0" />
@@ -283,72 +361,6 @@ export function AiOrganizeComposer({
                   </div>
                 </button>
               ))}
-            </motion.div>
-          ) : null}
-          {modelMenuOpen ? (
-            <motion.div
-              ref={modelMenuRef}
-              initial={prefersReducedMotion ? false : { opacity: 0, y: 4, scale: 0.98 }}
-              animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
-              exit={prefersReducedMotion ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
-              transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute bottom-[calc(100%+0.5rem)] left-0 z-20 w-60 overflow-hidden rounded-xl border border-border/85 bg-background p-1.5 shadow-xl"
-              role="menu"
-            >
-              {modelOptions.length > 0 ? (
-                modelOptions.map(model => {
-                  const active = aiConfig?.model.trim() === model
-                  return (
-                    <button
-                      key={model}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={active}
-                      onClick={() => handleSelectModel(model)}
-                      className="flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left transition-colors hover:bg-accent hover:text-foreground"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-xs text-foreground">
-                        {model}
-                      </span>
-                      {active ? <Check className="accent-foreground h-3.5 w-3.5 shrink-0" /> : null}
-                    </button>
-                  )
-                })
-              ) : (
-                <p className="px-2.5 py-2 text-[11px] leading-4 text-muted-foreground">
-                  {translate('还没有可选模型，请先到设置页填写模型名称。')}
-                </p>
-              )}
-            </motion.div>
-          ) : null}
-          {effortMenuOpen ? (
-            <motion.div
-              ref={effortMenuRef}
-              initial={prefersReducedMotion ? false : { opacity: 0, y: 4, scale: 0.98 }}
-              animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
-              exit={prefersReducedMotion ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
-              transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute bottom-[calc(100%+0.5rem)] left-0 z-20 w-44 overflow-hidden rounded-xl border border-border/85 bg-background p-1.5 shadow-xl"
-              role="menu"
-            >
-              {AI_REASONING_EFFORTS.map(effort => {
-                const active = (aiConfig?.reasoningEffort ?? 'none') === effort
-                return (
-                  <button
-                    key={effort}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={active}
-                    onClick={() => handleSelectEffort(effort)}
-                    className="flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left transition-colors hover:bg-accent hover:text-foreground"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-xs text-foreground">
-                      {effortLabel(effort)}
-                    </span>
-                    {active ? <Check className="accent-foreground h-3.5 w-3.5 shrink-0" /> : null}
-                  </button>
-                )
-              })}
             </motion.div>
           ) : null}
         </AnimatePresence>
