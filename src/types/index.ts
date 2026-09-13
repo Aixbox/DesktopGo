@@ -76,7 +76,7 @@ export const getIconGridRowHeight = (iconSize: IconSize): number =>
   ICON_SIZE_CONFIG[iconSize].columnWidth +
   Math.ceil((ICON_GRID_TITLE_HEIGHT + ICON_GRID_TITLE_GAP) / 2)
 
-export type WindowMode = 'fullscreen' | 'large' | 'medium' | 'small'
+export type WindowMode = 'fullscreen' | 'large' | 'medium'
 
 export type WindowStyle = 'default'
 
@@ -88,7 +88,6 @@ export const WINDOW_SIZE_CONFIG: Record<
 > = {
   large: { width: 1600, height: 900 },
   medium: { width: 1280, height: 720 },
-  small: { width: 800, height: 600 },
 }
 
 export type ThemeMode = 'system' | 'dark' | 'light'

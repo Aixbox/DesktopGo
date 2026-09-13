@@ -154,7 +154,7 @@ const isIconOpacity = (value: unknown): value is number =>
   value <= ICON_OPACITY_MAX
 
 const isWindowMode = (value: unknown): value is WindowMode =>
-  value === 'fullscreen' || value === 'large' || value === 'medium' || value === 'small'
+  value === 'fullscreen' || value === 'large' || value === 'medium'
 
 const isTitleLineCount = (value: unknown): value is TitleLineCount =>
   value === 'one' || value === 'two'

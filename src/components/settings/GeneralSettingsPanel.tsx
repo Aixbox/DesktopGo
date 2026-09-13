@@ -65,7 +65,6 @@ const WINDOW_MODE_OPTIONS: { label: string; value: WindowMode }[] = [
   { label: '全屏', value: 'fullscreen' },
   { label: '大窗口', value: 'large' },
   { label: '中等窗口', value: 'medium' },
-  { label: '小窗口', value: 'small' },
 ]
 
 const TITLE_LINE_OPTIONS: { label: string; value: TitleLineCount }[] = [

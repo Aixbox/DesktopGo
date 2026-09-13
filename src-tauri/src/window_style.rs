@@ -21,8 +21,6 @@ const MAIN_WINDOW_LARGE_WIDTH: f64 = 1600.0;
 const MAIN_WINDOW_LARGE_HEIGHT: f64 = 900.0;
 const MAIN_WINDOW_MEDIUM_WIDTH: f64 = 1280.0;
 const MAIN_WINDOW_MEDIUM_HEIGHT: f64 = 720.0;
-const MAIN_WINDOW_SMALL_WIDTH: f64 = 800.0;
-const MAIN_WINDOW_SMALL_HEIGHT: f64 = 600.0;
 // 与 window-frame.css 中的留白一致，窗口尺寸额外容纳四周阴影。
 const WINDOW_SHADOW_INSET: f64 = 16.0;
 
@@ -38,7 +36,6 @@ fn normalize_window_mode(value: &str) -> Option<&'static str> {
         "fullscreen" => Some("fullscreen"),
         "large" => Some("large"),
         "medium" => Some("medium"),
-        "small" => Some("small"),
         _ => None,
     }
 }
@@ -332,7 +329,7 @@ pub(crate) fn sync_main_window_dom_visibility(window: &tauri::WebviewWindow, del
 pub(crate) fn resolve_initial_main_window_size(app: &tauri::AppHandle) -> (f64, f64) {
     let (width, height) = match read_saved_window_mode(app) {
         Some("large") => (MAIN_WINDOW_LARGE_WIDTH, MAIN_WINDOW_LARGE_HEIGHT),
-        Some("small") => (MAIN_WINDOW_SMALL_WIDTH, MAIN_WINDOW_SMALL_HEIGHT),
+        // 已删除的 small 模式在读取时归一化为 None，与前端一起回退到中等窗口。
         Some("fullscreen") | Some("medium") | None => {
             (MAIN_WINDOW_MEDIUM_WIDTH, MAIN_WINDOW_MEDIUM_HEIGHT)
         }

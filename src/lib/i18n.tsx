@@ -41,7 +41,6 @@ const EN_MESSAGES: Record<string, string> = {
   全屏: 'Fullscreen',
   大窗口: 'Large window',
   中窗口: 'Medium window',
-  小窗口: 'Small window',
   单行标题: 'Single-line titles',
   双行标题: 'Two-line titles',
   网格模式: 'Grid mode',
