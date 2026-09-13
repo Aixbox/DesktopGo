@@ -200,7 +200,7 @@ export function AiOrganizeComposer({
                     animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
                     exit={prefersReducedMotion ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
                     transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-                    className="absolute bottom-full left-0 z-20 mb-1.5 w-60 overflow-hidden rounded-xl border border-border/85 bg-background p-1.5 shadow-xl"
+                    className="absolute bottom-full left-0 z-20 mb-1.5 w-60 overflow-hidden rounded-xl border border-border/85 bg-popover p-1.5 shadow-xl"
                     role="menu"
                   >
                     {modelOptions.length > 0 ? (
@@ -256,7 +256,7 @@ export function AiOrganizeComposer({
                     animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
                     exit={prefersReducedMotion ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
                     transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-                    className="absolute bottom-full left-0 z-20 mb-1.5 w-44 overflow-hidden rounded-xl border border-border/85 bg-background p-1.5 shadow-xl"
+                    className="absolute bottom-full left-0 z-20 mb-1.5 w-44 overflow-hidden rounded-xl border border-border/85 bg-popover p-1.5 shadow-xl"
                     role="menu"
                   >
                     {AI_REASONING_EFFORTS.map(effort => {
@@ -343,7 +343,7 @@ export function AiOrganizeComposer({
               animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
               exit={prefersReducedMotion ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
               transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute bottom-[calc(100%+0.5rem)] right-0 z-20 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border/85 bg-background p-1.5 shadow-xl"
+              className="absolute bottom-[calc(100%+0.5rem)] right-0 z-20 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border/85 bg-popover p-1.5 shadow-xl"
             >
               {PROMPT_PRESETS.map(preset => (
                 <button

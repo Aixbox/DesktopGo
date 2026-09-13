@@ -129,6 +129,14 @@
   box-shadow: 12px 0 32px color-mix(in oklch, var(--foreground) 5%, transparent);
 }
 
+/*
+ * 深色基底只有 0.13 亮度，72% 玻璃在壁纸上显得过透；深色下把底色浓度提到 90%，
+ * 读作清晰面板的同时保留一点玻璃感。
+ */
+.dark .scroll-grid-sidebar {
+  background: color-mix(in oklch, var(--background) 90%, transparent);
+}
+
 .scroll-grid-layout {
   transition: grid-template-columns 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -205,10 +213,14 @@
   backdrop-filter: blur(20px);
 }
 
+/*
+ * 侧栏头部/底部与中间滚动区是 flex 兄弟节点，滚动内容在各自边界内裁剪、
+ * 不会滚到头尾之下，因此头尾不需要额外的实底遮罩；此前它们各自叠了一层
+ * 34% 背景导致上下比中间更不透明，这里只保留分隔线，透出侧栏同一块玻璃。
+ */
 .scroll-grid-sidebar-header,
 .scroll-grid-sidebar-footer {
   border-color: color-mix(in oklch, var(--border) 72%, transparent);
-  background: color-mix(in oklch, var(--background) 34%, transparent);
 }
 
 .scroll-grid-group-active {
@@ -495,20 +507,30 @@
   --launchpad-background-scrim-rgb: 240 240 245;
 }
 
+/*
+ * 深色层级阶梯（参考 HeroUI 暗色 content1–content4 的做法：基底最深，
+ * 每一层抬升一个可感知的亮度档，层级关系一眼可辨）：
+ *   background 0.13（基底）
+ *   ├─ muted 0.185（凹陷底衬：骨架屏、AI 面板底、次级填充）
+ *   ├─ card 0.205（内容卡片）
+ *   ├─ popover 0.255（浮层：菜单、下拉、toast）
+ *   ├─ accent 0.27（悬停反馈面）
+ *   └─ secondary 0.30（次级操作面）
+ */
 .dark {
-  --background: oklch(0.145 0 0);
+  --background: oklch(0.13 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
+  --popover: oklch(0.255 0 0);
   --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.922 0 0);
   --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
+  --secondary: oklch(0.3 0 0);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
+  --muted: oklch(0.185 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
+  --accent: oklch(0.27 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
@@ -572,19 +594,25 @@
   -webkit-user-select: text;
 }
 
+/* 设置窗口沿用全局深色阶梯的相对层级：基底 → muted → card → popover → secondary → accent。 */
+/*
+ * 侧栏+标题栏与内容区是两块板块：chrome（侧栏/标题栏）压暗做凹陷框架，
+ * 内容区 bg-background 抬升为浮起的面板，两者至少相差 0.08 亮度才可辨层级；
+ * 内容区边框用低透明度细线，层级感交给板块本身的明暗差，不靠亮线。
+ */
 .dark .settings-shell {
-  --background: oklch(0.17 0 0);
-  --card: oklch(0.215 0 0);
-  --popover: oklch(0.225 0 0);
-  --secondary: oklch(0.29 0 0);
-  --muted: oklch(0.27 0 0);
+  --background: oklch(0.185 0 0);
+  --card: oklch(0.225 0 0);
+  --popover: oklch(0.26 0 0);
+  --secondary: oklch(0.3 0 0);
+  --muted: oklch(0.21 0 0);
   --muted-foreground: oklch(0.77 0 0);
-  --accent: oklch(0.315 0 0);
+  --accent: oklch(0.33 0 0);
   --border: oklch(0.74 0 0 / 22%);
   --input: oklch(0.82 0 0 / 28%);
   --ring: var(--appearance-accent, oklch(0.72 0.08 255));
-  --settings-chrome: oklch(0.145 0.018 260);
-  --settings-content-border: color-mix(in oklch, var(--foreground) 30%, transparent);
+  --settings-chrome: oklch(0.1 0.018 260);
+  --settings-content-border: color-mix(in oklch, var(--foreground) 14%, transparent);
   --settings-content-shadow:
     -8px -8px 24px -12px oklch(0.025 0 0 / 20%), inset -1px -1px 4px -1px oklch(0.025 0 0 / 6%),
     -2px 0 7px -4px oklch(0.025 0 0 / 2%), 0 -2px 7px -4px oklch(0.025 0 0 / 2%);
@@ -905,6 +933,13 @@ body:focus-visible {
   background-size: cover;
   filter: blur(var(--launchpad-background-blur, 0px));
   pointer-events: none;
+  /*
+   * 按窗口圆角预裁壁纸：backdrop-filter 的模糊采样发生在 #root 圆角裁切之前，
+   * 方角壁纸在圆角弧外残留的亮色像素会被玻璃面板（侧栏/搜索面板）的模糊采样
+   * 带回圆角处，形成白色弧线（壁纸亮角 + 深色模式下尤其明显）。图片层先按
+   * 同一圆角裁掉方角，弧外只剩暗色底衬（--muted）与蒙版可供采样。
+   */
+  border-radius: var(--radius-2xl);
 }
 
 [data-launchpad-background='custom'] .launchpad-bg {

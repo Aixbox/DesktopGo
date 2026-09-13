@@ -81,7 +81,7 @@ function ToastViewport({
             key={toast.id}
             role={toast.tone === 'error' ? 'alert' : 'status'}
             className={cn(
-              'pointer-events-auto rounded-xl border bg-card/95 px-4 py-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/85',
+              'pointer-events-auto rounded-xl border bg-popover/95 px-4 py-3 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-popover/85',
               toast.tone === 'success' && 'border-emerald-500/25',
               toast.tone === 'error' && 'border-red-500/25',
               toast.tone === 'info' && 'border-blue-500/20'

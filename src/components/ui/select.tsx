@@ -381,7 +381,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
                 role="listbox"
                 aria-labelledby={triggerId}
                 className={cn(
-                  'overflow-hidden rounded-popover border border-border bg-background/95 shadow-xl backdrop-blur-sm',
+                  'overflow-hidden rounded-popover border border-border bg-popover/95 shadow-xl backdrop-blur-sm',
                   contentClassName
                 )}
                 style={{
