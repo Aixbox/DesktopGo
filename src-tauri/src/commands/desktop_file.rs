@@ -106,7 +106,10 @@ fn create_new_file_windows(
     match template {
         NewFileKind::Directory => std::fs::create_dir_all(&target),
         NewFileKind::Empty => std::fs::write(&target, []),
-        NewFileKind::ShellNew { extension, fallback } => {
+        NewFileKind::ShellNew {
+            extension,
+            fallback,
+        } => {
             // 1) 本机注册表模板（Office/WPS，保真度最高）；
             // 2) 项目内置模板（保证文件合法可打开）；
             // 3) 都没有时退回空文件。

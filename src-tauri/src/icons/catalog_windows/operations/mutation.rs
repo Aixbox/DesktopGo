@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use crate::icons::models::{IconMutationTarget, InvalidIconEntry};
 
 use super::super::item::is_web_url;
-use crate::icons::search_icon_plan::is_special_shell_path;
 use super::super::source::IconSource;
 use super::super::storage::{
     load_icon_library_snapshot, max_snapshot_display_order, read_icon_snapshot,
@@ -12,6 +11,7 @@ use super::super::storage::{
 };
 use super::super::view::invalid_icon_reason;
 use super::import::icon_entry_dir_windows;
+use crate::icons::search_icon_plan::is_special_shell_path;
 
 const DELETE_SOURCE_SETTING_KEY: &str = "deleteIconSourceFile";
 const DELETE_NEW_FILE_SOURCE_SETTING_KEY: &str = "deleteNewFileSource";
@@ -131,9 +131,7 @@ fn delete_icons_in_snapshot_windows(
     {
         let source_paths: Vec<PathBuf> = removed_items
             .iter()
-            .filter(|item| {
-                delete_source_all || (delete_source_new && item.origin == "new")
-            })
+            .filter(|item| delete_source_all || (delete_source_new && item.origin == "new"))
             .filter(|item| !is_web_url(&item.target_path) && !is_special_shell_path(&item.path))
             .map(|item| PathBuf::from(&item.path))
             .filter(|entry_path| {
@@ -187,8 +185,8 @@ fn delete_paths_to_recycle_bin(paths: &[PathBuf]) -> Result<(), String> {
 
     use windows::core::PCWSTR;
     use windows::Win32::UI::Shell::{
-        SHFileOperationW, SHFILEOPSTRUCTW, FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION,
-        FOF_NOERRORUI, FOF_SILENT,
+        SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FO_DELETE,
+        SHFILEOPSTRUCTW,
     };
 
     if paths.is_empty() {
