@@ -3,8 +3,6 @@ import { useIconStore } from '@/stores/iconStore'
 import type { IconSize, LaunchpadGridViewMode, TitleLineCount, WindowMode } from '@/types'
 import {
   Bot,
-  FileArchive,
-  FileImage,
   FilePlus,
   FileSpreadsheet,
   FileText,
@@ -172,11 +170,7 @@ export function LaunchpadContextMenuContent({
           </ContextMenuItem>
           <ContextMenuItem className="gap-2" onSelect={() => onCreateNewFile('text')}>
             <FileText className={MENU_ICON_CLASS} aria-hidden="true" />
-            {translate('文本文档')}
-          </ContextMenuItem>
-          <ContextMenuItem className="gap-2" onSelect={() => onCreateNewFile('bitmap')}>
-            <FileImage className={MENU_ICON_CLASS} aria-hidden="true" />
-            {translate('BMP 图像')}
+            {translate('文本文档（txt）')}
           </ContextMenuItem>
           <ContextMenuItem className="gap-2" onSelect={() => onCreateNewFile('word')}>
             <FileType2 className={MENU_ICON_CLASS} aria-hidden="true" />
@@ -189,10 +183,6 @@ export function LaunchpadContextMenuContent({
           <ContextMenuItem className="gap-2" onSelect={() => onCreateNewFile('powerpoint')}>
             <Presentation className={MENU_ICON_CLASS} aria-hidden="true" />
             {translate('Microsoft PowerPoint 演示文稿')}
-          </ContextMenuItem>
-          <ContextMenuItem className="gap-2" onSelect={() => onCreateNewFile('zip')}>
-            <FileArchive className={MENU_ICON_CLASS} aria-hidden="true" />
-            {translate('压缩(zipped)文件夹')}
           </ContextMenuItem>
         </ContextMenuSubContent>
       </ContextMenuSub>

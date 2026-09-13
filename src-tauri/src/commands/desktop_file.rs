@@ -11,7 +11,6 @@ pub struct CreatedFileInfo {
 enum NewFileKind {
     Directory,
     Empty,
-    Bytes(Vec<u8>),
     /// 优先复制注册表 ShellNew 模板（Office/WPS 安装时提供，与资源管理器行为
     /// 一致）；找不到时退回内置模板，保证生成的文件始终合法可打开。
     ShellNew {
@@ -76,7 +75,6 @@ fn create_new_file_windows(
     let (stem, extension, template) = match kind {
         "folder" => ("新建文件夹", "", NewFileKind::Directory),
         "text" => ("新建文本文档", ".txt", NewFileKind::Empty),
-        "bitmap" => ("新建位图图像", ".bmp", NewFileKind::Bytes(minimal_bmp_bytes())),
         "word" => (
             "新建 Microsoft Word 文档",
             ".docx",
@@ -101,11 +99,6 @@ fn create_new_file_windows(
                 fallback: b"",
             },
         ),
-        "zip" => (
-            "新建压缩(zipped)文件夹",
-            ".zip",
-            NewFileKind::Bytes(empty_zip_bytes().to_vec()),
-        ),
         other => return Err(format!("未知的文件类型：{other}")),
     };
 
@@ -113,7 +106,6 @@ fn create_new_file_windows(
     match template {
         NewFileKind::Directory => std::fs::create_dir_all(&target),
         NewFileKind::Empty => std::fs::write(&target, []),
-        NewFileKind::Bytes(bytes) => std::fs::write(&target, bytes),
         NewFileKind::ShellNew { extension, fallback } => {
             // 1) 本机注册表模板（Office/WPS，保真度最高）；
             // 2) 项目内置模板（保证文件合法可打开）；
@@ -151,40 +143,6 @@ fn unique_target_path(dir: &Path, stem: &str, extension: &str) -> PathBuf {
         }
     }
     dir.join(format!("{stem}{extension}.new"))
-}
-
-/// 1×1 白色 24 位 BMP：资源管理器的"新建位图图像"同样是合法的最小位图文件。
-#[cfg(windows)]
-fn minimal_bmp_bytes() -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(58);
-    bytes.extend_from_slice(b"BM");
-    bytes.extend_from_slice(&58u32.to_le_bytes()); // 文件大小
-    bytes.extend_from_slice(&0u32.to_le_bytes()); // 保留字段
-    bytes.extend_from_slice(&54u32.to_le_bytes()); // 像素数据偏移
-    bytes.extend_from_slice(&40u32.to_le_bytes()); // 信息头大小
-    bytes.extend_from_slice(&1i32.to_le_bytes()); // 宽度
-    bytes.extend_from_slice(&1i32.to_le_bytes()); // 高度
-    bytes.extend_from_slice(&1u16.to_le_bytes()); // 位平面数
-    bytes.extend_from_slice(&24u16.to_le_bytes()); // 位深
-    bytes.extend_from_slice(&0u32.to_le_bytes()); // 压缩方式
-    bytes.extend_from_slice(&4u32.to_le_bytes()); // 图像数据大小（含行填充）
-    bytes.extend_from_slice(&2835i32.to_le_bytes()); // 水平分辨率（72 DPI）
-    bytes.extend_from_slice(&2835i32.to_le_bytes()); // 垂直分辨率
-    bytes.extend_from_slice(&0u32.to_le_bytes()); // 调色板色数
-    bytes.extend_from_slice(&0u32.to_le_bytes()); // 重要色数
-    bytes.extend_from_slice(&[255, 255, 255, 0]); // 1×1 白色像素（BGR + 行填充）
-    bytes
-}
-
-/// 规范的空 zip：仅 End of Central Directory 记录，资源管理器可直接打开。
-#[cfg(windows)]
-fn empty_zip_bytes() -> [u8; 22] {
-    let mut bytes = [0u8; 22];
-    bytes[0] = 0x50;
-    bytes[1] = 0x4B;
-    bytes[2] = 0x05;
-    bytes[3] = 0x06;
-    bytes
 }
 
 /// 读取 HKCR 下 ShellNew 的 FileName 模板（Office 安装时提供），与资源管理
@@ -236,22 +194,8 @@ fn expand_environment_variables(raw: &str) -> String {
 
 #[cfg(all(test, windows))]
 mod tests {
-    use super::{empty_zip_bytes, minimal_bmp_bytes, unique_target_path};
+    use super::unique_target_path;
     use std::fs;
-
-    #[test]
-    fn empty_zip_is_twenty_two_bytes_with_eocd_signature() {
-        let bytes = empty_zip_bytes();
-        assert_eq!(bytes.len(), 22);
-        assert_eq!(&bytes[0..4], &[0x50, 0x4B, 0x05, 0x06]);
-    }
-
-    #[test]
-    fn minimal_bmp_declares_one_pixel_and_correct_size() {
-        let bytes = minimal_bmp_bytes();
-        assert_eq!(bytes.len(), 58);
-        assert_eq!(&bytes[0..2], b"BM");
-    }
 
     #[test]
     fn unique_target_path_skips_existing_entries() {
