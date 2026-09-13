@@ -43,7 +43,7 @@ export function LaunchpadIconImportLayer({ controller }: LaunchpadIconImportLaye
             role={isExternalDragActive ? 'status' : 'dialog'}
             aria-modal={isExternalDragActive ? undefined : true}
             aria-labelledby={isExternalDragActive ? undefined : 'drop-import-title'}
-            className="w-full max-w-3xl overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
+            className="w-full max-w-3xl overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
           >
             {isExternalDragActive ? (
               <div className="p-5 sm:p-6">

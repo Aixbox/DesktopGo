@@ -663,7 +663,7 @@ export function IconManagerPanel() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="invalid-icon-scan-title"
-            className="flex max-h-[min(42rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-card border border-border bg-background shadow-xl"
+            className="flex max-h-[min(42rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-card border border-border bg-card shadow-xl"
           >
             <div className="flex items-start justify-between gap-4 border-b border-border/80 px-4 py-4 sm:px-5">
               <div className="min-w-0 space-y-1">

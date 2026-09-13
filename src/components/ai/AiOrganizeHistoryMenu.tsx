@@ -40,7 +40,7 @@ export function AiOrganizeHistoryMenu({
           animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
           exit={prefersReducedMotion ? undefined : { opacity: 0, y: -6, scale: 0.98 }}
           transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-          className="absolute right-3 top-[calc(100%-0.25rem)] z-20 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border/85 bg-background shadow-xl"
+          className="absolute right-3 top-[calc(100%-0.25rem)] z-20 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border/85 bg-popover shadow-xl"
         >
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-3 py-2">
             <span className="text-xs font-medium text-foreground">{translate('会话历史')}</span>
