@@ -11,6 +11,8 @@ export interface DesktopIcon {
   icon_color?: 'none' | 'ocean' | 'emerald' | 'amber' | 'coral' | 'plum'
   icon_text?: string
   item_type: 'shortcut' | 'folder' | 'file' | 'executable' | 'special' | 'website'
+  /** 图标来源：new = 应用内"新建"创建；import = 导入（拖入/添加对话框）。 */
+  origin: 'new' | 'import'
 }
 
 export interface IconManagerItem extends DesktopIcon {

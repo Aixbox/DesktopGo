@@ -51,6 +51,7 @@ pub(super) fn snapshot_to_ordered_desktop_icons(
                     icon_color: resolved_icon_color(item),
                     icon_text: item.icon_text.clone(),
                     item_type: item.item_type.clone(),
+                    origin: item.origin.clone(),
                 },
             )
         })
@@ -97,6 +98,7 @@ pub(super) fn snapshot_to_ordered_icon_manager_items(
                     icon_color: resolved_icon_color(item),
                     icon_text: item.icon_text.clone(),
                     item_type: item.item_type.clone(),
+                    origin: item.origin.clone(),
                     hidden: item.hidden,
                 },
             )

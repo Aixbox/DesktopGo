@@ -13,31 +13,28 @@ import {
 } from '@/components/icon-grid/services/layoutStore'
 import { AiOrganizePanel } from '@/components/ai/AiOrganizePanel'
 import { AddIconDialog } from '@/components/icons/AddIconDialog'
+import { InvalidIconScanDialog } from '@/components/settings/InvalidIconScanDialog'
 import { useIconManagerBulkActions } from '@/components/settings/useIconManagerBulkActions'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { NativeScrollArea } from '@/components/ui/native-scroll-area'
-import { OptionButton } from '@/components/ui/setting-components'
+import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { SettingCard, OptionButton, SettingGroup, ToggleRow } from '@/components/ui/setting-components'
 import { useToast } from '@/components/ui/toast'
 import type {
   IconManagerItem,
   IconManagerViewMode,
   IconMutationTarget,
-  InvalidIconEntry,
   LaunchpadGridViewMode,
 } from '@/types'
 import {
   RefreshCw,
   Bot,
-  X,
   LayoutGrid,
   List,
   Upload,
-  SearchX,
   Trash2,
   AlertTriangle,
-  CheckCircle2,
   Eye,
   EyeOff,
 } from 'lucide-react'
@@ -70,11 +67,6 @@ export function IconManagerPanel() {
   const [listLoading, setListLoading] = useState(true)
   const [listError, setListError] = useState<string | null>(null)
   const [layoutResetting, setLayoutResetting] = useState(false)
-  const [scanningInvalidIcons, setScanningInvalidIcons] = useState(false)
-  const [deletingInvalidIcons, setDeletingInvalidIcons] = useState(false)
-  const [invalidIconScanOpen, setInvalidIconScanOpen] = useState(false)
-  const [invalidIconResults, setInvalidIconResults] = useState<InvalidIconEntry[]>([])
-  const [selectedInvalidIconKeys, setSelectedInvalidIconKeys] = useState<string[]>([])
   const [allIcons, setAllIcons] = useState<IconManagerItem[]>([])
   const [viewMode, setViewMode] = useState<IconManagerViewMode>('list')
   const [searchInput, setSearchInput] = useState('')
@@ -85,6 +77,9 @@ export function IconManagerPanel() {
     useState<LaunchpadGridViewMode | null>(null)
   const [customNames, setCustomNames] = useState<Record<string, string>>({})
   const [selectedIconIds, setSelectedIconIds] = useState<string[]>([])
+  const [deleteSourceFile, setDeleteSourceFile] = useState(false)
+  const [deleteNewFileSource, setDeleteNewFileSource] = useState(false)
+  const [createFileTargetDir, setCreateFileTargetDir] = useState('')
   const toast = useToast()
 
   const refreshIconManagerList = useCallback(async () => {
@@ -124,7 +119,73 @@ export function IconManagerPanel() {
     void loadCustomNames()
       .then(setCustomNames)
       .catch(e => console.error('Failed to load custom names:', e))
+    void getSetting('deleteNewFileSource')
+      .then(setDeleteNewFileSource)
+      .catch(e => console.error('Failed to load delete new file source setting:', e))
+    void getSetting('deleteIconSourceFile')
+      .then(setDeleteSourceFile)
+      .catch(e => console.error('Failed to load delete source file setting:', e))
+    void getSetting('createFileTargetDir')
+      .then(setCreateFileTargetDir)
+      .catch(e => console.error('Failed to load create file target dir setting:', e))
   }, [toast])
+
+  const pickCreateFileTargetDir = async () => {
+    try {
+      const selected = await openDialog({
+        multiple: false,
+        directory: true,
+        title: translate('选择目录'),
+      })
+      if (typeof selected !== 'string') return
+      setCreateFileTargetDir(selected)
+      void setSetting('createFileTargetDir', selected).catch(e => {
+        setCreateFileTargetDir('')
+        console.error('Failed to save create file target dir setting:', e)
+        toast.error(translate('设置保存失败，请稍后重试。'), {
+          key: 'icon-library-create-file-dir',
+          title: translate('图标库'),
+        })
+      })
+    } catch (error) {
+      console.error('Failed to open directory picker:', error)
+    }
+  }
+
+  const handleResetCreateFileTargetDir = () => {
+    setCreateFileTargetDir('')
+    void setSetting('createFileTargetDir', '').catch(e => {
+      console.error('Failed to save create file target dir setting:', e)
+      toast.error(translate('设置保存失败，请稍后重试。'), {
+        key: 'icon-library-create-file-dir',
+        title: translate('图标库'),
+      })
+    })
+  }
+
+  const handleDeleteSourceFileChange = (checked: boolean) => {
+    setDeleteSourceFile(checked)
+    void setSetting('deleteIconSourceFile', checked).catch(e => {
+      setDeleteSourceFile(!checked)
+      console.error('Failed to save delete source file setting:', e)
+      toast.error(translate('设置保存失败，请稍后重试。'), {
+        key: 'icon-library-delete-source',
+        title: translate('图标库'),
+      })
+    })
+  }
+
+  const handleDeleteNewFileSourceChange = (checked: boolean) => {
+    setDeleteNewFileSource(checked)
+    void setSetting('deleteNewFileSource', checked).catch(e => {
+      setDeleteNewFileSource(!checked)
+      console.error('Failed to save delete new file source setting:', e)
+      toast.error(translate('设置保存失败，请稍后重试。'), {
+        key: 'icon-library-delete-new-source',
+        title: translate('图标库'),
+      })
+    })
+  }
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -162,8 +223,7 @@ export function IconManagerPanel() {
     filteredIcons.length > 0 && filteredSelectedCount === filteredIcons.length
   const someFilteredSelected = filteredSelectedCount > 0 && !allFilteredSelected
 
-  const controlsDisabled =
-    mutating || listLoading || layoutResetting || scanningInvalidIcons || deletingInvalidIcons
+  const controlsDisabled = mutating || listLoading || layoutResetting
 
   const { handleBulkMutation } = useIconManagerBulkActions({
     filteredIcons,
@@ -317,68 +377,6 @@ export function IconManagerPanel() {
     }
   }
 
-  const invalidIconKey = (icon: InvalidIconEntry) => icon.id
-
-  const handleScanInvalidIcons = async () => {
-    if (scanningInvalidIcons || deletingInvalidIcons) return
-    setScanningInvalidIcons(true)
-    try {
-      const results = await invoke<InvalidIconEntry[]>('scan_invalid_icons')
-      setInvalidIconResults(results)
-      setSelectedInvalidIconKeys(results.map(invalidIconKey))
-      setInvalidIconScanOpen(true)
-    } catch (e) {
-      toast.error(translate('扫描失效图标失败：{error}', { error: String(e) }), {
-        key: 'icon-library-invalid-scan',
-        title: translate('图标库'),
-      })
-    } finally {
-      setScanningInvalidIcons(false)
-    }
-  }
-
-  const handleToggleInvalidIcon = (key: string) => {
-    setSelectedInvalidIconKeys(current =>
-      current.includes(key) ? current.filter(item => item !== key) : [...current, key]
-    )
-  }
-
-  const handleDeleteInvalidIcons = async () => {
-    const selectedKeySet = new Set(selectedInvalidIconKeys)
-    const targets: IconMutationTarget[] = invalidIconResults
-      .filter(icon => selectedKeySet.has(invalidIconKey(icon)))
-      .map(icon => ({ id: icon.id }))
-    if (targets.length === 0 || deletingInvalidIcons) return
-
-    const confirmed = window.confirm(
-      translate('确定将选中的 {count} 个失效图标移出图标库吗？不会删除原始文件。', {
-        count: targets.length,
-      })
-    )
-    if (!confirmed) return
-
-    setDeletingInvalidIcons(true)
-    try {
-      const affected = await invoke<number>('delete_icons', { targets })
-      toast.success(translate('已移出 {count} 个失效图标。', { count: affected }), {
-        key: 'icon-library-invalid-delete',
-        title: translate('图标库'),
-      })
-      const remaining = await invoke<InvalidIconEntry[]>('scan_invalid_icons')
-      setInvalidIconResults(remaining)
-      setSelectedInvalidIconKeys([])
-      await refreshIconManagerList()
-      await notifyMainWindow()
-    } catch (e) {
-      toast.error(translate('删除失效图标失败：{error}', { error: String(e) }), {
-        key: 'icon-library-invalid-delete',
-        title: translate('图标库'),
-      })
-    } finally {
-      setDeletingInvalidIcons(false)
-    }
-  }
-
   const mutationDialogText = pendingMutation
     ? pendingMutation.type === 'hide'
       ? {
@@ -407,13 +405,6 @@ export function IconManagerPanel() {
             confirmVariant: 'destructive' as const,
           }
     : null
-
-  const selectedInvalidIconKeySet = new Set(selectedInvalidIconKeys)
-  const selectedInvalidIconCount = invalidIconResults.filter(icon =>
-    selectedInvalidIconKeySet.has(invalidIconKey(icon))
-  ).length
-  const allInvalidIconsSelected =
-    invalidIconResults.length > 0 && selectedInvalidIconCount === invalidIconResults.length
 
   return (
     <>
@@ -462,19 +453,11 @@ export function IconManagerPanel() {
                 <Bot className="h-3.5 w-3.5" />
                 {translate('AI 整理')}
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void handleScanInvalidIcons()}
-                disabled={controlsDisabled || allIcons.length === 0}
-              >
-                {scanningInvalidIcons ? (
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <SearchX className="h-3.5 w-3.5" />
-                )}
-                {scanningInvalidIcons ? translate('正在扫描...') : translate('扫描失效图标')}
-              </Button>
+              <InvalidIconScanDialog
+                disabled={controlsDisabled}
+                hasIcons={allIcons.length > 0}
+                onRemoved={handleIconCreated}
+              />
               <Button
                 variant="outline"
                 size="sm"
@@ -756,6 +739,57 @@ export function IconManagerPanel() {
             )}
           </div>
         </div>
+
+        <SettingGroup title={translate('删除图标时的源文件处理')}>
+          <ToggleRow
+            title={translate('删除图标时同时删除源文件')}
+            description={translate(
+              '对所有图标生效：删除图标（包括“新建”创建的和拖入导入的）都会将其指向的源文件移入回收站。'
+            )}
+            checked={deleteSourceFile}
+            onChange={handleDeleteSourceFileChange}
+            disabled={mutating}
+          />
+          <ToggleRow
+            title={translate('仅“新建”创建的图标：删除时同时删除源文件')}
+            description={
+              deleteSourceFile
+                ? translate('已由上方选项包含：所有图标的源文件都会被移入回收站。')
+                : deleteNewFileSource
+                  ? translate(
+                      '已开启：删除“新建”创建的图标时，其源文件会被移入回收站；拖入导入的图标不受影响。'
+                    )
+                  : translate(
+                      '已关闭：删除“新建”创建的图标时仅从图标库移除，源文件保留在原位置。'
+                    )
+            }
+            checked={deleteSourceFile || deleteNewFileSource}
+            onChange={handleDeleteNewFileSourceChange}
+            disabled={mutating || deleteSourceFile}
+          />
+        </SettingGroup>
+
+        <SettingCard
+          label={translate('新建文件保存路径')}
+          desc={translate('右键“新建”创建的文件将保存到该目录；未设置时保存到桌面。')}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className="min-w-0 max-w-full flex-1 truncate text-sm text-muted-foreground"
+              title={createFileTargetDir || translate('桌面（默认）')}
+            >
+              {createFileTargetDir || translate('桌面（默认）')}
+            </span>
+            <Button variant="outline" size="sm" onClick={() => void pickCreateFileTargetDir()}>
+              {translate('选择目录')}
+            </Button>
+            {createFileTargetDir ? (
+              <Button variant="ghost" size="sm" onClick={handleResetCreateFileTargetDir}>
+                {translate('恢复默认')}
+              </Button>
+            ) : null}
+          </div>
+        </SettingCard>
       </div>
 
       <AddIconDialog
@@ -786,163 +820,6 @@ export function IconManagerPanel() {
               >
                 {mutating ? translate('处理中...') : mutationDialogText.confirmLabel}
               </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {invalidIconScanOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/22 p-4 backdrop-blur-[1px] dark:bg-black/45">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="invalid-icon-scan-title"
-            className="flex max-h-[min(42rem,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-card border border-border bg-card shadow-xl"
-          >
-            <div className="flex items-start justify-between gap-4 border-b border-border/80 px-4 py-4 sm:px-5">
-              <div className="min-w-0 space-y-1">
-                <h3 id="invalid-icon-scan-title" className="text-base font-semibold">
-                  {translate('失效图标扫描')}
-                </h3>
-                <p className="text-xs leading-5 text-muted-foreground">
-                  {translate('仅检查入口和目标是否存在；请确认网络盘或移动设备已连接。')}
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={translate('关闭')}
-                onClick={() => setInvalidIconScanOpen(false)}
-                disabled={deletingInvalidIcons}
-                className="shrink-0"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-
-            {invalidIconResults.length === 0 ? (
-              <div className="flex min-h-64 flex-1 flex-col items-center justify-center gap-3 px-5 py-10 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 className="h-5 w-5" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">{translate('未发现失效图标')}</p>
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    {translate('当前图标库中的入口和目标均可访问。')}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 bg-muted/15 px-4 py-3 sm:px-5">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      checked={allInvalidIconsSelected}
-                      indeterminate={selectedInvalidIconCount > 0 && !allInvalidIconsSelected}
-                      onToggle={() =>
-                        setSelectedInvalidIconKeys(
-                          allInvalidIconsSelected ? [] : invalidIconResults.map(invalidIconKey)
-                        )
-                      }
-                      disabled={deletingInvalidIcons}
-                      ariaLabel={translate('全选')}
-                    />
-                    <span
-                      className="cursor-pointer select-none text-sm"
-                      onClick={() =>
-                        !deletingInvalidIcons &&
-                        setSelectedInvalidIconKeys(
-                          allInvalidIconsSelected ? [] : invalidIconResults.map(invalidIconKey)
-                        )
-                      }
-                    >
-                      {translate('全选')}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {translate('发现 {total} 项，已选择 {selected} 项。', {
-                      total: invalidIconResults.length,
-                      selected: selectedInvalidIconCount,
-                    })}
-                  </p>
-                </div>
-
-                <NativeScrollArea asChild>
-                  <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3 sm:px-5">
-                    {invalidIconResults.map(icon => {
-                      const key = invalidIconKey(icon)
-                      const reasonLabel =
-                        icon.reason === 'entry_missing'
-                          ? translate('入口文件不存在')
-                          : icon.reason === 'target_unresolved'
-                            ? translate('无法解析快捷方式目标')
-                            : translate('目标文件不存在')
-                      return (
-                        <label
-                          key={key}
-                          className="flex cursor-pointer items-start gap-3 rounded-card border border-border/80 bg-background p-3 transition-colors hover:bg-muted/20"
-                        >
-                          <Checkbox
-                            checked={selectedInvalidIconKeySet.has(key)}
-                            onToggle={() => handleToggleInvalidIcon(key)}
-                            disabled={deletingInvalidIcons}
-                            ariaLabel={icon.name || translate('未命名')}
-                            className="mt-0.5"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="truncate text-sm font-medium" title={icon.name}>
-                                {icon.name || translate('未命名')}
-                              </p>
-                              <span className="rounded border border-destructive/25 bg-destructive/10 px-1.5 py-0.5 text-[10px] text-destructive">
-                                {reasonLabel}
-                              </span>
-                            </div>
-                            <p
-                              className="mt-1 truncate text-xs text-muted-foreground"
-                              title={icon.target_path || icon.path}
-                            >
-                              {icon.target_path || icon.path}
-                            </p>
-                          </div>
-                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                        </label>
-                      )
-                    })}
-                  </div>
-                </NativeScrollArea>
-              </>
-            )}
-
-            <div className="flex flex-wrap justify-end gap-2 border-t border-border/80 bg-muted/15 px-4 py-3 sm:px-5">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setInvalidIconScanOpen(false)}
-                disabled={deletingInvalidIcons}
-                className="min-w-0 flex-1 sm:flex-none"
-              >
-                {translate('关闭')}
-              </Button>
-              {invalidIconResults.length > 0 ? (
-                <Button
-                  type="button"
-                  variant="destructive"
-                  onClick={() => void handleDeleteInvalidIcons()}
-                  disabled={deletingInvalidIcons || selectedInvalidIconCount === 0}
-                  className="min-w-0 flex-1 sm:flex-none"
-                >
-                  {deletingInvalidIcons ? (
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
-                  )}
-                  {deletingInvalidIcons
-                    ? translate('正在删除...')
-                    : translate('删除所选（{count}）', { count: selectedInvalidIconCount })}
-                </Button>
-              ) : null}
             </div>
           </div>
         </div>

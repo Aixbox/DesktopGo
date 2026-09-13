@@ -3,6 +3,11 @@ use serde::{Deserialize, Serialize};
 pub(crate) const ICON_SOURCE_DESKTOP: &str = "desktop";
 pub(crate) const ICON_SOURCE_CUSTOMAPP: &str = "customapp";
 
+/// 图标来源标记的默认值：历史条目一律视为导入。
+pub(crate) fn default_icon_origin() -> String {
+    "import".to_string()
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct DesktopIcon {
     pub id: String,
@@ -17,6 +22,7 @@ pub struct DesktopIcon {
     pub icon_color: String,
     pub icon_text: String,
     pub item_type: String,
+    pub origin: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -33,6 +39,7 @@ pub struct IconManagerItem {
     pub icon_color: String,
     pub icon_text: String,
     pub item_type: String,
+    pub origin: String,
     pub hidden: bool,
 }
 
@@ -84,6 +91,8 @@ pub(crate) struct SnapshotIconItem {
     #[serde(default)]
     pub(crate) icon_text: String,
     pub(crate) item_type: String,
+    #[serde(default = "default_icon_origin")]
+    pub(crate) origin: String,
     #[serde(default)]
     pub(crate) hidden: bool,
     #[serde(default)]
@@ -107,6 +116,9 @@ pub(crate) struct IconSnapshot {
 pub struct CreateIconEntryInput {
     pub display_name: String,
     pub target_path: String,
+    /// 图标来源标记：new = 应用内"新建"创建；import = 导入（默认）。
+    #[serde(default)]
+    pub origin: String,
     #[serde(default)]
     pub launch_arguments: String,
     #[serde(default)]
@@ -131,6 +143,8 @@ pub struct UpdateIconEntryInput {
     pub id: String,
     pub display_name: String,
     pub target_path: String,
+    #[serde(default)]
+    pub origin: String,
     #[serde(default)]
     pub launch_arguments: String,
     #[serde(default)]

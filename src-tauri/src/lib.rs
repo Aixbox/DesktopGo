@@ -28,7 +28,8 @@ use agent::icon_agent::{ai_organize_icons_agent, ai_organize_record_apply};
 use ai::{ai_cancel, ai_chat, ai_classify_icons, get_builtin_icon_categories};
 use commands::{
     activate_main_window, activate_settings_window, apply_window_style, check_for_app_update,
-    close_settings_window, create_icon_entry, create_settings_window, delete_icons,
+    close_settings_window, create_icon_entry, create_new_file, create_settings_window,
+    delete_icons,
     extract_website_icon, get_complete_search_snapshot, get_custom_icon_source,
     get_default_launcher_folders, get_drag_preview_icon, get_icon_edit_source,
     get_icon_manager_items, get_icons, get_launch_on_startup_enabled, get_launcher_catalog,
@@ -113,6 +114,7 @@ pub fn run() {
             set_window_mode,
             import_dropped_paths,
             create_icon_entry,
+            create_new_file,
             update_icon_entry,
             extract_website_icon,
             hide_icons,

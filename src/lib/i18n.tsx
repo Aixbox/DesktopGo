@@ -444,6 +444,33 @@ const EN_MESSAGES: Record<string, string> = {
   正则: 'Regex',
   删除: 'Delete',
   文件夹: 'Folder',
+  新建: 'New',
+  文本文档: 'Text document',
+  'BMP 图像': 'BMP image',
+  'Microsoft Word 文档': 'Microsoft Word document',
+  'Microsoft Excel 工作表': 'Microsoft Excel worksheet',
+  'Microsoft PowerPoint 演示文稿': 'Microsoft PowerPoint presentation',
+  '压缩(zipped)文件夹': 'Compressed (zipped) folder',
+  '新建文件失败：{error}': 'Failed to create file: {error}',
+  '设置保存失败，请稍后重试。': 'Failed to save the setting. Please try again later.',
+  '删除图标时同时删除源文件': 'Delete the source file when deleting icons',
+  '删除图标时的源文件处理': 'Source file handling when deleting icons',
+  '对所有图标生效：删除图标（包括“新建”创建的和拖入导入的）都会将其指向的源文件移入回收站。':
+    'Applies to all icons: deleting any icon (created via "New" or imported) moves its source file to the Recycle Bin.',
+  '仅“新建”创建的图标：删除时同时删除源文件':
+    '"New"-created icons: also delete the source file when deleting',
+  '已由上方选项包含：所有图标的源文件都会被移入回收站。':
+    'Already covered by the option above: source files of all icons are moved to the Recycle Bin.',
+  '已开启：删除“新建”创建的图标时，其源文件会被移入回收站；拖入导入的图标不受影响。':
+    'Enabled: deleting a "New"-created icon also moves its source file to the Recycle Bin; imported icons are not affected.',
+  '已关闭：删除“新建”创建的图标时仅从图标库移除，源文件保留在原位置。':
+    'Disabled: deleting a "New"-created icon only removes it from the icon library; the source file stays in place.',
+  '开启后，删除图标会将其指向的源文件移入回收站；关闭时仅从图标库移除。':
+    'When enabled, deleting an icon moves the file it points to to the Recycle Bin; when disabled, only the icon library entry is removed.',
+  '新建文件保存路径': 'New file save location',
+  '右键“新建”创建的文件将保存到该目录；未设置时保存到桌面。':
+    'Files created from the right-click "New" menu are saved here; defaults to the desktop when unset.',
+  '桌面（默认）': 'Desktop (default)',
   不可用: 'Unavailable',
   '选择一个结果后，可在这里查看预览。': 'Select a result to preview it here.',
   '正在加载预览...': 'Loading preview...',

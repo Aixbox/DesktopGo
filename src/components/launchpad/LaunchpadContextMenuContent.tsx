@@ -3,11 +3,19 @@ import { useIconStore } from '@/stores/iconStore'
 import type { IconSize, LaunchpadGridViewMode, TitleLineCount, WindowMode } from '@/types'
 import {
   Bot,
+  FileArchive,
+  FileImage,
+  FilePlus,
+  FileSpreadsheet,
+  FileText,
+  FileType2,
+  Folder,
   FolderCog,
   ListChecks,
   MonitorCog,
   PanelsTopLeft,
   Plus,
+  Presentation,
   Rows3,
   Scaling,
   Settings,
@@ -94,6 +102,7 @@ function MenuRadioSub<T extends string>({
 interface LaunchpadContextMenuContentProps {
   addIconDisabled: boolean
   onAddIcon: () => void
+  onCreateNewFile: (kind: string) => void
   onSelectIcons: () => void
   onAiOrganize: () => void
   onOpenSettings: () => void
@@ -102,6 +111,7 @@ interface LaunchpadContextMenuContentProps {
 export function LaunchpadContextMenuContent({
   addIconDisabled,
   onAddIcon,
+  onCreateNewFile,
   onSelectIcons,
   onAiOrganize,
   onOpenSettings,
@@ -149,6 +159,43 @@ export function LaunchpadContextMenuContent({
         options={GRID_VIEW_MODE_OPTIONS}
         onValueChange={setLaunchpadGridViewMode}
       />
+
+      <ContextMenuSub>
+        <ContextMenuSubTrigger className="gap-2">
+          <FilePlus className={MENU_ICON_CLASS} aria-hidden="true" />
+          {translate('新建')}
+        </ContextMenuSubTrigger>
+        <ContextMenuSubContent className="w-52">
+          <ContextMenuItem className="gap-2" onSelect={() => onCreateNewFile('folder')}>
+            <Folder className={MENU_ICON_CLASS} aria-hidden="true" />
+            {translate('文件夹')}
+          </ContextMenuItem>
+          <ContextMenuItem className="gap-2" onSelect={() => onCreateNewFile('text')}>
+            <FileText className={MENU_ICON_CLASS} aria-hidden="true" />
+            {translate('文本文档')}
+          </ContextMenuItem>
+          <ContextMenuItem className="gap-2" onSelect={() => onCreateNewFile('bitmap')}>
+            <FileImage className={MENU_ICON_CLASS} aria-hidden="true" />
+            {translate('BMP 图像')}
+          </ContextMenuItem>
+          <ContextMenuItem className="gap-2" onSelect={() => onCreateNewFile('word')}>
+            <FileType2 className={MENU_ICON_CLASS} aria-hidden="true" />
+            {translate('Microsoft Word 文档')}
+          </ContextMenuItem>
+          <ContextMenuItem className="gap-2" onSelect={() => onCreateNewFile('excel')}>
+            <FileSpreadsheet className={MENU_ICON_CLASS} aria-hidden="true" />
+            {translate('Microsoft Excel 工作表')}
+          </ContextMenuItem>
+          <ContextMenuItem className="gap-2" onSelect={() => onCreateNewFile('powerpoint')}>
+            <Presentation className={MENU_ICON_CLASS} aria-hidden="true" />
+            {translate('Microsoft PowerPoint 演示文稿')}
+          </ContextMenuItem>
+          <ContextMenuItem className="gap-2" onSelect={() => onCreateNewFile('zip')}>
+            <FileArchive className={MENU_ICON_CLASS} aria-hidden="true" />
+            {translate('压缩(zipped)文件夹')}
+          </ContextMenuItem>
+        </ContextMenuSubContent>
+      </ContextMenuSub>
 
       <ContextMenuSeparator />
       <ContextMenuItem className="gap-2" disabled={addIconDisabled} onSelect={onAddIcon}>

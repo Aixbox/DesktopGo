@@ -139,6 +139,7 @@ pub(super) fn build_snapshot_item(
         icon_color: "none".to_string(),
         icon_text: String::new(),
         item_type: item.item_type.clone(),
+        origin: "import".to_string(),
         hidden: false,
         icon,
         automatic_target_icon_cache: false,

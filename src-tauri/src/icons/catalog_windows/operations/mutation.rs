@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 use crate::icons::models::{IconMutationTarget, InvalidIconEntry};
 
+use super::super::item::is_web_url;
+use crate::icons::search_icon_plan::is_special_shell_path;
 use super::super::source::IconSource;
 use super::super::storage::{
     load_icon_library_snapshot, max_snapshot_display_order, read_icon_snapshot,
@@ -10,6 +12,9 @@ use super::super::storage::{
 };
 use super::super::view::invalid_icon_reason;
 use super::import::icon_entry_dir_windows;
+
+const DELETE_SOURCE_SETTING_KEY: &str = "deleteIconSourceFile";
+const DELETE_NEW_FILE_SOURCE_SETTING_KEY: &str = "deleteNewFileSource";
 
 pub(in crate::icons) fn scan_invalid_icons_windows(
     app_handle: &tauri::AppHandle,
@@ -119,8 +124,99 @@ fn delete_icons_in_snapshot_windows(
         remove_cached_icon_file(app_handle, &item.icon)?;
     }
 
+    // 源文件删除判定：全局开关对所有图标生效；「仅新建」开关只对 origin=new
+    // 的图标生效。失败仅记录，不影响条目移除。
+    let delete_source_all = read_delete_source_setting(app_handle);
+    let delete_source_new = read_delete_new_file_source_setting(app_handle);
+    {
+        let source_paths: Vec<PathBuf> = removed_items
+            .iter()
+            .filter(|item| {
+                delete_source_all || (delete_source_new && item.origin == "new")
+            })
+            .filter(|item| !is_web_url(&item.target_path) && !is_special_shell_path(&item.path))
+            .map(|item| PathBuf::from(&item.path))
+            .filter(|entry_path| {
+                !entry_path.as_os_str().is_empty()
+                    && entry_path.parent() != Some(managed_entry_dir.as_path())
+            })
+            .collect();
+        if let Err(error) = delete_paths_to_recycle_bin(&source_paths) {
+            eprintln!("Failed to recycle source files: {error}");
+        }
+    }
+
     write_icon_snapshot(app_handle, source, &snapshot)?;
     Ok(removed_items.len())
+}
+
+/// 读取「删除图标时同时删除源文件」设置开关（对全部图标生效）；默认关闭。
+fn read_delete_source_setting(app_handle: &tauri::AppHandle) -> bool {
+    use tauri_plugin_store::StoreExt;
+
+    app_handle
+        .store(crate::storage_profile::settings_store_path())
+        .ok()
+        .and_then(|store| {
+            store
+                .get(DELETE_SOURCE_SETTING_KEY)
+                .and_then(|value| value.as_bool())
+        })
+        .unwrap_or(false)
+}
+
+/// 读取「新建创建的图标删除时同时删除源文件」设置开关；默认关闭。
+fn read_delete_new_file_source_setting(app_handle: &tauri::AppHandle) -> bool {
+    use tauri_plugin_store::StoreExt;
+
+    app_handle
+        .store(crate::storage_profile::settings_store_path())
+        .ok()
+        .and_then(|store| {
+            store
+                .get(DELETE_NEW_FILE_SOURCE_SETTING_KEY)
+                .and_then(|value| value.as_bool())
+        })
+        .unwrap_or(false)
+}
+
+/// 通过 SHFileOperationW 把文件/目录移入回收站（FOF_ALLOWUNDO），与资源管理
+/// 器删除行为一致。
+fn delete_paths_to_recycle_bin(paths: &[PathBuf]) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::Shell::{
+        SHFileOperationW, SHFILEOPSTRUCTW, FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION,
+        FOF_NOERRORUI, FOF_SILENT,
+    };
+
+    if paths.is_empty() {
+        return Ok(());
+    }
+
+    let mut from: Vec<u16> = Vec::new();
+    for path in paths {
+        from.extend(path.as_os_str().encode_wide());
+        from.push(0);
+    }
+    from.push(0); // pFrom 以双空字符结尾
+
+    let mut operation = SHFILEOPSTRUCTW {
+        hwnd: Default::default(),
+        wFunc: FO_DELETE,
+        pFrom: PCWSTR::from_raw(from.as_ptr()),
+        pTo: PCWSTR::null(),
+        fFlags: (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI).0 as u16,
+        fAnyOperationsAborted: Default::default(),
+        hNameMappings: std::ptr::null_mut(),
+        lpszProgressTitle: PCWSTR::null(),
+    };
+    let code = unsafe { SHFileOperationW(&mut operation) };
+    if code != 0 || operation.fAnyOperationsAborted.as_bool() {
+        return Err(format!("回收站删除失败（代码 {code}）"));
+    }
+    Ok(())
 }
 
 pub(in crate::icons) fn hide_icons_windows(

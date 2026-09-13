@@ -146,6 +146,47 @@ export function useLaunchpadIconImportController({
     }
   }, [fetchIcons])
 
+  /** 右键「新建」：在桌面创建真实文件/文件夹，并作为新图标接入当前布局。 */
+  const handleCreateNewFile = useCallback(
+    async (kind: string) => {
+      if (isImportingDrop) return
+      setIsImportingDrop(true)
+      try {
+        pendingAddIconKeySetRef.current = new Set(icons.map(buildIconSelectionKey))
+        const created = await invoke<{ name: string; path: string }>('create_new_file', { kind })
+        await invoke('create_icon_entry', {
+          input: {
+            displayName: created.name,
+            targetPath: created.path,
+            iconSource: 'target',
+            origin: 'new',
+          },
+        })
+        await fetchIcons()
+        const nextIcons = useIconStore.getState().icons
+        const newIconKeys = nextIcons
+          .map(buildIconSelectionKey)
+          .filter(key => !pendingAddIconKeySetRef.current.has(key))
+        if (newIconKeys.length > 0) {
+          importPlacementTokenRef.current += 1
+          setImportPlacementRequest({
+            token: importPlacementTokenRef.current,
+            iconKeys: newIconKeys,
+          })
+        }
+      } catch (error) {
+        toast.error(translate('新建文件失败：{error}', { error: String(error) }), {
+          key: 'launchpad-create-new-file',
+          title: translate('新建'),
+        })
+      } finally {
+        pendingAddTargetGroupIdRef.current = undefined
+        setIsImportingDrop(false)
+      }
+    },
+    [fetchIcons, icons, isImportingDrop, toast]
+  )
+
   const prepareDroppedPaths = useCallback(
     (items: NativeFileDragItem[]) => {
       const uniqueItems = Array.from(
@@ -419,6 +460,7 @@ export function useLaunchpadIconImportController({
     handleAddIcons,
     handleConfirmDroppedImport,
     handleEditDroppedDraft,
+    handleCreateNewFile,
     handleIconCreated,
     handleSaveDroppedDraft,
     handleSaveIconEdit,

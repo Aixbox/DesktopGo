@@ -17,6 +17,7 @@ use super::super::item::{
 struct RawEntryInput<'a> {
     display_name: &'a str,
     target_path: &'a str,
+    origin: &'a str,
     launch_arguments: &'a str,
     working_directory: &'a str,
     custom_icon_path: &'a str,
@@ -42,6 +43,8 @@ pub(super) struct NormalizedIconEntry {
     pub is_special: bool,
     pub source_path: PathBuf,
     pub scanned_item: ScannedDesktopItem,
+    /// 图标来源标记：new = 应用内"新建"创建；import = 导入。
+    pub origin: String,
 }
 
 impl NormalizedIconEntry {
@@ -50,6 +53,7 @@ impl NormalizedIconEntry {
             RawEntryInput {
                 display_name: &input.display_name,
                 target_path: &input.target_path,
+                origin: &input.origin,
                 launch_arguments: &input.launch_arguments,
                 working_directory: &input.working_directory,
                 custom_icon_path: &input.custom_icon_path,
@@ -68,6 +72,7 @@ impl NormalizedIconEntry {
             RawEntryInput {
                 display_name: &input.display_name,
                 target_path: &input.target_path,
+                origin: &input.origin,
                 launch_arguments: &input.launch_arguments,
                 working_directory: &input.working_directory,
                 custom_icon_path: &input.custom_icon_path,
@@ -140,6 +145,12 @@ impl NormalizedIconEntry {
             is_special,
             source_path,
             scanned_item,
+            // 仅识别 new/import 两个标记，其余一律归为导入。
+            origin: if raw.origin.trim() == "new" {
+                "new".to_string()
+            } else {
+                "import".to_string()
+            },
         })
     }
 

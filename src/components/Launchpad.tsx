@@ -165,7 +165,7 @@ export function Launchpad() {
     editRequestedIcon,
     clearIconEditRequest,
   })
-  const { addIconDialogOpen, handleAddIcons, importPlacementRequest, isImportingDrop } = iconImport
+  const { addIconDialogOpen, handleAddIcons, handleCreateNewFile, importPlacementRequest, isImportingDrop } = iconImport
   const preloadGridView = useCallback((mode: 'paged' | 'scroll') => {
     void (mode === 'scroll' ? loadScrollableIconGrid() : loadIconGrid())
   }, [])
@@ -975,6 +975,7 @@ export function Launchpad() {
       <LaunchpadContextMenuContent
         addIconDisabled={isImportingDrop || addIconDialogOpen}
         onAddIcon={() => handleAddIcons()}
+        onCreateNewFile={kind => void handleCreateNewFile(kind)}
         onSelectIcons={handleEnterSelectionMode}
         onAiOrganize={enterAiOrganizeMode}
         onOpenSettings={openSettings}

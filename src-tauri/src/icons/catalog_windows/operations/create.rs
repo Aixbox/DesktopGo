@@ -81,6 +81,7 @@ fn write_created_entry(
         display_order,
     )?;
     created_icon.replace(item.icon.clone());
+    item.origin = entry.origin.clone();
     entry.apply_metadata(&mut item);
     apply_explicit_icon(app_handle, &entry, &mut item)?;
     created_icon.replace(item.icon.clone());

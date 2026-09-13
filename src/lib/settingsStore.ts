@@ -57,6 +57,9 @@ type SettingKey =
   | 'launchpadOpenFocusTarget'
   | 'iconManagerViewMode'
   | 'iconContextMenuMode'
+  | 'deleteIconSourceFile'
+  | 'createFileTargetDir'
+  | 'deleteNewFileSource'
 type ExtendedSettingKey = SettingKey
 
 type SettingValueMap = {
@@ -81,6 +84,9 @@ type SettingValueMap = {
   launchpadOpenFocusTarget: LaunchpadOpenFocusTarget
   iconManagerViewMode: IconManagerViewMode
   iconContextMenuMode: IconContextMenuMode
+  deleteIconSourceFile: boolean
+  createFileTargetDir: string
+  deleteNewFileSource: boolean
 }
 
 const SETTINGS_STORE_VERSION = 15
@@ -107,6 +113,9 @@ const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'launchpadOpenFocusTarget',
   'iconManagerViewMode',
   'iconContextMenuMode',
+  'deleteIconSourceFile',
+  'createFileTargetDir',
+  'deleteNewFileSource',
 ]
 
 const DEFAULT_SETTINGS: SettingValueMap = {
@@ -131,6 +140,9 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   launchpadOpenFocusTarget: DEFAULT_LAUNCHPAD_OPEN_FOCUS_TARGET,
   iconManagerViewMode: 'list',
   iconContextMenuMode: 'custom',
+  deleteIconSourceFile: false,
+  createFileTargetDir: '',
+  deleteNewFileSource: false,
 }
 
 const SETTINGS_STORE_PATH = import.meta.env.DEV ? 'dev/settings.json' : 'settings.json'
@@ -212,6 +224,9 @@ const validators: {
   launchpadOpenFocusTarget: isLaunchpadOpenFocus,
   iconManagerViewMode: isIconManagerViewMode,
   iconContextMenuMode: isIconContextMenuMode,
+  deleteIconSourceFile: (value): value is boolean => typeof value === 'boolean',
+  createFileTargetDir: (value): value is string => typeof value === 'string',
+  deleteNewFileSource: (value): value is boolean => typeof value === 'boolean',
 }
 
 async function migrateStore(): Promise<void> {
