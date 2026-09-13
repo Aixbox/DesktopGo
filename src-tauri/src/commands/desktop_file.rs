@@ -12,9 +12,18 @@ enum NewFileKind {
     Directory,
     Empty,
     Bytes(Vec<u8>),
-    /// 优先复制注册表 ShellNew 里的 Office 模板（与资源管理器行为一致），失败时退回空文件。
-    ShellNew(&'static str),
+    /// 优先复制注册表 ShellNew 模板（Office/WPS 安装时提供，与资源管理器行为
+    /// 一致）；找不到时退回内置模板，保证生成的文件始终合法可打开。
+    ShellNew {
+        extension: &'static str,
+        fallback: &'static [u8],
+    },
 }
+
+/// 内置的最小合法 xlsx 模板：未注册 ShellNew 的机器上也能生成 Excel 可打开
+/// 的工作簿（含 [Content_Types].xml、workbook、sheet1 等五个必需部件）。
+#[cfg(windows)]
+const BUNDLED_EXCEL_TEMPLATE: &[u8] = include_bytes!("../../resources/templates/new-excel.xlsx");
 
 const CREATE_FILE_TARGET_DIR_SETTING_KEY: &str = "createFileTargetDir";
 
@@ -71,17 +80,26 @@ fn create_new_file_windows(
         "word" => (
             "新建 Microsoft Word 文档",
             ".docx",
-            NewFileKind::ShellNew("docx"),
+            NewFileKind::ShellNew {
+                extension: "docx",
+                fallback: b"",
+            },
         ),
         "excel" => (
             "新建 Microsoft Excel 工作表",
             ".xlsx",
-            NewFileKind::ShellNew("xlsx"),
+            NewFileKind::ShellNew {
+                extension: "xlsx",
+                fallback: BUNDLED_EXCEL_TEMPLATE,
+            },
         ),
         "powerpoint" => (
             "新建 Microsoft PowerPoint 演示文稿",
             ".pptx",
-            NewFileKind::ShellNew("pptx"),
+            NewFileKind::ShellNew {
+                extension: "pptx",
+                fallback: b"",
+            },
         ),
         "zip" => (
             "新建压缩(zipped)文件夹",
@@ -96,10 +114,16 @@ fn create_new_file_windows(
         NewFileKind::Directory => std::fs::create_dir_all(&target),
         NewFileKind::Empty => std::fs::write(&target, []),
         NewFileKind::Bytes(bytes) => std::fs::write(&target, bytes),
-        NewFileKind::ShellNew(extension) => match shell_new_template_path(extension) {
-            Some(template_path) => std::fs::copy(template_path, &target).map(|_| ()),
-            None => std::fs::write(&target, []),
-        },
+        NewFileKind::ShellNew { extension, fallback } => {
+            // 1) 本机注册表模板（Office/WPS，保真度最高）；
+            // 2) 项目内置模板（保证文件合法可打开）；
+            // 3) 都没有时退回空文件。
+            match shell_new_template_path(extension) {
+                Some(template_path) => std::fs::copy(template_path, &target).map(|_| ()),
+                None if !fallback.is_empty() => std::fs::write(&target, fallback),
+                None => std::fs::write(&target, []),
+            }
+        }
     }
     .map_err(|error| format!("创建文件失败：{error}"))?;
 
@@ -163,17 +187,22 @@ fn empty_zip_bytes() -> [u8; 22] {
     bytes
 }
 
-/// 读取 HKCR\.扩展名\ShellNew 的 FileName 模板（Office 安装时提供），与资源管理
-/// 器"新建"菜单复用同一份模板文件。
+/// 读取 HKCR 下 ShellNew 的 FileName 模板（Office 安装时提供），与资源管理
+/// 器"新建"菜单复用同一份模板文件。Office 把 ShellNew 注册在
+/// ".扩展名\ProgID\ShellNew"（如 .xlsx\Excel.Sheet.12\ShellNew），
+/// 因此除扩展名直属键外还要按默认 ProgID 查找。
 #[cfg(windows)]
 fn shell_new_template_path(extension: &str) -> Option<PathBuf> {
     use winreg::enums::HKEY_CLASSES_ROOT;
 
     let classes = winreg::RegKey::predef(HKEY_CLASSES_ROOT);
-    for key_path in [
-        format!(".{extension}\\ShellNew"),
-        format!(".{extension}\\ShellNew\\Config"),
-    ] {
+    let mut key_paths = vec![format!(".{extension}\\ShellNew")];
+    let extension_key = classes.open_subkey(format!(".{extension}")).ok()?;
+    let prog_id = extension_key.get_value::<String, _>("").ok()?;
+    key_paths.push(format!(".{extension}\\{prog_id}\\ShellNew"));
+    key_paths.push(format!("{prog_id}\\ShellNew"));
+
+    for key_path in key_paths {
         let Ok(key) = classes.open_subkey(&key_path) else {
             continue;
         };

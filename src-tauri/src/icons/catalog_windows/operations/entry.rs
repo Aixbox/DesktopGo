@@ -292,6 +292,7 @@ mod tests {
             icon_source: "target".to_string(),
             icon_color: "none".to_string(),
             icon_text: String::new(),
+            origin: String::new(),
         }
     }
 
@@ -301,6 +302,7 @@ mod tests {
             id: "entry-id".to_string(),
             display_name: input.display_name,
             target_path: input.target_path,
+            origin: input.origin,
             launch_arguments: input.launch_arguments,
             working_directory: input.working_directory,
             custom_icon_path: input.custom_icon_path,

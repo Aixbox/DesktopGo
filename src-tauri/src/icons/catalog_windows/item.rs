@@ -227,6 +227,7 @@ mod tests {
             icon_color: "none".to_string(),
             icon_text: String::new(),
             item_type: "shortcut".to_string(),
+            origin: "import".to_string(),
             hidden: false,
             icon: "icons/library/item-id.img".to_string(),
             automatic_target_icon_cache: false,
