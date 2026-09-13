@@ -984,6 +984,19 @@ body:focus-visible {
   -webkit-backdrop-filter: blur(18px) saturate(142%);
 }
 
+/*
+ * 搜索结果区的可用高度：#root 可视高度（100vh 扣除四周窗口阴影留白）减去
+ * 面板顶距（4.6rem）、来源标签头部行（57px = py-2 + h-10 + 边框）与底部留白
+ * （44px，一个搜索输入框的高度），保证结果面板最低只到这个位置、不贴窗口底边。
+ */
+.search-results-body-height {
+  height: calc(100vh - 2 * var(--window-shadow-inset) - 175px);
+}
+
+.search-results-body-max-height {
+  max-height: calc(100vh - 2 * var(--window-shadow-inset) - 175px);
+}
+
 .search-panel-surface {
   border: 1px solid color-mix(in oklch, var(--foreground) 15%, transparent);
   background: linear-gradient(

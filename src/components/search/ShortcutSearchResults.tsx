@@ -23,6 +23,8 @@ interface ShortcutSearchResultsProps {
   /** 当前关键词，用于高亮命中字符。 */
   keyword?: string
   heading?: string
+  /** compact 模式结果区的最大高度（CSS 值）；超出后内部滚动，避免面板顶出窗口底部。 */
+  maxBodyHeight?: string
   onColumnCountChange?: (columnCount: number) => void
 }
 
@@ -108,6 +110,7 @@ export function ShortcutSearchResults({
   mode,
   keyword = '',
   heading,
+  maxBodyHeight,
   onColumnCountChange,
 }: ShortcutSearchResultsProps) {
   const { iconSize, titleLineCount } = useIconStore()
@@ -167,56 +170,63 @@ export function ShortcutSearchResults({
     return (
       <section className="shrink-0 border-b border-border/70 pb-2">
         <SearchResultSectionHeader title={translate(heading ?? '最佳匹配')} count={items.length} />
-        <div className="grid grid-cols-2 gap-1 px-2">
-          {items.map((item, index) => {
-            const row = (
-              <button
-                type="button"
-                aria-current={selectedIndex === index ? 'true' : undefined}
-                className={`flex h-12 min-w-0 items-center gap-2.5 rounded-lg px-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 ${
-                  selectedIndex === index
-                    ? 'bg-primary/18 ring-1 ring-inset ring-primary/55 dark:bg-primary/24 dark:ring-primary/65'
-                    : 'hover:bg-accent/55'
-                }`}
-                title={item.name}
-                onMouseEnter={() => onSelect(index)}
-                onClick={() => onSelect(index)}
-                onDoubleClick={() => onActivate(item)}
-              >
-                {item.kind === 'shortcut' ? (
-                  <ShortcutIcon icon={item.icon} size={30} />
-                ) : (
-                  <FileResultIcon
-                    iconBase64={resolveFileIcon(item.hit.path, item.hit.isFolder)}
-                    size={30}
-                  />
-                )}
-                <BestMatchLabels name={item.name} detail={item.detail} keyword={keyword} />
-              </button>
-            )
+        <NativeScrollArea asChild>
+          <div
+            className="overflow-auto px-2"
+            style={maxBodyHeight ? { maxHeight: maxBodyHeight } : undefined}
+          >
+            <div className="grid grid-cols-2 gap-1">
+              {items.map((item, index) => {
+                const row = (
+                  <button
+                    type="button"
+                    aria-current={selectedIndex === index ? 'true' : undefined}
+                    className={`flex h-12 min-w-0 items-center gap-2.5 rounded-lg px-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 ${
+                      selectedIndex === index
+                        ? 'bg-primary/18 ring-1 ring-inset ring-primary/55 dark:bg-primary/24 dark:ring-primary/65'
+                        : 'hover:bg-accent/55'
+                    }`}
+                    title={item.name}
+                    onMouseEnter={() => onSelect(index)}
+                    onClick={() => onSelect(index)}
+                    onDoubleClick={() => onActivate(item)}
+                  >
+                    {item.kind === 'shortcut' ? (
+                      <ShortcutIcon icon={item.icon} size={30} />
+                    ) : (
+                      <FileResultIcon
+                        iconBase64={resolveFileIcon(item.hit.path, item.hit.isFolder)}
+                        size={30}
+                      />
+                    )}
+                    <BestMatchLabels name={item.name} detail={item.detail} keyword={keyword} />
+                  </button>
+                )
 
-            return item.kind === 'shortcut' ? (
-              <IconContextMenu key={item.key} icon={item.icon} onOpen={() => onActivate(item)}>
-                {row}
-              </IconContextMenu>
-            ) : (
-              <FileResultContextMenu
-                key={item.key}
-                path={item.hit.path}
-                onOpen={() => onActivate(item)}
-              >
-                {row}
-              </FileResultContextMenu>
-            )
-          })}
-        </div>
+                return item.kind === 'shortcut' ? (
+                  <IconContextMenu key={item.key} icon={item.icon} onOpen={() => onActivate(item)}>
+                    {row}
+                  </IconContextMenu>
+                ) : (
+                  <FileResultContextMenu
+                    key={item.key}
+                    path={item.hit.path}
+                    onOpen={() => onActivate(item)}
+                  >
+                    {row}
+                  </FileResultContextMenu>
+                )
+              })}
+            </div>
+          </div>
+        </NativeScrollArea>
       </section>
     )
   }
 
   return (
     <NativeScrollArea asChild>
-      <div className="max-h-[56vh] overflow-auto px-4 py-4">
+      <div className="search-results-body-max-height overflow-auto px-4 py-4">
         <div
           ref={gridRef}
           className="grid justify-start gap-y-5"

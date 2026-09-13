@@ -40,7 +40,7 @@ export function SearchHistoryPanel({
   }
 
   return (
-    <div className="px-3 py-3">
+    <div className="search-results-body-max-height overflow-y-auto px-3 py-3">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">

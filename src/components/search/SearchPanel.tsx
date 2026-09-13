@@ -22,7 +22,12 @@ import { SearchResultSectionHeader } from './SearchResultSectionHeader'
 import { SearchResultsList } from './SearchResultsList'
 import { Button } from '@/components/ui/button'
 
-const EVERYTHING_BODY_HEIGHT = '56vh'
+/*
+ * 统一搜索时「最佳匹配」与「文件与文件夹」上下堆叠在同一结果区内：最佳匹配
+ * 内部滚动、最多占 32vh，其余高度全部让给文件列表（flex-1），整块结果区的
+ * 总高由 .search-results-body-height 控制，面板最低只到窗口底部上方一个输入框处。
+ */
+const UNIFIED_ICON_RESULTS_MAX_HEIGHT = '32vh'
 const EVERYTHING_LIST_PANE_MIN_WIDTH = 220
 const EVERYTHING_PREVIEW_MIN_WIDTH = 0
 const SPLIT_DIVIDER_WIDTH = 16
@@ -262,6 +267,9 @@ export function SearchPanel({
   )
 
   const showHistoryState = includesEverything && !hasCommittedQuery && !error && virtualCount === 0
+  // 文件结果展示态：此时结果区占据固定可用高度（.search-results-body-height），
+  // 最佳匹配（若有）与文件列表在这块高度内分配。
+  const showFileResults = includesEverything && !error && !showHistoryState && virtualCount > 0
   const panelTransition = prefersReducedMotion ? { duration: 0 } : PANEL_TRANSITION
   const isEverythingInitializing = isEverything && runtimeState === 'initializing'
   const everythingInitializingText = translate(
@@ -326,8 +334,7 @@ export function SearchPanel({
   const everythingResultsContent = (
     <div
       ref={splitContainerRef}
-      className={`relative ${previewVisible ? 'flex' : 'block'}`}
-      style={{ height: EVERYTHING_BODY_HEIGHT }}
+      className={`relative min-h-0 flex-1 ${previewVisible ? 'flex' : 'block'}`}
     >
       <div
         className="relative h-full min-w-0"
@@ -441,7 +448,7 @@ export function SearchPanel({
         )
       ) : null}
 
-      {isUnified && trimmedKeyword && iconResults.length > 0 ? (
+      {isUnified && trimmedKeyword && iconResults.length > 0 && !showFileResults ? (
         <ShortcutSearchResults
           items={iconResults}
           selectedIndex={selectedIconIndex}
@@ -450,6 +457,7 @@ export function SearchPanel({
           mode="compact"
           keyword={trimmedKeyword}
           heading="最佳匹配"
+          maxBodyHeight={UNIFIED_ICON_RESULTS_MAX_HEIGHT}
         />
       ) : null}
 
@@ -459,21 +467,35 @@ export function SearchPanel({
         </div>
       ) : null}
 
-      {includesEverything && !error && virtualCount > 0 ? (
-        <>
-          {isUnified ? (
-            <SearchResultSectionHeader
-              title={translate('文件与文件夹')}
-              count={totalResults > 0 ? totalResults : loadedCount}
+      {showFileResults ? (
+        <div className="search-results-body-height flex min-h-0 flex-col">
+          {isUnified && trimmedKeyword && iconResults.length > 0 ? (
+            <ShortcutSearchResults
+              items={iconResults}
+              selectedIndex={selectedIconIndex}
+              onSelect={onSelectIcon}
+              onActivate={onActivateIcon}
+              mode="compact"
+              keyword={trimmedKeyword}
+              heading="最佳匹配"
+              maxBodyHeight={UNIFIED_ICON_RESULTS_MAX_HEIGHT}
             />
           ) : null}
+          {isUnified ? (
+            <div className="shrink-0">
+              <SearchResultSectionHeader
+                title={translate('文件与文件夹')}
+                count={totalResults > 0 ? totalResults : loadedCount}
+              />
+            </div>
+          ) : null}
           {isEverythingInitializing ? (
-            <div className="border-b border-amber-500/20 bg-amber-500/8 px-4 py-2 text-sm text-amber-700 dark:text-amber-300">
+            <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/8 px-4 py-2 text-sm text-amber-700 dark:text-amber-300">
               {everythingInitializingText}
             </div>
           ) : null}
           {everythingResultsContent}
-        </>
+        </div>
       ) : null}
     </div>
   )
