@@ -320,8 +320,8 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
                   backgroundPosition: 'center',
                   backgroundSize: 'cover',
                   // 预览宽度远小于启动台，等比缩小模糊半径才能反映真实观感。
+                  // 主渲染不做放大补偿，预览同样保持取景不变，边缘淡出如实呈现。
                   filter: `blur(${previewBlurPixels / 4}px)`,
-                  transform: `scale(${1 + previewBlurPixels / 120})`,
                 }}
               />
               <div

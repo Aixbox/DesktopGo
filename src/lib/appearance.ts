@@ -97,14 +97,11 @@ export function applyAppearance({
     root.style.setProperty('--launchpad-background-image', `url("${backgroundImage}")`)
     root.style.setProperty('--launchpad-background-overlay', `${overlay / 100}`)
     root.style.setProperty('--launchpad-background-blur', `${blurPixels}px`)
-    // 模糊会让图片边缘透出底色，向外扩张同等量级的绘制区域来补偿。
-    root.style.setProperty('--launchpad-background-bleed', `${-blurPixels * 2}px`)
     root.dataset.launchpadBackground = 'custom'
   } else {
     root.style.removeProperty('--launchpad-background-image')
     root.style.removeProperty('--launchpad-background-overlay')
     root.style.removeProperty('--launchpad-background-blur')
-    root.style.removeProperty('--launchpad-background-bleed')
     delete root.dataset.launchpadBackground
   }
 }

@@ -902,11 +902,6 @@ body:focus-visible {
   display: none;
 }
 
-/* 壁纸滤镜同样会创建大面积合成层，透明表面下统一关闭。 */
-.launchpad-background-layer {
-  filter: none !important;
-}
-
 .launchpad-background-fill {
   display: none;
 }
@@ -914,7 +909,7 @@ body:focus-visible {
 [data-launchpad-background='custom'] .launchpad-background-fill {
   position: absolute;
   display: block;
-  inset: var(--launchpad-background-bleed, 0px);
+  inset: 0;
   background: var(--muted);
   pointer-events: none;
 }
@@ -922,7 +917,7 @@ body:focus-visible {
 [data-launchpad-background='custom'] .launchpad-background-layer {
   position: absolute;
   display: block;
-  inset: var(--launchpad-background-bleed, 0px);
+  inset: 0;
   overflow: hidden;
   border: 0;
   outline: 0;
