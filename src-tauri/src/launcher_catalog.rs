@@ -351,9 +351,9 @@ pub fn default_launcher_folders() -> Vec<DefaultLauncherFolder> {
 }
 
 /// 走 `SHGetKnownFolderPath` 而不是拼环境变量，这样桌面被 OneDrive 重定向时
-/// 也能拿到真实位置。
+/// 也能拿到真实位置。`app_import` 的应用扫描也复用这里。
 #[cfg(windows)]
-fn known_folder_path(folder_id: &windows_core::GUID) -> Option<PathBuf> {
+pub(crate) fn known_folder_path(folder_id: &windows_core::GUID) -> Option<PathBuf> {
     use windows::Win32::System::Com::CoTaskMemFree;
     use windows::Win32::UI::Shell::{SHGetKnownFolderPath, KF_FLAG_DEFAULT};
 

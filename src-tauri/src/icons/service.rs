@@ -1,6 +1,6 @@
 use super::models::{
     CreateIconEntryInput, DesktopIcon, IconManagerItem, IconMutationTarget,
-    ImportDroppedPathsResult, InvalidIconEntry, UpdateIconEntryInput,
+    ImportDroppedPathsResult, InvalidIconEntry, ScannedInstalledApp, UpdateIconEntryInput,
 };
 use super::search_cache;
 
@@ -202,6 +202,36 @@ pub fn update_icon_entry(
     {
         let _ = app_handle;
         let _ = input;
+        Err("Not supported on this platform".to_string())
+    }
+}
+
+/// 「快捷导入」：扫描已安装应用并标注与图标库的重复关系。
+pub fn scan_installed_apps(app_handle: tauri::AppHandle) -> Vec<ScannedInstalledApp> {
+    #[cfg(windows)]
+    {
+        catalog_windows::app_import::scan_installed_apps_windows(&app_handle)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app_handle;
+        Vec::new()
+    }
+}
+
+/// 「快捷导入」：批量创建图标条目。
+pub fn import_app_entries(
+    app_handle: tauri::AppHandle,
+    entries: Vec<CreateIconEntryInput>,
+) -> Result<ImportDroppedPathsResult, String> {
+    #[cfg(windows)]
+    {
+        catalog_windows::operations::create_icon_entries_windows(&app_handle, entries)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app_handle;
+        let _ = entries;
         Err("Not supported on this platform".to_string())
     }
 }

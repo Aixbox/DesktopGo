@@ -1,6 +1,6 @@
 use crate::icons::{
     self, CreateIconEntryInput, DesktopIcon, IconManagerItem, IconMutationTarget,
-    ImportDroppedPathsResult, WebsiteIconResult,
+    ImportDroppedPathsResult, ScannedInstalledApp, WebsiteIconResult,
 };
 
 #[tauri::command]
@@ -68,6 +68,29 @@ pub fn create_icon_entry(
     input: CreateIconEntryInput,
 ) -> Result<ImportDroppedPathsResult, String> {
     icons::create_icon_entry(app_handle, input)
+}
+
+/// 「快捷导入」：扫描已安装应用并标注重复状态。COM 解析与目录枚举都可能有
+/// 秒级开销，放到阻塞线程池避免卡住主线程。
+#[tauri::command]
+pub async fn scan_installed_apps(
+    app_handle: tauri::AppHandle,
+) -> Result<Vec<ScannedInstalledApp>, String> {
+    tauri::async_runtime::spawn_blocking(move || Ok(icons::scan_installed_apps(app_handle)))
+        .await
+        .map_err(|error| format!("Failed to scan installed apps: {}", error))?
+}
+
+/// 「快捷导入」：按用户勾选的结果批量创建图标条目。图标提取是重活，
+/// 同样放到阻塞线程池执行。
+#[tauri::command]
+pub async fn import_app_entries(
+    app_handle: tauri::AppHandle,
+    entries: Vec<CreateIconEntryInput>,
+) -> Result<ImportDroppedPathsResult, String> {
+    tauri::async_runtime::spawn_blocking(move || icons::import_app_entries(app_handle, entries))
+        .await
+        .map_err(|error| format!("Failed to import app entries: {}", error))?
 }
 
 #[tauri::command]

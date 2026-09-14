@@ -10,7 +10,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Check, ChevronDown, Import, Plus, RefreshCw } from 'lucide-react'
+import { Check, ChevronDown, Import, Plus, RefreshCw, Wand2 } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
 import { recordSearchResultRun } from '@/lib/search/api'
 import { getSearchFilterLabel, getSearchFilterOptions } from '@/lib/search/filters'
@@ -50,6 +50,10 @@ const IconGrid = lazy(() => loadIconGrid().then(module => ({ default: module.Ico
 
 const SearchPanel = lazy(() =>
   import('./search/SearchPanel').then(module => ({ default: module.SearchPanel }))
+)
+
+const QuickImportDialog = lazy(() =>
+  import('./quick-import/QuickImportDialog').then(module => ({ default: module.QuickImportDialog }))
 )
 
 const SEARCH_FLOATING_MENU_SELECTOR = '[data-search-floating-menu="true"]'
@@ -166,6 +170,8 @@ export function Launchpad() {
     clearIconEditRequest,
   })
   const { addIconDialogOpen, handleAddIcons, handleCreateNewFile, importPlacementRequest, isImportingDrop } = iconImport
+  // 「快捷导入」仅在启动台没有任何图标时从引导界面进入。
+  const [isQuickImportOpen, setIsQuickImportOpen] = useState(false)
   const preloadGridView = useCallback((mode: 'paged' | 'scroll') => {
     void (mode === 'scroll' ? loadScrollableIconGrid() : loadIconGrid())
   }, [])
@@ -908,11 +914,31 @@ export function Launchpad() {
                           '从桌面或资源管理器把应用、快捷方式或文件拖进窗口即可导入，也可以手动添加。'
                         )}
                       </p>
+                      <p className="launchpad-wallpaper-text text-xs leading-5 text-muted-foreground">
+                        {translate('还可以一键扫描已安装的应用，批量导入常用软件。')}
+                      </p>
                     </div>
-                    <Button type="button" size="sm" onClick={() => handleAddIcons()}>
-                      <Plus className="h-4 w-4" />
-                      {translate('添加图标')}
-                    </Button>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => setIsQuickImportOpen(true)}
+                        disabled={isImportingDrop || addIconDialogOpen}
+                      >
+                        <Wand2 className="h-4 w-4" />
+                        {translate('快捷导入')}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleAddIcons()}
+                        disabled={isImportingDrop || addIconDialogOpen}
+                      >
+                        <Plus className="h-4 w-4" />
+                        {translate('添加图标')}
+                      </Button>
+                    </div>
                   </div>
                 ) : launchpadGridViewMode === 'scroll' ? (
                   <Suspense
@@ -981,6 +1007,16 @@ export function Launchpad() {
         onOpenSettings={openSettings}
       />
       <LaunchpadIconImportLayer controller={iconImport} />
+
+      <Suspense fallback={null}>
+        {isQuickImportOpen ? (
+          <QuickImportDialog
+            open
+            onOpenChange={setIsQuickImportOpen}
+            onImported={() => iconImport.handleIconCreated()}
+          />
+        ) : null}
+      </Suspense>
     </ContextMenu>
   )
 }

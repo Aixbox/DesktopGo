@@ -14,6 +14,7 @@ import {
 import { AiOrganizePanel } from '@/components/ai/AiOrganizePanel'
 import { AddIconDialog } from '@/components/icons/AddIconDialog'
 import { InvalidIconScanDialog } from '@/components/settings/InvalidIconScanDialog'
+import { QuickImportDialog } from '@/components/quick-import/QuickImportDialog'
 import { useIconManagerBulkActions } from '@/components/settings/useIconManagerBulkActions'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -37,6 +38,7 @@ import {
   AlertTriangle,
   Eye,
   EyeOff,
+  Wand2,
 } from 'lucide-react'
 
 const ICON_VISIBILITY_FILTER_OPTIONS: { label: string; value: IconVisibilityFilter }[] = [
@@ -63,6 +65,7 @@ export function IconManagerPanel() {
     icon: IconManagerItem
   } | null>(null)
   const [addIconDialogOpen, setAddIconDialogOpen] = useState(false)
+  const [quickImportOpen, setQuickImportOpen] = useState(false)
   const [mutating, setMutating] = useState(false)
   const [listLoading, setListLoading] = useState(true)
   const [listError, setListError] = useState<string | null>(null)
@@ -430,10 +433,20 @@ export function IconManagerPanel() {
               {translate('导入常用应用、快捷方式和文件；文件夹可以直接拖入启动台。')}
             </p>
           </div>
-          <Button onClick={() => setAddIconDialogOpen(true)} disabled={mutating || layoutResetting}>
-            <Upload className="h-4 w-4" />
-            {translate('导入图标')}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setQuickImportOpen(true)}
+              disabled={mutating || layoutResetting}
+            >
+              <Wand2 className="h-4 w-4" />
+              {translate('快捷导入')}
+            </Button>
+            <Button onClick={() => setAddIconDialogOpen(true)} disabled={mutating || layoutResetting}>
+              <Upload className="h-4 w-4" />
+              {translate('导入图标')}
+            </Button>
+          </div>
         </div>
 
         <div className="min-w-0 space-y-3 rounded-card border border-border/80 bg-card p-4">
@@ -814,6 +827,15 @@ export function IconManagerPanel() {
         open={addIconDialogOpen}
         onOpenChange={setAddIconDialogOpen}
         onCreated={handleIconCreated}
+      />
+
+      <QuickImportDialog
+        open={quickImportOpen}
+        onOpenChange={setQuickImportOpen}
+        onImported={async () => {
+          await refreshIconManagerList()
+          await notifyMainWindow()
+        }}
       />
 
       {pendingMutation && mutationDialogText ? (

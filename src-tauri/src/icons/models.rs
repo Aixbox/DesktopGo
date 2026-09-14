@@ -171,6 +171,24 @@ pub struct WebsiteIconResult {
     pub icons: Vec<String>,
 }
 
+/// 「快捷导入」扫描到的单个已安装应用。
+///
+/// `source_path` 是导入时传给 `create_icon_entry` 的入口路径：lnk/url 用快捷方式
+/// 文件本身（导入时按现有逻辑复制入口），exe 用可执行文件路径（导入时创建指向它的
+/// 托管快捷方式）。`target_path` 只用于展示。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScannedInstalledApp {
+    pub source_path: String,
+    pub display_name: String,
+    pub target_path: String,
+    pub item_type: String,
+    /// 扫描来源的人类可读标签（开始菜单、桌面、注册表……）。
+    pub source_label: String,
+    /// new / possible_duplicate / exact_duplicate。
+    pub status: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ImportDroppedPathsResult {
     pub(crate) imported_count: usize,
