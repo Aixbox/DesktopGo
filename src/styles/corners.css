@@ -22,14 +22,21 @@
 @layer base {
   :root {
     --radius: 0.75rem;
-    --ui-corner-shape: superellipse(1.2);
+    /* 连续曲率圆角（squircle）：曲线在与直边相切处曲率为 0，向角内平滑增大，
+     * 消除正圆弧与直边交点处的曲率突变（接缝感）——即"直边到圆角的平滑过渡"。
+     * superellipse(k) 映射（CSS Borders L4）：0=bevel 斜切、1=round 正圆弧、
+     * 2=squircle 关键字同值、∞ 等价 square 方角；对应 Lamé 指数 n=2k。
+     * 取 k=2（squircle 本义）：Apple 风格平滑过渡的标准形状。 */
+    --ui-corner-shape: superellipse(2);
     --ui-corner-radius-scale: 1;
   }
 
-  @supports (corner-shape: superellipse(1.2)) {
+  @supports (corner-shape: superellipse(2)) {
     :root {
-      /* 补偿连续曲线的视觉收缩，令 45° 处的切入量接近同半径的普通圆弧。 */
-      --ui-corner-radius-scale: 1.125;
+      /* 同半径下 squircle 比正圆弧"收得更浅"（45° 切入深度 0.225r vs 正圆 0.414r），
+       * 按 1.773 统一放大半径补偿，使 45° 切入深度与旧版（1.2×1.125≈0.40r）一致：
+       * 圆角视觉大小不变，仅直边→弧线的过渡变为连续曲率。 */
+      --ui-corner-radius-scale: 1.773;
     }
 
     *,
@@ -40,13 +47,14 @@
   }
 }
 
-/* 官网的常规按钮为胶囊形；所有按钮尺寸共用半径，不随 sm/lg 改变。 */
+/* 官网的常规按钮为胶囊形；所有按钮尺寸共用半径，不随 sm/lg 改变。
+ * 胶囊端部跟随全局连续曲率（Apple 药丸形，端部不再是正圆半圆）。 */
 @utility rounded-button {
   border-radius: var(--radius-button);
-  corner-shape: round;
 }
 
-/* 扩展 Tailwind 的同名工具类，同时保留它生成的满圆角半径及状态变体。 */
+/* 扩展 Tailwind 的同名工具类，同时保留它生成的满圆角半径及状态变体。
+ * 真圆形元素（头像、圆点、旋钮）必须保持几何正圆，不受全局 squircle 影响。 */
 @utility rounded-full {
   corner-shape: round;
 }

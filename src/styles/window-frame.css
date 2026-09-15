@@ -29,7 +29,9 @@ body {
   padding: 0;
 }
 
-/* 阴影独立于内容裁切层，透明宿主内的留白让投影不会被窗口边界截断。 */
+/* 阴影独立于内容裁切层，透明宿主内的留白让投影不会被窗口边界截断。
+ * 窗口轮廓由 #root 的 clip-path 决定（正圆弧）；box-shadow 只跟随 border-radius
+ * 的 corner-shape 渲染——这里必须保持 round 与窗口轮廓同形，否则角部投影露错位。 */
 body::before {
   content: '';
   position: fixed;
@@ -51,8 +53,10 @@ body::before {
    * 半透明边缘像素、覆盖率相乘（50% × 50% = 25%），alpha 过渡变陡就是肉眼可见的锯齿。 */
   overflow: hidden;
   /* 窗口圆角的唯一来源。用 clip-path 而不是 border-radius，是因为只有它能裁到
-   * position: fixed 的后代，同时保留视口坐标，不影响拖拽和框选。 */
-  corner-shape: round;
+   * position: fixed 的后代，同时保留视口坐标，不影响拖拽和框选。
+   * 注意：clip-path 的 round 不受 corner-shape 影响（corner-shape 只作用于
+   * border-radius 渲染；#root 没有 border-radius，写了也无效），窗口轮廓保持正圆弧。
+   * 若将来要窗口级连续曲率，需改用 clip-path: shape() 显式画超椭圆轮廓。 */
   clip-path: inset(0 round var(--radius-2xl));
   isolation: isolate;
 }
@@ -61,6 +65,7 @@ body::before {
 .window-portal-overlay {
   inset: var(--window-shadow-inset);
   border-radius: var(--radius-2xl);
+  /* 背景边角形状须与 clip-path 的正圆弧一致。 */
   corner-shape: round;
   clip-path: inset(0 round var(--radius-2xl));
 }
