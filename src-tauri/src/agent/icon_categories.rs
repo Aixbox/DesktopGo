@@ -1,7 +1,9 @@
-//! 图标分类知识库：内置的「应用 → 分类」参考表 + 用户自定义条目。
+//! 图标分类知识库：内置的「应用 → 分类」参考表 + 用户自定义层。
 //!
 //! 内置表随应用发布；用户在设置页维护的条目存放在布局 KV
-//! （`desktopgo.ai.icon-categories.v1`），按名称（忽略大小写）覆盖内置项。
+//! （`desktopgo.ai.icon-categories.v1`），格式为 `{ entries, deletedBuiltinNames }`：
+//! `entries` 按名称（忽略大小写）覆盖内置项，`deletedBuiltinNames` 是内置条目
+//! 的墓碑（用户删除内置条目后记录名字，使其在合并结果中剔除，可随时恢复）。
 //! 对话 agent 的工具从合并后的知识库取数，让模型整理图标时有据可依。
 
 use serde::Serialize;
@@ -15,7 +17,7 @@ pub(crate) const ICON_CATEGORIES_KEY: &str = "desktopgo.ai.icon-categories.v1";
 const MIN_SUBSTRING_MATCH_CHARS: usize = 3;
 const MAX_ENTRIES: usize = 300;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiIconCategoryEntry {
     pub name: String,
@@ -208,44 +210,88 @@ pub(crate) fn builtin_icon_categories() -> Vec<AiIconCategoryEntry> {
         .collect()
 }
 
-/// 合并后的知识库：内置表 + 用户条目（同名覆盖，用户条目排在内置之后）。
-pub(crate) fn load_effective_icon_categories(app_handle: &AppHandle) -> Vec<AiIconCategoryEntry> {
-    let mut entries = builtin_icon_categories();
-    let Ok(Some(raw)) = get_layout_payload(app_handle, ICON_CATEGORIES_KEY) else {
-        return entries;
-    };
-    let Ok(value) = serde_json::from_str::<Value>(&raw) else {
-        return entries;
-    };
-    let Some(list) = value.get("entries").and_then(Value::as_array) else {
-        return entries;
-    };
+/// 用户自定义层在布局 KV 中的存储格式：自定义/覆盖条目 + 内置条目墓碑。
+#[derive(Debug, Default)]
+pub(crate) struct UserCategoryLayer {
+    /// 用户新增条目，以及覆盖同名内置条目（改名后的分类）。
+    pub entries: Vec<AiIconCategoryEntry>,
+    /// 被用户删除的内置条目名；合并时按名称（忽略大小写）从内置表剔除。
+    pub deleted_builtin_names: Vec<String>,
+}
 
-    for item in list {
-        let name = item
-            .get("name")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
-        let category = item
-            .get("category")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
-        let (Some(name), Some(category)) = (name, category) else {
-            continue;
+impl UserCategoryLayer {
+    /// 解析 KV 中的 JSON；兼容旧格式（只有 `entries`，无墓碑字段）。
+    /// 任何解析失败都回退为空层，不让坏数据挡住内置表。
+    pub(crate) fn parse(raw: &str) -> Self {
+        let mut layer = Self::default();
+        let Ok(value) = serde_json::from_str::<Value>(raw) else {
+            return layer;
         };
-        entries.retain(|entry| !entry.name.eq_ignore_ascii_case(name));
-        entries.push(AiIconCategoryEntry {
-            name: name.to_string(),
-            category: category.to_string(),
-        });
+
+        if let Some(list) = value.get("entries").and_then(Value::as_array) {
+            for item in list {
+                let name = item
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty());
+                let category = item
+                    .get("category")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty());
+                if let (Some(name), Some(category)) = (name, category) {
+                    layer.entries.push(AiIconCategoryEntry {
+                        name: name.to_string(),
+                        category: category.to_string(),
+                    });
+                }
+            }
+        }
+
+        if let Some(list) = value.get("deletedBuiltinNames").and_then(Value::as_array) {
+            for item in list.iter().filter_map(Value::as_str) {
+                let name = item.trim();
+                if !name.is_empty() {
+                    layer.deleted_builtin_names.push(name.to_string());
+                }
+            }
+        }
+
+        layer
     }
 
-    if entries.len() > MAX_ENTRIES {
-        entries.truncate(MAX_ENTRIES);
+    fn is_deleted(&self, name: &str) -> bool {
+        self.deleted_builtin_names
+            .iter()
+            .any(|deleted| deleted.eq_ignore_ascii_case(name))
     }
-    entries
+}
+
+/// 合并知识库：内置表 → 剔除墓碑 → 应用用户条目（同名覆盖，其余追加）。
+fn merge_categories(
+    mut builtins: Vec<AiIconCategoryEntry>,
+    layer: &UserCategoryLayer,
+) -> Vec<AiIconCategoryEntry> {
+    builtins.retain(|entry| !layer.is_deleted(&entry.name));
+    for item in &layer.entries {
+        builtins.retain(|entry| !entry.name.eq_ignore_ascii_case(&item.name));
+        builtins.push(item.clone());
+    }
+
+    if builtins.len() > MAX_ENTRIES {
+        builtins.truncate(MAX_ENTRIES);
+    }
+    builtins
+}
+
+/// 合并后的知识库：内置表 − 墓碑 + 用户条目（同名覆盖）。
+pub(crate) fn load_effective_icon_categories(app_handle: &AppHandle) -> Vec<AiIconCategoryEntry> {
+    let layer = match get_layout_payload(app_handle, ICON_CATEGORIES_KEY) {
+        Ok(Some(raw)) => UserCategoryLayer::parse(&raw),
+        _ => UserCategoryLayer::default(),
+    };
+    merge_categories(builtin_icon_categories(), &layer)
 }
 
 /// 名称匹配：先找全等（忽略大小写），再找最长且不少于 3 字符的包含匹配，
@@ -287,12 +333,22 @@ pub(crate) fn match_icon_category(
 
 #[cfg(test)]
 mod tests {
-    use super::{builtin_icon_categories, match_icon_category, AiIconCategoryEntry};
+    use super::{
+        builtin_icon_categories, merge_categories, match_icon_category, AiIconCategoryEntry,
+        UserCategoryLayer,
+    };
 
     fn entry(name: &str, category: &str) -> AiIconCategoryEntry {
         AiIconCategoryEntry {
             name: name.to_string(),
             category: category.to_string(),
+        }
+    }
+
+    fn layer(entries: Vec<AiIconCategoryEntry>, deleted: &[&str]) -> UserCategoryLayer {
+        UserCategoryLayer {
+            entries,
+            deleted_builtin_names: deleted.iter().map(|name| (*name).to_string()).collect(),
         }
     }
 
@@ -348,5 +404,54 @@ mod tests {
         assert!(builtins.iter().any(|entry| entry.category == "浏览器"));
         assert!(builtins.iter().any(|entry| entry.category == "开发工具"));
         assert!(builtins.iter().any(|entry| entry.category == "游戏娱乐"));
+    }
+
+    #[test]
+    fn tombstones_remove_builtin_entries_case_insensitively() {
+        let merged = merge_categories(builtin_icon_categories(), &layer(vec![], &["OPERA"]));
+        assert!(merged
+            .iter()
+            .all(|entry| !entry.name.eq_ignore_ascii_case("opera")));
+        // 其余内置条目不受影响
+        assert!(merged.iter().any(|entry| entry.name == "Chrome"));
+    }
+
+    #[test]
+    fn user_entry_can_override_a_tombstoned_builtin() {
+        // 删除内置「Opera」后，再添加同名（忽略大小写）用户条目 → 生效且唯一
+        let merged = merge_categories(
+            builtin_icon_categories(),
+            &layer(vec![entry("opera", "游戏娱乐")], &["Opera"]),
+        );
+        let matches: Vec<_> = merged
+            .iter()
+            .filter(|entry| entry.name.eq_ignore_ascii_case("opera"))
+            .collect();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].category, "游戏娱乐");
+    }
+
+    #[test]
+    fn parse_supports_legacy_payload_without_tombstones() {
+        let parsed = UserCategoryLayer::parse(r#"{"entries":[{"name":"Foo","category":" Bar "}]}"#);
+        assert_eq!(parsed.entries, vec![entry("Foo", "Bar")]);
+        assert!(parsed.deleted_builtin_names.is_empty());
+    }
+
+    #[test]
+    fn parse_reads_tombstones_and_skips_invalid_rows() {
+        let parsed = UserCategoryLayer::parse(
+            r#"{"entries":[{"name":"","category":"X"},{"name":"Foo","category":""}],
+                "deletedBuiltinNames":[" Opera ", 3, null]}"#,
+        );
+        assert!(parsed.entries.is_empty());
+        assert_eq!(parsed.deleted_builtin_names, vec!["Opera"]);
+    }
+
+    #[test]
+    fn parse_falls_back_to_empty_layer_on_invalid_json() {
+        let parsed = UserCategoryLayer::parse("not json");
+        assert!(parsed.entries.is_empty());
+        assert!(parsed.deleted_builtin_names.is_empty());
     }
 }

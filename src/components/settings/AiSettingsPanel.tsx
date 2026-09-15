@@ -1,14 +1,9 @@
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Plus, ShieldCheck, Trash2 } from 'lucide-react'
+import { ShieldCheck } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
 import { createAiOrganizeId } from '@/lib/aiOrganizeSessions'
-import {
-  loadAiIconCategories,
-  loadBuiltinIconCategories,
-  saveAiIconCategories,
-  type AiIconCategoryEntry,
-} from '@/lib/aiIconCategories'
+import { IconCategoryManager } from '@/components/settings/IconCategoryManager'
 import {
   AI_COMPATIBLE_PROTOCOLS,
   AI_PROVIDERS,
@@ -34,53 +29,6 @@ export function AiSettingsPanel() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
-  const [iconCategories, setIconCategories] = useState<AiIconCategoryEntry[]>([])
-  const [builtinCategories, setBuiltinCategories] = useState<AiIconCategoryEntry[]>([])
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const [userEntries, builtins] = await Promise.all([
-          loadAiIconCategories(),
-          loadBuiltinIconCategories(),
-        ])
-        setIconCategories(userEntries)
-        setBuiltinCategories(builtins)
-      } catch (e) {
-        console.error('Failed to load AI icon categories:', e)
-      }
-    })()
-  }, [])
-
-  // 知识库与提示词相互独立：条目即改即存（空行只留在本地，不入库），不经过「保存配置」按钮。
-  const persistIconCategories = (next: AiIconCategoryEntry[]) => {
-    setIconCategories(next)
-    void saveAiIconCategories(
-      next.filter(entry => entry.name.trim() && entry.category.trim())
-    ).catch((e: unknown) => {
-      console.error('Failed to save AI icon categories:', e)
-      toast.error(translate('保存图标分类失败：{error}', { error: String(e) }), {
-        key: 'settings-ai-categories',
-        title: translate('AI 助手'),
-      })
-    })
-  }
-
-  const updateIconCategory = (index: number, field: keyof AiIconCategoryEntry, value: string) => {
-    persistIconCategories(
-      iconCategories.map((entry, current) =>
-        current === index ? { ...entry, [field]: value } : entry
-      )
-    )
-  }
-
-  const addIconCategory = () => {
-    persistIconCategories([...iconCategories, { name: '', category: '' }])
-  }
-
-  const removeIconCategory = (index: number) => {
-    persistIconCategories(iconCategories.filter((_, current) => current !== index))
-  }
 
   useEffect(() => {
     void (async () => {
@@ -335,76 +283,10 @@ export function AiSettingsPanel() {
       <SettingCard
         label={translate('图标分类知识库')}
         desc={translate(
-          '整理图标时 AI 会参考这些「应用 → 分类」对应关系。这里维护你自己的条目（同名条目优先于内置分类），与提示词相互独立、即改即存。'
+          '整理图标时 AI 会参考这些「应用 → 分类」对应关系。内置条目可直接修改分类或删除（可恢复），与内置表同名的自定义条目优先生效；与提示词相互独立、即改即存。'
         )}
       >
-        <div className="space-y-3">
-          {iconCategories.length > 0 ? (
-            <div className="space-y-2">
-              {iconCategories.map((entry, index) => (
-                <div key={`${entry.name}-${index}`} className="flex items-center gap-2">
-                  <Input
-                    value={entry.name}
-                    onChange={e => updateIconCategory(index, 'name', e.target.value)}
-                    placeholder={translate('应用或网站名称')}
-                    spellCheck={false}
-                    className="h-8 min-w-0 flex-1"
-                    aria-label={translate('应用或网站名称')}
-                  />
-                  <span aria-hidden="true" className="shrink-0 text-xs text-muted-foreground">
-                    →
-                  </span>
-                  <Input
-                    value={entry.category}
-                    onChange={e => updateIconCategory(index, 'category', e.target.value)}
-                    placeholder={translate('分类')}
-                    spellCheck={false}
-                    className="h-8 w-36 shrink-0"
-                    aria-label={translate('分类')}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeIconCategory(index)}
-                    aria-label={translate('删除')}
-                    title={translate('删除')}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-button text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs leading-5 text-muted-foreground">
-              {translate('还没有自定义条目。内置分类已随应用提供，添加条目可补充或覆盖它们。')}
-            </p>
-          )}
-
-          <Button variant="outline" size="sm" onClick={addIconCategory}>
-            <Plus className="h-4 w-4" />
-            {translate('添加分类条目')}
-          </Button>
-
-          {builtinCategories.length > 0 ? (
-            <details className="rounded-card border border-border/70 bg-muted/20 px-3 py-2">
-              <summary className="cursor-pointer select-none text-xs font-medium text-foreground/85">
-                {translate('内置分类（{count} 条，只读）', { count: builtinCategories.length })}
-              </summary>
-              <div className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-x-3 gap-y-1 text-[11px] leading-4">
-                {builtinCategories.map(entry => (
-                  <span
-                    key={`${entry.name}-${entry.category}`}
-                    className="truncate text-muted-foreground"
-                    title={`${entry.name} → ${entry.category}`}
-                  >
-                    {entry.name}
-                    <span className="text-foreground/60"> → {entry.category}</span>
-                  </span>
-                ))}
-              </div>
-            </details>
-          ) : null}
-        </div>
+        <IconCategoryManager />
       </SettingCard>
 
       <div className="rounded-card border border-amber-500/30 bg-amber-500/8 p-4">
