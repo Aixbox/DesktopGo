@@ -42,6 +42,22 @@ Var AppStartMenuFolder`,
 ; 6. Start menu shortcut page
 Var AppStartMenuFolder`,
   },
+  {
+    name: "finish page auto-start hook",
+    upstream: `!define MUI_FINISHPAGE_RUN
+!define MUI_FINISHPAGE_RUN_FUNCTION RunMainBinary
+!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
+!insertmacro MUI_PAGE_FINISH`,
+    custom: `!define MUI_FINISHPAGE_RUN
+!define MUI_FINISHPAGE_RUN_FUNCTION RunMainBinary
+; DesktopGo extension: the finish page gains an auto-start checkbox, wired by
+; installer-hooks.nsh through the NSIS_HOOK_FINISH_PAGE macro.
+!ifmacrodef NSIS_HOOK_FINISH_PAGE
+  !insertmacro NSIS_HOOK_FINISH_PAGE
+!endif
+!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
+!insertmacro MUI_PAGE_FINISH`,
+  },
 ];
 
 function normalizeLineEndings(value) {

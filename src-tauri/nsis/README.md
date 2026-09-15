@@ -10,7 +10,8 @@ dialog.
   CLI version, and normalized SHA-256 are recorded in `installer-template-source.json`.
 - `installer.nsi` is generated from the upstream copy. Do not edit it manually.
 - `installer-hooks.nsh` owns DesktopGo-specific behavior. The generated template only exposes
-  the language initialization and custom-page placement hooks used by this file.
+  the language initialization, custom-page placement, and finish-page auto-start hooks used by
+  this file.
 - `scripts/sync-nsis-template.mjs` is the only place that describes allowed template changes.
 
 `pnpm nsis:template:check` verifies the pinned CLI version, upstream hash, patch anchors, and

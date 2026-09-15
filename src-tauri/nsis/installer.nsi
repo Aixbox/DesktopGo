@@ -397,6 +397,11 @@ Var AppStartMenuFolder
 ; Show run app after installation.
 !define MUI_FINISHPAGE_RUN
 !define MUI_FINISHPAGE_RUN_FUNCTION RunMainBinary
+; DesktopGo extension: the finish page gains an auto-start checkbox, wired by
+; installer-hooks.nsh through the NSIS_HOOK_FINISH_PAGE macro.
+!ifmacrodef NSIS_HOOK_FINISH_PAGE
+  !insertmacro NSIS_HOOK_FINISH_PAGE
+!endif
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
 !insertmacro MUI_PAGE_FINISH
 
