@@ -1,6 +1,42 @@
 :root {
   --window-shadow-inset: 16px;
   --window-edge-shadow: 0 4px 12px -3px rgb(0 0 0 / 24%), 0 0 4px rgb(0 0 0 / 12%);
+
+  /* 窗口轮廓的连续曲率（superellipse(2)，与全局圆角体系同形）。
+   * corner-shape 只作用于 border-radius 渲染、管不到 clip-path，因此轮廓的
+   * 连续曲率必须用 shape() 显式画出：每角两段三次贝塞尔，是对 Lamé n=4
+   * 四分之一曲线的最小二乘拟合——切点处曲率严格为 0（直边→圆角平滑过渡），
+   * 与浏览器原生 superellipse(2) 渲染的最大偏差 0.29px（R=35.46px 时）。
+   * 半径沿用全局补偿后的 --radius-2xl：45° 切入深度 0.225×R≈8.0px，与 squircle
+   * 改造前（round 20px≈8.3px）一致，并修正补偿半径作用在 round 裁切上
+   * 造成的角部变深（≈14.7px）回归。 */
+  --window-corner-radius: var(--radius-2xl);
+  --window-corner-m: calc(0.1591 * var(--window-corner-radius));
+  --window-corner-c1: calc(0.6632 * var(--window-corner-radius));
+  --window-corner-c2: calc(0.3377 * var(--window-corner-radius));
+  --window-corner-clip: shape(
+    from var(--window-corner-radius) 0px,
+    line to calc(100% - var(--window-corner-radius)) 0px,
+    curve to calc(100% - var(--window-corner-m)) var(--window-corner-m)
+      with calc(100% - var(--window-corner-c1)) 0px / calc(100% - var(--window-corner-c2)) 0px,
+    curve to 100% var(--window-corner-radius)
+      with 100% var(--window-corner-c2) / 100% var(--window-corner-c1),
+    line to 100% calc(100% - var(--window-corner-radius)),
+    curve to calc(100% - var(--window-corner-m)) calc(100% - var(--window-corner-m))
+      with 100% calc(100% - var(--window-corner-c1)) / 100% calc(100% - var(--window-corner-c2)),
+    curve to calc(100% - var(--window-corner-radius)) 100%
+      with calc(100% - var(--window-corner-c2)) 100% / calc(100% - var(--window-corner-c1)) 100%,
+    line to var(--window-corner-radius) 100%,
+    curve to var(--window-corner-m) calc(100% - var(--window-corner-m))
+      with var(--window-corner-c1) 100% / var(--window-corner-c2) 100%,
+    curve to 0px calc(100% - var(--window-corner-radius))
+      with 0px calc(100% - var(--window-corner-c2)) / 0px calc(100% - var(--window-corner-c1)),
+    line to 0px var(--window-corner-radius),
+    curve to var(--window-corner-m) var(--window-corner-m)
+      with 0px var(--window-corner-c1) / 0px var(--window-corner-c2),
+    curve to var(--window-corner-radius) 0px
+      with var(--window-corner-c2) 0px / var(--window-corner-c1) 0px
+  );
 }
 
 :root.dark {
@@ -30,8 +66,10 @@ body {
 }
 
 /* 阴影独立于内容裁切层，透明宿主内的留白让投影不会被窗口边界截断。
- * 窗口轮廓由 #root 的 clip-path 决定（正圆弧）；box-shadow 只跟随 border-radius
- * 的 corner-shape 渲染——这里必须保持 round 与窗口轮廓同形，否则角部投影露错位。 */
+ * 窗口轮廓由 #root 的 clip-path 决定；box-shadow 只跟随 border-radius 的
+ * corner-shape 渲染——必须与窗口轮廓同形，否则角部投影露错位。
+ * 回退环境轮廓是 round（此处保持 round）；支持连续曲率的环境下轮廓是
+ * 超椭圆，由文件末尾 @supports 块统一切到 var(--ui-corner-shape)。 */
 body::before {
   content: '';
   position: fixed;
@@ -54,9 +92,9 @@ body::before {
   overflow: hidden;
   /* 窗口圆角的唯一来源。用 clip-path 而不是 border-radius，是因为只有它能裁到
    * position: fixed 的后代，同时保留视口坐标，不影响拖拽和框选。
-   * 注意：clip-path 的 round 不受 corner-shape 影响（corner-shape 只作用于
-   * border-radius 渲染；#root 没有 border-radius，写了也无效），窗口轮廓保持正圆弧。
-   * 若将来要窗口级连续曲率，需改用 clip-path: shape() 显式画超椭圆轮廓。 */
+   * 基础值 round 是回退形状（不支持 corner-shape / shape() 的环境，此时半径
+   * 也未经全局补偿）；连续曲率轮廓由文件末尾 @supports 块内的
+   * shape() 超椭圆（var(--window-corner-clip)）接管。 */
   clip-path: inset(0 round var(--radius-2xl));
   isolation: isolate;
 }
@@ -65,7 +103,25 @@ body::before {
 .window-portal-overlay {
   inset: var(--window-shadow-inset);
   border-radius: var(--radius-2xl);
-  /* 背景边角形状须与 clip-path 的正圆弧一致。 */
+  /* 背景边角形状须与 clip-path 的轮廓一致（回退 round；连续曲率见 @supports 块）。 */
   corner-shape: round;
   clip-path: inset(0 round var(--radius-2xl));
+}
+
+/* 连续曲率窗口轮廓：shape() 超椭圆 + 投影/遮罩同步换形。
+ * 同时要求 corner-shape（半径补偿与 --ui-corner-shape 的前提）与
+ * clip-path: shape() 两个能力，缺一则整体留在 round 回退上。 */
+@supports (corner-shape: superellipse(2)) and (clip-path: shape(from 0px 0px, line to 1px 1px)) {
+  body::before {
+    corner-shape: var(--ui-corner-shape);
+  }
+
+  #root {
+    clip-path: var(--window-corner-clip);
+  }
+
+  .window-portal-overlay {
+    corner-shape: var(--ui-corner-shape);
+    clip-path: var(--window-corner-clip);
+  }
 }
