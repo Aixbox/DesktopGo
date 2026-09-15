@@ -68,6 +68,46 @@ pub(crate) fn is_special_shell_path(path: &str) -> bool {
     normalize_special_shell_path(path).is_some()
 }
 
+/// `shell:AppsFolder` 的 parsing name 根（CLSID_AppsFolder）：SHParseDisplayName
+/// 能沿它解析出具体商店应用条目。
+pub(crate) const APPS_FOLDER_PARSING_ROOT: &str = "::{4234d49b-0245-4df3-b780-3893943456e1}";
+
+/// 商店应用（UWP/MSIX）条目的目标形式：`shell:AppsFolder\<AUMID>`。
+/// 这类条目没有文件路径，启动与图标提取都走 Shell 命名空间。
+pub(crate) fn is_uwp_shell_path(path: &str) -> bool {
+    let lower = path.trim().to_ascii_lowercase();
+    lower.starts_with("shell:apps\\") || lower.starts_with("shell:appsfolder\\")
+}
+
+/// 从商店应用条目的两种目标形式中取出 AUMID：
+/// `shell:AppsFolder\<AUMID>`（存储形式）与
+/// `::{CLSID_AppsFolder}\<AUMID>`（Shell parsing name 形式）。
+pub(crate) fn uwp_aumid_from_path(path: &str) -> Option<&str> {
+    let trimmed = path.trim();
+    let rest = if let Some(tail) = trimmed.strip_prefix(APPS_FOLDER_PARSING_ROOT) {
+        tail
+    } else {
+        let lower = trimmed.to_ascii_lowercase();
+        if lower.starts_with("shell:apps\\") {
+            trimmed.get(11..)?
+        } else if lower.starts_with("shell:appsfolder\\") {
+            trimmed.get(17..)?
+        } else {
+            return None;
+        }
+    };
+    let aumid = rest.trim_start_matches('\\').trim();
+    (!aumid.is_empty()).then_some(aumid)
+}
+
+/// `shell:AppsFolder\<AUMID>` → `::{CLSID_AppsFolder}\<AUMID>`。
+/// Shell 的 parsing name 形式；注意 AppsFolder 不能用
+/// `SHCreateItemFromParsingName` 可靠解析，条目创建统一走
+/// `create_shell_item_from_path` 里的 `SHCreateItemInKnownFolder` 分支。
+pub(crate) fn uwp_parsing_path(path: &str) -> Option<String> {
+    uwp_aumid_from_path(path).map(|aumid| format!("{APPS_FOLDER_PARSING_ROOT}\\{aumid}"))
+}
+
 /// Lowercase extension without the dot; empty when the entry has none.
 pub(super) fn icon_extension(path: &str) -> String {
     Path::new(path)
@@ -113,9 +153,69 @@ pub(super) fn extension_lookup_name(extension: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        extension_lookup_name, icon_extension, is_special_shell_path, normalize_special_shell_path,
-        plan_search_icon, SearchIconSource,
+        extension_lookup_name, icon_extension, is_special_shell_path, is_uwp_shell_path,
+        normalize_special_shell_path, plan_search_icon, uwp_aumid_from_path, uwp_parsing_path,
+        SearchIconSource,
     };
+
+    #[test]
+    fn recognizes_uwp_shell_targets() {
+        assert!(is_uwp_shell_path(
+            "shell:AppsFolder\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"
+        ));
+        assert!(is_uwp_shell_path("shell:apps\\Vendor.App_abc123!Entry"));
+        assert!(is_uwp_shell_path(
+            "SHELL:APPSFOLDER\\microsoft.windowsterminal_8wekyb3d8bbwe!app"
+        ));
+        assert!(!is_uwp_shell_path("shell:desktop"));
+        assert!(!is_uwp_shell_path(
+            "shell:::{645FF040-5081-101B-9F08-00AA002F954E}"
+        ));
+        assert!(!is_uwp_shell_path("C:\\Program Files\\app.exe"));
+        assert!(!is_uwp_shell_path(""));
+    }
+
+    #[test]
+    fn converts_uwp_targets_to_parsable_namespace_paths() {
+        assert_eq!(
+            uwp_parsing_path("shell:AppsFolder\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"),
+            Some(format!(
+                "::{{4234d49b-0245-4df3-b780-3893943456e1}}\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"
+            ))
+        );
+        assert_eq!(
+            uwp_parsing_path("shell:apps\\Vendor.App_abc123!Entry"),
+            Some("::{4234d49b-0245-4df3-b780-3893943456e1}\\Vendor.App_abc123!Entry".to_string())
+        );
+        assert_eq!(uwp_parsing_path("shell:apps\\"), None);
+        assert_eq!(uwp_parsing_path("shell:desktop"), None);
+        assert_eq!(uwp_parsing_path("C:\\Apps\\foo.exe"), None);
+    }
+
+    #[test]
+    fn extracts_aumid_from_both_uwp_path_forms() {
+        // 存储形式（shell: 协议）。
+        assert_eq!(
+            uwp_aumid_from_path("shell:AppsFolder\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"),
+            Some("Microsoft.WindowsCalculator_8wekyb3d8bbwe!App")
+        );
+        // Shell parsing name 形式（图标提取链路内部转换后的形式）。
+        assert_eq!(
+            uwp_aumid_from_path("::{4234d49b-0245-4df3-b780-3893943456e1}\\Vendor.App_abc!Entry"),
+            Some("Vendor.App_abc!Entry")
+        );
+        // 根目录本身不是应用条目。
+        assert_eq!(
+            uwp_aumid_from_path("::{4234d49b-0245-4df3-b780-3893943456e1}"),
+            None
+        );
+        assert_eq!(uwp_aumid_from_path("shell:AppsFolder\\"), None);
+        assert_eq!(
+            uwp_aumid_from_path("::{645FF040-5081-101B-9F08-00AA002F954E}"),
+            None
+        );
+        assert_eq!(uwp_aumid_from_path("C:\\Program Files\\app.exe"), None);
+    }
 
     #[test]
     fn extension_lookups_use_a_short_synthetic_name() {

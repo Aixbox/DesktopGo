@@ -2,8 +2,9 @@
 //!
 //! 启动台为空时的引导入口要能一次性把系统里已安装的应用找出来批量导入。
 //! 扫描范围刻意铺得比桌面快照更广：用户开始菜单、公共开始菜单、用户桌面、
-//! 公共桌面、快速启动，最后补上注册表 App Paths —— 后者覆盖那些只装了
-//! exe、没有生成任何快捷方式的「非常规位置」。
+//! 公共桌面、快速启动、注册表 App Paths（覆盖那些只装了 exe、没有生成
+//! 任何快捷方式的「非常规位置」），最后是 Shell 的 AppsFolder——商店应用
+//! （UWP/MSIX）不生成快捷方式也不注册 App Paths，只能从这里枚举。
 //!
 //! 重复检测在扫描阶段一次做完，区分三档：
 //! - 一定重复（exact_duplicate）：条目的身份键（解析出的目标路径，无目标则用
@@ -13,10 +14,14 @@
 //!   可能是同一软件的不同发行渠道，交给用户判断。
 //! - 新应用（new）：其余全部。
 //!
+//! 跨来源去重会「吞掉」条目（同一应用优先级低的来源不再展示），为了让用户
+//! 知道某来源的条目为什么变少，去重时记录被并入条目的去向，随扫描结果
+//! 一并返回（`merged_sources`），前端在分组标题处展示合并说明。
+//!
 //! 扫描不做缓存：这个功能只在图标库为空（或用户主动点击）时触发一次，
 //! 目录内容与图标库随时可能变化，缓存反而要处理失效。
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::icons::models::{ScannedInstalledApp, SnapshotIconItem};
@@ -64,13 +69,14 @@ const STATUS_POSSIBLE_DUPLICATE: &str = "possible_duplicate";
 const STATUS_EXACT_DUPLICATE: &str = "exact_duplicate";
 
 /// 来源优先级：开始菜单是应用快捷方式的「正主」，桌面/快速启动次之，
-/// 注册表 App Paths 最后。同一身份键多条命中时保留优先级最高的那条。
+/// 注册表 App Paths 与商店应用最后。同一身份键多条命中时保留优先级最高的那条。
 const PRIORITY_USER_PROGRAMS: u8 = 0;
 const PRIORITY_COMMON_PROGRAMS: u8 = 1;
 const PRIORITY_USER_DESKTOP: u8 = 2;
 const PRIORITY_COMMON_DESKTOP: u8 = 3;
 const PRIORITY_QUICK_LAUNCH: u8 = 4;
 const PRIORITY_APP_PATHS: u8 = 5;
+const PRIORITY_UWP_APPS: u8 = 6;
 
 #[derive(Debug, Clone)]
 struct ScannedCandidate {
@@ -91,12 +97,13 @@ pub(in crate::icons) fn scan_installed_apps_windows(
 ) -> Vec<ScannedInstalledApp> {
     let mut candidates = collect_folder_candidates();
     candidates.extend(collect_app_paths_candidates());
-    let deduped = dedupe_candidates(candidates);
+    candidates.extend(collect_uwp_candidates());
+    let (deduped, merges) = dedupe_candidates(candidates);
     let existing = load_icon_library_snapshot(app_handle)
         .map(|snapshot| snapshot.icons)
         .unwrap_or_default();
     // 图标库加载失败时按空库处理：扫描结果仍然可用，只是重复标记可能缺失。
-    classify_candidates(deduped, existing)
+    classify_candidates(deduped, merges, existing)
 }
 
 fn collect_folder_candidates() -> Vec<ScannedCandidate> {
@@ -335,6 +342,110 @@ fn collect_app_paths_candidates() -> Vec<ScannedCandidate> {
     candidates
 }
 
+/// 商店应用（UWP/MSIX）：这类应用不生成 .lnk、也不注册 App Paths，只在
+/// Shell 的 AppsFolder 命名空间注册。逐项读 AppUserModel.ID，仅收录带 `!`
+/// 入口后缀的包应用——稀疏包（OneDrive、VS Code 等）没有入口后缀，且它们
+/// 自带 exe 与快捷方式，文件夹来源已经覆盖，收进来反而会重复。
+/// 目标统一写成 `shell:AppsFolder\<AUMID>`，启动、图标提取与导入校验
+/// 都按特殊 Shell 路径处理（见 `is_uwp_shell_path` 的各调用点）。
+#[cfg(windows)]
+fn collect_uwp_candidates() -> Vec<ScannedCandidate> {
+    use windows::core::Interface;
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::PROPERTYKEY;
+    use windows::Win32::System::Com::{
+        CoInitializeEx, CoTaskMemFree, IBindCtx, COINIT_APARTMENTTHREADED,
+    };
+    use windows::Win32::UI::Shell::{
+        BHID_EnumItems, FOLDERID_AppsFolder, IEnumShellItems, IShellItem, IShellItem2,
+        SHCreateItemInKnownFolder, KF_FLAG_DEFAULT, SIGDN_NORMALDISPLAY,
+    };
+
+    /// System.AppUserModel.ID（PKEY_AppUserModel_ID）。windows crate 未生成
+    /// 这个常量，按 SDK propkeydef.h 的定义硬编码。
+    const PKEY_APP_USER_MODEL_ID: PROPERTYKEY = PROPERTYKEY {
+        fmtid: windows_core::GUID::from_u128(0x9F4C2855_9F79_4B39_A8D0_E1D42DE1D5F3),
+        pid: 5,
+    };
+
+    // 与其它 Shell 调用一样先保证 COM 初始化（幂等）。
+    let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+    let Ok(root) = (unsafe {
+        SHCreateItemInKnownFolder::<PCWSTR, IShellItem>(
+            &FOLDERID_AppsFolder,
+            KF_FLAG_DEFAULT,
+            PCWSTR::null(),
+        )
+    }) else {
+        return Vec::new();
+    };
+    let enum_items: IEnumShellItems =
+        match unsafe { root.BindToHandler(None::<&IBindCtx>, &BHID_EnumItems) } {
+            Ok(items) => items,
+            Err(_) => return Vec::new(),
+        };
+
+    let mut candidates = Vec::new();
+    loop {
+        let mut buffer: [Option<IShellItem>; 16] = std::array::from_fn(|_| None);
+        let mut fetched = 0u32;
+        if unsafe { enum_items.Next(&mut buffer, Some(&mut fetched)) }.is_err() || fetched == 0 {
+            break;
+        }
+        for shell_item in buffer.iter_mut().take(fetched as usize) {
+            let Some(shell_item) = shell_item.take() else {
+                continue;
+            };
+            let Ok(item) = shell_item.cast::<IShellItem2>() else {
+                continue;
+            };
+            let Ok(raw_aumid) = (unsafe { item.GetString(&PKEY_APP_USER_MODEL_ID) }) else {
+                continue;
+            };
+            let aumid = unsafe {
+                let text = raw_aumid.to_string().unwrap_or_default();
+                CoTaskMemFree(Some(raw_aumid.0 as *const _));
+                text
+            };
+            let aumid = aumid.trim();
+            if !aumid.contains('!') {
+                continue;
+            }
+            let Ok(raw_name) = (unsafe { item.GetDisplayName(SIGDN_NORMALDISPLAY) }) else {
+                continue;
+            };
+            let display_name = unsafe {
+                let text = raw_name.to_string().unwrap_or_default();
+                CoTaskMemFree(Some(raw_name.0 as *const _));
+                text
+            };
+            let display_name = display_name.trim();
+            if display_name.is_empty() || is_junk_name(display_name) {
+                continue;
+            }
+            let target = format!("shell:AppsFolder\\{aumid}");
+            candidates.push(ScannedCandidate {
+                display_name: display_name.to_string(),
+                entry_path: target.clone(),
+                target_path: target.clone(),
+                identity: target.to_lowercase(),
+                item_type: "uwp".to_string(),
+                source_label: "商店应用",
+                source_priority: PRIORITY_UWP_APPS,
+            });
+            if candidates.len() >= MAX_SCAN_RESULTS {
+                return candidates;
+            }
+        }
+    }
+    candidates
+}
+
+#[cfg(not(windows))]
+fn collect_uwp_candidates() -> Vec<ScannedCandidate> {
+    Vec::new()
+}
+
 /// 展开注册表值里常见的 `%ProgramFiles%` 之类的环境变量引用。
 /// 展开失败的变量保留原样，让后续的存在性检查自然过滤掉。
 fn expand_env_vars(input: &str) -> String {
@@ -376,13 +487,25 @@ fn is_junk_name(display_name: &str) -> bool {
 }
 
 /// 同一身份键只保留优先级最高（数字最小）的条目，然后按来源与名称排序。
-fn dedupe_candidates(candidates: Vec<ScannedCandidate>) -> Vec<ScannedCandidate> {
+/// 同时返回被合并条目的去向 `(被合并来源, 保留条目身份键)`，
+/// 供 `classify_candidates` 归并成 `merged_sources`，让前端能解释
+/// 「某来源的条目为什么变少」。
+fn dedupe_candidates(
+    candidates: Vec<ScannedCandidate>,
+) -> (Vec<ScannedCandidate>, Vec<(String, String)>) {
     let mut best: HashMap<String, ScannedCandidate> = HashMap::new();
+    let mut merges: Vec<(String, String)> = Vec::new();
     for candidate in candidates {
-        let dominated = best
-            .get(&candidate.identity)
-            .is_some_and(|existing| existing.source_priority <= candidate.source_priority);
-        if !dominated {
+        let Some(winner) = best.get(&candidate.identity) else {
+            best.insert(candidate.identity.clone(), candidate);
+            continue;
+        };
+        if winner.source_priority <= candidate.source_priority {
+            // 现有条目优先级不低，候选条目被并入现有条目。
+            merges.push((candidate.source_label.to_string(), winner.identity.clone()));
+        } else {
+            // 候选条目优先级更高，替换现有条目；现有条目视为被并入候选条目。
+            merges.push((winner.source_label.to_string(), candidate.identity.clone()));
             best.insert(candidate.identity.clone(), candidate);
         }
     }
@@ -397,11 +520,12 @@ fn dedupe_candidates(candidates: Vec<ScannedCandidate>) -> Vec<ScannedCandidate>
             })
     });
     deduped.truncate(MAX_SCAN_RESULTS);
-    deduped
+    (deduped, merges)
 }
 
 fn classify_candidates(
     candidates: Vec<ScannedCandidate>,
+    merges: Vec<(String, String)>,
     existing: Vec<SnapshotIconItem>,
 ) -> Vec<ScannedInstalledApp> {
     let existing_identities: HashSet<String> = existing
@@ -421,6 +545,16 @@ fn classify_candidates(
         .filter(|name| !name.is_empty())
         .collect();
 
+    // 按保留条目的身份键归并被合并来源：身份键 → 来源 → 条目数。
+    let mut merged_by_identity: HashMap<String, BTreeMap<String, usize>> = HashMap::new();
+    for (source, identity) in merges {
+        *merged_by_identity
+            .entry(identity)
+            .or_default()
+            .entry(source)
+            .or_insert(0) += 1;
+    }
+
     candidates
         .into_iter()
         .map(|candidate| {
@@ -438,6 +572,10 @@ fn classify_candidates(
                 item_type: candidate.item_type,
                 source_label: candidate.source_label.to_string(),
                 status: status.to_string(),
+                merged_sources: merged_by_identity
+                    .get(&candidate.identity)
+                    .cloned()
+                    .unwrap_or_default(),
             }
         })
         .collect()
@@ -447,14 +585,19 @@ fn classify_candidates(
 mod tests {
     use super::*;
 
-    fn candidate(name: &str, identity: &str, priority: u8) -> ScannedCandidate {
+    fn candidate(
+        source: &'static str,
+        name: &str,
+        identity: &str,
+        priority: u8,
+    ) -> ScannedCandidate {
         ScannedCandidate {
             display_name: name.to_string(),
             entry_path: format!("C:\\dummy\\{name}.lnk"),
             target_path: identity.to_string(),
             identity: identity.to_lowercase(),
             item_type: "shortcut".to_string(),
-            source_label: "测试",
+            source_label: source,
             source_priority: priority,
         }
     }
@@ -483,11 +626,26 @@ mod tests {
 
     #[test]
     fn dedupe_keeps_the_highest_priority_entry_per_identity() {
-        let deduped = dedupe_candidates(vec![
-            candidate("注册表版", "C:\\Apps\\foo.exe", PRIORITY_APP_PATHS),
-            candidate("桌面版", "C:\\Apps\\foo.exe", PRIORITY_USER_DESKTOP),
-            candidate("菜单版", "C:\\Apps\\foo.exe", PRIORITY_USER_PROGRAMS),
-            candidate("另一个", "C:\\Apps\\bar.exe", PRIORITY_USER_PROGRAMS),
+        let (deduped, merges) = dedupe_candidates(vec![
+            candidate(
+                "注册表",
+                "注册表版",
+                "C:\\Apps\\foo.exe",
+                PRIORITY_APP_PATHS,
+            ),
+            candidate("桌面", "桌面版", "C:\\Apps\\foo.exe", PRIORITY_USER_DESKTOP),
+            candidate(
+                "开始菜单",
+                "菜单版",
+                "C:\\Apps\\foo.exe",
+                PRIORITY_USER_PROGRAMS,
+            ),
+            candidate(
+                "开始菜单",
+                "另一个",
+                "C:\\Apps\\bar.exe",
+                PRIORITY_USER_PROGRAMS,
+            ),
         ]);
         assert_eq!(deduped.len(), 2);
         let foo = deduped
@@ -500,6 +658,42 @@ mod tests {
                 .iter()
                 .any(|item| item.identity == "c:\\apps\\bar.exe"),
             "不同身份键的条目互不干扰"
+        );
+        // 被合并条目的去向要能追溯到保留条目：桌面版并入菜单版，注册表版亦然。
+        assert_eq!(merges.len(), 2, "两条同身份的低优先级条目都应记录去向");
+        assert!(
+            merges
+                .iter()
+                .all(|(source, identity)| identity == "c:\\apps\\foo.exe"
+                    && (*source == "桌面" || *source == "注册表")),
+            "去向应记录被合并来源与保留条目身份键"
+        );
+    }
+
+    #[test]
+    fn classification_attaches_merged_sources_to_the_survivor() {
+        let (deduped, merges) = dedupe_candidates(vec![
+            candidate(
+                "开始菜单",
+                "菜单版",
+                "C:\\Apps\\foo.exe",
+                PRIORITY_USER_PROGRAMS,
+            ),
+            candidate("桌面", "桌面版", "C:\\Apps\\foo.exe", PRIORITY_USER_DESKTOP),
+            candidate(
+                "桌面",
+                "桌面版二",
+                "C:\\Apps\\foo.exe",
+                PRIORITY_USER_DESKTOP,
+            ),
+        ]);
+        let classified = classify_candidates(deduped, merges, Vec::new());
+        assert_eq!(classified.len(), 1);
+        let merged = &classified[0].merged_sources;
+        assert_eq!(
+            merged.get("桌面"),
+            Some(&2),
+            "两个桌面来源条目都应计入保留条目的 merged_sources"
         );
     }
 
@@ -530,16 +724,28 @@ mod tests {
         let classified = classify_candidates(
             vec![
                 // 大小写不同但身份一致 → 一定重复。
-                candidate("WeChat", "c:\\apps\\wechat.exe", PRIORITY_USER_DESKTOP),
+                candidate(
+                    "桌面",
+                    "WeChat",
+                    "c:\\apps\\wechat.exe",
+                    PRIORITY_USER_DESKTOP,
+                ),
                 // 目标不同但名称相同 → 可能重复。
                 candidate(
+                    "桌面",
                     "微信",
                     "C:\\Other\\wechat-portable.exe",
                     PRIORITY_USER_DESKTOP,
                 ),
                 // 都不同 → 新应用。
-                candidate("DesktopGo", "C:\\Apps\\desktopgo.exe", PRIORITY_APP_PATHS),
+                candidate(
+                    "注册表",
+                    "DesktopGo",
+                    "C:\\Apps\\desktopgo.exe",
+                    PRIORITY_APP_PATHS,
+                ),
             ],
+            Vec::new(),
             existing,
         );
 

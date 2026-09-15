@@ -6,7 +6,7 @@ use crate::icons::models::{
 use crate::icons::platform_windows::{
     create_shortcut_windows, update_shortcut_launch_options_windows,
 };
-use crate::icons::search_icon_plan::is_special_shell_path;
+use crate::icons::search_icon_plan::{is_special_shell_path, is_uwp_shell_path};
 use crate::icons::website::normalize_website_url;
 
 use super::super::item::{
@@ -100,7 +100,10 @@ impl NormalizedIconEntry {
         }
 
         let is_web = is_web_url(raw_target_path);
-        let is_special = is_special_shell_path(raw_target_path);
+        // 商店应用目标（shell:AppsFolder\<AUMID>）与控制面板等 shell 命名空间
+        // 条目同属「特殊路径」：没有文件可校验，也不该带启动参数和工作目录。
+        let is_special =
+            is_special_shell_path(raw_target_path) || is_uwp_shell_path(raw_target_path);
         let target_path_text = if is_web {
             normalize_website_url(raw_target_path)?.to_string()
         } else {

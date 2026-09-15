@@ -8,7 +8,7 @@ use crate::icons::models::ScannedDesktopItem;
 use crate::icons::platform_windows::{
     extract_icon_for_item, extract_special_shell_icon, get_dpi_scale, resolve_lnk,
 };
-use crate::icons::search_icon_plan::is_special_shell_path;
+use crate::icons::search_icon_plan::{is_special_shell_path, is_uwp_shell_path, uwp_parsing_path};
 use crate::icons::url_shortcut::{is_url_shortcut, read_url_shortcut};
 
 use super::item::{build_scanned_item_from_path, has_extension};
@@ -94,6 +94,15 @@ fn shortcut_image_target(item: &ScannedDesktopItem) -> Option<PathBuf> {
 pub(in crate::icons) fn get_path_icon_base64_windows(path: &str, icon_size: i32) -> String {
     if is_special_shell_path(path) {
         return extract_special_shell_icon(path, icon_size).unwrap_or_default();
+    }
+
+    // 商店应用：目标不是文件路径，把 `shell:AppsFolder\<AUMID>` 转成
+    // `::{CLSID_AppsFolder}\<AUMID>` 交给 Shell 提取条目图标。
+    if is_uwp_shell_path(path) {
+        let Some(parsing) = uwp_parsing_path(path) else {
+            return String::new();
+        };
+        return extract_special_shell_icon(&parsing, icon_size).unwrap_or_default();
     }
 
     let item_path = PathBuf::from(path);

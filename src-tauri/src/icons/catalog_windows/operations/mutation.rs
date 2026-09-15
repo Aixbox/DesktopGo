@@ -11,7 +11,7 @@ use super::super::storage::{
 };
 use super::super::view::invalid_icon_reason;
 use super::import::icon_entry_dir_windows;
-use crate::icons::search_icon_plan::is_special_shell_path;
+use crate::icons::search_icon_plan::{is_special_shell_path, is_uwp_shell_path};
 
 const DELETE_SOURCE_SETTING_KEY: &str = "deleteIconSourceFile";
 const DELETE_NEW_FILE_SOURCE_SETTING_KEY: &str = "deleteNewFileSource";
@@ -132,7 +132,11 @@ fn delete_icons_in_snapshot_windows(
         let source_paths: Vec<PathBuf> = removed_items
             .iter()
             .filter(|item| delete_source_all || (delete_source_new && item.origin == "new"))
-            .filter(|item| !is_web_url(&item.target_path) && !is_special_shell_path(&item.path))
+            .filter(|item| {
+                !is_web_url(&item.target_path)
+                    && !is_special_shell_path(&item.path)
+                    && !is_uwp_shell_path(&item.path)
+            })
             .map(|item| PathBuf::from(&item.path))
             .filter(|entry_path| {
                 !entry_path.as_os_str().is_empty()

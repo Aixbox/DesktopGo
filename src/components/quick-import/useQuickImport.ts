@@ -2,8 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { translate } from '@/lib/i18n'
 import { useToast } from '@/components/ui/toast'
+import type { AddIconDialogDraft } from '@/components/icons/addIconDialogState'
 import {
   buildQuickImportDrafts,
+  buildQuickImportEditDraft,
+  buildQuickImportEntryInput,
   countSelectedQuickImportApps,
   type QuickImportAppDraft,
   type QuickImportResult,
@@ -27,6 +30,8 @@ export function useQuickImport({ open, onImported }: UseQuickImportParams) {
   const [importing, setImporting] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
   const [apps, setApps] = useState<QuickImportAppDraft[]>([])
+  /** 正在编辑的应用：key 定位条目，draft 是「编辑图标信息」弹窗的初始值。 */
+  const [editingApp, setEditingApp] = useState<{ key: string; draft: AddIconDialogDraft } | null>(null)
   const scanRequestRef = useRef(0)
   const previewRequestRef = useRef(0)
 
@@ -105,6 +110,52 @@ export function useQuickImport({ open, onImported }: UseQuickImportParams) {
     setApps(current => current.map(app => ({ ...app, selected })))
   }, [])
 
+  /** 按来源分组全选/取消全选：只影响该来源下的条目。 */
+  const setSourceSelected = useCallback((source: string, selected: boolean) => {
+    setApps(current =>
+      current.map(app => (app.sourceLabel === source ? { ...app, selected } : app))
+    )
+  }, [])
+
+  /** 打开「编辑图标信息」弹窗：与「确认导入图标」的编辑流程保持一致。 */
+  const handleEditApp = useCallback(
+    (key: string) => {
+      const app = apps.find(item => item.key === key)
+      if (!app) return
+      setEditingApp({ key, draft: buildQuickImportEditDraft(app) })
+    },
+    [apps]
+  )
+
+  /** 编辑弹窗关闭（取消或保存后）即返回快捷导入网格。 */
+  const handleEditDialogOpenChange = useCallback((nextOpen: boolean) => {
+    if (nextOpen) return
+    setEditingApp(null)
+  }, [])
+
+  /** 保存编辑：合并草稿并刷新预览；条目标记为选中，编辑后关闭由弹窗自身触发。 */
+  const handleSaveAppEdit = useCallback(
+    async (draft: AddIconDialogDraft) => {
+      if (!editingApp) return
+      const previewPath = draft.customIconPath || draft.targetPath
+      const preview =
+        draft.generatedIconBase64 ||
+        draft.websiteIconBase64 ||
+        (await invoke<string>('get_drag_preview_icon', {
+          path: previewPath,
+          iconSize: PREVIEW_ICON_SIZE,
+        }).catch(() => ''))
+      setApps(current =>
+        current.map(app =>
+          app.key === editingApp.key
+            ? { ...app, edit: draft, selected: true, preview, previewLoading: false }
+            : app
+        )
+      )
+    },
+    [editingApp]
+  )
+
   const selectedCount = countSelectedQuickImportApps(apps)
 
   const confirmImport = useCallback(async (): Promise<QuickImportResult | undefined> => {
@@ -113,11 +164,7 @@ export function useQuickImport({ open, onImported }: UseQuickImportParams) {
     setImporting(true)
     try {
       const result = await invoke<QuickImportResult>('import_app_entries', {
-        entries: selectedApps.map(app => ({
-          displayName: app.displayName,
-          targetPath: app.sourcePath,
-          origin: 'import',
-        })),
+        entries: selectedApps.map(buildQuickImportEntryInput),
       })
       const message = translate(
         '导入完成：新增 {imported} 项，重复 {duplicate} 项，无效 {invalid} 项。',
@@ -150,9 +197,14 @@ export function useQuickImport({ open, onImported }: UseQuickImportParams) {
     importing,
     scanError,
     selectedCount,
+    editingApp,
     startScan,
     toggleApp,
     setAllSelected,
+    setSourceSelected,
+    handleEditApp,
+    handleEditDialogOpenChange,
+    handleSaveAppEdit,
     confirmImport,
   }
 }

@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 pub(crate) const ICON_SOURCE_DESKTOP: &str = "desktop";
@@ -187,6 +189,10 @@ pub struct ScannedInstalledApp {
     pub source_label: String,
     /// new / possible_duplicate / exact_duplicate。
     pub status: String,
+    /// 因跨来源身份键去重并入本条目的其他来源条目：来源标签 → 条目数。
+    /// 空即没有条目被并入；用于向用户解释「某来源的条目为什么变少」。
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub merged_sources: BTreeMap<String, usize>,
 }
 
 #[derive(Debug, Clone, Serialize)]

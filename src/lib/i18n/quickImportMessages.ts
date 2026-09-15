@@ -15,18 +15,22 @@ export const EN_QUICK_IMPORT_MESSAGES: Record<string, string> = {
     'No usable app shortcuts were found. You can add icons manually.',
   重新扫描: 'Rescan',
   '共发现 {total} 个应用，已选择 {selected} 个。': 'Found {total} apps; {selected} selected.',
-  新应用: 'New apps',
+  '全选 {source}': 'Select all {source}',
+  '橙色圆点为已在图标库中的应用，默认不勾选；如需重新导入请手动勾选。':
+    'Orange dots mark apps already in your library; they are unchecked by default. Select them manually to import again.',
+  '可能重复 {count}': '{count} possible duplicates',
+  '已导入 {count}': '{count} imported',
+  '另有 {count} 个与{sources}重复': '{count} more entries merged into {sources}',
+  '其他来源同款：{detail}': 'Also found in: {detail}',
   可能重复: 'Possible duplicates',
-  一定重复: 'Exact duplicates',
   已导入: 'Imported',
-  '与图标库中的应用重名但目标不同，请确认后再导入。':
-    'Same name as an existing icon but a different target. Double-check before importing.',
-  '已在图标库中，默认不导入。': 'Already in the icon library; unchecked by default.',
   '导入失败，请检查应用是否仍可访问后重试。':
     'Import failed. Check that the apps are still accessible and try again.',
   开始菜单: 'Start menu',
   公共开始菜单: 'Common Start menu',
+  桌面: 'Desktop',
   公共桌面: 'Public desktop',
   快速启动: 'Quick Launch',
   注册表: 'Registry',
+  商店应用: 'Store apps',
 }

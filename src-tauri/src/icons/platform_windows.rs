@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use super::image_data::encode_bgra_png_data_uri_preserving_alpha;
-use super::search_icon_plan::is_special_shell_path;
+use super::search_icon_plan::{is_special_shell_path, is_uwp_shell_path, uwp_aumid_from_path};
 use super::shell_icon_windows::{
     owned_icon_to_data_uri, path_icon_to_data_uri, read_bitmap_pixels,
 };
@@ -46,8 +46,31 @@ pub(super) fn launch_special_shell_path(path: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// 商店应用没有 exe 路径可启动，把 `shell:AppsFolder\<AUMID>` 协议地址交给
+/// explorer 是 Windows 官方的启动途径。
 #[cfg(windows)]
-unsafe fn create_shell_item_from_path(path: &str) -> Option<windows::Win32::UI::Shell::IShellItem> {
+pub(super) fn launch_uwp_shell_path(path: &str) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+
+    std::process::Command::new("explorer.exe")
+        .arg(path)
+        .creation_flags(0x08000000)
+        .spawn()
+        .map_err(|e| format!("Failed to launch store app `{path}`: {e}"))?;
+
+    Ok(())
+}
+
+#[cfg(windows)]
+pub(super) unsafe fn create_shell_item_from_path(
+    path: &str,
+) -> Option<windows::Win32::UI::Shell::IShellItem> {
+    // 商店应用条目必须走 KnownFolder API：AppsFolder 不是普通命名空间，
+    // SHCreateItemFromParsingName 对 `::{CLSID_AppsFolder}` 及其子项会解析失败。
+    if let Some(aumid) = uwp_aumid_from_path(path) {
+        return create_shell_item_from_apps_folder_aumid(aumid);
+    }
+
     use windows::core::HSTRING;
     use windows::Win32::System::Com::*;
     use windows::Win32::UI::Shell::*;
@@ -58,6 +81,28 @@ unsafe fn create_shell_item_from_path(path: &str) -> Option<windows::Win32::UI::
     SHCreateItemFromParsingName(&path_hstring, None).ok()
 }
 
+/// 用 AUMID 在 FOLDERID_AppsFolder 里直接定位商店应用条目——这是扫描枚举
+/// 已验证可用的官方途径（`SHCreateItemInKnownFolder` + 子名）。
+#[cfg(windows)]
+unsafe fn create_shell_item_from_apps_folder_aumid(
+    aumid: &str,
+) -> Option<windows::Win32::UI::Shell::IShellItem> {
+    use windows::core::PCWSTR;
+    use windows::Win32::System::Com::*;
+    use windows::Win32::UI::Shell::{
+        FOLDERID_AppsFolder, IShellItem, SHCreateItemInKnownFolder, KF_FLAG_DEFAULT,
+    };
+
+    let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+    let name_wide: Vec<u16> = aumid.encode_utf16().chain(std::iter::once(0)).collect();
+    SHCreateItemInKnownFolder::<PCWSTR, IShellItem>(
+        &FOLDERID_AppsFolder,
+        KF_FLAG_DEFAULT,
+        PCWSTR(name_wide.as_ptr()),
+    )
+    .ok()
+}
+
 #[cfg(windows)]
 unsafe fn extract_shell_item_icon(path: &str, size: i32) -> Option<String> {
     use windows::Win32::UI::Shell::{SIIGBF_ICONONLY, SIIGBF_SCALEUP};
@@ -65,8 +110,13 @@ unsafe fn extract_shell_item_icon(path: &str, size: i32) -> Option<String> {
     // Without SCALEUP, Shell centers an undersized ICO frame in the requested
     // square bitmap. Persisting that bitmap makes the artwork look shrunken in
     // the launchpad even though Windows can scale it to the desktop icon size.
-    unsafe { extract_shell_item_image(path, size, SIIGBF_ICONONLY | SIIGBF_SCALEUP) }
-        .or_else(|| path_icon_to_data_uri(path, false, size))
+    let image = unsafe { extract_shell_item_image(path, size, SIIGBF_ICONONLY | SIIGBF_SCALEUP) };
+    if image.is_some() || uwp_aumid_from_path(path).is_some() {
+        return image;
+    }
+    // 商店应用条目不走 SHGetFileInfo 兜底：它们不是文件，兜底只会拿到
+    // 「通用空白文档」图标，误导性强；失败就返回 None 让上层用占位图。
+    path_icon_to_data_uri(path, false, size)
 }
 
 #[cfg(windows)]
@@ -447,6 +497,9 @@ pub(super) fn launch_app_windows(path: &str) -> Result<(), String> {
 
     if is_special_shell_path(path) {
         return launch_special_shell_path(path);
+    }
+    if is_uwp_shell_path(path) {
+        return launch_uwp_shell_path(path);
     }
 
     std::process::Command::new("cmd")
