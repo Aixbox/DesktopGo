@@ -137,6 +137,30 @@ pub fn get_search_preview(path: &str) -> Result<SearchPreview, String> {
         return Err("Preview path cannot be empty".to_string());
     }
 
+    // 商店应用等 Shell 命名空间条目没有文件系统元数据可读。给一份「信息」形状的
+    // 空预览，让预览面板正常渲染条目名，而不是对 `fs::metadata` 的失败报错。
+    if trimmed_path.to_ascii_lowercase().starts_with("shell:") {
+        let name = trimmed_path
+            .rsplit(['\\', '/'])
+            .next()
+            .filter(|value| !value.is_empty())
+            .unwrap_or(trimmed_path)
+            .to_string();
+        return Ok(SearchPreview {
+            path: trimmed_path.to_string(),
+            name,
+            extension: String::new(),
+            kind: SearchPreviewKind::Info,
+            is_directory: false,
+            size: None,
+            modified_at: None,
+            mime_type: None,
+            image_data_url: None,
+            text_snippet: None,
+            text_truncated: false,
+        });
+    }
+
     let preview_path = Path::new(trimmed_path);
     let metadata = fs::metadata(preview_path)
         .map_err(|e| format!("Failed to read preview metadata {:?}: {}", preview_path, e))?;

@@ -25,6 +25,7 @@ for (const invalid of [null, undefined, 42, 'nope', []]) {
     `非法输入 ${JSON.stringify(invalid)} 应退回默认值`
   )
   assert(config.extensions.length === DEFAULT_CATALOG_EXTENSIONS.length, '扩展名应退回默认勾选')
+  assert(config.includeRegisteredApps === true, '注册应用缺字段时应按开启处理')
 }
 
 // 层数钳位：0 表示不限层数，负数与非数字退回默认
@@ -57,6 +58,18 @@ assert(config.folders[0].enabled, '缺少 enabled 的条目按启用处理')
 assert(config.folders[1].enabled === false, 'enabled: false 应被保留')
 assert(config.extensions.join(',') === 'exe,lnk', '扩展名应归一化')
 assert(config.includeFolders === false, 'includeFolders: false 应被保留')
+assert(config.includeRegisteredApps === true, '缺字段时注册应用按开启处理')
+
+// 用户明确关掉注册应用后应被保留
+const withoutRegisteredApps = normalizeBestMatchFolderConfig({
+  presetsApplied: true,
+  folders: [],
+  includeRegisteredApps: false,
+})
+assert(
+  withoutRegisteredApps.includeRegisteredApps === false,
+  'includeRegisteredApps: false 应被保留'
+)
 
 // 条数上限
 const overflow = normalizeBestMatchFolderConfig({

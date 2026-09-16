@@ -49,9 +49,12 @@ export function useShortcutSearchResults(
    * 目录表的资格判定只跟「条目 + 配置」有关，所以在这里筛一次就够了。
    * 交给 `collectBestMatches` 逐条判定等于每次按键都要为上万条条目重算优先级
    * —— 实测 18k 条约 27ms，而这段代码就在输入的关键路径上。
+   *
+   * 「注册应用」（App Paths / 商店应用）直接豁免：它们的 exe 与 shell 路径
+   * 本来就不在任何目录清单里，按目录前缀判定会被全部误杀。
    */
   const eligibleCatalogHits = useMemo(
-    () => catalogHits.filter(hit => isBestMatchEligible(hit, priorityRules)),
+    () => catalogHits.filter(hit => hit.registeredApp || isBestMatchEligible(hit, priorityRules)),
     [catalogHits, priorityRules]
   )
 

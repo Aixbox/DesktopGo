@@ -18,6 +18,7 @@ const toSearchHit = (entry: LauncherCatalogEntry): SearchHit => ({
   highlightedName: '',
   highlightedPath: '',
   runCount: 0,
+  registeredApp: entry.registeredApp,
 })
 
 export interface LauncherCatalogState {

@@ -3,7 +3,7 @@ import { FolderPlus, Images, RefreshCw, RotateCcw } from 'lucide-react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { SettingCard, SettingGroup } from '@/components/ui/setting-components'
+import { SettingCard, SettingGroup, SwitchButton } from '@/components/ui/setting-components'
 import { useToast } from '@/components/ui/toast'
 import { translate } from '@/lib/i18n'
 import { getBestMatchIconLibraryCount, getLauncherCatalog } from '@/lib/search/api'
@@ -281,6 +281,18 @@ export function BestMatchFolderSettings({
             {translate('恢复预设目录')}
           </Button>
         </div>
+      </SettingCard>
+
+      <SettingCard
+        label={translate('注册应用')}
+        desc={translate(
+          '收录注册表 App Paths 里的应用与商店应用（UWP/MSIX）。它们不生成快捷方式，目录清单扫不到；关掉后最佳匹配只看上方清单和图标库。'
+        )}
+      >
+        <SwitchButton
+          checked={config.includeRegisteredApps}
+          onChange={includeRegisteredApps => onChange({ ...config, includeRegisteredApps })}
+        />
       </SettingCard>
 
       <SettingCard

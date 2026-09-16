@@ -51,6 +51,11 @@ export interface SearchHit {
   highlightedPath: string
   /** Everything's own launch count for this path; 0 when unavailable. */
   runCount: number
+  /**
+   * 目录清单的「注册应用」条目（App Paths / 商店应用）。这类条目跳过
+   * 「必须落在目录清单里」的高优先级判定，只有目录表会产出它。
+   */
+  registeredApp?: boolean
 }
 
 export interface SearchPage {
@@ -76,6 +81,8 @@ export interface LauncherCatalogEntry {
   isFolder: boolean
   /** `.lnk` 解析出的目标路径；非快捷方式条目为空串。用于最佳匹配去重。 */
   targetPath: string
+  /** 来自「注册应用」来源（App Paths / 商店应用），不是目录枚举的产物。 */
+  registeredApp: boolean
 }
 
 /** 一次枚举里某个目录的执行结果，设置页据此显示真实状态与条目数。 */

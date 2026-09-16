@@ -98,6 +98,9 @@ export const EN_SEARCH_MESSAGES: Record<string, string> = {
   不限层数: 'Unlimited',
   '{depth} 层': '{depth} levels',
   收录的文件类型: 'File types collected',
+  注册应用: 'Registered apps',
+  '收录注册表 App Paths 里的应用与商店应用（UWP/MSIX）。它们不生成快捷方式，目录清单扫不到；关掉后最佳匹配只看上方清单和图标库。':
+    'Collect apps registered under the App Paths registry key and store apps (UWP/MSIX). They never generate shortcuts, so no folder list can find them; turn this off and best match only reads the list above plus the icon library.',
   '只有勾上的类型才会进最佳匹配。默认是「点了会打开东西」的那些；勾上「全部」就会收录所有文件类型。':
     'Only the selected types reach best match. The defaults are the things you actually launch; selecting "All" collects every file type.',
   程序与快捷方式: 'Programs and shortcuts',

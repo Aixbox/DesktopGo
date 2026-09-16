@@ -12,6 +12,12 @@
 //! 「内置目录」这个概念。返回值把每个目录的真实路径、层数、条目数一起报给前端，
 //! 设置页显示的就是搜索真正用的那份清单，不会出现两套说法。
 //!
+//! 目录枚举之外还有一个不依赖目录的补充来源：「注册应用」（`include_registered_apps`）。
+//! 注册表 App Paths 覆盖只装了 exe、没建快捷方式的应用；商店应用（UWP/MSIX）只在
+//! Shell 的 AppsFolder 命名空间注册，两类都是快捷方式清单永远扫不到的。候选复用
+//! 快捷导入的扫描器（`icons::collect_registered_app_candidates`），按入口路径与目录
+//! 枚举结果去重后合并进条目表，条目带 `registered_app` 标记让前端豁免目录前缀判定。
+//!
 //! 目录内容随时可能变化，所以这里不做任何缓存：每次调用都重新枚举，
 //! 由前端决定在一次面板会话内复用。`.lnk` 的目标解析是唯一的例外
 //! （见 `crate::shortcut_target`），它按修改时间缓存，重复枚举不必重复走 COM。
@@ -46,6 +52,12 @@ fn default_include_folders() -> bool {
     true
 }
 
+/// 注册应用（App Paths + 商店应用）默认收录：它们是系统登记过的「已安装应用」，
+/// 本来就是启动器要找的东西，不依赖快捷方式是否存在。
+fn default_include_registered_apps() -> bool {
+    true
+}
+
 /// 缺字段时按默认层数处理。不能让它落到 0 —— 0 现在表示「不限层数」，
 /// 一份不完整的配置不该因此把整棵树读进来。
 fn default_depth() -> usize {
@@ -74,6 +86,10 @@ pub struct LauncherCatalogConfig {
     pub extensions: Vec<String>,
     #[serde(default = "default_include_folders")]
     pub include_folders: bool,
+    /// 除目录枚举外，是否补收「注册应用」：注册表 App Paths 与商店应用（UWP/MSIX）。
+    /// 这两类不生成快捷方式，目录清单永远扫不到；收录与否不影响目录部分的枚举。
+    #[serde(default = "default_include_registered_apps")]
+    pub include_registered_apps: bool,
 }
 
 impl Default for LauncherCatalogConfig {
@@ -82,6 +98,7 @@ impl Default for LauncherCatalogConfig {
             folders: Vec::new(),
             extensions: Vec::new(),
             include_folders: true,
+            include_registered_apps: default_include_registered_apps(),
         }
     }
 }
@@ -128,14 +145,18 @@ impl EntryFilter {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LauncherCatalogEntry {
-    path: String,
-    name: String,
-    parent: String,
-    is_file: bool,
-    is_folder: bool,
+    pub(crate) path: String,
+    pub(crate) name: String,
+    pub(crate) parent: String,
+    pub(crate) is_file: bool,
+    pub(crate) is_folder: bool,
     /// `.lnk` 解析出的目标路径，其它条目为空串。前端靠它把「程序本体」和
     /// 「指向它的快捷方式」判成同一条（见 src/lib/search/launcherIdentity.ts）。
-    target_path: String,
+    pub(crate) target_path: String,
+    /// 来自「注册应用」来源（App Paths / 商店应用）而不是目录枚举。
+    /// 前端据此跳过「必须落在目录清单里」的高优先级判定 —— 这类条目本身就是
+    /// 系统登记过的应用，不该因为 exe 恰好在清单外而被丢掉。
+    pub(crate) registered_app: bool,
 }
 
 impl LauncherCatalogEntry {
@@ -200,7 +221,55 @@ fn push_entry(entries: &mut Vec<LauncherCatalogEntry>, path: &Path, is_folder: b
         } else {
             resolve_shortcut_target(path).unwrap_or_default()
         },
+        registered_app: false,
     });
+}
+
+/// 把「注册应用」候选转成目录表条目并追加。返回实际追加的条数。
+///
+/// 去重只看入口路径：目录枚举已经收过的 exe 不再收第二次（快捷方式不算 ——
+/// 它的路径是 `.lnk`，与程序本体天然不同，认亲交给前端的 launcherIdentity）。
+/// 条目上限照常生效，目录枚举已经撞上限时这里一条都不加。
+fn push_registered_app_entries(
+    entries: &mut Vec<LauncherCatalogEntry>,
+    candidates: Vec<crate::icons::ScannedCandidate>,
+) -> usize {
+    let mut seen: std::collections::HashSet<String> = entries
+        .iter()
+        .map(|entry| entry.path.trim().to_lowercase())
+        .collect();
+    let before = entries.len();
+
+    for candidate in candidates {
+        if entries.len() >= MAX_CATALOG_ENTRIES {
+            break;
+        }
+        let path = candidate.entry_path.trim();
+        if path.is_empty() || !seen.insert(path.to_lowercase()) {
+            continue;
+        }
+        let is_uwp = candidate.item_type == "uwp";
+        let parent = if is_uwp {
+            // 商店应用没有真实父目录，别把 `shell:AppsFolder` 当路径参与打分。
+            String::new()
+        } else {
+            Path::new(path)
+                .parent()
+                .map(|value| value.to_string_lossy().to_string())
+                .unwrap_or_default()
+        };
+        entries.push(LauncherCatalogEntry {
+            path: path.to_string(),
+            name: candidate.display_name,
+            parent,
+            is_file: true,
+            is_folder: false,
+            target_path: candidate.target_path,
+            registered_app: true,
+        });
+    }
+
+    entries.len() - before
 }
 
 /// 递归枚举。`depth` 是**剩余**层数，调用方已经把「不限层数」换算成
@@ -311,6 +380,16 @@ pub fn collect_launcher_catalog(config: LauncherCatalogConfig) -> LauncherCatalo
         });
     }
 
+    // 目录枚举之后补收「注册应用」：App Paths 覆盖只装了 exe、没建快捷方式的
+    // 应用，商店应用（UWP/MSIX）则只在 Shell 的 AppsFolder 命名空间注册，
+    // 两类都依赖快捷方式的目录清单永远扫不到。条数由命令层写入搜索调试日志。
+    if config.include_registered_apps {
+        push_registered_app_entries(
+            &mut entries,
+            crate::icons::collect_registered_app_candidates(),
+        );
+    }
+
     let truncated = entries.len() >= MAX_CATALOG_ENTRIES;
     LauncherCatalogSnapshot {
         roots,
@@ -390,6 +469,24 @@ mod tests {
             folders,
             extensions: extensions.iter().map(|value| value.to_string()).collect(),
             include_folders: true,
+            include_registered_apps: false,
+        }
+    }
+
+    fn registered_candidate(
+        entry_path: &str,
+        name: &str,
+        target_path: &str,
+        item_type: &str,
+    ) -> crate::icons::ScannedCandidate {
+        crate::icons::ScannedCandidate {
+            display_name: name.to_string(),
+            entry_path: entry_path.to_string(),
+            target_path: target_path.to_string(),
+            identity: entry_path.to_lowercase(),
+            item_type: item_type.to_string(),
+            source_label: "测试",
+            source_priority: 5,
         }
     }
 
@@ -475,6 +572,7 @@ mod tests {
             folders: vec![folder(&root, 3, true)],
             extensions: vec!["exe".to_string()],
             include_folders: false,
+            include_registered_apps: false,
         });
         assert!(snapshot.entries.iter().all(|entry| !entry.is_folder));
         // 不收文件夹条目，但仍然要往里钻。
@@ -568,5 +666,91 @@ mod tests {
         ));
         assert!(snapshot.entries.is_empty());
         assert!(!snapshot.roots[0].exists);
+    }
+
+    #[test]
+    fn registered_apps_are_appended_and_flagged() {
+        let mut entries = Vec::new();
+        let added = push_registered_app_entries(
+            &mut entries,
+            vec![
+                registered_candidate(
+                    r"C:\Apps\tool.exe",
+                    "Tool",
+                    r"C:\Apps\tool.exe",
+                    "executable",
+                ),
+                registered_candidate(
+                    "shell:AppsFolder\\Vendor.App_abc!Entry",
+                    "商店应用",
+                    "shell:AppsFolder\\Vendor.App_abc!Entry",
+                    "uwp",
+                ),
+            ],
+        );
+
+        assert_eq!(added, 2);
+        assert_eq!(entries.len(), 2);
+        assert!(entries.iter().all(|entry| entry.registered_app));
+        assert!(entries
+            .iter()
+            .all(|entry| entry.is_file && !entry.is_folder));
+
+        let exe = &entries[0];
+        assert_eq!(exe.parent, r"C:\Apps", "exe 条目应带父目录参与路径打分");
+        assert_eq!(exe.target_path, r"C:\Apps\tool.exe");
+
+        let uwp = &entries[1];
+        assert_eq!(uwp.parent, "", "商店应用不该有伪父目录");
+        assert_eq!(uwp.name, "商店应用");
+    }
+
+    #[test]
+    fn registered_apps_skip_paths_the_folder_walk_already_collected() {
+        let mut entries = Vec::new();
+        push_entry(&mut entries, Path::new(r"C:\Apps\tool.exe"), false);
+        assert!(!entries[0].registered_app);
+
+        let added = push_registered_app_entries(
+            &mut entries,
+            vec![registered_candidate(
+                r"c:\APPS\TOOL.EXE",
+                "Tool",
+                r"c:\APPS\TOOL.EXE",
+                "executable",
+            )],
+        );
+
+        assert_eq!(added, 0, "大小写不同的同一路径不应重复收录");
+        assert_eq!(entries.len(), 1);
+    }
+
+    #[test]
+    fn registered_apps_respect_the_catalog_entry_cap() {
+        let mut entries: Vec<LauncherCatalogEntry> = (0..MAX_CATALOG_ENTRIES)
+            .map(|index| LauncherCatalogEntry {
+                // 直接构造条目，避免两万次注定失败的 .lnk COM 解析拖慢测试。
+                path: format!(r"C:\F\{index}.lnk"),
+                name: format!("{index}.lnk"),
+                parent: r"C:\F".to_string(),
+                is_file: true,
+                is_folder: false,
+                target_path: String::new(),
+                registered_app: false,
+            })
+            .collect();
+        assert_eq!(entries.len(), MAX_CATALOG_ENTRIES);
+
+        let added = push_registered_app_entries(
+            &mut entries,
+            vec![registered_candidate(
+                r"C:\Apps\tool.exe",
+                "Tool",
+                r"C:\Apps\tool.exe",
+                "executable",
+            )],
+        );
+        assert_eq!(added, 0);
+        assert_eq!(entries.len(), MAX_CATALOG_ENTRIES);
     }
 }

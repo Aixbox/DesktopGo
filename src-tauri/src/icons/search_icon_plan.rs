@@ -122,6 +122,12 @@ pub(super) fn plan_search_icon(path: &str, is_folder: bool) -> SearchIconSource 
     if let Some(shell_path) = normalize_special_shell_path(trimmed) {
         return SearchIconSource::ShellNamespace(shell_path.to_lowercase());
     }
+    // 商店应用条目（`shell:AppsFolder\<AUMID>`）不是 `::{GUID}` 根形式，上面的
+    // 归一化接不住；落到扩展名分支会拿到一个按 AUMID 后缀拼出来的假扩展名。
+    // 转成 parsing name 后按 Shell 命名空间解析，缓存键也随之归一。
+    if let Some(parsing_path) = uwp_parsing_path(trimmed) {
+        return SearchIconSource::ShellNamespace(parsing_path.to_lowercase());
+    }
     if is_folder {
         return SearchIconSource::OwnedByPath(trimmed.to_lowercase());
     }
@@ -179,9 +185,10 @@ mod tests {
     fn converts_uwp_targets_to_parsable_namespace_paths() {
         assert_eq!(
             uwp_parsing_path("shell:AppsFolder\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"),
-            Some(format!(
-                "::{{4234d49b-0245-4df3-b780-3893943456e1}}\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"
-            ))
+            Some(
+                "::{4234d49b-0245-4df3-b780-3893943456e1}\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"
+                    .to_string()
+            )
         );
         assert_eq!(
             uwp_parsing_path("shell:apps\\Vendor.App_abc123!Entry"),
@@ -314,6 +321,27 @@ mod tests {
             plan_search_icon("shell:::{645FF040-5081-101B-9F08-00AA002F954E}\\", false),
             SearchIconSource::ShellNamespace(
                 "::{645ff040-5081-101b-9f08-00aa002f954e}".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn store_app_rows_resolve_through_the_apps_folder_namespace() {
+        // 商店应用行没有扩展名可言：若不在这里接住，会按 AUMID 后缀拼出一个假扩展名。
+        assert_eq!(
+            plan_search_icon(
+                "shell:AppsFolder\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App",
+                false
+            ),
+            SearchIconSource::ShellNamespace(
+                "::{4234d49b-0245-4df3-b780-3893943456e1}\\microsoft.windowscalculator_8wekyb3d8bbwe!app"
+                    .to_string()
+            )
+        );
+        assert_eq!(
+            plan_search_icon("shell:apps\\Vendor.App_abc123!Entry", false),
+            SearchIconSource::ShellNamespace(
+                "::{4234d49b-0245-4df3-b780-3893943456e1}\\vendor.app_abc123!entry".to_string()
             )
         );
     }

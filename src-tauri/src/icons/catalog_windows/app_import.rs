@@ -31,6 +31,9 @@ use crate::shortcut_target::resolve_shortcut_target;
 
 use super::storage::load_icon_library_snapshot;
 
+#[cfg(windows)]
+use windows::Win32::Foundation::PROPERTYKEY;
+
 /// 单次扫描的结果上限，防止病态目录树把确认弹窗撑爆。
 const MAX_SCAN_RESULTS: usize = 2000;
 
@@ -79,31 +82,42 @@ const PRIORITY_APP_PATHS: u8 = 5;
 const PRIORITY_UWP_APPS: u8 = 6;
 
 #[derive(Debug, Clone)]
-struct ScannedCandidate {
-    display_name: String,
+pub(crate) struct ScannedCandidate {
+    pub(crate) display_name: String,
     /// 导入时作为入口路径传给 `create_icon_entry`。
-    entry_path: String,
+    pub(crate) entry_path: String,
     /// 解析出的目标 / exe 路径 / URL，只用于展示。
-    target_path: String,
+    pub(crate) target_path: String,
     /// 去重与重复检测用的身份键。
-    identity: String,
-    item_type: String,
-    source_label: &'static str,
-    source_priority: u8,
+    pub(crate) identity: String,
+    pub(crate) item_type: String,
+    pub(crate) source_label: &'static str,
+    pub(crate) source_priority: u8,
 }
 
 pub(in crate::icons) fn scan_installed_apps_windows(
     app_handle: &tauri::AppHandle,
 ) -> Vec<ScannedInstalledApp> {
     let mut candidates = collect_folder_candidates();
-    candidates.extend(collect_app_paths_candidates());
-    candidates.extend(collect_uwp_candidates());
+    candidates.extend(collect_registered_app_candidates());
     let (deduped, merges) = dedupe_candidates(candidates);
     let existing = load_icon_library_snapshot(app_handle)
         .map(|snapshot| snapshot.icons)
         .unwrap_or_default();
     // 图标库加载失败时按空库处理：扫描结果仍然可用，只是重复标记可能缺失。
     classify_candidates(deduped, merges, existing)
+}
+
+/// 「无快捷方式」的两个注册来源：注册表 App Paths 与商店应用（UWP/MSIX）。
+///
+/// 除了快捷导入，最佳匹配目录表（`crate::launcher_catalog`）也用这份清单——
+/// 开始菜单扫不到的应用只能从这里补。来源内部与来源之间都按身份键去重，
+/// 只保留优先级最高的那条。
+pub(crate) fn collect_registered_app_candidates() -> Vec<ScannedCandidate> {
+    let mut candidates = collect_app_paths_candidates();
+    candidates.extend(collect_uwp_candidates());
+    let (deduped, _) = dedupe_candidates(candidates);
+    deduped
 }
 
 fn collect_folder_candidates() -> Vec<ScannedCandidate> {
@@ -277,7 +291,7 @@ fn candidate_from_file(path: &Path, source: &mut FolderSource) -> Option<Scanned
 
 /// 注册表 App Paths：`HKLM/HKCU\...\App Paths` 的每个子键是一项已注册应用，
 /// 默认值是可执行文件路径。覆盖那些没写快捷方式、只装了 exe 的应用。
-fn collect_app_paths_candidates() -> Vec<ScannedCandidate> {
+pub(crate) fn collect_app_paths_candidates() -> Vec<ScannedCandidate> {
     use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ};
     use winreg::RegKey;
 
@@ -346,26 +360,69 @@ fn collect_app_paths_candidates() -> Vec<ScannedCandidate> {
 /// Shell 的 AppsFolder 命名空间注册。逐项读 AppUserModel.ID，仅收录带 `!`
 /// 入口后缀的包应用——稀疏包（OneDrive、VS Code 等）没有入口后缀，且它们
 /// 自带 exe 与快捷方式，文件夹来源已经覆盖，收进来反而会重复。
+/// System.AppUserModel.ID（PKEY_AppUserModel_ID）。windows crate 未生成
+/// 这个常量，按 SDK propkeydef.h 的定义硬编码。
+#[cfg(windows)]
+const PKEY_APP_USER_MODEL_ID: PROPERTYKEY = PROPERTYKEY {
+    fmtid: windows_core::GUID::from_u128(0x9F4C2855_9F79_4B39_A8D0_E1D42DE1D5F3),
+    pid: 5,
+};
+
+/// 把 AppsFolder 里的一个 Shell 条目转成候选：带 `!` 入口后缀才算包应用，
+/// 名称拿正常显示名，空名与安装器类条目照旧过滤。
+#[cfg(windows)]
+fn uwp_candidate_from_item(
+    item: &windows::Win32::UI::Shell::IShellItem2,
+) -> Option<ScannedCandidate> {
+    use windows::Win32::System::Com::CoTaskMemFree;
+    use windows::Win32::UI::Shell::SIGDN_NORMALDISPLAY;
+
+    let Ok(raw_aumid) = (unsafe { item.GetString(&PKEY_APP_USER_MODEL_ID) }) else {
+        return None;
+    };
+    let aumid = unsafe {
+        let text = raw_aumid.to_string().unwrap_or_default();
+        CoTaskMemFree(Some(raw_aumid.0 as *const _));
+        text
+    };
+    let aumid = aumid.trim();
+    if !aumid.contains('!') {
+        return None;
+    }
+    let Ok(raw_name) = (unsafe { item.GetDisplayName(SIGDN_NORMALDISPLAY) }) else {
+        return None;
+    };
+    let display_name = unsafe {
+        let text = raw_name.to_string().unwrap_or_default();
+        CoTaskMemFree(Some(raw_name.0 as *const _));
+        text
+    };
+    let display_name = display_name.trim();
+    if display_name.is_empty() || is_junk_name(display_name) {
+        return None;
+    }
+    let target = format!("shell:AppsFolder\\{aumid}");
+    Some(ScannedCandidate {
+        display_name: display_name.to_string(),
+        entry_path: target.clone(),
+        target_path: target.clone(),
+        identity: target.to_lowercase(),
+        item_type: "uwp".to_string(),
+        source_label: "商店应用",
+        source_priority: PRIORITY_UWP_APPS,
+    })
+}
+
 /// 目标统一写成 `shell:AppsFolder\<AUMID>`，启动、图标提取与导入校验
 /// 都按特殊 Shell 路径处理（见 `is_uwp_shell_path` 的各调用点）。
 #[cfg(windows)]
-fn collect_uwp_candidates() -> Vec<ScannedCandidate> {
+pub(crate) fn collect_uwp_candidates() -> Vec<ScannedCandidate> {
     use windows::core::Interface;
     use windows::core::PCWSTR;
-    use windows::Win32::Foundation::PROPERTYKEY;
-    use windows::Win32::System::Com::{
-        CoInitializeEx, CoTaskMemFree, IBindCtx, COINIT_APARTMENTTHREADED,
-    };
+    use windows::Win32::System::Com::{CoInitializeEx, IBindCtx, COINIT_APARTMENTTHREADED};
     use windows::Win32::UI::Shell::{
         BHID_EnumItems, FOLDERID_AppsFolder, IEnumShellItems, IShellItem, IShellItem2,
-        SHCreateItemInKnownFolder, KF_FLAG_DEFAULT, SIGDN_NORMALDISPLAY,
-    };
-
-    /// System.AppUserModel.ID（PKEY_AppUserModel_ID）。windows crate 未生成
-    /// 这个常量，按 SDK propkeydef.h 的定义硬编码。
-    const PKEY_APP_USER_MODEL_ID: PROPERTYKEY = PROPERTYKEY {
-        fmtid: windows_core::GUID::from_u128(0x9F4C2855_9F79_4B39_A8D0_E1D42DE1D5F3),
-        pid: 5,
+        SHCreateItemInKnownFolder, KF_FLAG_DEFAULT,
     };
 
     // 与其它 Shell 调用一样先保证 COM 初始化（幂等）。
@@ -399,40 +456,10 @@ fn collect_uwp_candidates() -> Vec<ScannedCandidate> {
             let Ok(item) = shell_item.cast::<IShellItem2>() else {
                 continue;
             };
-            let Ok(raw_aumid) = (unsafe { item.GetString(&PKEY_APP_USER_MODEL_ID) }) else {
+            let Some(candidate) = uwp_candidate_from_item(&item) else {
                 continue;
             };
-            let aumid = unsafe {
-                let text = raw_aumid.to_string().unwrap_or_default();
-                CoTaskMemFree(Some(raw_aumid.0 as *const _));
-                text
-            };
-            let aumid = aumid.trim();
-            if !aumid.contains('!') {
-                continue;
-            }
-            let Ok(raw_name) = (unsafe { item.GetDisplayName(SIGDN_NORMALDISPLAY) }) else {
-                continue;
-            };
-            let display_name = unsafe {
-                let text = raw_name.to_string().unwrap_or_default();
-                CoTaskMemFree(Some(raw_name.0 as *const _));
-                text
-            };
-            let display_name = display_name.trim();
-            if display_name.is_empty() || is_junk_name(display_name) {
-                continue;
-            }
-            let target = format!("shell:AppsFolder\\{aumid}");
-            candidates.push(ScannedCandidate {
-                display_name: display_name.to_string(),
-                entry_path: target.clone(),
-                target_path: target.clone(),
-                identity: target.to_lowercase(),
-                item_type: "uwp".to_string(),
-                source_label: "商店应用",
-                source_priority: PRIORITY_UWP_APPS,
-            });
+            candidates.push(candidate);
             if candidates.len() >= MAX_SCAN_RESULTS {
                 return candidates;
             }
@@ -442,7 +469,7 @@ fn collect_uwp_candidates() -> Vec<ScannedCandidate> {
 }
 
 #[cfg(not(windows))]
-fn collect_uwp_candidates() -> Vec<ScannedCandidate> {
+pub(crate) fn collect_uwp_candidates() -> Vec<ScannedCandidate> {
     Vec::new()
 }
 

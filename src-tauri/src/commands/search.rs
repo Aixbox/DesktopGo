@@ -79,6 +79,11 @@ pub async fn get_launcher_catalog(
         .iter()
         .filter(|entry| entry.has_shortcut_target())
         .count();
+    let registered = snapshot
+        .entries
+        .iter()
+        .filter(|entry| entry.registered_app)
+        .count();
     let roots = snapshot
         .roots
         .iter()
@@ -88,7 +93,7 @@ pub async fn get_launcher_catalog(
     everything::log_search_debug(
         &app_handle,
         format!(
-            "launcher catalog: collected {} entries, {resolved} shortcut targets resolved, roots: {roots}",
+            "launcher catalog: collected {} entries ({registered} registered apps), {resolved} shortcut targets resolved, roots: {roots}",
             snapshot.entries.len()
         ),
     );

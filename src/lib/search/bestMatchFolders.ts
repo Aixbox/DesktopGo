@@ -31,6 +31,11 @@ export interface BestMatchFolderConfig {
   extensions: string[]
   /** 是否把子文件夹本身也收进清单（开始菜单里的 `Visual Studio Code` 这类）。 */
   includeFolders: boolean
+  /**
+   * 是否补收「注册应用」：注册表 App Paths 与商店应用（UWP/MSIX）。
+   * 这两类不生成快捷方式，任何目录清单都扫不到；与目录枚举相互独立。
+   */
+  includeRegisteredApps: boolean
 }
 
 export const MIN_CATALOG_DEPTH = 1
@@ -46,6 +51,7 @@ export const DEFAULT_BEST_MATCH_FOLDER_CONFIG: BestMatchFolderConfig = {
   folders: [],
   extensions: DEFAULT_CATALOG_EXTENSIONS,
   includeFolders: true,
+  includeRegisteredApps: true,
 }
 
 /** 去重与前缀比较都按这个形式：正斜杠、小写、去掉尾部斜杠。 */
@@ -106,6 +112,9 @@ export const normalizeBestMatchFolderConfig = (value: unknown): BestMatchFolderC
     folders: normalizeFolderList(rawFolders),
     extensions: normalizeCatalogExtensions(record.extensions),
     includeFolders: record.includeFolders !== false,
+    // 旧档没有这个字段：注册应用是系统登记过的应用，缺字段按开启处理，
+    // 不该因为升级静默丢掉这批候选。
+    includeRegisteredApps: record.includeRegisteredApps !== false,
   }
 }
 
