@@ -4,7 +4,8 @@
   "description": "Capability for the main window",
   "windows": [
     "main",
-    "settings"
+    "settings",
+    "wallpaper-viewer"
   ],
   "permissions": [
     "core:default",
@@ -28,6 +29,9 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-unminimize",
     "core:window:allow-unmaximize",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen",
+    "core:window:allow-set-title",
     "core:webview:allow-create-webview-window",
     "opener:default",
     "opener:allow-open-path",

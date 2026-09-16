@@ -914,9 +914,48 @@ body:focus-visible {
   pointer-events: none;
 }
 
+[data-launchpad-background='custom'] .launchpad-background-bleed {
+  position: absolute;
+  display: block;
+  /*
+   * 出血垫底层：与取景层同图同模糊，但向外出血 3 倍模糊半径并由 cover 铺满出血框。
+   * filter: blur() 把图层当作透明画布上的图像处理，边缘 ±2σ 内 alpha 渐隐到 0——
+   * 若只有一张与内容区同大的图层，这条渐隐带会落进窗口边缘，透出 --muted 底衬，
+   * 形成一圈随主题变色的糊影（浅色近白/深色近黑）。垫底层垫住渐隐带透出的位置，
+   * 透出的变成同图的模糊版本而非底衬；出血部分由 #root 的 overflow/clip-path 裁掉。
+   * 取景不放大的代价是 cover 基准随出血框变大（垫底层是放大版），但垫底层只在
+   * 顶层边缘渐隐带（±2σ）内可见，两侧都是同图的低频模糊场，交叉过渡不可感。
+   * 模糊为 0 时出血为 0，垫底层与取景层完全重合，几何同不出血的旧实现。
+   */
+  inset: calc(var(--launchpad-background-blur, 0px) * -3);
+  overflow: hidden;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  background-image: var(--launchpad-background-image);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  filter: blur(var(--launchpad-background-blur, 0px));
+  pointer-events: none;
+  /*
+   * 按窗口圆角预裁壁纸：backdrop-filter 的模糊采样发生在 #root 圆角裁切之前，
+   * 方角壁纸在圆角弧外残留的亮色像素会被玻璃面板（侧栏/搜索面板）的模糊采样
+   * 带回圆角处，形成白色弧线（壁纸亮角 + 深色模式下尤其明显）。
+   * 模糊为 0 时圆角恰好与窗口轮廓重合，弧外只剩暗色底衬（--muted）可供采样；
+   * 模糊越大圆角随出血外移，逐步退出玻璃面板的采样范围。
+   */
+  border-radius: var(--radius-2xl);
+}
+
 [data-launchpad-background='custom'] .launchpad-background-layer {
   position: absolute;
   display: block;
+  /*
+   * 取景基准层：cover 以内容区为基准，可见区域取景与 blur=0 完全一致，
+   * 不随模糊强度放大（向外出血由 .launchpad-background-bleed 承担）。
+   * 自身边缘的 blur 渐隐带落在垫底层之上，透出同图的模糊版本而非底衬。
+   */
   inset: 0;
   overflow: hidden;
   border: 0;
@@ -932,7 +971,7 @@ body:focus-visible {
    * 按窗口圆角预裁壁纸：backdrop-filter 的模糊采样发生在 #root 圆角裁切之前，
    * 方角壁纸在圆角弧外残留的亮色像素会被玻璃面板（侧栏/搜索面板）的模糊采样
    * 带回圆角处，形成白色弧线（壁纸亮角 + 深色模式下尤其明显）。图片层先按
-   * 同一圆角裁掉方角，弧外只剩暗色底衬（--muted）与蒙版可供采样。
+   * 同一圆角裁掉方角，弧外由垫底层（同图模糊）与 --muted 底衬接替供采样。
    */
   border-radius: var(--radius-2xl);
 }

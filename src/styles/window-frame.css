@@ -17,25 +17,25 @@
   --window-corner-clip: shape(
     from var(--window-corner-radius) 0px,
     line to calc(100% - var(--window-corner-radius)) 0px,
-    curve to calc(100% - var(--window-corner-m)) var(--window-corner-m)
-      with calc(100% - var(--window-corner-c1)) 0px / calc(100% - var(--window-corner-c2)) 0px,
-    curve to 100% var(--window-corner-radius)
-      with 100% var(--window-corner-c2) / 100% var(--window-corner-c1),
+    curve to calc(100% - var(--window-corner-m)) var(--window-corner-m) with
+      calc(100% - var(--window-corner-c1)) 0px / calc(100% - var(--window-corner-c2)) 0px,
+    curve to 100% var(--window-corner-radius) with 100% var(--window-corner-c2) / 100%
+      var(--window-corner-c1),
     line to 100% calc(100% - var(--window-corner-radius)),
-    curve to calc(100% - var(--window-corner-m)) calc(100% - var(--window-corner-m))
-      with 100% calc(100% - var(--window-corner-c1)) / 100% calc(100% - var(--window-corner-c2)),
-    curve to calc(100% - var(--window-corner-radius)) 100%
-      with calc(100% - var(--window-corner-c2)) 100% / calc(100% - var(--window-corner-c1)) 100%,
+    curve to calc(100% - var(--window-corner-m)) calc(100% - var(--window-corner-m)) with 100%
+      calc(100% - var(--window-corner-c1)) / 100% calc(100% - var(--window-corner-c2)),
+    curve to calc(100% - var(--window-corner-radius)) 100% with calc(100% - var(--window-corner-c2))
+      100% / calc(100% - var(--window-corner-c1)) 100%,
     line to var(--window-corner-radius) 100%,
-    curve to var(--window-corner-m) calc(100% - var(--window-corner-m))
-      with var(--window-corner-c1) 100% / var(--window-corner-c2) 100%,
-    curve to 0px calc(100% - var(--window-corner-radius))
-      with 0px calc(100% - var(--window-corner-c2)) / 0px calc(100% - var(--window-corner-c1)),
+    curve to var(--window-corner-m) calc(100% - var(--window-corner-m)) with var(--window-corner-c1)
+      100% / var(--window-corner-c2) 100%,
+    curve to 0px calc(100% - var(--window-corner-radius)) with 0px
+      calc(100% - var(--window-corner-c2)) / 0px calc(100% - var(--window-corner-c1)),
     line to 0px var(--window-corner-radius),
-    curve to var(--window-corner-m) var(--window-corner-m)
-      with 0px var(--window-corner-c1) / 0px var(--window-corner-c2),
-    curve to var(--window-corner-radius) 0px
-      with var(--window-corner-c2) 0px / var(--window-corner-c1) 0px
+    curve to var(--window-corner-m) var(--window-corner-m) with 0px var(--window-corner-c1) / 0px
+      var(--window-corner-c2),
+    curve to var(--window-corner-radius) 0px with var(--window-corner-c2) 0px /
+      var(--window-corner-c1) 0px
   );
 }
 
@@ -45,7 +45,8 @@
 
 :root:has(
   .launchpad-bg[data-window-expanded='true'],
-  .settings-shell[data-window-expanded='true']
+  .settings-shell[data-window-expanded='true'],
+  .wallpaper-viewer-shell[data-window-expanded='true']
 ) {
   --window-shadow-inset: 0px;
   --window-edge-shadow: none;

@@ -8,6 +8,12 @@ const Settings = lazy(() =>
   import('./components/Settings').then(module => ({ default: module.Settings }))
 )
 
+const WallpaperViewer = lazy(() =>
+  import('./components/viewer/WallpaperViewer').then(module => ({
+    default: module.WallpaperViewer,
+  }))
+)
+
 function App() {
   const params = new URLSearchParams(window.location.search)
   const page = params.get('page')
@@ -32,7 +38,11 @@ function App() {
     <I18nProvider>
       <ToastProvider>
         <AppErrorBoundary>
-          {page === 'settings' ? (
+          {page === 'wallpaper-viewer' ? (
+            <Suspense fallback={<div className="h-full w-full bg-black" />}>
+              <WallpaperViewer />
+            </Suspense>
+          ) : page === 'settings' ? (
             <Suspense fallback={<div className="settings-shell h-full w-full bg-background" />}>
               <Settings />
             </Suspense>

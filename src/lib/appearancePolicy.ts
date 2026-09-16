@@ -89,6 +89,14 @@ function toLinearChannel(value: number): number {
   return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
 }
 
+/**
+ * 彩色表面上的前景色判定：白字对比度达到该阈值就用白字，不足才用深字。
+ * 不做白/黑对比度的相对比较——壁纸提取出的中亮度彩色（典型如蓝色）黑字对比度
+ * 虽略胜一筹，但蓝底黑字观感差；白色作为彩色表面的默认前景视觉上更舒适，
+ * 仅黄色等真正高亮的颜色保留深字。
+ */
+const WHITE_FOREGROUND_MIN_CONTRAST = 2.2
+
 export function getAccentForegroundColor(color: string): '#ffffff' | '#111827' {
   const normalized = normalizeThemeAccentColor(color)
   if (!normalized) return '#ffffff'
@@ -96,8 +104,7 @@ export function getAccentForegroundColor(color: string): '#ffffff' | '#111827' {
   const luminance =
     0.2126 * toLinearChannel(red) + 0.7152 * toLinearChannel(green) + 0.0722 * toLinearChannel(blue)
   const whiteContrast = 1.05 / (luminance + 0.05)
-  const darkContrast = (luminance + 0.05) / 0.057
-  return whiteContrast >= darkContrast ? '#ffffff' : '#111827'
+  return whiteContrast >= WHITE_FOREGROUND_MIN_CONTRAST ? '#ffffff' : '#111827'
 }
 
 export type AccentPalette = {
