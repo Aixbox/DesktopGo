@@ -4,7 +4,7 @@ export const MAX_BACKGROUND_DATA_URI_LENGTH = 1_600_000
 /** 蒙版浓度：0 表示完全不遮挡背景图，100 表示接近纯色。 */
 export const BACKGROUND_OVERLAY_MIN = 0
 export const BACKGROUND_OVERLAY_MAX = 90
-export const DEFAULT_BACKGROUND_OVERLAY = 20
+export const DEFAULT_BACKGROUND_OVERLAY = 0
 
 /** 背景模糊强度百分比；100% 对应 BACKGROUND_BLUR_MAX_PX 的实际半径。 */
 export const BACKGROUND_BLUR_MIN = 0
