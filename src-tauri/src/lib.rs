@@ -83,6 +83,17 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// 注册全局共享状态。从 build_app 拆出：invoke_handler 命令列表天然偏长，
+/// 再叠 manage 链会顶过 clippy too_many_lines(80) 上限。
+fn manage_shared_state(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    builder
+        .manage(updater::PendingUpdate::default())
+        .manage(MainWindowState::default())
+        .manage(launchpad_shortcut::LaunchpadShortcutState::default())
+        .manage(TrayState::default())
+        .manage(ai::AiRunRegistry::default())
+}
+
 /// 构建应用：插件注册、托盘/主窗口 setup 与全部命令的 invoke_handler。
 /// 独立成函数以保持 `run()` 精简（clippy too_many_lines 上限 80 行）。
 fn build_app() -> tauri::App {
@@ -91,12 +102,8 @@ fn build_app() -> tauri::App {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(tauri_plugin_store::Builder::default().build())
-        .manage(updater::PendingUpdate::default())
-        .manage(MainWindowState::default())
-        .manage(launchpad_shortcut::LaunchpadShortcutState::default())
-        .manage(TrayState::default())
-        .manage(ai::AiRunRegistry::default());
+        .plugin(tauri_plugin_store::Builder::default().build());
+    let builder = manage_shared_state(builder);
 
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
@@ -161,8 +168,8 @@ fn build_app() -> tauri::App {
             ai_organize_record_apply,
             fetch_wallpaper_feed,
             fetch_wallpaper_image,
-            // 一行多个命令：generate_handler 是宏，rustfmt 不会重排内部项，
-            // 手动压缩行数以保持 build_app 在 clippy too_many_lines(80) 限制内。
+            // generate_handler 的参数会被 rustfmt 展开成一行一项，压行数无效；
+            // build_app 再超 too_many_lines(80) 时优先继续拆函数。
             save_background_original,
             load_background_original,
             clear_background_original,
