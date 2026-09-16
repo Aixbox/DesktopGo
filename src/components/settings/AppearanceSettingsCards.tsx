@@ -313,14 +313,26 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
         <div className="relative aspect-video w-full max-w-sm overflow-hidden rounded-card border border-border/80 bg-muted">
           {appearance.backgroundImage ? (
             <>
+              {/* 垫底层：出血 3 倍预览半径，垫住取景层的 blur 边缘渐隐（同主渲染），
+                  由外层 overflow-hidden 裁掉出血部分。 */}
+              <div
+                className="absolute inset-0"
+                style={{
+                  inset: `-${(previewBlurPixels / 4) * 3}px`,
+                  backgroundImage: `url("${appearance.backgroundImage}")`,
+                  backgroundPosition: 'center',
+                  backgroundSize: 'cover',
+                  filter: `blur(${previewBlurPixels / 4}px)`,
+                }}
+              />
+              {/* 取景层：尺寸不随模糊变化，预览取景与 blur=0 一致。预览宽度远小于
+                  启动台，等比缩小模糊半径才能反映真实观感。 */}
               <div
                 className="absolute inset-0"
                 style={{
                   backgroundImage: `url("${appearance.backgroundImage}")`,
                   backgroundPosition: 'center',
                   backgroundSize: 'cover',
-                  // 预览宽度远小于启动台，等比缩小模糊半径才能反映真实观感。
-                  // 主渲染不做放大补偿，预览同样保持取景不变，边缘淡出如实呈现。
                   filter: `blur(${previewBlurPixels / 4}px)`,
                 }}
               />

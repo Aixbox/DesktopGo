@@ -169,7 +169,13 @@ export function Launchpad() {
     editRequestedIcon,
     clearIconEditRequest,
   })
-  const { addIconDialogOpen, handleAddIcons, handleCreateNewFile, importPlacementRequest, isImportingDrop } = iconImport
+  const {
+    addIconDialogOpen,
+    handleAddIcons,
+    handleCreateNewFile,
+    importPlacementRequest,
+    isImportingDrop,
+  } = iconImport
   // 「快捷导入」仅在启动台没有任何图标时从引导界面进入。
   const [isQuickImportOpen, setIsQuickImportOpen] = useState(false)
   const preloadGridView = useCallback((mode: 'paged' | 'scroll') => {
@@ -573,6 +579,20 @@ export function Launchpad() {
         style={
           aiOrganizeLayoutOpen && aiOrganizeMainWindowWidth !== null
             ? { width: `${aiOrganizeMainWindowWidth}px`, right: 'auto' }
+            : undefined
+        }
+      />
+      {/* 出血垫底层：垫住取景层模糊的边缘渐隐（见 globals.css）；AI 侧栏停靠时
+          补回左侧出血量，右缘与取景层一同停在主区边界。 */}
+      <div
+        className="launchpad-background-bleed"
+        aria-hidden="true"
+        style={
+          aiOrganizeLayoutOpen && aiOrganizeMainWindowWidth !== null
+            ? {
+                width: `calc(${aiOrganizeMainWindowWidth}px + var(--launchpad-background-blur, 0px) * 3)`,
+                right: 'auto',
+              }
             : undefined
         }
       />
