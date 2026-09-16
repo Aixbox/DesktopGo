@@ -47,6 +47,7 @@ type SettingKey =
   | 'launchpadBackgroundImage'
   | 'launchpadBackgroundOverlay'
   | 'launchpadBackgroundBlur'
+  | 'launchpadBackgroundSource'
   | 'autoExtractThemeColor'
   | 'windowStyle'
   | 'language'
@@ -74,6 +75,8 @@ type SettingValueMap = {
   launchpadBackgroundImage: string
   launchpadBackgroundOverlay: number
   launchpadBackgroundBlur: number
+  /** 壁纸来源标识：`builtin:<id>` / `bing:<id>` / `custom` / 空。 */
+  launchpadBackgroundSource: string
   autoExtractThemeColor: boolean
   windowStyle: WindowStyle
   language: AppLanguage
@@ -103,6 +106,7 @@ const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'launchpadBackgroundImage',
   'launchpadBackgroundOverlay',
   'launchpadBackgroundBlur',
+  'launchpadBackgroundSource',
   'autoExtractThemeColor',
   'windowStyle',
   'language',
@@ -130,6 +134,7 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   launchpadBackgroundImage: '',
   launchpadBackgroundOverlay: DEFAULT_BACKGROUND_OVERLAY,
   launchpadBackgroundBlur: DEFAULT_BACKGROUND_BLUR,
+  launchpadBackgroundSource: '',
   autoExtractThemeColor: true,
   windowStyle: 'default',
   language: 'zh',
@@ -185,8 +190,7 @@ const isLaunchpadBackgroundImage = (value: unknown): value is string =>
 
 const isAutoExtractThemeColor = (value: unknown): value is boolean => typeof value === 'boolean'
 
-const isWindowStyle = (value: unknown): value is WindowStyle =>
-  value === 'default'
+const isWindowStyle = (value: unknown): value is WindowStyle => value === 'default'
 
 const isAppLanguage = (value: unknown): value is AppLanguage => value === 'zh' || value === 'en'
 
@@ -214,6 +218,7 @@ const validators: {
   launchpadBackgroundImage: isLaunchpadBackgroundImage,
   launchpadBackgroundOverlay: isBackgroundOverlay,
   launchpadBackgroundBlur: isBackgroundBlur,
+  launchpadBackgroundSource: (value): value is string => typeof value === 'string',
   autoExtractThemeColor: isAutoExtractThemeColor,
   windowStyle: isWindowStyle,
   language: isAppLanguage,

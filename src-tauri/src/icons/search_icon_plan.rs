@@ -179,9 +179,10 @@ mod tests {
     fn converts_uwp_targets_to_parsable_namespace_paths() {
         assert_eq!(
             uwp_parsing_path("shell:AppsFolder\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"),
-            Some(format!(
-                "::{{4234d49b-0245-4df3-b780-3893943456e1}}\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"
-            ))
+            Some(
+                "::{4234d49b-0245-4df3-b780-3893943456e1}\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"
+                    .to_string(),
+            )
         );
         assert_eq!(
             uwp_parsing_path("shell:apps\\Vendor.App_abc123!Entry"),

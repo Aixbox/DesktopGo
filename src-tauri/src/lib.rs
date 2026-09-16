@@ -28,19 +28,20 @@ use agent::icon_agent::{ai_organize_icons_agent, ai_organize_record_apply};
 use ai::{ai_cancel, ai_chat, ai_classify_icons, get_builtin_icon_categories};
 use commands::{
     activate_main_window, activate_settings_window, apply_window_style, check_for_app_update,
-    close_settings_window, create_icon_entry, create_new_file, create_settings_window,
-    delete_icons, extract_website_icon, get_complete_search_snapshot, get_custom_icon_source,
+    clear_background_original, close_settings_window, create_icon_entry, create_new_file,
+    create_settings_window, delete_icons, extract_website_icon, fetch_wallpaper_feed,
+    fetch_wallpaper_image, get_complete_search_snapshot, get_custom_icon_source,
     get_default_launcher_folders, get_drag_preview_icon, get_icon_edit_source,
     get_icon_manager_items, get_icons, get_launch_on_startup_enabled, get_launcher_catalog,
     get_layout_payload, get_layout_payloads, get_main_window_always_on_top_enabled,
     get_search_preview, get_search_result_icons, get_search_runtime_status,
     get_updater_configuration_status, hide_icons, import_app_entries, import_dropped_paths,
-    install_app_update, launch_app, notify_main_window_ready, optimize_icon_image,
-    record_search_result_run, scan_installed_apps, scan_invalid_icons, search_files,
-    set_layout_payload, set_layout_payloads, set_main_window_always_on_top_enabled,
-    set_window_mode, show_shell_context_menu, start_search_runtime, sync_window_persistent_state,
-    toggle_window, unhide_icons, update_icon_entry, update_launch_on_startup_enabled,
-    update_launchpad_shortcut,
+    install_app_update, launch_app, load_background_original, notify_main_window_ready,
+    open_wallpaper_viewer, optimize_icon_image, record_search_result_run, save_background_original,
+    scan_installed_apps, scan_invalid_icons, search_files, set_layout_payload, set_layout_payloads,
+    set_main_window_always_on_top_enabled, set_window_mode, show_shell_context_menu,
+    start_search_runtime, sync_window_persistent_state, toggle_window, unhide_icons,
+    update_icon_entry, update_launch_on_startup_enabled, update_launchpad_shortcut,
 };
 use std::sync::atomic::Ordering;
 use tauri::{Manager, RunEvent};
@@ -82,8 +83,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
+/// 构建应用：插件注册、托盘/主窗口 setup 与全部命令的 invoke_handler。
+/// 独立成函数以保持 `run()` 精简（clippy too_many_lines 上限 80 行）。
+fn build_app() -> tauri::App {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -156,10 +158,25 @@ pub fn run() {
             get_builtin_icon_categories,
             ai_cancel,
             ai_organize_icons_agent,
-            ai_organize_record_apply
+            ai_organize_record_apply,
+            fetch_wallpaper_feed,
+            fetch_wallpaper_image,
+            // 一行多个命令：generate_handler 是宏，rustfmt 不会重排内部项，
+            // 手动压缩行数以保持 build_app 在 clippy too_many_lines(80) 限制内。
+            save_background_original,
+            load_background_original,
+            clear_background_original,
+            open_wallpaper_viewer
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
+
+    app
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let app = build_app();
 
     app.run(|app_handle, event| {
         if let RunEvent::Exit = event {

@@ -25,6 +25,10 @@ const MAIN_WINDOW_BLUR_GUARD_MS: u64 = 1200;
 const MAIN_WINDOW_SHOWN_EVENT: &str = "launchpad:shown";
 const SETTINGS_WINDOW_WIDTH: f64 = 800.0;
 const SETTINGS_WINDOW_HEIGHT: f64 = 600.0;
+const VIEWER_WINDOW_WIDTH: f64 = 1080.0;
+const VIEWER_WINDOW_HEIGHT: f64 = 720.0;
+const VIEWER_WINDOW_MIN_WIDTH: f64 = 640.0;
+const VIEWER_WINDOW_MIN_HEIGHT: f64 = 440.0;
 
 fn set_main_window_blur_guard(state: &MainWindowState, duration_ms: u64) {
     state.suppress_blur.store(true, Ordering::SeqCst);
@@ -224,6 +228,91 @@ pub(crate) fn create_main_window(app: &tauri::AppHandle) {
         }
         Err(error) => eprintln!("Failed to create main window: {}", error),
     }
+}
+
+/// 把任意字符串编码为 URL 查询参数值（比 encodeURIComponent 更保守：非字母数字全部转义）。
+fn encode_query_component(value: &str) -> String {
+    percent_encoding::utf8_percent_encode(value, percent_encoding::NON_ALPHANUMERIC).to_string()
+}
+
+/// 创建壁纸独立查看窗口；已存在则直接复用。
+///
+/// 窗口样式与设置窗口完全一致：无边框、无原生阴影/圆角/边框（DWM），
+/// 窗口尺寸含四周阴影留白（由 window-frame.css 的 --window-shadow-inset 消化）。
+/// 前端渲染就绪后自行 show + 聚焦（创建时不可见，避免透明空窗闪现）。
+pub(crate) fn create_wallpaper_viewer_window(
+    app: &tauri::AppHandle,
+    src: &str,
+    title: &str,
+    subtitle: &str,
+) -> Result<(), String> {
+    if app.get_webview_window("wallpaper-viewer").is_some() {
+        return Ok(());
+    }
+
+    let window_icon = crate::native_icon::from_ico(crate::window_icon::MAX_WINDOW_ICON_SIZE)
+        .map_err(|error| format!("Failed to load wallpaper viewer window icon: {error}"))?;
+    let url = format!(
+        "index.html?page=wallpaper-viewer&src={}&title={}&subtitle={}",
+        encode_query_component(src),
+        encode_query_component(title),
+        encode_query_component(subtitle)
+    );
+    let (width, height) = window_size_with_shadow(VIEWER_WINDOW_WIDTH, VIEWER_WINDOW_HEIGHT);
+    let (min_width, min_height) =
+        window_size_with_shadow(VIEWER_WINDOW_MIN_WIDTH, VIEWER_WINDOW_MIN_HEIGHT);
+    let builder = tauri::WebviewWindowBuilder::new(
+        app,
+        "wallpaper-viewer",
+        tauri::WebviewUrl::App(url.into()),
+    )
+    .title("壁纸预览")
+    .icon(window_icon)
+    .map_err(|error| format!("Failed to configure wallpaper viewer window icon: {error}"))?
+    .on_page_load(|window, payload| {
+        if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+            if let Err(error) = crate::window_icon::refresh(&window) {
+                eprintln!(
+                    "Warning: Failed to refresh wallpaper viewer window icon after page load: {error}"
+                );
+            }
+            if let Err(error) = window.set_skip_taskbar(false) {
+                eprintln!(
+                    "Warning: Failed to add wallpaper viewer window to taskbar after page load: {error}"
+                );
+            }
+        }
+    });
+
+    builder
+        .inner_size(width, height)
+        .min_inner_size(min_width, min_height)
+        .background_color(tauri::utils::config::Color(0, 0, 0, 0))
+        .transparent(true)
+        .center()
+        .resizable(true)
+        .decorations(false)
+        .shadow(false)
+        .skip_taskbar(true)
+        .visible(false)
+        .build()
+        .map_err(|error| format!("Failed to create wallpaper viewer window: {error}"))
+        .and_then(|window| {
+            crate::window_icon::install(&window).map_err(|error| {
+                format!("Failed to install wallpaper viewer window icon: {error}")
+            })?;
+            #[cfg(windows)]
+            {
+                if let Err(error) = crate::window_style::disable_window_corner_preference(&window) {
+                    eprintln!("Warning: {error}");
+                }
+                if let Err(error) = crate::window_style::remove_native_window_border(&window) {
+                    eprintln!("Warning: {error}");
+                }
+            }
+            Ok(())
+        })
+        .map(|_| ())
 }
 
 /// 创建设置窗口；已存在则直接复用。

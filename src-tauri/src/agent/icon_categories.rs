@@ -334,7 +334,7 @@ pub(crate) fn match_icon_category(
 #[cfg(test)]
 mod tests {
     use super::{
-        builtin_icon_categories, merge_categories, match_icon_category, AiIconCategoryEntry,
+        builtin_icon_categories, match_icon_category, merge_categories, AiIconCategoryEntry,
         UserCategoryLayer,
     };
 

@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core'
 import { getSetting } from './settingsStore'
 import {
   backgroundBlurToPixels,
@@ -32,7 +33,16 @@ export {
 
 export const MAX_BACKGROUND_FILE_BYTES = 12 * 1024 * 1024
 
-const BACKGROUND_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+export const BACKGROUND_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+
+const CROP_ASPECT_MIN = 0.5
+const CROP_ASPECT_MAX = 3
+
+/** 把窗口宽高比收敛到背景取景框的合理区间，避免极端比例下取景框过扁/过窄。 */
+export function clampCropAspect(aspect: number): number {
+  if (!Number.isFinite(aspect) || aspect <= 0) return 16 / 9
+  return Math.min(CROP_ASPECT_MAX, Math.max(CROP_ASPECT_MIN, aspect))
+}
 const APPEARANCE_CSS_VARIABLES = [
   '--appearance-accent',
   '--accent-selected-foreground-light',
@@ -122,6 +132,15 @@ export async function applySavedAppearance(): Promise<AppearanceSettings> {
   return appearance
 }
 
+function blobToDataUri(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(new BackgroundImageError('decode'))
+    reader.readAsDataURL(blob)
+  })
+}
+
 function canvasToDataUri(canvas: HTMLCanvasElement, quality: number): Promise<string> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -130,10 +149,7 @@ function canvasToDataUri(canvas: HTMLCanvasElement, quality: number): Promise<st
           reject(new BackgroundImageError('decode'))
           return
         }
-        const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result))
-        reader.onerror = () => reject(new BackgroundImageError('decode'))
-        reader.readAsDataURL(blob)
+        blobToDataUri(blob).then(resolve, reject)
       },
       'image/webp',
       quality
@@ -168,10 +184,19 @@ export async function prepareLaunchpadBackground(
 ): Promise<{ dataUri: string; accentColor: string | null }> {
   if (!BACKGROUND_MIME_TYPES.has(file.type)) throw new BackgroundImageError('format')
   if (file.size > MAX_BACKGROUND_FILE_BYTES) throw new BackgroundImageError('file-size')
+  return prepareLaunchpadBackgroundFromBlob(file)
+}
 
+/**
+ * 内置壁纸与必应壁纸的取用入口：来源已限定为应用内置资源或 Rust 侧下载的
+ * 官方图片 data URI，无需再做文件类型/大小校验，直接进入解码与压缩管线。
+ */
+export async function prepareLaunchpadBackgroundFromBlob(
+  blob: Blob
+): Promise<{ dataUri: string; accentColor: string | null }> {
   let bitmap: ImageBitmap
   try {
-    bitmap = await createImageBitmap(file)
+    bitmap = await createImageBitmap(blob)
   } catch {
     throw new BackgroundImageError('decode')
   }
@@ -199,4 +224,23 @@ export async function prepareLaunchpadBackground(
   } finally {
     bitmap.close()
   }
+}
+
+/**
+ * 把用户选定的原始图片另存到本机（与压缩后的背景分开存放），
+ * 供「调整取景」始终基于原图无损重新取景。失败由调用方自行降级处理。
+ */
+export async function saveBackgroundOriginal(blob: Blob): Promise<void> {
+  const dataUri = await blobToDataUri(blob)
+  await invoke('save_background_original', { dataUri })
+}
+
+/** 读取已保存的原图 data URI；从未保存过时返回 null。 */
+export async function loadBackgroundOriginal(): Promise<string | null> {
+  return invoke<string | null>('load_background_original')
+}
+
+/** 移除背景时同步清理已保存的原图文件。 */
+export async function clearBackgroundOriginal(): Promise<void> {
+  await invoke('clear_background_original')
 }

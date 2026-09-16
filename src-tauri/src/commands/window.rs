@@ -155,6 +155,25 @@ pub fn activate_settings_window(app_handle: tauri::AppHandle) -> Result<(), Stri
     crate::show_settings_window(&app_handle)
 }
 
+/// 打开壁纸独立查看窗口（样式与设置窗口一致）。窗口已存在时直接返回 Ok，
+/// 由前端通过全局事件换图并聚焦，不重复建窗。
+#[tauri::command]
+pub async fn open_wallpaper_viewer(
+    app_handle: tauri::AppHandle,
+    src: String,
+    title: String,
+    subtitle: String,
+) -> Result<(), String> {
+    if app_handle.get_webview_window("wallpaper-viewer").is_some() {
+        return Ok(());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::window::create_wallpaper_viewer_window(&app_handle, &src, &title, &subtitle)
+    })
+    .await
+    .map_err(|error| format!("Failed to create wallpaper viewer window: {error}"))?
+}
+
 #[tauri::command]
 pub fn get_main_window_always_on_top_enabled(
     main_window_state: tauri::State<'_, MainWindowState>,

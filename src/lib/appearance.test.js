@@ -23,6 +23,9 @@ assert.equal(normalizeThemeAccentColor('blue'), null)
 
 assert.equal(getAccentForegroundColor('#111827'), '#ffffff')
 assert.equal(getAccentForegroundColor('#facc15'), '#111827')
+// 壁纸提取的中亮度蓝色此前会被判成黑字（蓝底黑字观感差），修复后应为白字。
+assert.equal(getAccentForegroundColor('#4a90d9'), '#ffffff')
+assert.equal(getAccentForegroundColor('#2563eb'), '#ffffff')
 
 const bluePalette = deriveAccentPalette('#2563eb')
 assert.match(bluePalette?.selectedForegroundLight ?? '', /^oklch\(0\.420 /)

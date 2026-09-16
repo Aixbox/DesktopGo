@@ -1,20 +1,27 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
-import { ImagePlus, LoaderCircle, RotateCcw, Trash2 } from 'lucide-react'
+import { Crop, ImagePlus, LoaderCircle, RotateCcw, Trash2 } from 'lucide-react'
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import {
   BACKGROUND_BLUR_MAX,
   BACKGROUND_BLUR_MIN,
+  BACKGROUND_MIME_TYPES,
   BACKGROUND_OVERLAY_MAX,
   BACKGROUND_OVERLAY_MIN,
   BackgroundImageError,
   DEFAULT_BACKGROUND_BLUR,
   DEFAULT_BACKGROUND_OVERLAY,
   DEFAULT_THEME_ACCENT_COLOR,
+  MAX_BACKGROUND_FILE_BYTES,
   THEME_ACCENT_PRESETS,
   applyAppearance,
   backgroundBlurToPixels,
+  clampCropAspect,
+  clearBackgroundOriginal,
   getSavedAppearance,
+  loadBackgroundOriginal,
   normalizeThemeAccentColor,
-  prepareLaunchpadBackground,
+  prepareLaunchpadBackgroundFromBlob,
+  saveBackgroundOriginal,
   type AppearanceSettings,
   type BackgroundImageErrorCode,
 } from '@/lib/appearance'
@@ -25,6 +32,8 @@ import { Button } from '@/components/ui/button'
 import { formControlFocusWithinClassName } from '@/components/ui/inputStyles'
 import { RangeControl, SettingCard, SwitchButton } from '@/components/ui/setting-components'
 import { useToast } from '@/components/ui/toast'
+import { WallpaperGallery } from '@/components/settings/WallpaperGallery'
+import { BackgroundCropDialog } from '@/components/settings/BackgroundCropDialog'
 
 const BACKGROUND_ERROR_MESSAGES: Record<BackgroundImageErrorCode, string> = {
   format: '请选择 JPG、PNG 或 WebP 图片。',
@@ -46,8 +55,14 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
   })
   const [autoExtractThemeColor, setAutoExtractThemeColor] = useState(true)
   const [isProcessingBackground, setIsProcessingBackground] = useState(false)
+  const [backgroundSource, setBackgroundSource] = useState('')
+  const [cropSource, setCropSource] = useState('')
+  const [cropSourceKind, setCropSourceKind] = useState<'original' | 'compressed'>('original')
+  const [cropAspect, setCropAspect] = useState(16 / 9)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const tuningCommitTimerRef = useRef<number | null>(null)
+  /** 本次取景所用的原始图片（本地选图/图库 Blob），应用成功后另存供无损重取景。 */
+  const cropOriginalRef = useRef<{ blob: Blob; objectUrl: string } | null>(null)
   const toast = useToast()
 
   useEffect(
@@ -128,60 +143,188 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
     })
   }
 
-  const handleBackgroundFile = async (event: ChangeEvent<HTMLInputElement>) => {
+  /** 编码完成的壁纸统一走这里：本地预览、落盘（含来源标识）、失败回滚。 */
+  const commitBackgroundUpdate = async (
+    prepared: { dataUri: string; accentColor: string | null },
+    source: string
+  ) => {
+    const previousAppearance = appearance
+    const nextAppearance = {
+      ...appearance,
+      backgroundImage: prepared.dataUri,
+      accentColor:
+        autoExtractThemeColor && prepared.accentColor
+          ? prepared.accentColor
+          : appearance.accentColor,
+    }
+
+    applyLocally(nextAppearance)
+    try {
+      await Promise.all([
+        setSetting('launchpadBackgroundImage', nextAppearance.backgroundImage),
+        setSetting('themeAccentColor', nextAppearance.accentColor),
+        setSetting('launchpadBackgroundSource', source),
+      ])
+      setBackgroundSource(source)
+      syncMainWindow()
+      toast.success(
+        translate(
+          autoExtractThemeColor && prepared.accentColor
+            ? '背景已更新，并已应用从图片提取的主题色。'
+            : '背景已更新。'
+        ),
+        { key: 'settings-background', title: translate('自定义背景') }
+      )
+    } catch (error) {
+      applyLocally(previousAppearance)
+      const rollbackResults = await Promise.allSettled([
+        setSetting('launchpadBackgroundImage', previousAppearance.backgroundImage),
+        setSetting('themeAccentColor', previousAppearance.accentColor),
+        setSetting('launchpadBackgroundSource', backgroundSource),
+      ])
+      if (rollbackResults.some(result => result.status === 'rejected')) {
+        console.error('Failed to fully rollback appearance settings:', rollbackResults)
+      }
+      throw error
+    }
+  }
+
+  const reportBackgroundError = (error: unknown) => {
+    const message =
+      error instanceof BackgroundImageError
+        ? translate(BACKGROUND_ERROR_MESSAGES[error.code])
+        : translate('保存背景失败：{error}', { error: String(error) })
+    toast.error(message, {
+      key: 'settings-background',
+      title: translate('自定义背景'),
+    })
+  }
+
+  /** 读取主窗口实际宽高比作为取景比例，取不到时退化为当前窗口。 */
+  const resolveCropAspect = async (): Promise<number> => {
+    try {
+      const mainWindow = await WebviewWindow.getByLabel('main')
+      if (mainWindow) {
+        const [size, scaleFactor] = await Promise.all([
+          mainWindow.innerSize(),
+          mainWindow.scaleFactor(),
+        ])
+        const width = size.width / scaleFactor
+        const height = size.height / scaleFactor
+        if (width > 0 && height > 0) return clampCropAspect(width / height)
+      }
+    } catch (error) {
+      console.error('Failed to read main window size for background crop:', error)
+    }
+    return clampCropAspect(window.innerWidth / Math.max(1, window.innerHeight))
+  }
+
+  const closeBackgroundCrop = () => {
+    if (cropOriginalRef.current) {
+      URL.revokeObjectURL(cropOriginalRef.current.objectUrl)
+      cropOriginalRef.current = null
+    }
+    setCropSource('')
+  }
+
+  /** 原图备份失败时的可见提醒：静默失败会让用户误以为原图丢了。 */
+  const warnOriginalSaveFailure = (error: unknown) => {
+    console.error('Failed to save background original:', error)
+    toast.error(translate('背景已更新，但原图备份失败：{error}', { error: String(error) }), {
+      key: 'settings-background-original',
+      title: translate('自定义背景'),
+    })
+  }
+
+  /** 用新图片进入取景：保留原始 Blob，应用成功后另存为本机原图。 */
+  const openBackgroundCropWithBlob = async (blob: Blob) => {
+    if (cropOriginalRef.current) URL.revokeObjectURL(cropOriginalRef.current.objectUrl)
+    const objectUrl = URL.createObjectURL(blob)
+    cropOriginalRef.current = { blob, objectUrl }
+    setCropAspect(await resolveCropAspect())
+    setCropSourceKind('original')
+    setCropSource(objectUrl)
+  }
+
+  /** 调整取景：优先使用已保存的本机原图；缺失时退回已压缩背景并存为原图基线（只退化一次）。 */
+  const openBackgroundCropForTuning = async () => {
+    if (cropOriginalRef.current) {
+      URL.revokeObjectURL(cropOriginalRef.current.objectUrl)
+      cropOriginalRef.current = null
+    }
+    setCropAspect(await resolveCropAspect())
+    let source = appearance.backgroundImage
+    let sourceKind: 'original' | 'compressed' = 'compressed'
+    try {
+      const original = await loadBackgroundOriginal()
+      if (original) {
+        source = original
+        sourceKind = 'original'
+      }
+    } catch (error) {
+      console.error('Failed to load saved background original:', error)
+    }
+    if (sourceKind === 'compressed' && source) {
+      try {
+        const response = await fetch(source)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        await saveBackgroundOriginal(await response.blob())
+      } catch (error) {
+        console.error('Failed to backfill background original:', error)
+      }
+    }
+    setCropSourceKind(sourceKind)
+    setCropSource(source)
+  }
+
+  /** 裁剪确认：裁出的原始图统一走压缩管线后落盘；错误向上抛给弹窗展示。 */
+  const handleCropApply = async (blob: Blob) => {
+    const prepared = await prepareLaunchpadBackgroundFromBlob(blob)
+    await commitBackgroundUpdate(prepared, 'custom')
+    // 背景落盘成功后再保存原图；保存失败只影响之后能否无损重取景，不回滚背景。
+    const original = cropOriginalRef.current
+    if (original) {
+      try {
+        await saveBackgroundOriginal(original.blob)
+      } catch (error) {
+        warnOriginalSaveFailure(error)
+      }
+    }
+  }
+
+  /** 本地选图：先做类型/大小校验，通过后进入取景裁剪。 */
+  const handleBackgroundFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0]
     event.currentTarget.value = ''
     if (!file || isProcessingBackground) return
+    if (!BACKGROUND_MIME_TYPES.has(file.type)) {
+      reportBackgroundError(new BackgroundImageError('format'))
+      return
+    }
+    if (file.size > MAX_BACKGROUND_FILE_BYTES) {
+      reportBackgroundError(new BackgroundImageError('file-size'))
+      return
+    }
+    void openBackgroundCropWithBlob(file)
+  }
+
+  /** 壁纸库选择：来源资源由画廊取得，这里统一走压缩管线后落盘。 */
+  const handleGalleryPick = async (source: string, blob: Blob) => {
+    if (isProcessingBackground) return
     setIsProcessingBackground(true)
 
     try {
-      const prepared = await prepareLaunchpadBackground(file)
-      const previousAppearance = appearance
-      const nextAppearance = {
-        ...appearance,
-        backgroundImage: prepared.dataUri,
-        accentColor:
-          autoExtractThemeColor && prepared.accentColor
-            ? prepared.accentColor
-            : appearance.accentColor,
-      }
-
-      applyLocally(nextAppearance)
+      const prepared = await prepareLaunchpadBackgroundFromBlob(blob)
+      await commitBackgroundUpdate(prepared, source)
+      // 同步保存下载到的原始图片，之后「调整取景」可基于原图无损重裁。
       try {
-        await Promise.all([
-          setSetting('launchpadBackgroundImage', nextAppearance.backgroundImage),
-          setSetting('themeAccentColor', nextAppearance.accentColor),
-        ])
-        syncMainWindow()
-        toast.success(
-          translate(
-            autoExtractThemeColor && prepared.accentColor
-              ? '背景已更新，并已应用从图片提取的主题色。'
-              : '背景已更新。'
-          ),
-          { key: 'settings-background', title: translate('自定义背景') }
-        )
+        await saveBackgroundOriginal(blob)
       } catch (error) {
-        applyLocally(previousAppearance)
-        const rollbackResults = await Promise.allSettled([
-          setSetting('launchpadBackgroundImage', previousAppearance.backgroundImage),
-          setSetting('themeAccentColor', previousAppearance.accentColor),
-        ])
-        if (rollbackResults.some(result => result.status === 'rejected')) {
-          console.error('Failed to fully rollback appearance settings:', rollbackResults)
-        }
-        throw error
+        warnOriginalSaveFailure(error)
       }
     } catch (error) {
       console.error('Failed to update launchpad background:', error)
-      const message =
-        error instanceof BackgroundImageError
-          ? translate(BACKGROUND_ERROR_MESSAGES[error.code])
-          : translate('保存背景失败：{error}', { error: String(error) })
-      toast.error(message, {
-        key: 'settings-background',
-        title: translate('自定义背景'),
-      })
+      reportBackgroundError(error)
     } finally {
       setIsProcessingBackground(false)
     }
@@ -192,8 +335,17 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
     const previousAppearance = appearance
     const nextAppearance = { ...appearance, backgroundImage: '' }
     applyLocally(nextAppearance)
-    void setSetting('launchpadBackgroundImage', '')
-      .then(syncMainWindow)
+    void Promise.all([
+      setSetting('launchpadBackgroundImage', ''),
+      setSetting('launchpadBackgroundSource', ''),
+    ])
+      .then(() => {
+        setBackgroundSource('')
+        void clearBackgroundOriginal().catch(error => {
+          console.error('Failed to clear background original:', error)
+        })
+        syncMainWindow()
+      })
       .catch(error => {
         console.error('Failed to remove launchpad background:', error)
         applyLocally(previousAppearance)
@@ -352,13 +504,19 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
           )}
         </div>
 
+        <WallpaperGallery
+          disabled={isProcessingBackground}
+          selectedSource={backgroundSource}
+          onPick={handleGalleryPick}
+        />
+
         <div className="flex flex-wrap gap-2">
           <input
             ref={fileInputRef}
             type="file"
             accept="image/jpeg,image/png,image/webp"
             className="hidden"
-            onChange={event => void handleBackgroundFile(event)}
+            onChange={handleBackgroundFile}
           />
           <Button
             type="button"
@@ -369,6 +527,17 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
           >
             {isProcessingBackground ? <LoaderCircle className="animate-spin" /> : <ImagePlus />}
             {translate(isProcessingBackground ? '处理中...' : '选择图片')}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!appearance.backgroundImage || isProcessingBackground}
+            title={translate('优先基于已保存的原图取景，无损画质；原图缺失时基于已压缩的背景。')}
+            onClick={() => void openBackgroundCropForTuning()}
+          >
+            <Crop />
+            {translate('调整取景')}
           </Button>
           <Button
             type="button"
@@ -446,6 +615,17 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
           />
         </div>
       </SettingCard>
+
+      {cropSource ? (
+        <BackgroundCropDialog
+          key={cropSource}
+          source={cropSource}
+          sourceKind={cropSourceKind}
+          aspect={cropAspect}
+          onApply={handleCropApply}
+          onClose={closeBackgroundCrop}
+        />
+      ) : null}
     </>
   )
 }
