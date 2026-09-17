@@ -20,6 +20,11 @@
 //!
 //! 扫描不做缓存：这个功能只在图标库为空（或用户主动点击）时触发一次，
 //! 目录内容与图标库随时可能变化，缓存反而要处理失效。
+//!
+//! 系统自带工具（管理工具、辅助功能、Windows Kits 等文件夹里的条目，或解析
+//! 目标位于 %SystemRoot% 下的组件）会在扫描结果里标记 `system_tool`，前端
+//! 默认隐藏、不勾选，通过「显示系统工具」开关查看——判定规则见
+//! `SYSTEM_TOOL_FOLDER_NAMES` 与 `is_system_tool_entry`。
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -70,6 +75,95 @@ const JUNK_NAME_KEYWORDS: &[&str] = &[
 const STATUS_NEW: &str = "new";
 const STATUS_POSSIBLE_DUPLICATE: &str = "possible_duplicate";
 const STATUS_EXACT_DUPLICATE: &str = "exact_duplicate";
+
+/// 系统自带工具的文件夹名黑名单（小写匹配，中英文都收）：管理工具、辅助功能、
+/// Windows 附件、SDK 工具（Windows Kits）、自启动等目录里的快捷方式基本都不是
+/// 用户主动安装的应用，快捷导入默认把它们标记为系统工具，由前端隐藏、可勾选显示。
+const SYSTEM_TOOL_FOLDER_NAMES: &[&str] = &[
+    // 管理工具（services、compmgmt 等 .msc 控制台）。
+    "administrative tools",
+    "管理工具",
+    // Windows 11 把管理工具改名为 Windows 工具。
+    "windows tools",
+    "windows 工具",
+    // 轻松使用 / 辅助功能（讲述人、放大镜、实时字幕、语音访问等）。
+    "accessibility",
+    "轻松使用",
+    "辅助功能",
+    "windows ease of access",
+    "windows 轻松使用",
+    // Windows 附件（写字板、画图、字符映射表、传真和扫描等系统组件）。
+    "windows accessories",
+    "windows 附件",
+    // 系统自带的 PowerShell / ISE 入口。
+    "windows powershell",
+    // SDK / WDK 附带的开发者工具（Application Verifier、Certification Kit 等）。
+    "windows kits",
+    // 自启动目录：随系统登录自动运行，不该批量导入启动台。
+    "startup",
+    "启动",
+    // 维护与系统工具目录（备份、还原、碎片整理等）。
+    "maintenance",
+    "维护",
+    "system tools",
+    "系统工具",
+    // Windows 安全中心入口。
+    "windows defender",
+    "windows 安全中心",
+];
+
+/// 入口路径或解析目标里出现这些文件夹名（按路径组件、含文件名主干）即视为系统工具。
+fn path_has_system_tool_folder(path: &str) -> bool {
+    Path::new(path).components().any(|component| {
+        let raw = component.as_os_str().to_string_lossy();
+        let stem = Path::new(&*raw)
+            .file_stem()
+            .unwrap_or_else(|| Path::new(&*raw).file_name().unwrap_or_default())
+            .to_string_lossy()
+            .trim()
+            .to_lowercase();
+        SYSTEM_TOOL_FOLDER_NAMES.contains(&stem.as_str())
+    })
+}
+
+/// 解析目标是否为系统工具：`%SystemRoot%` 下的可执行文件 / 控制台（services.msc、
+/// SystemApps 收件箱组件）、`.msc` 管理控制台、Windows Kits 目录内的 SDK 工具。
+fn is_system_tool_target(target: &str) -> bool {
+    let lower = target.trim().to_lowercase();
+    if lower.is_empty()
+        || lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("shell:")
+    {
+        return false;
+    }
+    if let Ok(system_root) = std::env::var("SystemRoot") {
+        let system_root = system_root
+            .trim()
+            .trim_end_matches(['\\', '/'])
+            .to_lowercase();
+        if !system_root.is_empty() && lower.starts_with(&system_root) {
+            let rest = &lower[system_root.len()..];
+            if rest.is_empty() || rest.starts_with('\\') || rest.starts_with('/') {
+                return true;
+            }
+        }
+    }
+    if Path::new(target)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("msc"))
+    {
+        return true;
+    }
+    path_has_system_tool_folder(target)
+}
+
+/// 条目是否为系统工具：入口路径落在系统工具文件夹里，或解析目标是系统组件。
+/// URL 快捷方式与商店应用（`shell:AppsFolder\...`）两路检测都自然不命中。
+fn is_system_tool_entry(entry_path: &str, target_path: &str) -> bool {
+    path_has_system_tool_folder(entry_path) || is_system_tool_target(target_path)
+}
 
 /// 来源优先级：开始菜单是应用快捷方式的「正主」，桌面/快速启动次之，
 /// 注册表 App Paths 与商店应用最后。同一身份键多条命中时保留优先级最高的那条。
@@ -592,6 +686,9 @@ fn classify_candidates(
             } else {
                 STATUS_NEW
             };
+            // 系统工具判定要先于结构体构造：entry_path / target_path 会被移动进去。
+            // 商店应用（shell: 前缀）与 URL 快捷方式在这里自然不会误判。
+            let system_tool = is_system_tool_entry(&candidate.entry_path, &candidate.target_path);
             ScannedInstalledApp {
                 source_path: candidate.entry_path,
                 display_name: candidate.display_name,
@@ -599,6 +696,7 @@ fn classify_candidates(
                 item_type: candidate.item_type,
                 source_label: candidate.source_label.to_string(),
                 status: status.to_string(),
+                system_tool,
                 merged_sources: merged_by_identity
                     .get(&candidate.identity)
                     .cloned()
@@ -636,6 +734,63 @@ mod tests {
         assert!(is_junk_name("  "));
         assert!(!is_junk_name("Visual Studio Code"));
         assert!(!is_junk_name("微信"));
+    }
+
+    #[test]
+    fn system_tool_folders_are_detected_by_name() {
+        // 用户报告的样例：管理工具、辅助功能、Windows Kits 里的快捷方式。
+        assert!(path_has_system_tool_folder(
+            r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\services.lnk"
+        ));
+        assert!(path_has_system_tool_folder(
+            r"C:\Users\a\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Accessibility\LiveCaptions.lnk"
+        ));
+        assert!(path_has_system_tool_folder(
+            r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Windows Kits\Application Verifier (X86)\Application Verifier (WOW).lnk"
+        ));
+        // 中文系统的本地化文件夹名。
+        assert!(path_has_system_tool_folder(
+            r"C:\dummy\管理工具\services.lnk"
+        ));
+        assert!(path_has_system_tool_folder(
+            r"C:\dummy\辅助功能\VoiceAccess.lnk"
+        ));
+        // 自启动目录。
+        assert!(path_has_system_tool_folder(
+            r"C:\Users\a\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\OneDrive.lnk"
+        ));
+        // 普通应用不受影响。
+        assert!(!path_has_system_tool_folder(
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        ));
+        assert!(!path_has_system_tool_folder(r"C:\Users\a\Desktop\微信.lnk"));
+    }
+
+    #[test]
+    fn system_tool_targets_are_detected_by_path() {
+        // 目标在 %SystemRoot% 下：.msc 管理控制台与 SystemApps 收件箱组件。
+        assert!(is_system_tool_target(r"C:\Windows\System32\services.msc"));
+        assert!(is_system_tool_target(
+            r"C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\LiveCaptions.exe"
+        ));
+        // Windows Kits 目录内（即使入口路径不在该文件夹下）。
+        assert!(is_system_tool_target(
+            r"C:\Program Files (x86)\Windows Kits\10\App Certification Kit\appverifier.exe"
+        ));
+        // %SystemRoot% 边界：C:\WindowsApps 这类同前缀目录不算（下一字符不是分隔符）。
+        assert!(!is_system_tool_target(r"C:\WindowsApps\SomeApp\app.exe"));
+        // 普通应用与 URL 快捷方式不受影响。
+        assert!(!is_system_tool_target(
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        ));
+        assert!(!is_system_tool_entry(
+            r"C:\Users\a\Desktop\微信.lnk",
+            "https://weixin.qq.com/"
+        ));
+        assert!(!is_system_tool_entry(
+            r"C:\Users\a\Desktop\Chrome.lnk",
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        ));
     }
 
     #[test]

@@ -24,6 +24,8 @@ export interface ScannedInstalledApp {
   itemType: string
   sourceLabel: string
   status: string
+  /** 是否为系统自带工具（管理工具、辅助功能、Windows Kits 等）：弹窗默认隐藏。 */
+  systemTool: boolean
   /**
    * 跨来源去重时并入本条目的其他来源条目：来源标签 → 条目数。
    * 后端只在非空时返回该字段；用于在分组标题解释「条目为什么变少」。
@@ -75,7 +77,8 @@ export function buildQuickImportDrafts(scanned: ScannedInstalledApp[]): QuickImp
       ...app,
       status,
       key: `${app.sourcePath}#${index}`,
-      selected: isQuickImportAppDefaultSelected(status),
+      // 系统工具默认隐藏，也不默认勾选：用户勾选「显示系统工具」后自行决定。
+      selected: app.systemTool ? false : isQuickImportAppDefaultSelected(status),
       preview: '',
       previewLoading: false,
     }

@@ -129,6 +129,8 @@ function AppTile({
  * 「快捷导入」确认弹窗：以网格瓦片展示扫描到的已安装应用，按来源位置
  * （开始菜单 / 桌面 / 快速启动 / 注册表等）分组，组内新应用在前、重复项靠后；
  * 一定重复（已导入）默认取消勾选，瓦片右上角圆点标记重复状态。
+ * 系统自带工具（管理工具、辅助功能、Windows Kits 等）默认隐藏且不勾选，
+ * 通过「显示系统工具」开关查看；全选只作用于可见条目。
  * 顶部与各分组标题均有全选，可整批或按来源批量勾选。
  * 展示形式与「确认导入图标」弹窗保持一致，支持逐项编辑名称与图标。
  * 主窗口引导界面与设置页共用。
@@ -142,6 +144,9 @@ export function QuickImportDialog({ open, onOpenChange, onImported }: QuickImpor
     scanError,
     selectedCount,
     editingApp,
+    showSystemTools,
+    toggleShowSystemTools,
+    hiddenSystemToolCount,
     toggleApp,
     setAllSelected,
     setSourceSelected,
@@ -242,7 +247,9 @@ export function QuickImportDialog({ open, onOpenChange, onImported }: QuickImpor
             <div className="space-y-1">
               <p className="text-sm font-medium">{translate('未发现可导入的应用')}</p>
               <p className="text-xs leading-5 text-muted-foreground">
-                {translate('没有找到可用的应用快捷方式，可以手动添加图标。')}
+                {hiddenSystemToolCount > 0
+                  ? translate('扫描到的应用都是系统自带工具，已默认隐藏；勾选「显示系统工具」可查看。')
+                  : translate('没有找到可用的应用快捷方式，可以手动添加图标。')}
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={() => void startScan()} disabled={importing}>
@@ -269,11 +276,23 @@ export function QuickImportDialog({ open, onOpenChange, onImported }: QuickImpor
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
+                  <Checkbox
+                    checked={showSystemTools}
+                    onToggle={() => toggleShowSystemTools(!showSystemTools)}
+                    disabled={importing}
+                    ariaLabel={translate('显示系统工具')}
+                  />
+                  {translate('显示系统工具')}
+                </label>
                 <p className="text-xs text-muted-foreground">
                   {translate('共发现 {total} 个应用，已选择 {selected} 个。', {
                     total: apps.length,
                     selected: selectedCount,
                   })}
+                  {hiddenSystemToolCount > 0 && !showSystemTools
+                    ? translate('已隐藏 {count} 个系统工具。', { count: hiddenSystemToolCount })
+                    : ''}
                 </p>
                 <Button
                   type="button"

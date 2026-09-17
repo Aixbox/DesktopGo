@@ -15,6 +15,10 @@ export const EN_QUICK_IMPORT_MESSAGES: Record<string, string> = {
     'No usable app shortcuts were found. You can add icons manually.',
   重新扫描: 'Rescan',
   '共发现 {total} 个应用，已选择 {selected} 个。': 'Found {total} apps; {selected} selected.',
+  显示系统工具: 'Show system tools',
+  '已隐藏 {count} 个系统工具。': '{count} system tools hidden.',
+  '扫描到的应用都是系统自带工具，已默认隐藏；勾选「显示系统工具」可查看。':
+    'All scanned entries are built-in system tools and are hidden by default. Toggle "Show system tools" to view them.',
   '全选 {source}': 'Select all {source}',
   '橙色圆点为已在图标库中的应用，默认不勾选；如需重新导入请手动勾选。':
     'Orange dots mark apps already in your library; they are unchecked by default. Select them manually to import again.',

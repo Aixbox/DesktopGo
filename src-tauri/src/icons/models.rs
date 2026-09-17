@@ -189,6 +189,10 @@ pub struct ScannedInstalledApp {
     pub source_label: String,
     /// new / possible_duplicate / exact_duplicate。
     pub status: String,
+    /// 是否为系统自带工具（管理工具、辅助功能、Windows Kits 等目录里的条目，
+    /// 或解析目标位于 %SystemRoot% 下的组件）：快捷导入弹窗默认隐藏这类条目，
+    /// 用户可通过「显示系统工具」开关查看并自行决定是否导入。
+    pub system_tool: bool,
     /// 因跨来源身份键去重并入本条目的其他来源条目：来源标签 → 条目数。
     /// 空即没有条目被并入；用于向用户解释「某来源的条目为什么变少」。
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]

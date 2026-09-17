@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { translate } from '@/lib/i18n'
 import { useToast } from '@/components/ui/toast'
@@ -30,6 +30,8 @@ export function useQuickImport({ open, onImported }: UseQuickImportParams) {
   const [importing, setImporting] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
   const [apps, setApps] = useState<QuickImportAppDraft[]>([])
+  /** 是否在弹窗里显示系统自带工具（管理工具、辅助功能等）：默认隐藏。 */
+  const [showSystemTools, setShowSystemTools] = useState(false)
   /** 正在编辑的应用：key 定位条目，draft 是「编辑图标信息」弹窗的初始值。 */
   const [editingApp, setEditingApp] = useState<{ key: string; draft: AddIconDialogDraft } | null>(null)
   const scanRequestRef = useRef(0)
@@ -106,9 +108,36 @@ export function useQuickImport({ open, onImported }: UseQuickImportParams) {
     )
   }, [])
 
-  const setAllSelected = useCallback((selected: boolean) => {
-    setApps(current => current.map(app => ({ ...app, selected })))
+  /**
+   * 弹窗实际展示的条目：默认隐藏系统工具，勾选「显示系统工具」后全部可见。
+   * 隐藏只是展示层过滤，扫描结果保持完整，切换开关无需重新扫描。
+   */
+  const visibleApps = useMemo(
+    () => (showSystemTools ? apps : apps.filter(app => !app.systemTool)),
+    [apps, showSystemTools]
+  )
+  const hiddenSystemToolCount = apps.length - visibleApps.length
+
+  /** 关闭「显示系统工具」时同步取消勾选被隐藏的条目，避免看不见的应用被导入。 */
+  const toggleShowSystemTools = useCallback((show: boolean) => {
+    setShowSystemTools(show)
+    if (!show) {
+      setApps(current =>
+        current.map(app => (app.systemTool ? { ...app, selected: false } : app))
+      )
+    }
   }, [])
+
+  const setAllSelected = useCallback(
+    (selected: boolean) => {
+      // 全选只作用于当前可见条目，不触碰隐藏中的系统工具。
+      const visibleKeys = new Set(visibleApps.map(app => app.key))
+      setApps(current =>
+        current.map(app => (visibleKeys.has(app.key) ? { ...app, selected } : app))
+      )
+    },
+    [visibleApps]
+  )
 
   /** 按来源分组全选/取消全选：只影响该来源下的条目。 */
   const setSourceSelected = useCallback((source: string, selected: boolean) => {
@@ -156,7 +185,7 @@ export function useQuickImport({ open, onImported }: UseQuickImportParams) {
     [editingApp]
   )
 
-  const selectedCount = countSelectedQuickImportApps(apps)
+  const selectedCount = countSelectedQuickImportApps(visibleApps)
 
   const confirmImport = useCallback(async (): Promise<QuickImportResult | undefined> => {
     const selectedApps = apps.filter(app => app.selected)
@@ -192,12 +221,16 @@ export function useQuickImport({ open, onImported }: UseQuickImportParams) {
   }, [apps, importing, onImported, scanning, toast])
 
   return {
-    apps,
+    // 弹窗拿到的是过滤后的可见条目；确认导入用的是内部完整列表（隐藏条目不勾选）。
+    apps: visibleApps,
     scanning,
     importing,
     scanError,
     selectedCount,
     editingApp,
+    showSystemTools,
+    toggleShowSystemTools,
+    hiddenSystemToolCount,
     startScan,
     toggleApp,
     setAllSelected,
