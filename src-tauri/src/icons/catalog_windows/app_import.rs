@@ -21,10 +21,12 @@
 //! 扫描不做缓存：这个功能只在图标库为空（或用户主动点击）时触发一次，
 //! 目录内容与图标库随时可能变化，缓存反而要处理失效。
 //!
-//! 系统自带工具（管理工具、辅助功能、Windows Kits 等文件夹里的条目，或解析
-//! 目标位于 %SystemRoot% 下的组件）会在扫描结果里标记 `system_tool`，前端
+//! 系统自带工具（管理工具、辅助功能、Windows Kits、快速启动、WindowsApps
+//! 等文件夹里的条目，解析目标位于 %SystemRoot% 下的组件，以及名字呈
+//! 「组件感」的套件后台可执行文件）会在扫描结果里标记 `system_tool`，前端
 //! 默认隐藏、不勾选，通过「显示系统工具」开关查看——判定规则见
-//! `SYSTEM_TOOL_FOLDER_NAMES` 与 `is_system_tool_entry`。
+//! `SYSTEM_TOOL_FOLDER_NAMES`、`is_system_tool_target` 与
+//! `is_component_executable_name`。
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -70,6 +72,8 @@ const JUNK_NAME_KEYWORDS: &[&str] = &[
     "修复",
     "repair",
     "register",
+    // 套件安装器残留（setup 已在上面覆盖，这里补 install 本体）。
+    "install",
 ];
 
 const STATUS_NEW: &str = "new";
@@ -110,7 +114,37 @@ const SYSTEM_TOOL_FOLDER_NAMES: &[&str] = &[
     // Windows 安全中心入口。
     "windows defender",
     "windows 安全中心",
+    // 快速启动目录（任务栏固定、Window Switcher / Shows Desktop 等旧式条目）。
+    "quick launch",
+    // MSIX 包安装目录（C:\Program Files\WindowsApps）与执行别名目录
+    // （%LOCALAPPDATA%\Microsoft\WindowsApps，winget/python 等命令别名）。
+    // 商店应用走 UWP 来源以 shell: 路径导入，不受影响。
+    "windowsapps",
 ];
+
+/// 可执行目标名呈现这些「组件感」模式时视为系统/套件组件（按文件主干、
+/// 小写匹配）：Office 套件以 mso 开头的内部组件（msoadfsb、msoxmled 等），
+/// 以及 helper/server/service/host/diag 结尾的后台组件（sdxhelper、
+/// WindowsPackageManagerServer 等）。只匹配解析目标的可执行文件名，
+/// 不碰快捷方式显示名；误标记时用户仍可打开「显示系统工具」勾选导入。
+const COMPONENT_EXECUTABLE_PREFIXES: &[&str] = &["mso"];
+const COMPONENT_EXECUTABLE_SUFFIXES: &[&str] = &["helper", "server", "service", "host", "diag"];
+
+fn is_component_executable_name(target: &str) -> bool {
+    let Some(stem) = Path::new(target)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .map(|value| value.trim().to_lowercase())
+    else {
+        return false;
+    };
+    COMPONENT_EXECUTABLE_PREFIXES
+        .iter()
+        .any(|prefix| stem.starts_with(prefix))
+        || COMPONENT_EXECUTABLE_SUFFIXES
+            .iter()
+            .any(|suffix| stem.ends_with(suffix))
+}
 
 /// 入口路径或解析目标里出现这些文件夹名（按路径组件、含文件名主干）即视为系统工具。
 fn path_has_system_tool_folder(path: &str) -> bool {
@@ -154,6 +188,9 @@ fn is_system_tool_target(target: &str) -> bool {
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| extension.eq_ignore_ascii_case("msc"))
     {
+        return true;
+    }
+    if is_component_executable_name(target) {
         return true;
     }
     path_has_system_tool_folder(target)
@@ -383,6 +420,17 @@ fn candidate_from_file(path: &Path, source: &mut FolderSource) -> Option<Scanned
     None
 }
 
+/// App Paths 只收录真实存在的 .exe：该注册表键里也混有 .dll 注册
+/// （dfshim.dll、vstoee.dll 这类 ClickOnce/VSTO 部署组件）与失效路径，
+/// 都不能算「应用」。
+fn is_importable_app_paths_target(exe_path: &Path) -> bool {
+    exe_path.is_file()
+        && exe_path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+}
+
 /// 注册表 App Paths：`HKLM/HKCU\...\App Paths` 的每个子键是一项已注册应用，
 /// 默认值是可执行文件路径。覆盖那些没写快捷方式、只装了 exe 的应用。
 pub(crate) fn collect_app_paths_candidates() -> Vec<ScannedCandidate> {
@@ -422,7 +470,7 @@ pub(crate) fn collect_app_paths_candidates() -> Vec<ScannedCandidate> {
                 continue;
             }
             let exe_path = PathBuf::from(&expanded);
-            if !exe_path.is_file() {
+            if !is_importable_app_paths_target(&exe_path) {
                 continue;
             }
             let display_name = sub_name
@@ -707,232 +755,4 @@ fn classify_candidates(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn candidate(
-        source: &'static str,
-        name: &str,
-        identity: &str,
-        priority: u8,
-    ) -> ScannedCandidate {
-        ScannedCandidate {
-            display_name: name.to_string(),
-            entry_path: format!("C:\\dummy\\{name}.lnk"),
-            target_path: identity.to_string(),
-            identity: identity.to_lowercase(),
-            item_type: "shortcut".to_string(),
-            source_label: source,
-            source_priority: priority,
-        }
-    }
-
-    #[test]
-    fn junk_names_are_filtered() {
-        assert!(is_junk_name("Uninstall Foo"));
-        assert!(is_junk_name("应用卸载程序"));
-        assert!(is_junk_name("  "));
-        assert!(!is_junk_name("Visual Studio Code"));
-        assert!(!is_junk_name("微信"));
-    }
-
-    #[test]
-    fn system_tool_folders_are_detected_by_name() {
-        // 用户报告的样例：管理工具、辅助功能、Windows Kits 里的快捷方式。
-        assert!(path_has_system_tool_folder(
-            r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\services.lnk"
-        ));
-        assert!(path_has_system_tool_folder(
-            r"C:\Users\a\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Accessibility\LiveCaptions.lnk"
-        ));
-        assert!(path_has_system_tool_folder(
-            r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Windows Kits\Application Verifier (X86)\Application Verifier (WOW).lnk"
-        ));
-        // 中文系统的本地化文件夹名。
-        assert!(path_has_system_tool_folder(
-            r"C:\dummy\管理工具\services.lnk"
-        ));
-        assert!(path_has_system_tool_folder(
-            r"C:\dummy\辅助功能\VoiceAccess.lnk"
-        ));
-        // 自启动目录。
-        assert!(path_has_system_tool_folder(
-            r"C:\Users\a\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\OneDrive.lnk"
-        ));
-        // 普通应用不受影响。
-        assert!(!path_has_system_tool_folder(
-            r"C:\Program Files\Google\Chrome\Application\chrome.exe"
-        ));
-        assert!(!path_has_system_tool_folder(r"C:\Users\a\Desktop\微信.lnk"));
-    }
-
-    #[test]
-    fn system_tool_targets_are_detected_by_path() {
-        // 目标在 %SystemRoot% 下：.msc 管理控制台与 SystemApps 收件箱组件。
-        assert!(is_system_tool_target(r"C:\Windows\System32\services.msc"));
-        assert!(is_system_tool_target(
-            r"C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\LiveCaptions.exe"
-        ));
-        // Windows Kits 目录内（即使入口路径不在该文件夹下）。
-        assert!(is_system_tool_target(
-            r"C:\Program Files (x86)\Windows Kits\10\App Certification Kit\appverifier.exe"
-        ));
-        // %SystemRoot% 边界：C:\WindowsApps 这类同前缀目录不算（下一字符不是分隔符）。
-        assert!(!is_system_tool_target(r"C:\WindowsApps\SomeApp\app.exe"));
-        // 普通应用与 URL 快捷方式不受影响。
-        assert!(!is_system_tool_target(
-            r"C:\Program Files\Google\Chrome\Application\chrome.exe"
-        ));
-        assert!(!is_system_tool_entry(
-            r"C:\Users\a\Desktop\微信.lnk",
-            "https://weixin.qq.com/"
-        ));
-        assert!(!is_system_tool_entry(
-            r"C:\Users\a\Desktop\Chrome.lnk",
-            r"C:\Program Files\Google\Chrome\Application\chrome.exe"
-        ));
-    }
-
-    #[test]
-    fn env_vars_expand_and_keep_unknown_placeholders() {
-        std::env::set_var("DESKTOPGO_TEST_DIR", "C:\\Program Files");
-        assert_eq!(
-            expand_env_vars("%DESKTOPGO_TEST_DIR%\\app.exe"),
-            "C:\\Program Files\\app.exe"
-        );
-        assert_eq!(
-            expand_env_vars("%DESKTOPGO_TEST_MISSING_VAR%\\app.exe"),
-            "%DESKTOPGO_TEST_MISSING_VAR%\\app.exe"
-        );
-    }
-
-    #[test]
-    fn dedupe_keeps_the_highest_priority_entry_per_identity() {
-        let (deduped, merges) = dedupe_candidates(vec![
-            candidate(
-                "注册表",
-                "注册表版",
-                "C:\\Apps\\foo.exe",
-                PRIORITY_APP_PATHS,
-            ),
-            candidate("桌面", "桌面版", "C:\\Apps\\foo.exe", PRIORITY_USER_DESKTOP),
-            candidate(
-                "开始菜单",
-                "菜单版",
-                "C:\\Apps\\foo.exe",
-                PRIORITY_USER_PROGRAMS,
-            ),
-            candidate(
-                "开始菜单",
-                "另一个",
-                "C:\\Apps\\bar.exe",
-                PRIORITY_USER_PROGRAMS,
-            ),
-        ]);
-        assert_eq!(deduped.len(), 2);
-        let foo = deduped
-            .iter()
-            .find(|item| item.identity == "c:\\apps\\foo.exe")
-            .expect("foo 条目应保留");
-        assert_eq!(foo.display_name, "菜单版", "同身份键保留开始菜单来源");
-        assert!(
-            deduped
-                .iter()
-                .any(|item| item.identity == "c:\\apps\\bar.exe"),
-            "不同身份键的条目互不干扰"
-        );
-        // 被合并条目的去向要能追溯到保留条目：桌面版并入菜单版，注册表版亦然。
-        assert_eq!(merges.len(), 2, "两条同身份的低优先级条目都应记录去向");
-        assert!(
-            merges
-                .iter()
-                .all(|(source, identity)| identity == "c:\\apps\\foo.exe"
-                    && (*source == "桌面" || *source == "注册表")),
-            "去向应记录被合并来源与保留条目身份键"
-        );
-    }
-
-    #[test]
-    fn classification_attaches_merged_sources_to_the_survivor() {
-        let (deduped, merges) = dedupe_candidates(vec![
-            candidate(
-                "开始菜单",
-                "菜单版",
-                "C:\\Apps\\foo.exe",
-                PRIORITY_USER_PROGRAMS,
-            ),
-            candidate("桌面", "桌面版", "C:\\Apps\\foo.exe", PRIORITY_USER_DESKTOP),
-            candidate(
-                "桌面",
-                "桌面版二",
-                "C:\\Apps\\foo.exe",
-                PRIORITY_USER_DESKTOP,
-            ),
-        ]);
-        let classified = classify_candidates(deduped, merges, Vec::new());
-        assert_eq!(classified.len(), 1);
-        let merged = &classified[0].merged_sources;
-        assert_eq!(
-            merged.get("桌面"),
-            Some(&2),
-            "两个桌面来源条目都应计入保留条目的 merged_sources"
-        );
-    }
-
-    #[test]
-    fn classification_matches_identity_and_name() {
-        let existing = vec![SnapshotIconItem {
-            id: "existing-id".to_string(),
-            key: "existing-key".to_string(),
-            display_order: 1,
-            name: "微信".to_string(),
-            path: "C:\\Library\\wechat.lnk".to_string(),
-            target_path: "C:\\Apps\\WeChat.exe".to_string(),
-            launch_arguments: String::new(),
-            working_directory: String::new(),
-            custom_icon_path: String::new(),
-            icon_source: "target".to_string(),
-            icon_color: "none".to_string(),
-            icon_text: String::new(),
-            item_type: "shortcut".to_string(),
-            origin: "import".to_string(),
-            hidden: false,
-            icon: String::new(),
-            automatic_target_icon_cache: false,
-            automatic_target_icon_cache_version: 0,
-            legacy_icons: None,
-        }];
-
-        let classified = classify_candidates(
-            vec![
-                // 大小写不同但身份一致 → 一定重复。
-                candidate(
-                    "桌面",
-                    "WeChat",
-                    "c:\\apps\\wechat.exe",
-                    PRIORITY_USER_DESKTOP,
-                ),
-                // 目标不同但名称相同 → 可能重复。
-                candidate(
-                    "桌面",
-                    "微信",
-                    "C:\\Other\\wechat-portable.exe",
-                    PRIORITY_USER_DESKTOP,
-                ),
-                // 都不同 → 新应用。
-                candidate(
-                    "注册表",
-                    "DesktopGo",
-                    "C:\\Apps\\desktopgo.exe",
-                    PRIORITY_APP_PATHS,
-                ),
-            ],
-            Vec::new(),
-            existing,
-        );
-
-        assert_eq!(classified[0].status, "exact_duplicate");
-        assert_eq!(classified[1].status, "possible_duplicate");
-        assert_eq!(classified[2].status, "new");
-    }
-}
+mod tests;
