@@ -1,6 +1,12 @@
 import { invoke } from '@tauri-apps/api/core'
 
 export const APP_UPDATER_PROGRESS_EVENT = 'desktopgo://updater-progress'
+export const APP_UPDATE_AVAILABLE_EVENT = 'desktopgo://update-available'
+
+export interface AppUpdateAvailablePayload {
+  version: string
+  body: string | null
+}
 
 export interface UpdaterConfigurationStatus {
   configured: boolean

@@ -299,6 +299,9 @@ pub fn notify_main_window_ready(
 ) -> Result<(), String> {
     main_window_state.ready.store(true, Ordering::SeqCst);
 
+    // 主窗口就绪即调度一次启动更新检查（内部自带防重入与延迟）。
+    crate::updater::schedule_startup_update_check(app_handle.clone());
+
     if !main_window_state.pending_show.swap(false, Ordering::SeqCst) {
         return Ok(());
     }

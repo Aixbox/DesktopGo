@@ -9,10 +9,17 @@ use url::Url;
 
 const UPDATE_TIMEOUT_SECONDS: u64 = 30;
 pub const UPDATE_PROGRESS_EVENT: &str = "desktopgo://updater-progress";
+/// 启动自动检查发现新版本时发给前端的事件名（仅发布构建启用自动检查）。
+#[cfg(not(debug_assertions))]
+pub const UPDATE_AVAILABLE_EVENT: &str = "desktopgo://update-available";
+#[cfg(not(debug_assertions))]
+const AUTO_CHECK_DELAY_MS: u64 = 15_000;
 
 const BUILD_UPDATER_TARGET: Option<&str> = option_env!("DESKTOPGO_UPDATER_TARGET");
 
 static INSTALL_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+#[cfg(not(debug_assertions))]
+static AUTO_CHECK_SCHEDULED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Default)]
 pub struct PendingUpdate(pub Mutex<Option<Update>>);
@@ -103,6 +110,48 @@ pub fn get_updater_configuration_status(app_handle: AppHandle) -> UpdaterConfigu
             message: Some(message),
         },
     }
+}
+
+/// 启动后延迟自动检查一次更新：只提示、不自动下载，也不写入
+/// [`PendingUpdate`] 状态（与手动检查互相独立，发现更新后引导用户进设置安装）。
+/// 仅发布构建启用；调试构建由设置页手动检查覆盖。
+#[cfg(not(debug_assertions))]
+pub(crate) fn schedule_startup_update_check(app_handle: AppHandle) {
+    if AUTO_CHECK_SCHEDULED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(AUTO_CHECK_DELAY_MS));
+        match tauri::async_runtime::block_on(check_for_available_update(&app_handle)) {
+            Ok(Some(update)) => {
+                let _ = app_handle.emit(
+                    UPDATE_AVAILABLE_EVENT,
+                    serde_json::json!({ "version": update.version, "body": update.body }),
+                );
+            }
+            Ok(None) => {}
+            Err(error) => eprintln!("Startup update check failed: {error}"),
+        }
+    });
+}
+
+/// 调试构建不自动检查：开发环境依赖本地配置，检查只会产生噪音。
+#[cfg(debug_assertions)]
+pub(crate) fn schedule_startup_update_check(_app_handle: AppHandle) {}
+
+#[cfg(not(debug_assertions))]
+async fn check_for_available_update(
+    app_handle: &AppHandle,
+) -> Result<Option<tauri_plugin_updater::Update>, String> {
+    if resolve_updater_config(app_handle).is_err() {
+        return Ok(None);
+    }
+    let update = build_updater(app_handle)?
+        .check()
+        .await
+        .map_err(|error| format!("检查更新失败：{error}"))?;
+    Ok(update)
 }
 
 pub async fn check_for_app_update(
