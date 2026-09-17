@@ -10,7 +10,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Check, ChevronDown, Import, Plus, RefreshCw, Wand2 } from 'lucide-react'
 import { translate, useI18n } from '@/lib/i18n'
 import { recordSearchResultRun } from '@/lib/search/api'
 import { getSearchFilterLabel, getSearchFilterOptions } from '@/lib/search/filters'
@@ -18,7 +17,6 @@ import { searchSourceIncludesFiles, type SearchSource } from '@/lib/search/scope
 import { useSearchPreview } from '@/lib/search/useSearchPreview'
 import { useShortcutSearchResults } from '@/lib/search/useShortcutSearchResults'
 import { useSearchScopeChange } from '@/lib/search/useSearchScopeChange'
-import { SearchFloatingMenu } from '@/components/search/SearchFloatingMenu'
 import {
   getUnifiedSelectedShortcutIndex,
   handleSearchNavigation,
@@ -29,6 +27,15 @@ import { LaunchpadIconImportLayer } from '@/components/launchpad/LaunchpadIconIm
 import { LaunchpadWindowControls } from '@/components/launchpad/LaunchpadWindowControls'
 import { LaunchpadAiOrganizePane } from '@/components/launchpad/LaunchpadAiOrganizePane'
 import { LaunchpadAiOrganizeToolbar } from '@/components/launchpad/LaunchpadAiOrganizeToolbar'
+import {
+  LaunchpadIconArea,
+} from '@/components/launchpad/LaunchpadIconArea'
+import {
+  loadIconGrid,
+  loadScrollableIconGrid,
+} from '@/components/launchpad/launchpadGridChunks'
+import { LaunchpadSearchBar } from '@/components/launchpad/LaunchpadSearchBar'
+import { LaunchpadSelectionToolbar } from '@/components/launchpad/LaunchpadSelectionToolbar'
 import { useLaunchpadIconImportController } from '@/components/launchpad/useLaunchpadIconImportController'
 import { useLaunchpadSurfaceInteractions } from '@/components/launchpad/useLaunchpadSurfaceInteractions'
 import { useLaunchpadWindowController } from '@/components/launchpad/useLaunchpadWindowController'
@@ -39,14 +46,6 @@ import { useIconStore } from '@/stores/iconStore'
 import type { BestMatchItem } from '@/lib/search/bestMatch'
 import type { DesktopIcon } from '@/types'
 import type { AiOrganizePanelHandle, AiOrganizePanelRunState } from './ai/AiOrganizePanel'
-import { Button } from './ui/button'
-
-const loadScrollableIconGrid = () => import('./ScrollableIconGrid')
-const ScrollableIconGrid = lazy(() =>
-  loadScrollableIconGrid().then(module => ({ default: module.ScrollableIconGrid }))
-)
-const loadIconGrid = () => import('./IconGrid')
-const IconGrid = lazy(() => loadIconGrid().then(module => ({ default: module.IconGrid })))
 
 const SearchPanel = lazy(() =>
   import('./search/SearchPanel').then(module => ({ default: module.SearchPanel }))
@@ -670,123 +669,39 @@ export function Launchpad() {
                       onExit={exitAiOrganizeMode}
                     />
                   ) : selectionMode ? (
-                    <div
-                      data-selection-toolbar
-                      className="launchpad-glass-panel-strong mx-auto flex w-fit max-w-full flex-wrap items-center justify-center gap-2 rounded-full px-3 py-2 text-sm text-foreground/90"
-                    >
-                      <span className="px-2">
-                        {translate('已选择：{count}', { count: selectedIconKeys.length })}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleHideSelected}
-                        className="launchpad-glass-button rounded-full px-3 py-1 text-xs transition-colors"
-                      >
-                        {translate('隐藏')}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleDeleteSelected}
-                        className="rounded-full border border-red-500/30 px-3 py-1 text-xs text-red-700 transition-colors hover:bg-red-500/12 hover:text-red-800 dark:text-red-200 dark:hover:bg-red-500/25 dark:hover:text-red-100"
-                      >
-                        {translate('删除')}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={clearSelection}
-                        className="launchpad-glass-button rounded-full px-3 py-1 text-xs transition-colors"
-                      >
-                        {translate('取消')}
-                      </button>
-                    </div>
+                    <LaunchpadSelectionToolbar
+                      count={selectedIconKeys.length}
+                      onHide={handleHideSelected}
+                      onDelete={handleDeleteSelected}
+                      onCancel={clearSelection}
+                    />
                   ) : (
-                    <>
-                      <input
-                        ref={searchInputRef}
-                        data-search-placeholder
-                        type="text"
-                        value={keyword}
-                        onChange={e => {
-                          setKeyword(e.target.value)
-                          setCombinedSelectedIndex(-1)
-                          if (!isSearchPanelOpen) {
-                            openSearchPanel()
-                          }
-                        }}
-                        onFocus={() => {
+                    <LaunchpadSearchBar
+                      searchSource={searchSource}
+                      keyword={keyword}
+                      inputRef={searchInputRef}
+                      onKeywordChange={value => {
+                        setKeyword(value)
+                        setCombinedSelectedIndex(-1)
+                        if (!isSearchPanelOpen) {
                           openSearchPanel()
-                        }}
-                        onKeyDown={handleSearchInputKeyDown}
-                        placeholder={
-                          searchSource === 'all'
-                            ? translate('搜索应用、快捷入口、文件和文件夹...')
-                            : searchSource === 'everything'
-                              ? translate('搜索文件和文件夹...')
-                              : translate('搜索快捷入口...')
                         }
-                        aria-label={
-                          searchSource === 'all'
-                            ? translate('搜索全部内容')
-                            : searchSource === 'everything'
-                              ? translate('搜索文件')
-                              : translate('搜索快捷入口')
-                        }
-                        className={`launchpad-glass-panel h-11 w-full rounded-full px-4 text-sm text-foreground/90 outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 ${
-                          searchSource !== 'icons' ? 'pr-36' : ''
-                        }`}
-                      />
-
-                      {searchSource !== 'icons' ? (
-                        <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                          <button
-                            ref={filterButtonRef}
-                            data-search-placeholder
-                            type="button"
-                            className="launchpad-glass-button inline-flex h-8 items-center gap-1 rounded-full px-3 text-xs transition-colors"
-                            onClick={() => setIsFilterMenuOpen(open => !open)}
-                          >
-                            <span className="truncate">
-                              {searchSource === 'all'
-                                ? `${translate('文件')} · ${selectedFilterLabel}`
-                                : selectedFilterLabel}
-                            </span>
-                            <ChevronDown className="h-3.5 w-3.5" />
-                          </button>
-
-                          <SearchFloatingMenu
-                            open={isFilterMenuOpen}
-                            triggerRef={filterButtonRef}
-                            menuRef={filterMenuRef}
-                            width={192}
-                            align="start"
-                            className="launchpad-glass-panel-strong overflow-hidden rounded-xl shadow-xl"
-                            contentClassName="p-1.5"
-                          >
-                            {searchFilterOptions.map(entry => (
-                              <button
-                                key={entry.value}
-                                type="button"
-                                className={`flex w-full items-center justify-between rounded-sm px-3 py-2 text-sm transition ${
-                                  searchFilter === entry.value
-                                    ? 'bg-accent text-foreground'
-                                    : 'text-foreground/70 hover:bg-accent hover:text-foreground'
-                                }`}
-                                onClick={() => {
-                                  setCombinedSelectedIndex(-1)
-                                  setSearchFilter(entry.value)
-                                  setIsFilterMenuOpen(false)
-                                }}
-                              >
-                                <span>{entry.label}</span>
-                                {searchFilter === entry.value ? (
-                                  <Check className="accent-foreground h-4 w-4" />
-                                ) : null}
-                              </button>
-                            ))}
-                          </SearchFloatingMenu>
-                        </div>
-                      ) : null}
-                    </>
+                      }}
+                      onInputFocus={openSearchPanel}
+                      onInputKeyDown={handleSearchInputKeyDown}
+                      filterButtonRef={filterButtonRef}
+                      filterMenuRef={filterMenuRef}
+                      isFilterMenuOpen={isFilterMenuOpen}
+                      onFilterToggle={() => setIsFilterMenuOpen(open => !open)}
+                      filterOptions={searchFilterOptions}
+                      filter={searchFilter}
+                      selectedFilterLabel={selectedFilterLabel}
+                      onFilterSelect={value => {
+                        setCombinedSelectedIndex(-1)
+                        setSearchFilter(value)
+                        setIsFilterMenuOpen(false)
+                      }}
+                    />
                   )}
                 </div>
               </div>
@@ -888,115 +803,22 @@ export function Launchpad() {
                 />
               ) : null}
 
-              <div className="flex h-full min-h-0 items-center justify-center">
-                {loading ? (
-                  <div className="flex items-center gap-3">
-                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/40 border-t-foreground" />
-                    <span className="launchpad-wallpaper-text text-lg text-foreground/70">
-                      {translate('Loading...')}
-                    </span>
-                  </div>
-                ) : iconLoadError && icons.length === 0 ? (
-                  <div
-                    role="alert"
-                    className="flex max-w-md flex-col items-center gap-3 px-6 text-center"
-                  >
-                    <div className="space-y-1">
-                      <p className="launchpad-wallpaper-text text-sm font-medium text-foreground">
-                        {translate('图标库加载失败，请重试。')}
-                      </p>
-                      <p
-                        className="launchpad-wallpaper-text break-words text-xs leading-5 text-muted-foreground"
-                        title={iconLoadError}
-                      >
-                        {translate('现有布局不会被修改。')}
-                      </p>
-                    </div>
-                    <Button type="button" size="sm" onClick={() => void fetchIcons()}>
-                      <RefreshCw className="h-4 w-4" />
-                      {translate('重试')}
-                    </Button>
-                  </div>
-                ) : icons.length === 0 ? (
-                  <div className="flex max-w-md flex-col items-center gap-4 px-6 text-center">
-                    <div className="flex h-28 w-44 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-foreground/30 bg-background/35 text-foreground/55 backdrop-blur-sm">
-                      <Import className="h-6 w-6" />
-                      <span className="launchpad-wallpaper-text text-xs">
-                        {translate('把图标拖到这里导入')}
-                      </span>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="launchpad-wallpaper-text text-sm font-medium text-foreground">
-                        {translate('启动台还是空的')}
-                      </p>
-                      <p className="launchpad-wallpaper-text text-xs leading-5 text-muted-foreground">
-                        {translate(
-                          '从桌面或资源管理器把应用、快捷方式或文件拖进窗口即可导入，也可以手动添加。'
-                        )}
-                      </p>
-                      <p className="launchpad-wallpaper-text text-xs leading-5 text-muted-foreground">
-                        {translate('还可以一键扫描已安装的应用，批量导入常用软件。')}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center justify-center gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => setIsQuickImportOpen(true)}
-                        disabled={isImportingDrop || addIconDialogOpen}
-                      >
-                        <Wand2 className="h-4 w-4" />
-                        {translate('快捷导入')}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleAddIcons()}
-                        disabled={isImportingDrop || addIconDialogOpen}
-                      >
-                        <Plus className="h-4 w-4" />
-                        {translate('添加图标')}
-                      </Button>
-                    </div>
-                  </div>
-                ) : launchpadGridViewMode === 'scroll' ? (
-                  <Suspense
-                    fallback={
-                      <div className="flex items-center gap-3">
-                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/40 border-t-foreground" />
-                        <span className="launchpad-wallpaper-text text-lg text-foreground/70">
-                          {translate('Loading...')}
-                        </span>
-                      </div>
-                    }
-                  >
-                    <ScrollableIconGrid
-                      icons={icons}
-                      layoutResetToken={layoutResetToken}
-                      sidebarCompact={isScrollSidebarCompact}
-                      onToggleSidebarCompact={() => setIsScrollSidebarCompact(current => !current)}
-                      importPlacementRequest={importPlacementRequest}
-                      addIconDisabled={isImportingDrop || addIconDialogOpen}
-                      onAddIcon={handleAddIcons}
-                    />
-                  </Suspense>
-                ) : (
-                  <Suspense
-                    fallback={
-                      <span className="launchpad-wallpaper-text text-sm text-foreground/70">
-                        {translate('Loading...')}
-                      </span>
-                    }
-                  >
-                    <IconGrid
-                      icons={icons}
-                      layoutResetToken={layoutResetToken}
-                      importPlacementRequest={importPlacementRequest}
-                    />
-                  </Suspense>
-                )}
-              </div>
+              <LaunchpadIconArea
+                loading={loading}
+                error={iconLoadError}
+                icons={icons}
+                onRetry={() => void fetchIcons()}
+                gridViewMode={launchpadGridViewMode}
+                layoutResetToken={layoutResetToken}
+                sidebarCompact={isScrollSidebarCompact}
+                onToggleSidebarCompact={() =>
+                  setIsScrollSidebarCompact(current => !current)
+                }
+                importPlacementRequest={importPlacementRequest}
+                addIconDisabled={isImportingDrop || addIconDialogOpen}
+                onAddIcon={() => handleAddIcons()}
+                onQuickImport={() => setIsQuickImportOpen(true)}
+              />
             </div>
 
             {aiOrganizeUiActive ? (
