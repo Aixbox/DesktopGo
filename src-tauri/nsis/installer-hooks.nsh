@@ -209,7 +209,7 @@ FunctionEnd
       ; 删 Run 键并记录偏好；交互安装以完成页的最终勾选为准（覆盖安装段先写的结果）。
       ${If} $AutoStartCheckboxState = ${BST_CHECKED}
         DeleteRegValue HKCU "${MANUPRODUCTKEY}" "${AUTOSTART_DISABLED_VALUE}"
-        WriteRegStr HKCU "${AUTORUNKEY}" "${PRODUCTNAME}" '"$INSTDIR\${MAINBINARYNAME}.exe"'
+        WriteRegStr HKCU "${AUTORUNKEY}" "${PRODUCTNAME}" '"$INSTDIR\${MAINBINARYNAME}.exe" --hidden'
       ${Else}
         WriteRegDWORD HKCU "${MANUPRODUCTKEY}" "${AUTOSTART_DISABLED_VALUE}" 1
         DeleteRegValue HKCU "${AUTORUNKEY}" "${PRODUCTNAME}"
@@ -246,7 +246,7 @@ FunctionEnd
 
   ${If} $AutoStartCheckboxState = ${BST_CHECKED}
     DeleteRegValue HKCU "${MANUPRODUCTKEY}" "${AUTOSTART_DISABLED_VALUE}"
-    WriteRegStr HKCU "${AUTORUNKEY}" "${PRODUCTNAME}" '"$INSTDIR\${MAINBINARYNAME}.exe"'
+    WriteRegStr HKCU "${AUTORUNKEY}" "${PRODUCTNAME}" '"$INSTDIR\${MAINBINARYNAME}.exe" --hidden'
   ${Else}
     WriteRegDWORD HKCU "${MANUPRODUCTKEY}" "${AUTOSTART_DISABLED_VALUE}" 1
     DeleteRegValue HKCU "${AUTORUNKEY}" "${PRODUCTNAME}"

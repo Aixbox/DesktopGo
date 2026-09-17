@@ -7,6 +7,14 @@ const DEFAULT_LAUNCH_ON_STARTUP: bool = true;
 const LAUNCH_ON_STARTUP_SETTING_KEY: &str = "launchOnStartup";
 const WINDOWS_RUN_VALUE_NAME: &str = "DesktopGo";
 const SHOW_ON_LAUNCH_MARKER_FILE_NAME: &str = ".show_on_launch";
+/// 开机自启命令行参数：注册表 Run 键里的命令带此参数，本次启动保持静默进托盘。
+pub(crate) const HIDDEN_LAUNCH_FLAG: &str = "--hidden";
+
+/// 判断命令行参数里是否带静默启动标记。
+/// 抽成纯函数便于单测；调用方跳过 argv[0] 后传入。
+fn is_hidden_launch_args(args: &[String]) -> bool {
+    args.iter().any(|arg| arg == HIDDEN_LAUNCH_FLAG)
+}
 
 pub(crate) fn should_show_on_launch(_app: &tauri::AppHandle) -> bool {
     let exe = std::env::current_exe().ok();
@@ -14,13 +22,16 @@ pub(crate) fn should_show_on_launch(_app: &tauri::AppHandle) -> bool {
         .as_ref()
         .and_then(|path| path.parent())
         .map(|dir| dir.join(SHOW_ON_LAUNCH_MARKER_FILE_NAME));
-    match marker {
-        Some(path) if path.exists() => {
+    if let Some(path) = marker {
+        if path.exists() {
             let _ = std::fs::remove_file(&path);
-            true
+            return true;
         }
-        _ => false,
     }
+    // 安装完成首启之外：手动启动（开始菜单/桌面/直接运行）直接打开启动台，
+    // 开机自启（命令带 --hidden）保持静默进托盘。
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    !is_hidden_launch_args(&args)
 }
 
 fn read_saved_launch_on_startup(app: &tauri::AppHandle) -> Option<bool> {
@@ -188,4 +199,32 @@ pub(crate) fn set_launch_on_startup_enabled(
     }
 
     Ok(enabled)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_hidden_launch_args;
+
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_string()).collect()
+    }
+
+    #[test]
+    fn hidden_flag_is_detected_among_other_arguments() {
+        assert!(is_hidden_launch_args(&args(&["--hidden"])));
+        assert!(is_hidden_launch_args(&args(&["--other", "--hidden"])));
+    }
+
+    #[test]
+    fn manual_launch_has_no_hidden_flag() {
+        assert!(!is_hidden_launch_args(&args(&[])));
+        assert!(!is_hidden_launch_args(&args(&["--other"])));
+    }
+
+    #[test]
+    fn similar_flags_do_not_match() {
+        assert!(!is_hidden_launch_args(&args(&["--hidden=true"])));
+        assert!(!is_hidden_launch_args(&args(&["-hidden"])));
+        assert!(!is_hidden_launch_args(&args(&["--Hidden"])));
+    }
 }

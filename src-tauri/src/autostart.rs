@@ -19,7 +19,12 @@ fn open_windows_run_key() -> Result<winreg::RegKey, String> {
 pub(crate) fn current_launch_command() -> Result<String, String> {
     let executable_path =
         std::env::current_exe().map_err(|error| format!("无法获取当前程序路径：{}", error))?;
-    Ok(format!("\"{}\"", executable_path.display()))
+    // 自启命令带 --hidden：开机启动静默进托盘，与手动启动（直接显示启动台）区分。
+    Ok(format!(
+        "\"{}\" {}",
+        executable_path.display(),
+        crate::startup::HIDDEN_LAUNCH_FLAG
+    ))
 }
 
 #[cfg(windows)]
