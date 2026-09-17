@@ -5,9 +5,12 @@ import {
   clampBackgroundOverlay,
   deriveAccentPalette,
   extractAccentColorFromPixels,
-  getAccentForegroundColor,
   isLaunchpadBackgroundDataUri,
   normalizeThemeAccentColor,
+  DEFAULT_FOREGROUND_TONE,
+  FOREGROUND_TONE_COLOR,
+  LABEL_TONE_TEXT_SHADOW,
+  type ForegroundTone,
 } from './appearancePolicy'
 
 export {
@@ -18,6 +21,7 @@ export {
   BACKGROUND_OVERLAY_MIN,
   DEFAULT_BACKGROUND_BLUR,
   DEFAULT_BACKGROUND_OVERLAY,
+  DEFAULT_FOREGROUND_TONE,
   DEFAULT_THEME_ACCENT_COLOR,
   MAX_BACKGROUND_DATA_URI_LENGTH,
   THEME_ACCENT_PRESETS,
@@ -27,8 +31,10 @@ export {
   deriveAccentPalette,
   extractAccentColorFromPixels,
   getAccentForegroundColor,
+  isForegroundTone,
   isLaunchpadBackgroundDataUri,
   normalizeThemeAccentColor,
+  type ForegroundTone,
 } from './appearancePolicy'
 
 export const MAX_BACKGROUND_FILE_BYTES = 12 * 1024 * 1024
@@ -61,6 +67,10 @@ export type AppearanceSettings = {
   backgroundOverlay: number
   /** 背景模糊强度百分比，渲染时换算为模糊半径。 */
   backgroundBlur: number
+  /** 自定义壁纸上图标标题的颜色调。 */
+  labelTone: ForegroundTone
+  /** 选中态控件（开关圆点、复选框、主按钮）的前景色调，仅在设置主题色后生效。 */
+  selectedForegroundTone: ForegroundTone
 }
 
 export type BackgroundImageErrorCode = 'format' | 'file-size' | 'decode' | 'output-size'
@@ -80,26 +90,34 @@ export function applyAppearance({
   backgroundImage,
   backgroundOverlay,
   backgroundBlur,
+  labelTone,
+  selectedForegroundTone,
 }: AppearanceSettings): void {
   const root = document.documentElement
   const normalizedAccent = normalizeThemeAccentColor(accentColor)
 
   if (normalizedAccent) {
-    const foreground = getAccentForegroundColor(normalizedAccent)
     const palette = deriveAccentPalette(normalizedAccent)
     root.style.setProperty('--appearance-accent', normalizedAccent)
     if (palette) {
       root.style.setProperty('--accent-selected-foreground-light', palette.selectedForegroundLight)
       root.style.setProperty('--accent-selected-foreground-dark', palette.selectedForegroundDark)
     }
+    const selectedForeground =
+      FOREGROUND_TONE_COLOR[selectedForegroundTone ?? DEFAULT_FOREGROUND_TONE]
     root.style.setProperty('--primary', normalizedAccent)
-    root.style.setProperty('--primary-foreground', foreground)
+    root.style.setProperty('--primary-foreground', selectedForeground)
     root.style.setProperty('--ring', normalizedAccent)
     root.style.setProperty('--sidebar-primary', normalizedAccent)
-    root.style.setProperty('--sidebar-primary-foreground', foreground)
+    root.style.setProperty('--sidebar-primary-foreground', selectedForeground)
   } else {
     for (const variable of APPEARANCE_CSS_VARIABLES) root.style.removeProperty(variable)
   }
+
+  // 图标标题颜色：黑字时把深色投影换成浅色投影，保证浅色壁纸上可读。
+  const tone = labelTone ?? DEFAULT_FOREGROUND_TONE
+  root.style.setProperty('--launchpad-label-color', FOREGROUND_TONE_COLOR[tone])
+  root.style.setProperty('--launchpad-label-text-shadow', LABEL_TONE_TEXT_SHADOW[tone])
 
   if (isLaunchpadBackgroundDataUri(backgroundImage)) {
     const overlay = clampBackgroundOverlay(backgroundOverlay)
@@ -117,13 +135,29 @@ export function applyAppearance({
 }
 
 export async function getSavedAppearance(): Promise<AppearanceSettings> {
-  const [accentColor, backgroundImage, backgroundOverlay, backgroundBlur] = await Promise.all([
+  const [
+    accentColor,
+    backgroundImage,
+    backgroundOverlay,
+    backgroundBlur,
+    labelTone,
+    selectedForegroundTone,
+  ] = await Promise.all([
     getSetting('themeAccentColor'),
     getSetting('launchpadBackgroundImage'),
     getSetting('launchpadBackgroundOverlay'),
     getSetting('launchpadBackgroundBlur'),
+    getSetting('launchpadLabelTone'),
+    getSetting('selectedForegroundTone'),
   ])
-  return { accentColor, backgroundImage, backgroundOverlay, backgroundBlur }
+  return {
+    accentColor,
+    backgroundImage,
+    backgroundOverlay,
+    backgroundBlur,
+    labelTone,
+    selectedForegroundTone,
+  }
 }
 
 export async function applySavedAppearance(): Promise<AppearanceSettings> {

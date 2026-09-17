@@ -27,10 +27,13 @@ import {
 import {
   DEFAULT_BACKGROUND_BLUR,
   DEFAULT_BACKGROUND_OVERLAY,
+  DEFAULT_FOREGROUND_TONE,
   isBackgroundBlur,
   isBackgroundOverlay,
+  isForegroundTone,
   isLaunchpadBackgroundDataUri,
   normalizeThemeAccentColor,
+  type ForegroundTone,
 } from './appearancePolicy'
 
 export const DEFAULT_LAUNCHPAD_SHORTCUT = 'Ctrl+Space'
@@ -48,6 +51,8 @@ type SettingKey =
   | 'launchpadBackgroundOverlay'
   | 'launchpadBackgroundBlur'
   | 'launchpadBackgroundSource'
+  | 'launchpadLabelTone'
+  | 'selectedForegroundTone'
   | 'autoExtractThemeColor'
   | 'windowStyle'
   | 'language'
@@ -77,6 +82,10 @@ type SettingValueMap = {
   launchpadBackgroundBlur: number
   /** 壁纸来源标识：`builtin:<id>` / `bing:<id>` / `custom` / 空。 */
   launchpadBackgroundSource: string
+  /** 自定义壁纸上图标标题的颜色调。 */
+  launchpadLabelTone: ForegroundTone
+  /** 选中态控件前景色调，仅在设置主题色后生效。 */
+  selectedForegroundTone: ForegroundTone
   autoExtractThemeColor: boolean
   windowStyle: WindowStyle
   language: AppLanguage
@@ -107,6 +116,8 @@ const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'launchpadBackgroundOverlay',
   'launchpadBackgroundBlur',
   'launchpadBackgroundSource',
+  'launchpadLabelTone',
+  'selectedForegroundTone',
   'autoExtractThemeColor',
   'windowStyle',
   'language',
@@ -135,6 +146,8 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   launchpadBackgroundOverlay: DEFAULT_BACKGROUND_OVERLAY,
   launchpadBackgroundBlur: DEFAULT_BACKGROUND_BLUR,
   launchpadBackgroundSource: '',
+  launchpadLabelTone: DEFAULT_FOREGROUND_TONE,
+  selectedForegroundTone: DEFAULT_FOREGROUND_TONE,
   autoExtractThemeColor: true,
   windowStyle: 'default',
   language: 'zh',
@@ -219,6 +232,8 @@ const validators: {
   launchpadBackgroundOverlay: isBackgroundOverlay,
   launchpadBackgroundBlur: isBackgroundBlur,
   launchpadBackgroundSource: (value): value is string => typeof value === 'string',
+  launchpadLabelTone: isForegroundTone,
+  selectedForegroundTone: isForegroundTone,
   autoExtractThemeColor: isAutoExtractThemeColor,
   windowStyle: isWindowStyle,
   language: isAppLanguage,

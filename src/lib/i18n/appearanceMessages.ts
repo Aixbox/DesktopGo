@@ -3,6 +3,14 @@ export const EN_APPEARANCE_MESSAGES: Record<string, string> = {
   自定义背景: 'Custom background',
   '选择用于主要按钮、选中状态和聚焦框的强调色。':
     'Choose the accent color used for primary buttons, selected states, and focus rings.',
+  选中态前景色: 'Selected foreground',
+  '开关、复选框和主按钮的前景色，仅在设置主题色后生效。':
+    'Foreground color for switches, checkboxes, and primary buttons. Applies only when an accent color is set.',
+  白色: 'White',
+  黑色: 'Black',
+  图标标题颜色: 'Icon label color',
+  '自定义壁纸上图标文字的颜色。': 'Color of the icon label text on the custom wallpaper.',
+  '保存设置失败：{error}': 'Failed to save the setting: {error}',
   '使用主题色 {color}': 'Use accent color {color}',
   选择自定义主题色: 'Choose a custom accent color',
   '选择 JPG、PNG 或 WebP 图片，应用会压缩后保存在本机。':

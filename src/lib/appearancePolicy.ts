@@ -63,6 +63,27 @@ export const THEME_ACCENT_PRESETS = [
   '#c2410c',
 ] as const
 
+/** 用户可选的前景色调：白色（默认）或黑色，用于图标标题与选中态控件前景。 */
+export type ForegroundTone = 'white' | 'black'
+
+export const DEFAULT_FOREGROUND_TONE: ForegroundTone = 'white'
+
+export function isForegroundTone(value: unknown): value is ForegroundTone {
+  return value === 'white' || value === 'black'
+}
+
+/** 选中态控件（开关圆点、复选框、主按钮文字）的前景色。 */
+export const FOREGROUND_TONE_COLOR: Record<ForegroundTone, string> = {
+  white: '#ffffff',
+  black: '#111827',
+}
+
+/** 自定义壁纸上图标标题的文字投影：白字配深投影，黑字配浅投影。 */
+export const LABEL_TONE_TEXT_SHADOW: Record<ForegroundTone, string> = {
+  white: '0 1px 2px rgba(0, 0, 0, 0.75), 0 0 3px rgba(0, 0, 0, 0.45)',
+  black: '0 1px 2px rgba(255, 255, 255, 0.45), 0 0 3px rgba(255, 255, 255, 0.25)',
+}
+
 export function normalizeThemeAccentColor(value: string): string | null {
   const normalized = value.trim().toLowerCase()
   if (!/^#[0-9a-f]{6}$/.test(normalized)) return null

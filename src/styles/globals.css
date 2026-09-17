@@ -1008,20 +1008,25 @@ body:focus-visible {
 }
 
 /*
- * 蒙版可以调到很低，直接压在壁纸上的文字不能再依赖主题前景色。改用系统桌面图标的
- * 处理：统一白字 + 紧凑深色投影。深色投影读起来是「深度」而不是「发光」，因此在
- * 浅色壁纸上也不会像反色光晕那样抢视线。
+ * 蒙版可以调到很低，直接压在壁纸上的文字不能再依赖主题前景色。默认沿用系统桌面
+ * 图标的处理：统一白字 + 紧凑深色投影。深色投影读起来是「深度」而不是「发光」，
+ * 因此在浅色壁纸上也不会像反色光晕那样抢视线。
+ *
+ * 浅色壁纸（如白色）上看不清白字时，可在设置里把「图标标题颜色」切成黑色，
+ * 对应 --launchpad-label-color / --launchpad-label-text-shadow 两个变量。
  *
  * .icon-label 是图标名称；.launchpad-wallpaper-text 供其他同样落在壁纸上的文字
  * 复用（文件夹标题、空态与加载提示等）。落在玻璃面板里、或自带底色与悬停填充的
- * 元素不要加这个类，否则白字会糊在浅色填充上。
+ * 元素不要加这个类，否则前景色会糊在浅色填充上。
  */
 [data-launchpad-background='custom'] .icon-label,
 [data-launchpad-background='custom'] .launchpad-wallpaper-text {
-  color: #fff;
-  text-shadow:
+  color: var(--launchpad-label-color, #fff);
+  text-shadow: var(
+    --launchpad-label-text-shadow,
     0 1px 2px rgba(0, 0, 0, 0.75),
-    0 0 3px rgba(0, 0, 0, 0.45);
+    0 0 3px rgba(0, 0, 0, 0.45)
+  );
 }
 
 /* 文件夹标题是壁纸上唯一的可点击文字，悬停不能再用浅色 accent 底衬白字。 */

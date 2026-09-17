@@ -10,6 +10,7 @@ import {
   BackgroundImageError,
   DEFAULT_BACKGROUND_BLUR,
   DEFAULT_BACKGROUND_OVERLAY,
+  DEFAULT_FOREGROUND_TONE,
   DEFAULT_THEME_ACCENT_COLOR,
   MAX_BACKGROUND_FILE_BYTES,
   THEME_ACCENT_PRESETS,
@@ -24,13 +25,20 @@ import {
   saveBackgroundOriginal,
   type AppearanceSettings,
   type BackgroundImageErrorCode,
+  type ForegroundTone,
 } from '@/lib/appearance'
 import { getSetting, setSetting } from '@/lib/settingsStore'
 import { translate } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { formControlFocusWithinClassName } from '@/components/ui/inputStyles'
-import { RangeControl, SettingCard, SwitchButton } from '@/components/ui/setting-components'
+import {
+  RangeControl,
+  SegmentedControl,
+  SettingCard,
+  SwitchButton,
+  type SegmentedControlOption,
+} from '@/components/ui/setting-components'
 import { useToast } from '@/components/ui/toast'
 import { WallpaperGallery } from '@/components/settings/WallpaperGallery'
 import { BackgroundCropDialog } from '@/components/settings/BackgroundCropDialog'
@@ -46,12 +54,35 @@ interface AppearanceSettingsCardsProps {
   onAppearanceChange: () => void | Promise<void>
 }
 
+type ToneSettingKey = 'launchpadLabelTone' | 'selectedForegroundTone'
+
+const TONE_SETTING_TO_APPEARANCE: Record<ToneSettingKey, 'labelTone' | 'selectedForegroundTone'> = {
+  launchpadLabelTone: 'labelTone',
+  selectedForegroundTone: 'selectedForegroundTone',
+}
+
+/**
+ * 写入后读回校验：plugin-store 写入偶发不一致时重试一次；
+ * 仍不一致则抛错，交由调用方回滚 UI 并提示，避免"点了没反应"的静默失败。
+ */
+async function persistSettingWithVerify(key: ToneSettingKey, value: ForegroundTone): Promise<void> {
+  await setSetting(key, value)
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const saved = await getSetting(key)
+    if (saved === value) return
+    await setSetting(key, value)
+  }
+  throw new Error(`设置 ${key} 写入校验失败`)
+}
+
 export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettingsCardsProps) {
   const [appearance, setAppearance] = useState<AppearanceSettings>({
     accentColor: DEFAULT_THEME_ACCENT_COLOR,
     backgroundImage: '',
     backgroundOverlay: DEFAULT_BACKGROUND_OVERLAY,
     backgroundBlur: DEFAULT_BACKGROUND_BLUR,
+    labelTone: DEFAULT_FOREGROUND_TONE,
+    selectedForegroundTone: DEFAULT_FOREGROUND_TONE,
   })
   const [autoExtractThemeColor, setAutoExtractThemeColor] = useState(true)
   const [isProcessingBackground, setIsProcessingBackground] = useState(false)
@@ -65,6 +96,14 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
   const cropOriginalRef = useRef<{ blob: Blob; objectUrl: string } | null>(null)
   const toast = useToast()
 
+  /** appearance 的同步镜像：跨事件读取最新值，避免闭包旧值导致切换判断失真。 */
+  const appearanceRef = useRef(appearance)
+
+  const toneOptions: SegmentedControlOption<ForegroundTone>[] = [
+    { label: translate('白色'), value: 'white' },
+    { label: translate('黑色'), value: 'black' },
+  ]
+
   useEffect(
     () => () => {
       if (tuningCommitTimerRef.current !== null) {
@@ -77,6 +116,7 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
   useEffect(() => {
     void Promise.all([getSavedAppearance(), getSetting('autoExtractThemeColor')])
       .then(([savedAppearance, savedAutoExtract]) => {
+        appearanceRef.current = savedAppearance
         setAppearance(savedAppearance)
         setAutoExtractThemeColor(savedAutoExtract)
         applyAppearance(savedAppearance)
@@ -85,6 +125,7 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
   }, [])
 
   const applyLocally = (nextAppearance: AppearanceSettings) => {
+    appearanceRef.current = nextAppearance
     setAppearance(nextAppearance)
     applyAppearance(nextAppearance)
   }
@@ -109,6 +150,29 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
         toast.error(translate('保存主题色失败：{error}', { error: String(error) }), {
           key: 'settings-theme-accent',
           title: translate('主题色'),
+        })
+      })
+  }
+
+  const handleToneChange = (
+    settingKey: ToneSettingKey,
+    tone: ForegroundTone,
+    options: { toastKey: string; toastTitle: string }
+  ) => {
+    const appearanceKey = TONE_SETTING_TO_APPEARANCE[settingKey]
+    const current = appearanceRef.current
+    if (tone === current[appearanceKey]) return
+    const previousAppearance = current
+    const nextAppearance = { ...current, [appearanceKey]: tone }
+    applyLocally(nextAppearance)
+    void persistSettingWithVerify(settingKey, tone)
+      .then(syncMainWindow)
+      .catch(error => {
+        console.error(`Failed to save ${settingKey}:`, error)
+        applyLocally(previousAppearance)
+        toast.error(translate('保存设置失败：{error}', { error: String(error) }), {
+          key: options.toastKey,
+          title: options.toastTitle,
         })
       })
   }
@@ -456,6 +520,26 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
             {translate('恢复默认')}
           </Button>
         </div>
+
+        <div className="flex items-center justify-between gap-4 border-t border-border/70 pt-3">
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-sm font-medium text-foreground">{translate('选中态前景色')}</p>
+            <p className="text-xs leading-5 text-muted-foreground">
+              {translate('开关、复选框和主按钮的前景色，仅在设置主题色后生效。')}
+            </p>
+          </div>
+          <SegmentedControl
+            ariaLabel={translate('选中态前景色')}
+            value={appearance.selectedForegroundTone}
+            options={toneOptions}
+            onChange={tone =>
+              handleToneChange('selectedForegroundTone', tone, {
+                toastKey: 'settings-selected-foreground-tone',
+                toastTitle: translate('选中态前景色'),
+              })
+            }
+          />
+        </div>
       </SettingCard>
 
       <SettingCard
@@ -597,6 +681,26 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
               valueLabel={`${appearance.backgroundBlur}%`}
               disabled={isTuningDisabled}
               onChange={handleBackgroundBlur}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0 space-y-0.5">
+              <p className="text-sm font-medium text-foreground">{translate('图标标题颜色')}</p>
+              <p className="text-xs leading-5 text-muted-foreground">
+                {translate('自定义壁纸上图标文字的颜色。')}
+              </p>
+            </div>
+            <SegmentedControl
+              ariaLabel={translate('图标标题颜色')}
+              value={appearance.labelTone}
+              options={toneOptions}
+              onChange={tone =>
+                handleToneChange('launchpadLabelTone', tone, {
+                  toastKey: 'settings-label-tone',
+                  toastTitle: translate('图标标题颜色'),
+                })
+              }
             />
           </div>
         </div>
