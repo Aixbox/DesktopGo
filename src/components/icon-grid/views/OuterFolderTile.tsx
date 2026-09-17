@@ -28,6 +28,7 @@ import {
   FOLDER_SHARED_LAYOUT_TRANSITION,
   getDesktopFolderTileMetrics,
   getFolderSharedLayoutId,
+  scaledRadius,
 } from './folderVisualPolicy'
 import { FolderIconVisual } from './FolderVisuals'
 
@@ -96,7 +97,7 @@ function FolderSizePreview({ span, active }: FolderSizePreviewProps) {
         style={{
           width: `${shellWidth}px`,
           height: `${shellHeight}px`,
-          borderRadius: `${shellRadius}px`,
+          borderRadius: scaledRadius(shellRadius),
         }}
       >
         <span
@@ -116,7 +117,7 @@ function FolderSizePreview({ span, active }: FolderSizePreviewProps) {
                   ? 'border-border/40 bg-background/72 dark:border-white/18 dark:bg-white/14'
                   : 'border-border/30 bg-background/50 dark:border-white/10 dark:bg-white/[0.05]'
               }`}
-              style={{ borderRadius: `${slotRadius}px` }}
+              style={{ borderRadius: scaledRadius(slotRadius) }}
             />
           ))}
         </span>
@@ -228,7 +229,7 @@ function FolderDropReceiverBackdrop({
       style={{
         width: `${shapeWidth + expansion}px`,
         height: `${shapeHeight + expansion}px`,
-        borderRadius: `${surfaceRadius + 4}px`,
+        borderRadius: scaledRadius(surfaceRadius + 4),
       }}
     />
   )
@@ -263,7 +264,7 @@ function FolderBody({
         style={{
           width: `${bodyWidth}px`,
           height: `${bodyHeight}px`,
-          borderRadius: `${surfaceRadius}px`,
+          borderRadius: scaledRadius(surfaceRadius),
         }}
         title={folder.name}
         onClick={event => {
@@ -289,7 +290,7 @@ function FolderBody({
           style={{
             width: `${shapeWidth}px`,
             height: `${shapeHeight}px`,
-            borderRadius: `${surfaceRadius}px`,
+            borderRadius: scaledRadius(surfaceRadius),
           }}
         >
           <FolderIconVisual
@@ -325,7 +326,7 @@ function FolderBody({
       style={{
         width: `${bodyWidth}px`,
         height: `${bodyHeight}px`,
-        borderRadius: `${surfaceRadius}px`,
+        borderRadius: scaledRadius(surfaceRadius),
       }}
       title={folder.name}
       onClick={event => {
@@ -351,7 +352,7 @@ function FolderBody({
         style={{
           width: `${shapeWidth}px`,
           height: `${shapeHeight}px`,
-          borderRadius: `${surfaceRadius}px`,
+          borderRadius: scaledRadius(surfaceRadius),
         }}
       >
         <div

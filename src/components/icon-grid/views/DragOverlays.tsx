@@ -7,7 +7,11 @@ import type { FolderItem, GridItem } from '../model'
 import { getGridItemSpan } from '../model'
 import type { FolderDropFlight, MultiDropFlightItem } from '../state/types'
 import { FolderIconVisual } from './FolderVisuals'
-import { DESKTOP_FOLDER_SURFACE_CLASS, getDesktopFolderTileMetrics } from './folderVisualPolicy'
+import {
+  DESKTOP_FOLDER_SURFACE_CLASS,
+  getDesktopFolderTileMetrics,
+  scaledRadius,
+} from './folderVisualPolicy'
 
 interface DragGhostPointer {
   pointerX: number
@@ -195,7 +199,7 @@ function FolderGhost({
           style={{
             width: `${shapeWidth}px`,
             height: `${shapeHeight}px`,
-            borderRadius: `${surfaceRadius}px`,
+            borderRadius: scaledRadius(surfaceRadius),
           }}
         >
           <FolderIconVisual
@@ -232,7 +236,7 @@ function FolderGhost({
         style={{
           width: `${shapeWidth}px`,
           height: `${shapeHeight}px`,
-          borderRadius: `${surfaceRadius}px`,
+          borderRadius: scaledRadius(surfaceRadius),
         }}
       >
         <div

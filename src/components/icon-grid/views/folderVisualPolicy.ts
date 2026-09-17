@@ -21,7 +21,7 @@ export const FOLDER_SHARED_LAYOUT_TRANSITION = {
   mass: 0.9,
 } as const
 export const FOLDER_SURFACE_CLASS =
-  'relative h-full w-full overflow-hidden rounded-[10px] border border-border/35 bg-background/42 shadow-[0_4px_12px_rgba(15,23,42,0.1)] backdrop-blur-lg dark:border-white/14 dark:bg-black/24 dark:shadow-[0_4px_12px_rgba(0,0,0,0.18)]'
+  'relative h-full w-full overflow-hidden rounded-[var(--radius-folder-surface)] border border-border/35 bg-background/42 shadow-[0_4px_12px_rgba(15,23,42,0.1)] backdrop-blur-lg dark:border-white/14 dark:bg-black/24 dark:shadow-[0_4px_12px_rgba(0,0,0,0.18)]'
 export const DESKTOP_FOLDER_SURFACE_CLASS =
   'relative h-full w-full overflow-hidden border border-border/45 bg-background/48 shadow-[0_6px_18px_rgba(15,23,42,0.12)] backdrop-blur-lg dark:border-white/16 dark:bg-black/30 dark:shadow-[0_6px_18px_rgba(0,0,0,0.18)]'
 export const DOCK_FOLDER_SURFACE_CLASS =
@@ -30,6 +30,14 @@ export const DOCK_FOLDER_SURFACE_ACTIVE_CLASS =
   'border-foreground/[0.18] bg-background/62 ring-1 ring-foreground/[0.12] dark:border-white/28 dark:bg-black/34 dark:ring-white/[0.16]'
 
 const clampNumber = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
+
+/**
+ * JS 侧计算的像素圆角必须走全局连续曲率补偿（corners.css 的 --ui-corner-radius-scale）。
+ * 全局 `* { corner-shape: superellipse(2) }` 会作用于内联半径，但补偿缩放只存在于
+ * CSS 变量里——绕过它会让同一半径的 45° 切入深度比正圆弧浅约 46%，文件夹磁贴因此显方。
+ */
+export const scaledRadius = (px: number): string =>
+  `calc(var(--ui-corner-radius-scale, 1) * ${px}px)`
 
 const getDesktopFolderSurfaceRadius = (panelBase: number) =>
   Math.round(clampNumber(panelBase * 0.2, 16, 24))

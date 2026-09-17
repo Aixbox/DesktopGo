@@ -16,6 +16,7 @@ import {
   FOLDER_MODAL_TRANSITION_EASING,
   FOLDER_SHARED_LAYOUT_TRANSITION,
   getFolderSharedLayoutId,
+  scaledRadius,
 } from './folderVisualPolicy'
 import { Input } from '@/components/ui/input'
 import { NativeScrollArea } from '@/components/ui/native-scroll-area'
@@ -287,10 +288,11 @@ export function FolderModalView({
               transition={prefersReducedMotion ? { duration: 0 } : FOLDER_SHARED_LAYOUT_TRANSITION}
               data-icon
               ref={folderPanelRef}
-              className="launchpad-glass-panel-strong relative overflow-hidden rounded-[18px] p-5 will-change-[transform,border-radius]"
+              className="launchpad-glass-panel-strong relative overflow-hidden p-5 will-change-[transform,border-radius]"
               style={{
                 width: `${panelWidth}px`,
                 maxHeight: `min(80vh, ${maxModalHeight}px)`,
+                borderRadius: scaledRadius(18),
               }}
               onPointerDown={onPanelPointerDown}
               onClick={onPanelClick}

@@ -17,6 +17,7 @@
   --radius-popover: var(--radius-card);
   --radius-dock: var(--radius-card);
   --radius-icon-tile: calc(18px * var(--ui-corner-radius-scale));
+  --radius-folder-surface: calc(10px * var(--ui-corner-radius-scale));
 }
 
 @layer base {

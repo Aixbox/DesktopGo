@@ -5,7 +5,10 @@ import { normalizeAiFolderSize } from '@/lib/aiOrganize'
 import type { AiOrganizeSnapshot } from '@/lib/aiOrganizeSessions'
 import type { DesktopIcon } from '@/types'
 import type { FolderSize } from '@/components/icon-grid/model'
-import { DESKTOP_FOLDER_SURFACE_CLASS } from '@/components/icon-grid/views/folderVisualPolicy'
+import {
+  DESKTOP_FOLDER_SURFACE_CLASS,
+  scaledRadius,
+} from '@/components/icon-grid/views/folderVisualPolicy'
 import {
   formatSessionTime,
   type AiOrganizePhase,
@@ -52,10 +55,11 @@ function AiFolderGridPreview({ group, iconByKey }: AiFolderGridPreviewProps) {
   return (
     <div className="flex w-16 shrink-0 flex-col items-center gap-1" title={translate('文件夹预览')}>
       <div
-        className={`${DESKTOP_FOLDER_SURFACE_CLASS} grid shrink-0 place-items-center rounded-[14px] p-1.5`}
+        className={`${DESKTOP_FOLDER_SURFACE_CLASS} grid shrink-0 place-items-center p-1.5`}
         style={{
           width: `${layout.width}px`,
           height: `${layout.height}px`,
+          borderRadius: scaledRadius(14),
           gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`,
           gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`,
           gap: '3px',

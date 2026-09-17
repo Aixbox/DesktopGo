@@ -31,6 +31,7 @@ import {
   type DesktopSingleSlotFolderMetrics,
   getDesktopSingleSlotFolderMetrics,
   getFolderSharedLayoutId,
+  scaledRadius,
 } from './folderVisualPolicy'
 import { FolderIconVisual } from './FolderVisuals'
 
@@ -114,7 +115,7 @@ function DockFolderCreatePreview({
           style={{
             width: `${metrics.surfaceSize}px`,
             height: `${metrics.surfaceSize}px`,
-            borderRadius: `${metrics.surfaceRadius}px`,
+            borderRadius: scaledRadius(metrics.surfaceRadius),
             transitionDuration: `${reorderAnimationMs}ms`,
           }}
         >
@@ -806,7 +807,7 @@ export function DockBar({
                                   style={{
                                     width: `${singleSlotFolderMetrics.surfaceSize}px`,
                                     height: `${singleSlotFolderMetrics.surfaceSize}px`,
-                                    borderRadius: `${singleSlotFolderMetrics.surfaceRadius}px`,
+                                    borderRadius: scaledRadius(singleSlotFolderMetrics.surfaceRadius),
                                   }}
                                 >
                                   <FolderIconVisual

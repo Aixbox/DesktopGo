@@ -13,6 +13,7 @@ import {
   getDesktopSingleSlotFolderMetrics,
   getFolderPreviewFrameSize,
   getFolderPreviewSlotSize,
+  scaledRadius,
 } from './folderVisualPolicy'
 
 interface FolderCreatePreviewProps {
@@ -50,7 +51,7 @@ export const FolderCreatePreview = memo(function FolderCreatePreview({
             top: `${metrics.surfaceTop}px`,
             width: `${metrics.surfaceSize}px`,
             height: `${metrics.surfaceSize}px`,
-            borderRadius: `${metrics.surfaceRadius}px`,
+            borderRadius: scaledRadius(metrics.surfaceRadius),
             transitionDuration: `${reorderAnimationMs}ms`,
           }}
         >
