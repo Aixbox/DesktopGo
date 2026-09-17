@@ -873,8 +873,15 @@ Section Uninstall
     DeleteRegKey /ifempty HKCU "${MANUKEY}"
 
     SetShellVarContext current
+    ; DesktopGo extension: the data directory holds thousands of small icon cache
+    ; files (icons\library\*.img). RmDir /r prints one "Delete file:" line per
+    ; file, and the detail window (a RichEdit) re-renders per line — the UI crawl
+    ; is orders of magnitude slower than the actual IO (3000 files: ~0.2s raw).
+    ; Silence the per-file output so uninstall finishes at filesystem speed.
+    SetDetailsPrint none
     RmDir /r "$APPDATA\${BUNDLEID}"
     RmDir /r "$LOCALAPPDATA\${BUNDLEID}"
+    SetDetailsPrint lastused
   ${EndIf}
 
   !ifmacrodef NSIS_HOOK_POSTUNINSTALL
