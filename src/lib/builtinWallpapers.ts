@@ -7,10 +7,10 @@ export interface BuiltinWallpaper {
 
 /** 内置精选壁纸清单：图片随应用打包，离线可用。 */
 export const BUILTIN_WALLPAPERS: BuiltinWallpaper[] = [
-  { id: 'aurora', name: '极光夜空', src: '/wallpapers/aurora.webp' },
-  { id: 'alpine-lake', name: '高山湖泊', src: '/wallpapers/alpine-lake.webp' },
-  { id: 'dunes', name: '大漠落日', src: '/wallpapers/dunes.webp' },
-  { id: 'misty-forest', name: '晨雾森林', src: '/wallpapers/misty-forest.webp' },
-  { id: 'sea-cliffs', name: '碧海悬崖', src: '/wallpapers/sea-cliffs.webp' },
-  { id: 'neon-city', name: '霓虹夜城', src: '/wallpapers/neon-city.webp' },
+  { id: 'sunny-clouds', name: '晴空云海', src: '/wallpapers/cloud.png' },
+  { id: 'starry-sky', name: '星夜营地', src: '/wallpapers/starry-sky.png' },
+  { id: 'cartoon-apple', name: '青苹果星球', src: '/wallpapers/Cartoon-Apple.jpg' },
+  { id: 'anime-girl', name: '二次元少女', src: '/wallpapers/Two-dimensional.jpg' },
+  { id: 'grassland-tree', name: '草原暮色', src: '/wallpapers/Grassland-trees.jpg' },
+  { id: 'ocean-highway', name: '海滨列车', src: '/wallpapers/Ocean-Highway.jpg' },
 ]

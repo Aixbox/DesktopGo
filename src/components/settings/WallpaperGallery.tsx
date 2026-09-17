@@ -18,7 +18,7 @@ const PREVIEW_COUNT = 6
 interface WallpaperGalleryProps {
   /** 上层正在处理壁纸（编码/落盘）时禁用选择。 */
   disabled: boolean
-  /** 当前选中的壁纸来源标识，如 `builtin:aurora`、`bing:<id>`。 */
+  /** 当前选中的壁纸来源标识，如 `builtin:starry-sky`、`bing:<id>`。 */
   selectedSource: string
   /**
    * 确认应用某张壁纸并拿到原始图片 Blob。onPick 内部自行消化错误并提示，

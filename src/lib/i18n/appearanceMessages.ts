@@ -108,10 +108,10 @@ export const EN_APPEARANCE_MESSAGES: Record<string, string> = {
   '源图 {width}×{height}': 'Source {width}×{height}',
   '背景已更新，但原图备份失败：{error}':
     'The background was updated, but saving the original image failed: {error}',
-  极光夜空: 'Aurora Night',
-  高山湖泊: 'Alpine Lake',
-  大漠落日: 'Desert Dunes',
-  晨雾森林: 'Misty Forest',
-  碧海悬崖: 'Sea Cliffs',
-  霓虹夜城: 'Neon City',
+  青苹果星球: 'Apple Planet',
+  二次元少女: 'Anime Girl',
+  晴空云海: 'Sunny Clouds',
+  草原暮色: 'Grassland Dusk',
+  海滨列车: 'Coastal Train',
+  星夜营地: 'Starry Camp',
 }
