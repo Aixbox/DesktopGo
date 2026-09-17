@@ -539,7 +539,7 @@ fn build_agent_messages(config: &AiConfig, history: Vec<AiChatMessageInput>) -> 
 可用工具：
 1. list_icons - 查看当前图标库（名称/类型/路径，带 category 字段时表示知识库命中的分类）。参数：{"keyword": "可选，按名称或分类过滤"}
 2. organize_icons - 生成图标分组布局预览。参数：{"groups": [{"folder_name": "分组名", "icon_keys": ["图标ID"]}]}
-   icon_keys 必须来自 list_icons 返回的 id 字段；每组至少 2 个图标；不确定归属的图标不要放进任何组。
+   icon_keys 必须来自 list_icons 返回的 id 字段；每组至少 2 个图标；尽量让所有图标都进入某个分组（确实无法判断的放进「其他」分组），不要大批图标留在组外。
 3. get_icon_categories - 查看「应用 → 分类」参考知识库（含用户自定义条目）。整理前若不确定某些应用的归类，先调用它。
 4. add_website_icon - 准备添加一个网页图标。参数：{"url":"https://example.com","display_name":"可选名称","placement":"grid|dock|folder","folder_name":"文件夹名（placement=folder 时必填）"}
 

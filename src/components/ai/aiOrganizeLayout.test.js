@@ -85,7 +85,7 @@ test('classifies a post-write preview refresh failure without losing its cause',
   assert.equal(isAiOrganizePreviewRefreshError(cause), false)
 })
 
-test('preserves explicit scroll group metadata and order while normalizing memberships', () => {
+test('prepends newly created AI folders to the first scroll group', () => {
   const result = buildAiOrganizeLayoutWrite({
     viewMode: 'scroll',
     items: [icon('a'), icon('b'), folder('folder-1'), icon('c')],
@@ -100,14 +100,39 @@ test('preserves explicit scroll group metadata and order while normalizing membe
   })
 
   assert.equal(result.scope, 'scroll')
+  // 新建文件夹从恢复位置（最后一个网格）挪到第一个网格开头，整理结果可见性优先。
   assert.deepEqual(result.scrollGroups, [
-    { id: 'work', name: 'Work', icon: 'briefcase', itemIds: ['b', 'a'] },
-    { id: 'play', name: 'Play', icon: 'gamepad', itemIds: ['c', 'folder:folder-1'] },
+    { id: 'work', name: 'Work', icon: 'briefcase', itemIds: ['folder:folder-1', 'b', 'a'] },
+    { id: 'play', name: 'Play', icon: 'gamepad', itemIds: ['c'] },
   ])
 
   const representedIds = result.scrollGroups.flatMap(group => group.itemIds)
   assert.deepEqual([...representedIds].sort(), ['a', 'b', 'c', 'folder:folder-1'])
   assert.equal(new Set(representedIds).size, 4)
+})
+
+test('keeps pre-existing folders in place while prepending new AI folders', () => {
+  const baselineLayout = layout({
+    explicit: true,
+    scrollGroups: [
+      { id: 'work', name: 'Work', icon: 'briefcase', itemIds: ['folder:old', 'a'] },
+      { id: 'play', name: 'Play', icon: 'gamepad', itemIds: [] },
+    ],
+  })
+  baselineLayout.items = [{ type: 'folder', id: 'old', name: 'old', children: [] }]
+
+  const result = buildAiOrganizeLayoutWrite({
+    viewMode: 'scroll',
+    items: [icon('a'), folder('old'), folder('new-1'), icon('b')],
+    baselineLayout,
+    defaultScrollGroupName: defaultName,
+  })
+
+  // 用户已有的 old 文件夹保持在原分组；本次 AI 新建的 new-1 前置到第一组开头。
+  assert.deepEqual(result.scrollGroups, [
+    { id: 'work', name: 'Work', icon: 'briefcase', itemIds: ['folder:new-1', 'folder:old', 'a'] },
+    { id: 'play', name: 'Play', icon: 'gamepad', itemIds: ['b'] },
+  ])
 })
 
 test('migrates legacy slots after removing desktop and customapp prefixes', () => {
@@ -125,9 +150,10 @@ test('migrates legacy slots after removing desktop and customapp prefixes', () =
     defaultScrollGroupName: defaultName,
   })
 
+  // folder-1 不在基线里，视为 AI 新建文件夹，前置到第一个网格。
   assert.deepEqual(result.scrollGroups, [
-    { id: 'first', name: 'First', icon: 'grid', itemIds: ['a', 'b'] },
-    { id: 'second', name: 'Second', icon: 'code', itemIds: ['c', 'folder:folder-1'] },
+    { id: 'first', name: 'First', icon: 'grid', itemIds: ['folder:folder-1', 'a', 'b'] },
+    { id: 'second', name: 'Second', icon: 'code', itemIds: ['c'] },
   ])
 })
 
