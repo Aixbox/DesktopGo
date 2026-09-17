@@ -1,0 +1,36 @@
+# 发布转正修复：测试构建 draft（临时 tag v<version>-test.<build>）被人工改名转正后，
+# latest.json 里的下载 URL 仍指向旧临时 tag，应用内更新会 404。
+# 转正发布后手动运行本工作流，输入版本号即可把 URL 改写为正式 tag 并校验。
+name: finalize-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "正式版本号（如 1.0.6，可带 v 前缀），对应 tag vX.Y.Z"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-release-${{ github.event.inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  fix-latest-json:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+
+      - name: setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: fix latest.json download URLs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/finalize-release.mjs "${{ github.event.inputs.version }}"

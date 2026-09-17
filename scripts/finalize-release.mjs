@@ -2,9 +2,9 @@
 // 必须跑一次本脚本，把 release 上 latest.json 里的下载 URL 从旧临时 tag 改写为正式 tag。
 // 否则应用内"下载并安装更新"会拿到 404（latest.json 本身能被检查到，但文件下载不到）。
 //
-// 用法：node scripts/finalize-release.mjs <正式tag>   例：node scripts/finalize-release.mjs v1.0.6
+// 用法：node scripts/finalize-release.mjs <正式tag或版本号>   例：node scripts/finalize-release.mjs v1.0.6
 //
-// 依赖 gh CLI（已登录且有该仓库写权限）。流程：
+// 依赖 gh CLI（已登录且有该仓库写权限；CI 里通过 GH_TOKEN 环境变量鉴权）。流程：
 //   1. 读取 release 的 latest.json asset 原文（走 GitHub API，不经 CDN 缓存）
 //   2. 把所有 releases/download/<旧tag>/ 重写为 releases/download/<正式tag>/
 //   3. 删除旧 asset 并上传改写后的 latest.json
@@ -21,10 +21,17 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-const repo = "Aixbox/DesktopGo";
-const tag = process.argv[2];
+// CI（GitHub Actions）里由 GITHUB_REPOSITORY 自动提供；本地运行回退到本仓库。
+const repo = process.env.GITHUB_REPOSITORY || "Aixbox/DesktopGo";
+const rawInput = process.argv[2];
+if (!rawInput) {
+  console.error("Usage: node scripts/finalize-release.mjs <release-tag>  (e.g. v1.0.6)");
+  process.exit(1);
+}
+// 宽容处理：接受 "1.0.6" 或 "v1.0.6"，统一为带 v 前缀的 tag。
+const tag = rawInput.startsWith("v") ? rawInput : `v${rawInput}`;
 
-if (!tag || !/^v\d/.test(tag)) {
+if (!/^v\d/.test(tag)) {
   console.error("Usage: node scripts/finalize-release.mjs <release-tag>  (e.g. v1.0.6)");
   process.exit(1);
 }
