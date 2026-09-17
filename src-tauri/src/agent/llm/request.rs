@@ -28,7 +28,8 @@ pub(super) fn build_responses_request(
         body["temperature"] = json!(temperature);
     }
     if let Some(effort) = config.reasoning_effort.as_openai_value() {
-        body["reasoning"] = json!({ "effort": effort, "summary": "auto" });
+        // detailed：推理摘要更详细、分段更多；auto 只会给一句简短英文标题。
+        body["reasoning"] = json!({ "effort": effort, "summary": "detailed" });
     }
     if strict_json {
         body["text"] = json!({
@@ -152,7 +153,7 @@ mod tests {
         assert_eq!(body["stream"], true);
         assert_eq!(body["temperature"], 0.25);
         assert_eq!(body["reasoning"]["effort"], "medium");
-        assert_eq!(body["reasoning"]["summary"], "auto");
+        assert_eq!(body["reasoning"]["summary"], "detailed");
         assert_eq!(body["text"]["format"]["type"], "json_schema");
     }
 

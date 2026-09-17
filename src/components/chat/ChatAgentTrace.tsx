@@ -52,7 +52,11 @@ export function ChatAgentTrace({
             aria-expanded={expanded}
             className="-mx-1 flex items-center gap-1 rounded px-1 py-0.5 text-sm font-normal leading-5 text-muted-foreground transition-colors hover:text-foreground"
           >
-            <span>{running ? translate('进行中') : translate('用时 {time}', { time: formatAiDuration(responseMs) })}</span>
+            <span>
+              {running
+                ? `${translate('进行中')} · ${formatAiDuration(responseMs)}`
+                : translate('用时 {time}', { time: formatAiDuration(responseMs) })}
+            </span>
             <ChevronDown className={`h-3 w-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
           </button>
           <div className="mt-1 border-b-2 border-border/70" aria-hidden="true" />

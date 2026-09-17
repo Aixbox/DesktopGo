@@ -32,7 +32,8 @@ pub(super) fn emit_stream_delta(delta: &str, observation: Option<&LlmObservation
 }
 
 pub(super) fn emit_reasoning_delta(delta: &str, observation: Option<&LlmObservation<'_>>) {
-    if delta.trim().is_empty() {
+    // 只过滤完全空的增量；纯换行/空白要放行（摘要分段边界依赖它插入空行）。
+    if delta.is_empty() {
         return;
     }
     if let Some(observation) = observation {

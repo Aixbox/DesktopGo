@@ -14,6 +14,8 @@ use super::ApiSurface;
 pub(super) struct StreamAccumulator {
     pub(super) content: String,
     pub(super) usage: Option<LlmUsage>,
+    /// Responses API 已收到的推理摘要分段数，用于在分段边界补换行。
+    pub(super) reasoning_parts: usize,
 }
 
 impl StreamAccumulator {
@@ -21,6 +23,7 @@ impl StreamAccumulator {
         Self {
             content: String::new(),
             usage: None,
+            reasoning_parts: 0,
         }
     }
 }
@@ -202,6 +205,13 @@ fn handle_responses_event(
             if let Some(delta) = payload.get("delta").and_then(Value::as_str) {
                 emit_reasoning_delta(delta, observation);
             }
+        }
+        // 多段摘要在边界处补一个空行，避免各段标题被拼成一行。
+        "response.reasoning_summary_part.added" => {
+            if accumulator.reasoning_parts > 0 {
+                emit_reasoning_delta("\n\n", observation);
+            }
+            accumulator.reasoning_parts += 1;
         }
         _ => {}
     }
