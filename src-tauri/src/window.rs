@@ -4,15 +4,16 @@ use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
 
 #[cfg(windows)]
-use windows::Win32::Foundation::HWND;
+use core::ffi::c_void;
 #[cfg(windows)]
-use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+use windows::Win32::Foundation::HWND;
 #[cfg(windows)]
 use windows::Win32::UI::Input::KeyboardAndMouse::{SetActiveWindow, SetFocus};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
-    BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
-    SetWindowPos, HWND_TOP, SWP_NOMOVE, SWP_NOSIZE,
+    BringWindowToTop, GetForegroundWindow, SetForegroundWindow, SetWindowPos,
+    SystemParametersInfoW, HWND_TOP, SPI_GETFOREGROUNDLOCKTIMEOUT, SPI_SETFOREGROUNDLOCKTIMEOUT,
+    SWP_NOMOVE, SWP_NOSIZE, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
 };
 
 use crate::tray::{refresh_settings_window_title, refresh_tray_menu, settings_window_title};
@@ -528,35 +529,76 @@ fn resolve_activation_window_pos_flags(
     SWP_NOMOVE | SWP_NOSIZE
 }
 
-/// 把窗口设为前台窗口，失败时借前台线程的输入队列再试一次。
+/// 临时把系统的「前台锁定超时」清零，离开作用域时恢复原值。
 ///
-/// 这是不注入任何键盘输入的前台切换方式：`AttachThreadInput` 只是让本线程与当前前台线程
-/// 临时共享输入状态，从而获得 `SetForegroundWindow` 的许可，不会给其他程序发送按键。
+/// 这是唯一既不注入键盘输入、也不碰其他线程输入队列的前台切换辅助手段。之前用的
+/// `AttachThreadInput` 会让本线程与当前前台程序的线程共享输入状态（焦点、捕获、按键状态），
+/// 解绑时对方线程的输入状态被重置，正是那个程序（通常就是随后要从启动台唤起的应用）
+/// 会停在标题栏按钮卡悬停态、鼠标点击无响应的状态。
+#[cfg(windows)]
+struct ForegroundLockTimeoutReset {
+    previous_timeout_ms: Option<u32>,
+}
+
+#[cfg(windows)]
+impl ForegroundLockTimeoutReset {
+    unsafe fn apply() -> Self {
+        let mut previous: u32 = 0;
+        let read = SystemParametersInfoW(
+            SPI_GETFOREGROUNDLOCKTIMEOUT,
+            0,
+            Some(&mut previous as *mut u32 as *mut c_void),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        )
+        .is_ok();
+        if !read || previous == 0 {
+            return Self {
+                previous_timeout_ms: None,
+            };
+        }
+        // 这个 SPI 用 pvParam 直接承载数值（不是指针）；标志位传 0：不写注册表、不广播设置变更。
+        let cleared = SystemParametersInfoW(
+            SPI_SETFOREGROUNDLOCKTIMEOUT,
+            0,
+            Some(std::ptr::null_mut()),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        )
+        .is_ok();
+        Self {
+            previous_timeout_ms: cleared.then_some(previous),
+        }
+    }
+}
+
+#[cfg(windows)]
+impl Drop for ForegroundLockTimeoutReset {
+    fn drop(&mut self) {
+        if let Some(previous) = self.previous_timeout_ms {
+            unsafe {
+                let _ = SystemParametersInfoW(
+                    SPI_SETFOREGROUNDLOCKTIMEOUT,
+                    0,
+                    Some(previous as usize as *mut c_void),
+                    SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+                );
+            }
+        }
+    }
+}
+
+/// 把窗口设为前台窗口。
+///
+/// 只用 `SetForegroundWindow`，失败时清零前台锁定超时再试一次；绝不 `AttachThreadInput`、
+/// 绝不模拟按键（见 [`ForegroundLockTimeoutReset`] 与 [`schedule_main_window_focus_retry`]）。
+/// 还是失败就交给调用方的重试循环，宁可让用户自己点一下，也不能把别的程序搞卡。
 #[cfg(windows)]
 pub(crate) unsafe fn bring_window_to_foreground(hwnd: HWND) -> bool {
-    if SetForegroundWindow(hwnd).as_bool() {
+    if SetForegroundWindow(hwnd).as_bool() || GetForegroundWindow() == hwnd {
         return true;
     }
 
-    let foreground = GetForegroundWindow();
-    if foreground == hwnd {
-        return true;
-    }
-    if foreground.0.is_null() {
-        return false;
-    }
-
-    let foreground_thread = GetWindowThreadProcessId(foreground, None);
-    let current_thread = GetCurrentThreadId();
-    if foreground_thread == 0 || foreground_thread == current_thread {
-        return false;
-    }
-    if !AttachThreadInput(current_thread, foreground_thread, true).as_bool() {
-        return false;
-    }
-    let activated = SetForegroundWindow(hwnd).as_bool();
-    let _ = AttachThreadInput(current_thread, foreground_thread, false);
-    activated
+    let _reset = ForegroundLockTimeoutReset::apply();
+    SetForegroundWindow(hwnd).as_bool() || GetForegroundWindow() == hwnd
 }
 
 /// 激活窗口并交出键盘焦点。只用 Win32 前台/焦点调用，绝不经过 tao 的 `set_focus`

@@ -10,6 +10,7 @@ mod launcher_catalog;
 mod launchpad_shortcut;
 mod layout_db;
 mod native_icon;
+mod poll;
 #[cfg(windows)]
 mod running_app;
 mod search_preview;
@@ -19,6 +20,8 @@ mod startup;
 mod storage_profile;
 mod tray;
 mod tray_icon;
+#[cfg(windows)]
+mod tray_icon_click;
 mod updater;
 mod window;
 mod window_icon;
