@@ -501,6 +501,10 @@ pub(super) fn launch_app_windows(path: &str) -> Result<(), String> {
     if is_uwp_shell_path(path) {
         return launch_uwp_shell_path(path);
     }
+    // 程序已在运行就只唤起它的窗口：QQ、微信这类可多开的程序再启动会弹第二个登录框。
+    if crate::running_app::activate_running_instance(path) {
+        return Ok(());
+    }
 
     std::process::Command::new("cmd")
         .args(["/C", "start", "", path])

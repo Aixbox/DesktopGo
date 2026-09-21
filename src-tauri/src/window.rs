@@ -4,10 +4,15 @@ use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
 
 #[cfg(windows)]
+use windows::Win32::Foundation::HWND;
+#[cfg(windows)]
+use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+#[cfg(windows)]
 use windows::Win32::UI::Input::KeyboardAndMouse::{SetActiveWindow, SetFocus};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
-    BringWindowToTop, SetForegroundWindow, SetWindowPos, HWND_TOP, SWP_NOMOVE, SWP_NOSIZE,
+    BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
+    SetWindowPos, HWND_TOP, SWP_NOMOVE, SWP_NOSIZE,
 };
 
 use crate::tray::{refresh_settings_window_title, refresh_tray_menu, settings_window_title};
@@ -144,6 +149,49 @@ pub(crate) fn toggle_main_window_visibility(app: &tauri::AppHandle) {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FocusRetryStep {
+    /// 窗口已隐藏或已在前台：结束重试并解除失焦保护。
+    Settle,
+    /// 窗口可见但仍不在前台，且保护期未过：再激活一次。
+    Activate,
+    /// 保护期已过：放弃激活，仅恢复失焦即隐的默认行为。
+    GiveUp,
+}
+
+fn resolve_focus_retry_step(visible: bool, foreground: bool, guard_active: bool) -> FocusRetryStep {
+    if !visible || foreground {
+        FocusRetryStep::Settle
+    } else if guard_active {
+        FocusRetryStep::Activate
+    } else {
+        FocusRetryStep::GiveUp
+    }
+}
+
+/// 窗口是否为系统前台窗口。
+///
+/// 不能用 `window.is_focused()` 判断：WebView2 子窗口一拿到键盘焦点，宿主窗口就会收到
+/// `WM_KILLFOCUS`，tao 从此一直报告未聚焦，重试循环会跑满整个保护期。
+#[cfg(windows)]
+fn main_window_is_foreground(window: &tauri::WebviewWindow) -> bool {
+    window
+        .hwnd()
+        .map(|hwnd| unsafe { GetForegroundWindow() } == hwnd)
+        .unwrap_or(false)
+}
+
+#[cfg(not(windows))]
+fn main_window_is_foreground(window: &tauri::WebviewWindow) -> bool {
+    window.is_focused().unwrap_or(false)
+}
+
+/// 显示后短暂重试把启动台带到前台。
+///
+/// 这里绝不能调用 `window.set_focus()`：tao 在 `SetForegroundWindow` 失败时会用 `SendInput`
+/// 向当前前台程序注入一次 ALT 按下/抬起来“偷”前台权限。ALT 抬起常常在前台切换后才送达，
+/// 原前台程序（通常正是稍后要从启动台打开的应用）会一直认为 ALT 被按住，
+/// 之后它的窗口对鼠标点击没有反应、标题栏按钮卡在悬停态。
 fn schedule_main_window_focus_retry(app: tauri::AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_millis(MAIN_WINDOW_FOCUS_RETRY_DELAY_MS));
@@ -151,20 +199,27 @@ fn schedule_main_window_focus_retry(app: tauri::AppHandle) {
         let Some(window) = app.get_webview_window("main") else {
             return;
         };
-        if !window.is_visible().unwrap_or(false) {
-            clear_main_window_blur_guard(&app.state::<MainWindowState>());
-            return;
-        }
-        if window.is_focused().unwrap_or(false) {
-            clear_main_window_blur_guard(&app.state::<MainWindowState>());
-            return;
-        }
-
-        let _ = window.set_focus();
         let state = app.state::<MainWindowState>();
-        if !main_window_blur_guard_active(&state) {
-            state.suppress_blur.store(false, Ordering::SeqCst);
-            return;
+        let step = resolve_focus_retry_step(
+            window.is_visible().unwrap_or(false),
+            main_window_is_foreground(&window),
+            main_window_blur_guard_active(&state),
+        );
+        match step {
+            FocusRetryStep::Settle => {
+                clear_main_window_blur_guard(&state);
+                return;
+            }
+            FocusRetryStep::GiveUp => {
+                state.suppress_blur.store(false, Ordering::SeqCst);
+                return;
+            }
+            FocusRetryStep::Activate => {
+                // SetActiveWindow / SetFocus 只对调用线程自己的窗口生效，激活必须回到主线程。
+                let _ = app.run_on_main_thread(move || {
+                    let _ = activate_webview_window(&window);
+                });
+            }
         }
     });
 }
@@ -473,12 +528,45 @@ fn resolve_activation_window_pos_flags(
     SWP_NOMOVE | SWP_NOSIZE
 }
 
+/// 把窗口设为前台窗口，失败时借前台线程的输入队列再试一次。
+///
+/// 这是不注入任何键盘输入的前台切换方式：`AttachThreadInput` 只是让本线程与当前前台线程
+/// 临时共享输入状态，从而获得 `SetForegroundWindow` 的许可，不会给其他程序发送按键。
+#[cfg(windows)]
+pub(crate) unsafe fn bring_window_to_foreground(hwnd: HWND) -> bool {
+    if SetForegroundWindow(hwnd).as_bool() {
+        return true;
+    }
+
+    let foreground = GetForegroundWindow();
+    if foreground == hwnd {
+        return true;
+    }
+    if foreground.0.is_null() {
+        return false;
+    }
+
+    let foreground_thread = GetWindowThreadProcessId(foreground, None);
+    let current_thread = GetCurrentThreadId();
+    if foreground_thread == 0 || foreground_thread == current_thread {
+        return false;
+    }
+    if !AttachThreadInput(current_thread, foreground_thread, true).as_bool() {
+        return false;
+    }
+    let activated = SetForegroundWindow(hwnd).as_bool();
+    let _ = AttachThreadInput(current_thread, foreground_thread, false);
+    activated
+}
+
+/// 激活窗口并交出键盘焦点。只用 Win32 前台/焦点调用，绝不经过 tao 的 `set_focus`
+/// （它会向前台程序注入 ALT 按键，见 [`schedule_main_window_focus_retry`]）。
 pub(crate) fn activate_webview_window(window: &tauri::WebviewWindow) -> Result<(), String> {
     #[cfg(windows)]
     {
         let hwnd = window
             .hwnd()
-            .map_err(|error| format!("Failed to resolve settings HWND: {}", error))?;
+            .map_err(|error| format!("Failed to resolve window HWND: {}", error))?;
 
         unsafe {
             let _ = SetWindowPos(
@@ -491,7 +579,7 @@ pub(crate) fn activate_webview_window(window: &tauri::WebviewWindow) -> Result<(
                 resolve_activation_window_pos_flags(),
             );
             let _ = BringWindowToTop(hwnd);
-            let _ = SetForegroundWindow(hwnd);
+            let _ = bring_window_to_foreground(hwnd);
             let _ = SetActiveWindow(hwnd);
             let _ = SetFocus(Some(hwnd));
         }
@@ -525,6 +613,34 @@ mod tests {
             .window_persistent_enabled
             .store(true, Ordering::SeqCst);
         assert!(!settings_should_hide_main_window(&state));
+    }
+
+    #[test]
+    fn focus_retry_settles_once_the_window_is_hidden_or_in_front() {
+        assert_eq!(
+            resolve_focus_retry_step(false, false, true),
+            FocusRetryStep::Settle
+        );
+        assert_eq!(
+            resolve_focus_retry_step(true, true, true),
+            FocusRetryStep::Settle
+        );
+        assert_eq!(
+            resolve_focus_retry_step(true, true, false),
+            FocusRetryStep::Settle
+        );
+    }
+
+    #[test]
+    fn focus_retry_keeps_activating_only_while_the_blur_guard_lasts() {
+        assert_eq!(
+            resolve_focus_retry_step(true, false, true),
+            FocusRetryStep::Activate
+        );
+        assert_eq!(
+            resolve_focus_retry_step(true, false, false),
+            FocusRetryStep::GiveUp
+        );
     }
 
     #[cfg(windows)]

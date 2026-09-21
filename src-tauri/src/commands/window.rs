@@ -94,6 +94,18 @@ pub fn activate_main_window(app_handle: tauri::AppHandle) -> Result<(), String> 
     Ok(())
 }
 
+/// 把指定窗口带到前台并交出焦点。
+///
+/// 前端不要直接调用 `setFocus()`：它走 tao 的 `set_focus`，前台切换失败时会向当前前台程序
+/// 注入 ALT 按键，让其他应用的窗口卡死在“ALT 按住”状态。
+#[tauri::command]
+pub fn activate_window(app_handle: tauri::AppHandle, label: String) -> Result<(), String> {
+    let window = app_handle
+        .get_webview_window(&label)
+        .ok_or_else(|| format!("Window `{label}` not found"))?;
+    crate::window::activate_webview_window(&window)
+}
+
 #[tauri::command]
 pub fn apply_window_style(
     app_handle: tauri::AppHandle,

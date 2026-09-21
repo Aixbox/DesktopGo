@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import {
@@ -84,6 +85,7 @@ export function WallpaperViewer() {
   const expanded = maximized || fullscreen
 
   // 窗口由 Rust 侧隐藏创建：标题、显示与聚焦都在前端就绪后进行，避免透明空窗闪现。
+  // 聚焦走 Rust 的 activate_window，不用 setFocus()：后者在前台切换失败时会向其他程序注入 ALT 按键。
   useEffect(() => {
     const webviewWindow = getCurrentWebviewWindow()
     void webviewWindow
@@ -91,7 +93,7 @@ export function WallpaperViewer() {
       .catch(error => console.error('Failed to set wallpaper viewer title:', error))
     void webviewWindow
       .show()
-      .then(() => webviewWindow.setFocus())
+      .then(() => invoke('activate_window', { label: webviewWindow.label }))
       .catch(error => console.error('Failed to show wallpaper viewer window:', error))
   }, [])
 

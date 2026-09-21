@@ -195,7 +195,8 @@ export function WallpaperPickerDialog({
       const existing = await WebviewWindow.getByLabel(VIEWER_WINDOW_LABEL)
       if (existing) {
         await emit('wallpaper-viewer:update', payload)
-        await existing.setFocus()
+        // 不用 existing.setFocus()：tao 前台切换失败时会向其他程序注入 ALT 按键。
+        await invoke('activate_window', { label: VIEWER_WINDOW_LABEL })
         return
       }
     } catch (error) {
