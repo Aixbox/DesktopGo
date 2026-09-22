@@ -58,6 +58,11 @@ const LOCATE_TIMEOUT: Duration = Duration::from_millis(1000);
 const POST_CLICK_TIMEOUT: Duration = Duration::from_millis(500);
 /// 已知要双击的程序：第一次按下只是为了展开溢出区，等它展开用不了多久。
 const OVERFLOW_OPEN_PROBE_TIMEOUT: Duration = Duration::from_millis(150);
+/// 溢出面板展开动画的预算：这段时间内只做坐标命中，不退到全树搜索。
+const OVERFLOW_ANIMATION_BUDGET: Duration = Duration::from_millis(250);
+/// 上一次采样超过这个时间就不能拿来做"同一个元素"比对：中间隔了太多次命中失败，
+/// 说不清这期间发生了什么。
+const SAMPLE_MAX_AGE: Duration = Duration::from_millis(80);
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
 /// 图标位置比对容差（像素）：`Shell_NotifyIconGetRect` 与 UIA 的矩形相差一两个像素。
 const RECT_TOLERANCE: i32 = 4;
@@ -115,11 +120,6 @@ fn pick_candidate_by_tooltip(tooltips: &[String], app_name: &str) -> Option<usiz
         .iter()
         .position(|tooltip| tooltip_names_app(tooltip, app_name))
         .or_else(|| (tooltips.len() == 1).then_some(0))
-}
-
-/// 两次轮询（间隔一个 `POLL_INTERVAL`）里 Shell 与 UIA 报的位置都没变，说明动画停了。
-fn positions_settled(previous: Option<(RECT, RECT)>, current: (RECT, RECT)) -> bool {
-    previous == Some(current)
 }
 
 /// 左键单击的按下/抬起两条回调（NOTIFYICON_VERSION 3 编码：wParam 是图标 ID，lParam 是鼠标消息）。
@@ -387,18 +387,25 @@ fn pick_button(candidates: Vec<ButtonCandidate>, app_name: &str) -> Option<Butto
     candidates.into_iter().nth(index)
 }
 
-/// 找目标图标的按钮：先单点命中，没命中再在各个 `windows` 里全树搜索（慢路径按提示文字挑）。
+/// 找目标图标的按钮：先单点命中，没命中且 `allow_slow_path` 时再在各个 `windows` 里全树搜索
+/// （慢路径按提示文字挑）。返回候选与"是否走了慢路径"。
 unsafe fn find_button_at(
     automation: &IUIAutomation,
     windows: impl IntoIterator<Item = HWND>,
     rect: RECT,
     app_name: &str,
-) -> Option<ButtonCandidate> {
-    hit_test_button(automation, rect).or_else(|| {
-        windows
-            .into_iter()
-            .find_map(|window| pick_button(buttons_at(automation, window, rect), app_name))
-    })
+    allow_slow_path: bool,
+) -> Option<(ButtonCandidate, bool)> {
+    if let Some(candidate) = hit_test_button(automation, rect) {
+        return Some((candidate, false));
+    }
+    if !allow_slow_path {
+        return None;
+    }
+    windows
+        .into_iter()
+        .find_map(|window| pick_button(buttons_at(automation, window, rect), app_name))
+        .map(|candidate| (candidate, true))
 }
 
 unsafe fn find_window(class: PCWSTR) -> Option<HWND> {
@@ -493,37 +500,72 @@ impl ClickSession<'_> {
         self.double_click(located)
     }
 
-    /// 图标在溢出弹窗里：弹窗刚打开时图标还在动画，位置会变，要边刷新位置边找，
-    /// 并且等 Shell 与 UIA 两边报的位置连续两次都不变了才按。
+    /// 图标在溢出弹窗里：弹窗刚打开时整个面板还在滑入，要边刷新位置边找，
+    /// 并且等连续两次采样命中的是同一个元素才按。
+    ///
+    /// 不要求两次坐标相等：面板滑入约 270ms，期间系统报的位置和 UIA 的矩形一起在动，
+    /// 等它们停下要多等 150ms 以上。面板整体平移时，位置容差内命中的一直是同一个元素，
+    /// 身份比对（`CompareElements`）足以防止点到滑过来的邻居：邻居不可能连续两次都停在
+    /// 目标位置的容差内。命中偶尔失败不清空上一次采样，但采样太旧就作废。
+    ///
+    /// 动画期间（前 `OVERFLOW_ANIMATION_BUDGET`）只做几毫秒的坐标命中：此时命中失败是常态，
+    /// 每次都退到上百毫秒的全树搜索，只会把定位拖到动画结束之后很久。
     unsafe fn click_in_overflow(
         &mut self,
         automation: &IUIAutomation,
         deadline: Instant,
     ) -> Option<RevealMethod> {
-        let mut previous: Option<(RECT, RECT)> = None;
+        let opened_at = Instant::now();
+        let mut previous: Option<(Instant, ButtonCandidate)> = None;
+        let mut polls = 0u32;
+        let mut trace: Vec<String> = Vec::new();
         while Instant::now() < deadline {
+            polls += 1;
+            let elapsed = opened_at.elapsed().as_millis();
             let Some(rect) = self.icon_rect() else {
-                previous = None;
+                trace.push(format!("#{polls}@{elapsed}ms:no-rect"));
                 std::thread::sleep(POLL_INTERVAL);
                 continue;
             };
             let overflow_windows = OVERFLOW_CLASSES.iter().filter_map(|class| find_window(*class));
-            let Some(button) =
-                find_button_at(automation, overflow_windows, rect, &self.icon.app_name)
-            else {
-                previous = None;
+            let allow_slow_path = opened_at.elapsed() >= OVERFLOW_ANIMATION_BUDGET;
+            let Some((button, via_slow_path)) = find_button_at(
+                automation,
+                overflow_windows,
+                rect,
+                &self.icon.app_name,
+                allow_slow_path,
+            ) else {
+                trace.push(format!("#{polls}@{elapsed}ms:miss"));
                 std::thread::sleep(POLL_INTERVAL);
                 continue;
             };
-            let current = (rect, button.bounds);
-            if positions_settled(previous, current) {
-                self.timer.phase("overflow_locate");
+            trace.push(format!(
+                "#{polls}@{elapsed}ms:{}[shell={},{} uia={},{}]",
+                if via_slow_path { "slow" } else { "fast" },
+                rect.left,
+                rect.top,
+                button.bounds.left,
+                button.bounds.top,
+            ));
+            let same_element = previous.as_ref().is_some_and(|(sampled_at, previous_button)| {
+                sampled_at.elapsed() <= SAMPLE_MAX_AGE
+                    && automation
+                        .CompareElements(&previous_button.element, &button.element)
+                        .is_ok_and(|same| same.as_bool())
+            });
+            if same_element {
+                self.timer.phase(&format!(
+                    "overflow_locate(poll #{polls}; {})",
+                    trace.join(" ")
+                ));
                 return self.press(&button, "overflow");
             }
-            previous = Some(current);
+            previous = Some((Instant::now(), button));
             std::thread::sleep(POLL_INTERVAL);
         }
-        self.timer.phase("overflow_timeout");
+        self.timer
+            .phase(&format!("overflow_timeout({})", trace.join(" ")));
         None
     }
 
@@ -540,8 +582,13 @@ impl ClickSession<'_> {
         self.timer.phase("uia_init");
         let first_rect = self.icon_rect()?;
         let taskbar = find_window(TASKBAR_CLASS)?;
-        let Some(button) = find_button_at(&automation, [taskbar], first_rect, &self.icon.app_name)
-        else {
+        let Some((button, _)) = find_button_at(
+            &automation,
+            [taskbar],
+            first_rect,
+            &self.icon.app_name,
+            true,
+        ) else {
             self.timer.phase("taskbar_locate(miss)");
             return None;
         };
@@ -713,20 +760,6 @@ mod tests {
         assert_eq!(pick_candidate_by_tooltip(&[], "spotify"), None);
         // 程序名为空时不做匹配，只认唯一候选。
         assert_eq!(pick_candidate_by_tooltip(&tooltips, ""), None);
-    }
-
-    #[test]
-    fn positions_count_as_settled_only_when_both_rects_repeat() {
-        let shell = rect(3298, 2130, 48, 72);
-        let ui = rect(3297, 2130, 60, 60);
-        assert!(!positions_settled(None, (shell, ui)));
-        assert!(positions_settled(Some((shell, ui)), (shell, ui)));
-        // UIA 的位置还在动：不算稳定。
-        let moving_ui = rect(3280, 2130, 60, 60);
-        assert!(!positions_settled(Some((shell, moving_ui)), (shell, ui)));
-        // Shell 的位置变了（图标从任务栏进了溢出区）：同样不算。
-        let other_shell = rect(3423, 2088, 48, 72);
-        assert!(!positions_settled(Some((other_shell, ui)), (shell, ui)));
     }
 
     #[test]

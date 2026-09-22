@@ -417,10 +417,18 @@ pub(crate) fn activate_running_instance(launch_path: &str) -> bool {
                     Some(RevealMethod::DoubleClick) => TRAY_DOUBLE_CLICK_APPS.insert(&target_exe),
                     Some(_) => {}
                     None => {
-                        eprintln!(
-                            "Warning: tray icon click did not reveal the window of {launch_path}; falling back to a normal launch (remembered for this session)"
-                        );
-                        TRAY_CLICK_FAILURES.insert(&target_exe);
+                        // 已确认双击有效的程序偶尔失败（面板还在动画、点击落空）是暂时的，
+                        // 只这一次退回重启，不能记成永久失败。
+                        if prefer_double_click {
+                            eprintln!(
+                                "Warning: tray double-click did not reveal the window of {launch_path} this time; falling back to a normal launch"
+                            );
+                        } else {
+                            eprintln!(
+                                "Warning: tray icon click did not reveal the window of {launch_path}; falling back to a normal launch (remembered for this session)"
+                            );
+                            TRAY_CLICK_FAILURES.insert(&target_exe);
+                        }
                         timer.report();
                         return false;
                     }
