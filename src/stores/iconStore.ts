@@ -118,11 +118,14 @@ export const useIconStore = create<IconStore>((set, get) => ({
   },
 
   launchApp: async (path: string) => {
+    // 先收起启动台再启动：唤起已在运行的程序要等它的窗口出来，让启动台一直盖在前面会显得很慢。
+    await invoke('toggle_window')
     try {
       await invoke('launch_app', { path })
-      await invoke('toggle_window')
     } catch (e) {
       console.error('Failed to launch app:', e)
+      // 启动失败要让用户看到提示，把启动台拉回来。
+      await invoke('activate_main_window').catch(() => {})
       throw e
     }
   },

@@ -2,6 +2,44 @@
 
 use std::time::{Duration, Instant};
 
+/// 分阶段计时并打到控制台，用来定位跨进程窗口操作里慢在哪一步。
+pub(crate) struct PhaseTimer {
+    label: String,
+    started: Instant,
+    last: Instant,
+    phases: Vec<String>,
+}
+
+impl PhaseTimer {
+    pub(crate) fn start(label: impl Into<String>) -> Self {
+        let now = Instant::now();
+        Self {
+            label: label.into(),
+            started: now,
+            last: now,
+            phases: Vec::new(),
+        }
+    }
+
+    /// 记录自上一阶段以来的耗时。
+    pub(crate) fn phase(&mut self, name: &str) {
+        let now = Instant::now();
+        self.phases
+            .push(format!("{name}={}ms", now.duration_since(self.last).as_millis()));
+        self.last = now;
+    }
+
+    /// 打印所有阶段与总耗时。
+    pub(crate) fn report(&self) {
+        eprintln!(
+            "[timing] {} total={}ms {}",
+            self.label,
+            self.started.elapsed().as_millis(),
+            self.phases.join(" ")
+        );
+    }
+}
+
 /// 轮询直到 `settled` 为真或超时，返回是否等到。
 pub(crate) fn wait_until(
     mut settled: impl FnMut() -> bool,

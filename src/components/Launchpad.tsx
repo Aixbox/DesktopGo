@@ -409,11 +409,17 @@ export function Launchpad() {
         await recordCurrentSearch().catch(() => {
           // Ignore history persistence failure on launch.
         })
-        await invoke('launch_app', { path })
+        // 先收起启动台再启动（同 iconStore.launchApp），失败时再拉回来显示提示。
+        await invoke('toggle_window')
+        try {
+          await invoke('launch_app', { path })
+        } catch (e) {
+          await invoke('activate_main_window').catch(() => {})
+          throw e
+        }
         void recordSearchResultRun(path).catch(() => {
           // Ignore Everything run history update failure.
         })
-        await invoke('toggle_window')
         clearSearch()
       } catch (e) {
         console.error('Failed to launch selected search item:', e)
