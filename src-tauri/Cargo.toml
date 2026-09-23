@@ -8,6 +8,11 @@ repository = "https://github.com/Aixbox/DesktopGo"
 license = "MIT"
 edition = "2021"
 
+# 诊断构建开关：`cargo build --features devtools` / `pnpm tauri build --features devtools`
+# 会在 release 产物中启用 WebView2 Inspector（右键 → 检查）。正式发布不带。
+[features]
+devtools = ["tauri/devtools"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
@@ -24,6 +29,8 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-log = "2"
+log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-global-shortcut = "2.3.1"

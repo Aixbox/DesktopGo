@@ -264,6 +264,9 @@ export const readLayoutStrict = async (
   return parsePersistedLayoutStrict(raw, scope)
 }
 
+// 内容未变化的布局重复写入会放大状态振荡（每次保存都触发下游刷新），按 key 去重。
+const lastWrittenPayloadByKey = new Map<string, string>()
+
 export const writeLayout = async (
   items: GridItem[],
   slots: Array<string | null>,
@@ -289,9 +292,13 @@ export const writeLayout = async (
     geometryKey,
     scrollGroups,
   }
+  const serialized = JSON.stringify(payload)
+  const key = getLayoutKey(scope)
+  if (lastWrittenPayloadByKey.get(key) === serialized) return
+  lastWrittenPayloadByKey.set(key, serialized)
   await invoke('set_layout_payload', {
-    key: getLayoutKey(scope),
-    payload: JSON.stringify(payload),
+    key,
+    payload: serialized,
   })
 }
 

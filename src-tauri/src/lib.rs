@@ -68,6 +68,16 @@ pub(crate) use window_style::{
 };
 
 fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    log::info!(
+        "DesktopGo v{} starting (pid {})",
+        app.package_info().version,
+        std::process::id()
+    );
+
+    // 诊断构建：注册全局热键打开 WebView Inspector（应用自定义右键菜单拦截了默认入口）。
+    #[cfg(feature = "devtools")]
+    register_devtools_hotkey(app.handle());
+
     storage_profile::ensure_dev_profile_seeded(app.handle())?;
     tray::initialize_language(app.handle());
 
@@ -100,15 +110,64 @@ fn manage_shared_state(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         .manage(ai::AiRunRegistry::default())
 }
 
+/// 诊断日志：文件（应用日志目录）+ stdout，Info 级。
+/// 文件位置：`%LOCALAPPDATA%\com.aixbox.desktopgo\logs\`。
+/// 前端 console 经 attachConsole 转发进同一份日志。
+fn with_diagnostics_plugin(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    builder.plugin(
+        tauri_plugin_log::Builder::new()
+            .targets([
+                tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                    file_name: Some("desktopgo".into()),
+                }),
+                tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+            ])
+            .level(log::LevelFilter::Info)
+            .max_file_size(512_000)
+            .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(5))
+            .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+            .build(),
+    )
+}
+
+/// 诊断构建：注册打开 Inspector 的全局热键。F12 常被截图/输入法等软件的全局
+/// 热键占用，注册失败会降级到备用键；热键不可用只记警告，绝不阻断应用启动。
+#[cfg(feature = "devtools")]
+fn register_devtools_hotkey(app: &tauri::AppHandle) {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutEvent, ShortcutState};
+    fn open_devtools(app_handle: &tauri::AppHandle, _shortcut: &Shortcut, event: ShortcutEvent) {
+        if event.state != ShortcutState::Pressed {
+            return;
+        }
+        if let Some(window) = app_handle.get_webview_window("main") {
+            window.open_devtools();
+            log::info!("devtools opened via global hotkey");
+        }
+    }
+    let manager = app.global_shortcut();
+    for accelerator in ["F12", "Ctrl+Shift+I"] {
+        match manager.on_shortcut(accelerator, open_devtools) {
+            Ok(()) => {
+                log::info!("devtools global hotkey registered: {accelerator}");
+                return;
+            }
+            Err(err) => log::warn!("devtools hotkey {accelerator} unavailable: {err}"),
+        }
+    }
+    log::warn!("no devtools hotkey available; Inspector hotkey disabled in this build");
+}
+
 /// 构建应用：插件注册、托盘/主窗口 setup 与全部命令的 invoke_handler。
 /// 独立成函数以保持 `run()` 精简（clippy too_many_lines 上限 80 行）。
 fn build_app() -> tauri::App {
-    let builder = tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(tauri_plugin_store::Builder::default().build());
+    let builder = with_diagnostics_plugin(
+        tauri::Builder::default()
+            .plugin(tauri_plugin_opener::init())
+            .plugin(tauri_plugin_dialog::init())
+            .plugin(tauri_plugin_shell::init())
+            .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+            .plugin(tauri_plugin_store::Builder::default().build()),
+    );
     let builder = manage_shared_state(builder);
 
     #[cfg(desktop)]

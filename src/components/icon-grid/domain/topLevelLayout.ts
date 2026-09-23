@@ -96,6 +96,28 @@ const canPlaceAtIndex = (
   return indices.every(index => !occupied[index])
 }
 
+// 拖拽期间网格度量可能瞬间退化为 1x1（预览重渲染/遮罩瞬间量到 0 宽），
+// 此时 2 宽的 footprint 永远放不进去，下方所有锚点扫描会无限循环（渲染进程整体冻结）。
+// 钳制 span 到网格可容纳的范围，保证扫描必然终止；并写日志标记退化时刻。
+const MAX_ANCHOR_SCAN_INDEX = 100_000
+let degenerateSpanWarnings = 0
+
+const fitSpanToGrid = (span: GridSpan, columns: number, pageSize: number): GridSpan => {
+  const safeColumns = Math.max(1, columns)
+  const safePageSize = Math.max(1, pageSize)
+  const maxRows = Math.max(1, Math.ceil(safePageSize / safeColumns))
+  const cols = Math.min(span.cols, safeColumns)
+  const rows = Math.min(span.rows, maxRows)
+  if (cols === span.cols && rows === span.rows) return span
+  if (degenerateSpanWarnings < 5) {
+    degenerateSpanWarnings += 1
+    console.error(
+      `[layout] item span ${span.cols}x${span.rows} does not fit grid columns=${safeColumns} pageSize=${safePageSize}; clamping (grid metrics degenerated?)`
+    )
+  }
+  return { cols: Math.max(1, cols), rows: Math.max(1, rows) }
+}
+
 const getAnchorDistanceScore = (
   originIndex: number,
   candidateIndex: number,
@@ -328,7 +350,7 @@ export const normalizeOuterSlots = (
 
     const item = itemById.get(id)
     if (!item) return false
-    const span = getGridItemSpan(item)
+    const span = fitSpanToGrid(getGridItemSpan(item), safeColumns, safePageSize)
     if (!canPlaceAtIndex(occupied, anchorIndex, span, safeColumns, safePageSize)) return false
 
     anchors[anchorIndex] = id
@@ -369,15 +391,16 @@ export const normalizeOuterSlots = (
       searchLimit += safePageSize
     }
 
-    for (let index = 0; ; index += 1) {
+    for (let index = 0; index < MAX_ANCHOR_SCAN_INDEX; index += 1) {
       ensureAnchorCapacity(index)
       if (anchors[index]) continue
       if (!canPlaceAtIndex(occupied, index, span, safeColumns, safePageSize)) continue
       return index
     }
+    return null
   }
 
-  const findAppendAnchorIndex = (span: GridSpan): number => {
+  const findAppendAnchorIndex = (span: GridSpan): number | null => {
     let searchIndex = anchors.reduce((lastAnchorIndex, slot, index) => {
       if (typeof slot === 'string') {
         return index + 1
@@ -386,6 +409,7 @@ export const normalizeOuterSlots = (
     }, 0)
 
     for (;;) {
+      if (searchIndex > MAX_ANCHOR_SCAN_INDEX) return null
       ensureAnchorCapacity(searchIndex)
       if (
         !anchors[searchIndex] &&
@@ -397,9 +421,10 @@ export const normalizeOuterSlots = (
     }
   }
 
-  const findForwardAvailableAnchorIndex = (span: GridSpan, originIndex: number): number => {
+  const findForwardAvailableAnchorIndex = (span: GridSpan, originIndex: number): number | null => {
     let searchIndex = Math.max(0, originIndex)
     for (;;) {
+      if (searchIndex > MAX_ANCHOR_SCAN_INDEX) return null
       ensureAnchorCapacity(searchIndex)
       if (
         !anchors[searchIndex] &&
@@ -432,7 +457,7 @@ export const normalizeOuterSlots = (
     if (consumed.has(id)) return
     const item = itemById.get(id)
     if (!item) return
-    const span = getGridItemSpan(item)
+    const span = fitSpanToGrid(getGridItemSpan(item), safeColumns, safePageSize)
     const originIndex = sourceAnchorIndexById.get(id) ?? -1
     let anchorIndex: number | null
     if (spillStrategy === 'row-major-forward' && originIndex >= 0) {
@@ -444,11 +469,19 @@ export const normalizeOuterSlots = (
           : findAppendAnchorIndex(span)
     }
     if (anchorIndex === null) {
-      for (let index = 0; anchorIndex === null; index += 1) {
+      const freshPageStart =
+        Math.ceil(Math.max(anchors.length, safePageSize) / safePageSize) * safePageSize
+      for (let index = 0; index < MAX_ANCHOR_SCAN_INDEX; index += 1) {
         ensureAnchorCapacity(index)
         if (anchors[index]) continue
         if (!canPlaceAtIndex(occupied, index, span, safeColumns, safePageSize)) continue
         anchorIndex = index
+        break
+      }
+      // span 已被钳制到网格可容纳范围，全新页起始位必然可放置；仅作为最终兜底。
+      if (anchorIndex === null) {
+        ensureAnchorCapacity(freshPageStart)
+        anchorIndex = freshPageStart
       }
     }
 

@@ -84,7 +84,7 @@ interface IconGridProps {
   importPlacementRequest?: PagedImportPlacementRequest | null
 }
 
-const EVASION_DWELL_MS = 100
+const EVASION_DWELL_MS = 250
 const EVASION_COOLDOWN_MS = 200
 
 export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: IconGridProps) {

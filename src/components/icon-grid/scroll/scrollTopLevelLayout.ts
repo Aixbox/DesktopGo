@@ -158,7 +158,15 @@ export const compactOuterSlotsWithinPages = (
   }
 
   while (carryIds.length > 0) {
+    const previousCarryCount = carryIds.length
     placePage(carryIds)
+    // placePage 一轮没有任何进展时（溢出集合不缩小），继续循环只会无限推页。
+    if (carryIds.length >= previousCarryCount) {
+      console.error(
+        `[layout] compact outer packing stalled: ${carryIds.length} ids cannot be placed; aborting to avoid freeze`
+      )
+      break
+    }
   }
 
   const minimumLength = Math.max(1, minPageCount) * safePageSize

@@ -483,7 +483,17 @@ const assignWithBacktracking = (
   let bestScore = greedy?.totalScore ?? Number.POSITIVE_INFINITY
   let bestAssignments = greedy ? new Map(greedy.assignments) : null
 
+  // 回溯搜索最坏情况指数爆炸（贪心失败时剪枝失效），加上限访问次数防止冻结。
+  const MAX_BACKTRACK_VISITS = 200_000
+  let visits = 0
+  let budgetExhausted = false
+
   const search = (specIndex: number, totalScore: number, lastAssignedAnchor: number) => {
+    visits += 1
+    if (visits > MAX_BACKTRACK_VISITS) {
+      budgetExhausted = true
+      return
+    }
     if (specIndex >= specs.length) {
       if (totalScore < bestScore) {
         bestScore = totalScore
@@ -520,6 +530,11 @@ const assignWithBacktracking = (
   }
 
   search(0, 0, Number.NEGATIVE_INFINITY)
+  if (budgetExhausted) {
+    console.error(
+      `[layout] footprint backtracking budget exhausted after ${visits} visits (specs=${specs.length}); falling back to greedy result`
+    )
+  }
   return bestAssignments ? { assignments: bestAssignments, totalScore: bestScore } : null
 }
 
