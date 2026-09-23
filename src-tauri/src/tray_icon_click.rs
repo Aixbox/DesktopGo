@@ -35,14 +35,12 @@ use windows::Win32::UI::HiDpi::{
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_LEFTDOWN,
-    MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_VIRTUALDESK, MOUSEINPUT,
-    MOUSE_EVENT_FLAGS,
+    MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_VIRTUALDESK, MOUSEINPUT, MOUSE_EVENT_FLAGS,
 };
 use windows::Win32::UI::Shell::{Shell_NotifyIconGetRect, NOTIFYICONIDENTIFIER};
 use windows::Win32::UI::WindowsAndMessaging::{
     FindWindowW, GetCursorPos, GetSystemMetrics, PostMessageW, SM_CXVIRTUALSCREEN,
-    SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, WM_APP, WM_LBUTTONDOWN,
-    WM_LBUTTONUP,
+    SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, WM_APP, WM_LBUTTONDOWN, WM_LBUTTONUP,
 };
 
 use crate::poll::{wait_until, PhaseTimer};
@@ -489,7 +487,11 @@ impl ClickSession<'_> {
     }
 
     /// 已定位到图标本身：按 `prefer_double_click` 决定先单击还是直接双击。
-    unsafe fn press(&mut self, located: &ButtonCandidate, phase_prefix: &str) -> Option<RevealMethod> {
+    unsafe fn press(
+        &mut self,
+        located: &ButtonCandidate,
+        phase_prefix: &str,
+    ) -> Option<RevealMethod> {
         if !self.prefer_double_click {
             invoke_pattern(&located.element)?.Invoke().ok()?;
             self.timer.phase(&format!("{phase_prefix}_invoke"));
@@ -527,7 +529,9 @@ impl ClickSession<'_> {
                 std::thread::sleep(POLL_INTERVAL);
                 continue;
             };
-            let overflow_windows = OVERFLOW_CLASSES.iter().filter_map(|class| find_window(*class));
+            let overflow_windows = OVERFLOW_CLASSES
+                .iter()
+                .filter_map(|class| find_window(*class));
             let allow_slow_path = opened_at.elapsed() >= OVERFLOW_ANIMATION_BUDGET;
             let Some((button, via_slow_path)) = find_button_at(
                 automation,
@@ -548,12 +552,14 @@ impl ClickSession<'_> {
                 button.bounds.left,
                 button.bounds.top,
             ));
-            let same_element = previous.as_ref().is_some_and(|(sampled_at, previous_button)| {
-                sampled_at.elapsed() <= SAMPLE_MAX_AGE
-                    && automation
-                        .CompareElements(&previous_button.element, &button.element)
-                        .is_ok_and(|same| same.as_bool())
-            });
+            let same_element = previous
+                .as_ref()
+                .is_some_and(|(sampled_at, previous_button)| {
+                    sampled_at.elapsed() <= SAMPLE_MAX_AGE
+                        && automation
+                            .CompareElements(&previous_button.element, &button.element)
+                            .is_ok_and(|same| same.as_bool())
+                });
             if same_element {
                 self.timer.phase(&format!(
                     "overflow_locate(poll #{polls}; {})",
@@ -796,11 +802,8 @@ mod tests {
             width: 1921,
             height: 1081,
         };
-        let sequence = double_click_sequence(
-            screen,
-            POINT { x: 1920, y: 1080 },
-            POINT { x: 0, y: 0 },
-        );
+        let sequence =
+            double_click_sequence(screen, POINT { x: 1920, y: 1080 }, POINT { x: 0, y: 0 });
         let flags: Vec<u32> = sequence
             .iter()
             .map(|input| unsafe { input.Anonymous.mi.dwFlags.0 })

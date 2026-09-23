@@ -24,8 +24,10 @@ impl PhaseTimer {
     /// 记录自上一阶段以来的耗时。
     pub(crate) fn phase(&mut self, name: &str) {
         let now = Instant::now();
-        self.phases
-            .push(format!("{name}={}ms", now.duration_since(self.last).as_millis()));
+        self.phases.push(format!(
+            "{name}={}ms",
+            now.duration_since(self.last).as_millis()
+        ));
         self.last = now;
     }
 

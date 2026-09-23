@@ -15,11 +15,10 @@ use windows::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, FindWindowExW, GetClassNameW, GetWindow, GetWindowLongPtrW,
-    GetWindowPlacement, GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic,
-    IsWindowVisible, ShowWindowAsync, GWL_EXSTYLE, GWL_STYLE, GW_OWNER, HWND_MESSAGE,
-    SHOW_WINDOW_CMD, SW_RESTORE, WINDOWPLACEMENT, WS_EX_TOOLWINDOW, WS_MAXIMIZEBOX,
-    WS_MINIMIZEBOX, WS_SYSMENU, WS_THICKFRAME,
+    EnumWindows, FindWindowExW, GetClassNameW, GetWindow, GetWindowLongPtrW, GetWindowPlacement,
+    GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic, IsWindowVisible, ShowWindowAsync,
+    GWL_EXSTYLE, GWL_STYLE, GW_OWNER, HWND_MESSAGE, SHOW_WINDOW_CMD, SW_RESTORE, WINDOWPLACEMENT,
+    WS_EX_TOOLWINDOW, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SYSMENU, WS_THICKFRAME,
 };
 
 use crate::poll::{wait_until, PhaseTimer};
