@@ -157,22 +157,26 @@ fn register_devtools_hotkey(app: &tauri::AppHandle) {
     log::warn!("no devtools hotkey available; Inspector hotkey disabled in this build");
 }
 
+/// 注册核心插件：单实例、对话框、shell、快捷键、存储。
+fn with_core_plugins(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    builder
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // 当尝试启动第二个实例时，唤起已运行实例的主窗口
+            log::info!("single instance triggered: activating existing window");
+            request_main_window_show(app);
+        }))
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_store::Builder::default().build())
+}
+
 /// 构建应用：插件注册、托盘/主窗口 setup 与全部命令的 invoke_handler。
 /// 独立成函数以保持 `run()` 精简（clippy too_many_lines 上限 80 行）。
 fn build_app() -> tauri::App {
-    let builder = with_diagnostics_plugin(
-        tauri::Builder::default()
-            .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-                // 当尝试启动第二个实例时，唤起已运行实例的主窗口
-                log::info!("single instance triggered: activating existing window");
-                let _ = request_main_window_show(app);
-            }))
-            .plugin(tauri_plugin_opener::init())
-            .plugin(tauri_plugin_dialog::init())
-            .plugin(tauri_plugin_shell::init())
-            .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-            .plugin(tauri_plugin_store::Builder::default().build()),
-    );
+    let builder = with_diagnostics_plugin(tauri::Builder::default());
+    let builder = with_core_plugins(builder);
     let builder = manage_shared_state(builder);
 
     #[cfg(desktop)]

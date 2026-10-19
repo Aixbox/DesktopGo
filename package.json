@@ -23,7 +23,8 @@
     "rust:check": "cargo check --manifest-path src-tauri/Cargo.toml",
     "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml",
     "rust:test:release": "cargo test --manifest-path src-tauri/Cargo.toml --release",
-    "rust:quality": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-rust.ps1"
+    "rust:quality": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-rust.ps1",
+    "prepare": "husky"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -67,6 +68,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.0",
     "globals": "^14.0.0",
+    "husky": "^9.1.7",
     "postcss": "^8.5.6",
     "prettier": "^3.8.1",
     "tailwindcss": "^4.1.18",
