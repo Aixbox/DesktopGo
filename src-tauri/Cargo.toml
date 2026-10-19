@@ -1,6 +1,6 @@
 [package]
 name = "desktopgo"
-version = "1.0.7"
+version = "1.0.8"
 description = "A macOS-like launchpad for Windows"
 authors = ["Aixbox"]
 homepage = "https://github.com/Aixbox/DesktopGo"
