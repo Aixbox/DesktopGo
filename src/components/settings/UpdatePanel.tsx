@@ -112,16 +112,35 @@ export function UpdatePanel() {
   useEffect(() => {
     let active = true
 
-    void getUpdaterConfigurationStatus()
-      .then(nextStatus => {
-        if (active) applyConfigurationStatus(nextStatus)
-      })
-      .catch(error => {
+    const initializeUpdateStatus = async () => {
+      try {
+        const nextStatus = await getUpdaterConfigurationStatus()
+        if (!active) return
+
+        applyConfigurationStatus(nextStatus)
+        if (!nextStatus.configured) return
+
+        setChecking(true)
+        try {
+          const result = await checkForAppUpdate()
+          if (active) {
+            setCheckResult(result)
+          }
+        } catch (error) {
+          if (active) {
+            console.error('Failed to check for app updates on update page:', error)
+          }
+        } finally {
+          if (active) setChecking(false)
+        }
+      } catch (error) {
         if (active) reportConfigurationError(error)
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoadingConfig(false)
-      })
+      }
+    }
+
+    void initializeUpdateStatus()
 
     return () => {
       active = false

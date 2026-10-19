@@ -1,6 +1,5 @@
 import { Suspense, lazy, useEffect } from 'react'
 import { Launchpad } from './components/Launchpad'
-import { UpdateAvailableToast } from './components/update/UpdateAvailableToast'
 import { ToastProvider } from './components/ui/toast'
 import { AppErrorBoundary } from './components/ui/app-error-boundary'
 import { I18nProvider } from './lib/i18n/I18nProvider'
@@ -50,7 +49,6 @@ function App() {
           ) : (
             <>
               <Launchpad />
-              <UpdateAvailableToast />
             </>
           )}
         </AppErrorBoundary>

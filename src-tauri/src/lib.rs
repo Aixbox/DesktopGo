@@ -33,8 +33,8 @@ use agent::icon_agent::{ai_organize_icons_agent, ai_organize_record_apply};
 use ai::{ai_cancel, ai_chat, ai_classify_icons, get_builtin_icon_categories};
 use commands::{
     activate_main_window, activate_settings_window, activate_window, apply_window_style,
-    check_for_app_update, clear_background_original, close_settings_window, create_icon_entry,
-    create_new_file, create_settings_window, delete_icons, extract_website_icon,
+    check_for_app_update, check_persisted_update, clear_background_original, close_settings_window,
+    create_icon_entry, create_new_file, create_settings_window, delete_icons, extract_website_icon,
     fetch_wallpaper_feed, fetch_wallpaper_image, get_complete_search_snapshot,
     get_custom_icon_source, get_default_launcher_folders, get_drag_preview_icon,
     get_icon_edit_source, get_icon_manager_items, get_icons, get_launch_on_startup_enabled,
@@ -92,6 +92,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     console_exit::install(app.handle());
     startup::initialize_launch_on_startup(app.handle());
     launchpad_shortcut::initialize(app.handle());
+    updater::schedule_startup_update_check(app.handle().clone());
 
     if startup::should_show_on_launch(app.handle()) {
         window::request_main_window_show(app.handle());
@@ -225,6 +226,7 @@ fn build_app() -> tauri::App {
             get_main_window_always_on_top_enabled,
             set_main_window_always_on_top_enabled,
             get_updater_configuration_status,
+            check_persisted_update,
             check_for_app_update,
             install_app_update,
             get_drag_preview_icon,

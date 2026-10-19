@@ -8,6 +8,11 @@ pub fn get_updater_configuration_status(
 }
 
 #[tauri::command]
+pub fn check_persisted_update(app_handle: tauri::AppHandle) -> bool {
+    updater::check_persisted_update(&app_handle)
+}
+
+#[tauri::command]
 pub async fn check_for_app_update(
     app_handle: tauri::AppHandle,
     pending_update: tauri::State<'_, PendingUpdate>,

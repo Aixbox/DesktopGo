@@ -90,7 +90,14 @@ function WindowControlButton({
 
 export function Settings() {
   const { language } = useI18n()
-  const [activeNav, setActiveNav] = useState<NavItem>('settings')
+  const initialTab = useMemo(() => {
+    const params = new URLSearchParams(window.location.search)
+    const tab = params.get('tab')
+    return (tab && ['settings', 'search', 'iconManager', 'ai', 'update', 'about'].includes(tab)
+      ? tab
+      : 'settings') as NavItem
+  }, [])
+  const [activeNav, setActiveNav] = useState<NavItem>(initialTab)
   const openIconManager = useCallback(() => setActiveNav('iconManager'), [])
   const [isMaximized, setIsMaximized] = useState(false)
   const isClosingRef = useRef(false)

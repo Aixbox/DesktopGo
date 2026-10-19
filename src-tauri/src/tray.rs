@@ -151,7 +151,7 @@ pub(crate) fn install(app: &mut tauri::App) -> tauri::Result<()> {
             TRAY_SETTINGS_MENU_ITEM_ID => {
                 // 托盘回调在事件循环顶层，同步建窗不会嵌套消息泵。
                 // 从托盘打开时启动台可能没开过，返回启动台的意愿记为 false。
-                let result = window::create_settings_window(app, false)
+                let result = window::create_settings_window(app, false, None)
                     .and_then(|_| window::show_settings_window(app));
                 if let Err(error) = result {
                     eprintln!("Warning: Failed to open settings window from tray: {error}");

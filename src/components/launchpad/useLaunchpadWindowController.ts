@@ -426,7 +426,7 @@ export function useLaunchpadWindowController({
       // 由 Rust 侧的 builder 建窗：前端 WindowOptions 没有 icon 选项，自建窗口拿不到清晰的任务栏图标，
       // 也没有 builder 上 on_page_load 里延后挂任务栏按钮的钩子。create 是 async 命令，在工作线程建窗，
       // 再由同步的 activate 在主线程显示，执行模型和之前的 new WebviewWindow 一致。
-      await invoke('create_settings_window', { returnToMain: true })
+      await invoke('create_settings_window', { returnToMain: true, tab: null })
       await invoke('activate_settings_window')
     } catch (error) {
       console.error('Failed to open settings window:', error)

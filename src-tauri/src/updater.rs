@@ -1,9 +1,12 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::utils::config::PluginConfig;
+#[cfg(not(debug_assertions))]
+use tauri::Manager;
 use tauri::{AppHandle, Emitter, State};
+use tauri_plugin_store::StoreExt;
 use tauri_plugin_updater::{Update, UpdaterExt};
 use url::Url;
 
@@ -16,6 +19,7 @@ pub const UPDATE_AVAILABLE_EVENT: &str = "desktopgo://update-available";
 const AUTO_CHECK_DELAY_MS: u64 = 15_000;
 
 const BUILD_UPDATER_TARGET: Option<&str> = option_env!("DESKTOPGO_UPDATER_TARGET");
+const PENDING_UPDATE_STORE_KEY: &str = "pending-update";
 
 static INSTALL_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 #[cfg(not(debug_assertions))]
@@ -23,6 +27,17 @@ static AUTO_CHECK_SCHEDULED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Default)]
 pub struct PendingUpdate(pub Mutex<Option<Update>>);
+
+/// 持久化的更新元数据（不含 Update 对象，因为它不可序列化）
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PersistedUpdateMetadata {
+    version: String,
+    current_version: String,
+    target: String,
+    body: Option<String>,
+    date: Option<String>,
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -112,8 +127,20 @@ pub fn get_updater_configuration_status(app_handle: AppHandle) -> UpdaterConfigu
     }
 }
 
-/// 启动后延迟自动检查一次更新：只提示、不自动下载，也不写入
-/// [`PendingUpdate`] 状态（与手动检查互相独立，发现更新后引导用户进设置安装）。
+/// 检查是否有持久化的更新信息（供前端启动时查询）
+pub fn check_persisted_update(app_handle: &AppHandle) -> bool {
+    if let Some(persisted) = load_persisted_update_metadata(app_handle) {
+        let current_version = app_handle.package_info().version.to_string();
+        // 只有当持久化的更新版本比当前版本新时才返回 true
+        persisted.version != current_version && persisted.current_version == current_version
+    } else {
+        false
+    }
+}
+
+/// 启动后延迟自动检查一次更新：只提示、不自动下载，但会写入
+/// [`PendingUpdate`] 状态并持久化以便设置页直接展示更新信息（用户点击"去更新"后无需再次检查）。
+/// 启动时优先加载已持久化的更新信息并发送通知，然后再执行真正的网络检查。
 /// 仅发布构建启用；调试构建由设置页手动检查覆盖。
 #[cfg(not(debug_assertions))]
 pub(crate) fn schedule_startup_update_check(app_handle: AppHandle) {
@@ -121,17 +148,51 @@ pub(crate) fn schedule_startup_update_check(app_handle: AppHandle) {
         return;
     }
 
+    // 先加载持久化的更新信息（如果有）
+    if let Some(persisted) = load_persisted_update_metadata(&app_handle) {
+        let current_version = app_handle.package_info().version.to_string();
+
+        // 只有当持久化的更新版本比当前版本新时才显示
+        if persisted.version != current_version && persisted.current_version == current_version {
+            log::info!("Found persisted update info for v{}", persisted.version);
+            let _ = app_handle.emit(
+                UPDATE_AVAILABLE_EVENT,
+                serde_json::json!({ "version": &persisted.version, "body": &persisted.body }),
+            );
+        } else {
+            // 版本不匹配说明已经更新过了，清除旧数据
+            clear_update_metadata(&app_handle);
+        }
+    }
+
+    // 然后执行真正的网络检查
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(AUTO_CHECK_DELAY_MS));
         match tauri::async_runtime::block_on(check_for_available_update(&app_handle)) {
             Ok(Some(update)) => {
+                let version = update.version.clone();
+                let body = update.body.clone();
+
+                // 持久化更新信息
+                save_update_metadata(&app_handle, &update);
+
+                // 写入 PendingUpdate 状态,让设置页可以直接读取
+                if let Some(pending_update) = app_handle.try_state::<PendingUpdate>() {
+                    if let Ok(mut guard) = pending_update.0.lock() {
+                        *guard = Some(update);
+                    }
+                }
+
                 let _ = app_handle.emit(
                     UPDATE_AVAILABLE_EVENT,
-                    serde_json::json!({ "version": update.version, "body": update.body }),
+                    serde_json::json!({ "version": version, "body": body }),
                 );
             }
-            Ok(None) => {}
-            Err(error) => eprintln!("Startup update check failed: {error}"),
+            Ok(None) => {
+                // 没有更新时清除旧的持久化数据
+                clear_update_metadata(&app_handle);
+            }
+            Err(error) => log::error!("Startup update check failed: {error}"),
         }
     });
 }
@@ -164,6 +225,7 @@ pub async fn check_for_app_update(
             .0
             .lock()
             .map_err(|_| "无法读取待安装更新状态".to_string())? = None;
+        clear_update_metadata(&app_handle);
         return Ok(UpdateCheckResult {
             configured: false,
             available: false,
@@ -188,6 +250,13 @@ pub async fn check_for_app_update(
         date: update.date.map(|date| date.to_string()),
     });
     let has_update = metadata.is_some();
+
+    // 持久化更新信息
+    if let Some(update) = &update {
+        save_update_metadata(&app_handle, update);
+    } else {
+        clear_update_metadata(&app_handle);
+    }
 
     *pending_update
         .0
@@ -267,6 +336,8 @@ pub async fn install_app_update(
 
     match install_result {
         Ok(_) => {
+            // 安装成功后清除持久化的更新信息
+            clear_update_metadata(&app_handle);
             let _ = app_handle.emit(UPDATE_PROGRESS_EVENT, UpdateProgressEvent::Finished);
             Ok(())
         }
@@ -281,6 +352,43 @@ pub async fn install_app_update(
             Err(message)
         }
     }
+}
+
+/// 保存更新元数据到持久化存储
+fn save_update_metadata(app: &AppHandle, update: &Update) {
+    let metadata = PersistedUpdateMetadata {
+        version: update.version.clone(),
+        current_version: update.current_version.clone(),
+        target: update.target.clone(),
+        body: update.body.clone(),
+        date: update.date.map(|d| d.to_string()),
+    };
+
+    let path = std::path::PathBuf::from(".update-state.json");
+    if let Ok(store) = app.store(path) {
+        store.set(
+            PENDING_UPDATE_STORE_KEY,
+            serde_json::to_value(&metadata).ok(),
+        );
+        let _ = store.save();
+    }
+}
+
+/// 清除持久化的更新元数据
+fn clear_update_metadata(app: &AppHandle) {
+    let path = std::path::PathBuf::from(".update-state.json");
+    if let Ok(store) = app.store(path) {
+        let _ = store.delete(PENDING_UPDATE_STORE_KEY);
+        let _ = store.save();
+    }
+}
+
+/// 从持久化存储加载更新元数据
+fn load_persisted_update_metadata(app: &AppHandle) -> Option<PersistedUpdateMetadata> {
+    let path = std::path::PathBuf::from(".update-state.json");
+    let store = app.store(path).ok()?;
+    let value = store.get(PENDING_UPDATE_STORE_KEY)?;
+    serde_json::from_value(value.clone()).ok()
 }
 
 fn build_updater(app_handle: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {

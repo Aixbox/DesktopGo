@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Bot, Minus, Pin, X } from 'lucide-react'
 import { translate } from '@/lib/i18n'
+import { LaunchpadUpdateButton } from './LaunchpadUpdateButton'
 
 interface WindowControlButtonProps {
   label: string
@@ -75,6 +76,7 @@ export function LaunchpadWindowControls({
           : { right: '20px' }
       }
     >
+      <LaunchpadUpdateButton />
       <div className="launchpad-glass-panel-strong flex items-center rounded-xl border border-border/80 px-1.5 py-1">
         <WindowControlButton
           label={

@@ -153,9 +153,10 @@ pub fn update_launch_on_startup_enabled(
 pub async fn create_settings_window(
     app_handle: tauri::AppHandle,
     return_to_main: bool,
+    tab: Option<String>,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        crate::window::create_settings_window(&app_handle, return_to_main)
+        crate::window::create_settings_window(&app_handle, return_to_main, tab.as_deref())
     })
     .await
     .map_err(|error| format!("Failed to create settings window: {error}"))?

@@ -2,10 +2,7 @@ import { useEffect } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/core'
 import { translate } from '@/lib/i18n'
-import {
-  APP_UPDATE_AVAILABLE_EVENT,
-  type AppUpdateAvailablePayload,
-} from '@/lib/updater'
+import { APP_UPDATE_AVAILABLE_EVENT, type AppUpdateAvailablePayload } from '@/lib/updater'
 import { useToast } from '@/components/ui/toast'
 
 /**
@@ -23,24 +20,24 @@ export function UpdateAvailableToast() {
     void getCurrentWindow()
       .listen<AppUpdateAvailablePayload>(APP_UPDATE_AVAILABLE_EVENT, event => {
         const { version } = event.payload
-        toast.info(
-          translate('发现新版本 v{version}，可到设置中下载安装。', { version }),
-          {
-            key: 'update-available',
-            title: translate('应用更新'),
-            duration: 10_000,
-            action: {
-              label: translate('去更新'),
-              onClick: () => {
-                void invoke('create_settings_window', { returnToMain: true }).catch(
-                  (error: unknown) => {
-                    console.error('Failed to open settings for update:', error)
-                  }
-                )
-              },
+        toast.info(translate('发现新版本 v{version}，可到设置中下载安装。', { version }), {
+          key: 'update-available',
+          title: translate('应用更新'),
+          duration: 10_000,
+          action: {
+            label: translate('去更新'),
+            onClick: () => {
+              void invoke('create_settings_window', {
+                returnToMain: true,
+                tab: 'update',
+              })
+                .then(() => invoke('activate_settings_window'))
+                .catch((error: unknown) => {
+                  console.error('Failed to open settings for update:', error)
+                })
             },
-          }
-        )
+          },
+        })
       })
       .then(fn => {
         if (disposed) {

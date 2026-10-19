@@ -379,38 +379,44 @@ pub(crate) fn create_wallpaper_viewer_window(
 pub(crate) fn create_settings_window(
     app: &tauri::AppHandle,
     return_to_main: bool,
+    tab: Option<&str>,
 ) -> Result<(), String> {
     if app.get_webview_window("settings").is_some() {
-        return Ok(());
+        // 窗口已存在，激活并显示它
+        return show_settings_window(app);
     }
 
     let bootstrap_script = build_window_bootstrap_script(app, false);
     let window_icon = crate::native_icon::from_ico(crate::window_icon::MAX_WINDOW_ICON_SIZE)
         .map_err(|error| format!("Failed to load settings window icon: {error}"))?;
-    let url = if return_to_main {
-        "index.html?page=settings&returnToMain=1"
-    } else {
-        "index.html?page=settings"
+    let url = match (return_to_main, tab) {
+        (true, Some(tab)) => format!("index.html?page=settings&returnToMain=1&tab={}", tab),
+        (true, None) => "index.html?page=settings&returnToMain=1".to_string(),
+        (false, Some(tab)) => format!("index.html?page=settings&tab={}", tab),
+        (false, None) => "index.html?page=settings".to_string(),
     };
-    let builder =
-        tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App(url.into()))
-            .title(settings_window_title(app))
-            .icon(window_icon)
-            .map_err(|error| format!("Failed to configure settings window icon: {error}"))?
-            .on_page_load(|window, payload| {
-                if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
-                    if let Err(error) = crate::window_icon::refresh(&window) {
-                        eprintln!(
+    let builder = tauri::WebviewWindowBuilder::new(
+        app,
+        "settings",
+        tauri::WebviewUrl::App(url.as_str().into()),
+    )
+    .title(settings_window_title(app))
+    .icon(window_icon)
+    .map_err(|error| format!("Failed to configure settings window icon: {error}"))?
+    .on_page_load(|window, payload| {
+        if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+            if let Err(error) = crate::window_icon::refresh(&window) {
+                eprintln!(
                     "Warning: Failed to refresh settings window icon after page load: {error}"
                 );
-                    }
-                    if let Err(error) = window.set_skip_taskbar(false) {
-                        eprintln!(
+            }
+            if let Err(error) = window.set_skip_taskbar(false) {
+                eprintln!(
                     "Warning: Failed to add settings window to taskbar after page load: {error}"
                 );
-                    }
-                }
-            });
+            }
+        }
+    });
     let (width, height) = window_size_with_shadow(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT);
     builder
         .inner_size(width, height)
