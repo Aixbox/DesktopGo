@@ -162,6 +162,11 @@ fn register_devtools_hotkey(app: &tauri::AppHandle) {
 fn build_app() -> tauri::App {
     let builder = with_diagnostics_plugin(
         tauri::Builder::default()
+            .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+                // 当尝试启动第二个实例时，唤起已运行实例的主窗口
+                log::info!("single instance triggered: activating existing window");
+                let _ = request_main_window_show(app);
+            }))
             .plugin(tauri_plugin_opener::init())
             .plugin(tauri_plugin_dialog::init())
             .plugin(tauri_plugin_shell::init())
