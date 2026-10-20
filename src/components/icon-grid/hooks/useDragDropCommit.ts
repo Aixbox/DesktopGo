@@ -36,6 +36,7 @@ import {
   getFolderPreviewSlotSize,
 } from '../views/folderVisualPolicy'
 import { normalizeOuterSlots } from '../domain/topLevelLayout'
+import { resolveUnscaledGridRect } from './gridMotionGeometry'
 
 interface IconConfigLike {
   imgSize: number
@@ -254,7 +255,7 @@ export function useDragDropCommit({
     const targetNode = tileRefs.current.get(targetId)
     if (!targetNode) return null
 
-    const rect = targetNode.getBoundingClientRect()
+    const rect = resolveUnscaledGridRect(targetNode)
     const iconSize = iconConfig.imgSize
     const frameSize = getFolderPreviewFrameSize(iconSize)
     const slotSize = getFolderPreviewSlotSize(iconSize)
@@ -344,7 +345,7 @@ export function useDragDropCommit({
     if (!tileNode) return null
 
     const imageNode = tileNode.querySelector<HTMLElement>('.icon-image')
-    const rect = (imageNode ?? tileNode).getBoundingClientRect()
+    const rect = resolveUnscaledGridRect(imageNode ?? tileNode)
     const translate = resolveElementTranslate(tileNode)
     return {
       left: rect.left - translate.x + (rect.width - iconConfig.imgSize) / 2,
