@@ -74,6 +74,16 @@ export function useLaunchpadIconImportController({
   const pendingAddTargetGroupIdRef = useRef<string | undefined>(undefined)
   const iconEditSourceRequestRef = useRef(0)
 
+  const requestImportPlacement = useCallback((iconKeys: string[], targetGroupId?: string) => {
+    if (iconKeys.length === 0) return
+    importPlacementTokenRef.current += 1
+    setImportPlacementRequest({
+      token: importPlacementTokenRef.current,
+      iconKeys,
+      targetGroupId,
+    })
+  }, [])
+
   const handleAddIcons = useCallback(
     (targetGroupId?: string) => {
       pendingAddIconKeySetRef.current = new Set(icons.map(buildIconSelectionKey))
@@ -132,19 +142,12 @@ export function useLaunchpadIconImportController({
       const importedIconKeys = nextIcons
         .map(icon => buildIconSelectionKey(icon))
         .filter(key => !pendingAddIconKeySetRef.current.has(key))
-      if (importedIconKeys.length > 0) {
-        importPlacementTokenRef.current += 1
-        setImportPlacementRequest({
-          token: importPlacementTokenRef.current,
-          iconKeys: importedIconKeys,
-          targetGroupId: pendingAddTargetGroupIdRef.current,
-        })
-      }
+      requestImportPlacement(importedIconKeys, pendingAddTargetGroupIdRef.current)
     } finally {
       pendingAddTargetGroupIdRef.current = undefined
       setIsImportingDrop(false)
     }
-  }, [fetchIcons])
+  }, [fetchIcons, requestImportPlacement])
 
   /** 右键「新建」：在桌面创建真实文件/文件夹，并作为新图标接入当前布局。 */
   const handleCreateNewFile = useCallback(
@@ -167,13 +170,7 @@ export function useLaunchpadIconImportController({
         const newIconKeys = nextIcons
           .map(buildIconSelectionKey)
           .filter(key => !pendingAddIconKeySetRef.current.has(key))
-        if (newIconKeys.length > 0) {
-          importPlacementTokenRef.current += 1
-          setImportPlacementRequest({
-            token: importPlacementTokenRef.current,
-            iconKeys: newIconKeys,
-          })
-        }
+        requestImportPlacement(newIconKeys)
       } catch (error) {
         toast.error(translate('新建文件失败：{error}', { error: String(error) }), {
           key: 'launchpad-create-new-file',
@@ -184,7 +181,7 @@ export function useLaunchpadIconImportController({
         setIsImportingDrop(false)
       }
     },
-    [fetchIcons, icons, isImportingDrop, toast]
+    [fetchIcons, icons, isImportingDrop, requestImportPlacement, toast]
   )
 
   const prepareDroppedPaths = useCallback(
@@ -192,7 +189,11 @@ export function useLaunchpadIconImportController({
       const uniqueItems = Array.from(
         new Map(
           items
-            .map(item => ({ ...item, path: item.path.trim(), displayName: item.displayName?.trim() }))
+            .map(item => ({
+              ...item,
+              path: item.path.trim(),
+              displayName: item.displayName?.trim(),
+            }))
             .filter(item => item.path)
             .map(item => [item.path, item])
         ).values()
@@ -358,13 +359,7 @@ export function useLaunchpadIconImportController({
         const importedIconKeys = nextIcons
           .map(icon => buildIconSelectionKey(icon))
           .filter(key => !previousIconKeySet.has(key))
-        if (importedIconKeys.length > 0) {
-          importPlacementTokenRef.current += 1
-          setImportPlacementRequest({
-            token: importPlacementTokenRef.current,
-            iconKeys: importedIconKeys,
-          })
-        }
+        requestImportPlacement(importedIconKeys)
       }
       const message = translate(
         '导入完成：新增 {imported} 项，重复 {duplicate} 项，无效 {invalid} 项。',
@@ -401,7 +396,7 @@ export function useLaunchpadIconImportController({
     } finally {
       setIsImportingDrop(false)
     }
-  }, [fetchIcons, icons, isImportingDrop, pendingDropDrafts, toast])
+  }, [fetchIcons, icons, isImportingDrop, pendingDropDrafts, requestImportPlacement, toast])
 
   useEffect(() => {
     let disposed = false
@@ -468,6 +463,7 @@ export function useLaunchpadIconImportController({
     isExternalDragActive,
     isImportingDrop,
     pendingDropDrafts,
+    requestImportPlacement,
     toggleDroppedDraft: (index: number) => {
       setPendingDropDrafts(current =>
         current.map((item, itemIndex) =>

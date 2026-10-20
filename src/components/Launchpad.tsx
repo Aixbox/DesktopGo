@@ -27,13 +27,8 @@ import { LaunchpadIconImportLayer } from '@/components/launchpad/LaunchpadIconIm
 import { LaunchpadWindowControls } from '@/components/launchpad/LaunchpadWindowControls'
 import { LaunchpadAiOrganizePane } from '@/components/launchpad/LaunchpadAiOrganizePane'
 import { LaunchpadAiOrganizeToolbar } from '@/components/launchpad/LaunchpadAiOrganizeToolbar'
-import {
-  LaunchpadIconArea,
-} from '@/components/launchpad/LaunchpadIconArea'
-import {
-  loadIconGrid,
-  loadScrollableIconGrid,
-} from '@/components/launchpad/launchpadGridChunks'
+import { LaunchpadIconArea } from '@/components/launchpad/LaunchpadIconArea'
+import { loadIconGrid, loadScrollableIconGrid } from '@/components/launchpad/launchpadGridChunks'
 import { LaunchpadSearchBar } from '@/components/launchpad/LaunchpadSearchBar'
 import { LaunchpadSelectionToolbar } from '@/components/launchpad/LaunchpadSelectionToolbar'
 import { useLaunchpadIconImportController } from '@/components/launchpad/useLaunchpadIconImportController'
@@ -187,6 +182,7 @@ export function Launchpad() {
     searchInputRef,
     setLayoutResetToken,
     preloadGridView,
+    onNewIconsImported: iconImport.requestImportPlacement,
     aiOrganizeSidebarOpen: isAiOrganizeSidebarOpen,
   })
   const {
@@ -817,9 +813,7 @@ export function Launchpad() {
                 gridViewMode={launchpadGridViewMode}
                 layoutResetToken={layoutResetToken}
                 sidebarCompact={isScrollSidebarCompact}
-                onToggleSidebarCompact={() =>
-                  setIsScrollSidebarCompact(current => !current)
-                }
+                onToggleSidebarCompact={() => setIsScrollSidebarCompact(current => !current)}
                 importPlacementRequest={importPlacementRequest}
                 addIconDisabled={isImportingDrop || addIconDialogOpen}
                 onAddIcon={() => handleAddIcons()}

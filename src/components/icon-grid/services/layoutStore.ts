@@ -20,6 +20,10 @@ export const LAYOUT_KEY = 'desktopgo.launchpad.layout.v1'
 export const SCROLL_LAYOUT_KEY = 'desktopgo.launchpad.layout.scroll.v1'
 export const LAUNCHPAD_LAYOUT_RESET_EVENT = 'launchpad:layout-reset'
 
+export interface LaunchpadLayoutResetPayload {
+  placeNewIcons?: boolean
+}
+
 export type LaunchpadLayoutScope = 'paged' | 'scroll'
 
 const getLayoutKey = (scope: LaunchpadLayoutScope) =>

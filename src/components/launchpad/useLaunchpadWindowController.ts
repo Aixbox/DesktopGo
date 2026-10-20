@@ -26,9 +26,13 @@ import {
 } from '@/lib/windowPersistent'
 import { applyWindowStyle, getSavedWindowStyle } from '@/lib/windowStyle'
 import { applySavedAppearance } from '@/lib/appearance'
-import { LAUNCHPAD_LAYOUT_RESET_EVENT } from '@/components/icon-grid/services/layoutStore'
+import {
+  LAUNCHPAD_LAYOUT_RESET_EVENT,
+  type LaunchpadLayoutResetPayload,
+} from '@/components/icon-grid/services/layoutStore'
 import { useToast } from '@/components/ui/toast'
-import { useIconStore } from '@/stores/iconStore'
+import { buildIconSelectionKey, useIconStore } from '@/stores/iconStore'
+import { findNewlyAddedIconKeys } from './iconRefreshPolicy'
 
 const LAUNCHPAD_SHOWN_EVENT = 'launchpad:shown'
 const EXTERNAL_SHOW_CLICK_GUARD_MS = 350
@@ -62,6 +66,7 @@ interface UseLaunchpadWindowControllerParams {
   searchInputRef: MutableRefObject<HTMLInputElement | null>
   setLayoutResetToken: (update: (current: number) => number) => void
   preloadGridView: (mode: 'paged' | 'scroll') => void
+  onNewIconsImported: (iconKeys: string[]) => void
   aiOrganizeSidebarOpen: boolean
 }
 
@@ -72,6 +77,7 @@ export function useLaunchpadWindowController({
   searchInputRef,
   setLayoutResetToken,
   preloadGridView,
+  onNewIconsImported,
   aiOrganizeSidebarOpen,
 }: UseLaunchpadWindowControllerParams) {
   const toast = useToast()
@@ -361,9 +367,15 @@ export function useLaunchpadWindowController({
     let disposed = false
     let unlisten: (() => void) | null = null
     void getCurrentWindow()
-      .listen(LAUNCHPAD_LAYOUT_RESET_EVENT, () => {
+      .listen<LaunchpadLayoutResetPayload>(LAUNCHPAD_LAYOUT_RESET_EVENT, event => {
+        const previousKeys = new Set(useIconStore.getState().icons.map(buildIconSelectionKey))
         setLayoutResetToken(current => current + 1)
-        void syncExternalState()
+        void (async () => {
+          await syncExternalState()
+          if (event.payload?.placeNewIcons !== true) return
+          const currentKeys = useIconStore.getState().icons.map(buildIconSelectionKey)
+          onNewIconsImported(findNewlyAddedIconKeys(previousKeys, currentKeys))
+        })()
       })
       .then(fn => {
         if (disposed) fn()
@@ -373,7 +385,7 @@ export function useLaunchpadWindowController({
       disposed = true
       unlisten?.()
     }
-  }, [setLayoutResetToken, syncExternalState])
+  }, [onNewIconsImported, setLayoutResetToken, syncExternalState])
 
   const requestCloseLaunchpad = useCallback(() => {
     void invoke('toggle_window').catch(error => {

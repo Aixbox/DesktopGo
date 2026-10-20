@@ -20,7 +20,12 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import { SettingCard, OptionButton, SettingGroup, ToggleRow } from '@/components/ui/setting-components'
+import {
+  SettingCard,
+  OptionButton,
+  SettingGroup,
+  ToggleRow,
+} from '@/components/ui/setting-components'
 import { useToast } from '@/components/ui/toast'
 import type {
   IconManagerItem,
@@ -197,11 +202,14 @@ export function IconManagerPanel() {
     return () => window.clearTimeout(timer)
   }, [searchInput])
 
-  const notifyMainWindow = async () => {
+  const notifyMainWindow = async (placeNewIcons = false) => {
     const mainWindow = await WebviewWindow.getByLabel('main')
-    if (mainWindow) {
-      await mainWindow.emit(LAUNCHPAD_LAYOUT_RESET_EVENT)
+    if (!mainWindow) return
+    if (placeNewIcons) {
+      await mainWindow.emit(LAUNCHPAD_LAYOUT_RESET_EVENT, { placeNewIcons: true })
+      return
     }
+    await mainWindow.emit(LAUNCHPAD_LAYOUT_RESET_EVENT)
   }
 
   const filteredIcons = useMemo(
@@ -230,7 +238,9 @@ export function IconManagerPanel() {
   const bulkSelectedIcons = filteredIcons.filter(icon => selectedIconIdSet.has(icon.id))
   const bulkDeletesSource =
     deleteSourceFile ||
-    (deleteNewFileSource && bulkSelectedIcons.length > 0 && bulkSelectedIcons.every(icon => icon.origin === 'new'))
+    (deleteNewFileSource &&
+      bulkSelectedIcons.length > 0 &&
+      bulkSelectedIcons.every(icon => icon.origin === 'new'))
 
   const controlsDisabled = mutating || listLoading || layoutResetting
 
@@ -271,7 +281,7 @@ export function IconManagerPanel() {
 
   const handleIconCreated = async () => {
     await refreshIconManagerList()
-    await notifyMainWindow()
+    await notifyMainWindow(true)
   }
 
   const handleOpenAiOrganize = () => {
@@ -442,7 +452,10 @@ export function IconManagerPanel() {
               <Wand2 className="h-4 w-4" />
               {translate('快捷导入')}
             </Button>
-            <Button onClick={() => setAddIconDialogOpen(true)} disabled={mutating || layoutResetting}>
+            <Button
+              onClick={() => setAddIconDialogOpen(true)}
+              disabled={mutating || layoutResetting}
+            >
               <Upload className="h-4 w-4" />
               {translate('导入图标')}
             </Button>
@@ -790,9 +803,7 @@ export function IconManagerPanel() {
                   ? translate(
                       '已开启：删除“新建”创建的图标时，其源文件会被移入回收站；拖入导入的图标不受影响。'
                     )
-                  : translate(
-                      '已关闭：删除“新建”创建的图标时仅从图标库移除，源文件保留在原位置。'
-                    )
+                  : translate('已关闭：删除“新建”创建的图标时仅从图标库移除，源文件保留在原位置。')
             }
             checked={deleteSourceFile || deleteNewFileSource}
             onChange={handleDeleteNewFileSourceChange}
@@ -834,7 +845,7 @@ export function IconManagerPanel() {
         onOpenChange={setQuickImportOpen}
         onImported={async () => {
           await refreshIconManagerList()
-          await notifyMainWindow()
+          await notifyMainWindow(true)
         }}
       />
 
