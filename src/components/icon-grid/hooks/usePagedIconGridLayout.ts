@@ -6,7 +6,7 @@ import { compactEmptyPages, areSlotsEqual } from '../domain/slots'
 import { clampNumber } from '../domain/geometry'
 import {
   hydrateDockKeys,
-  hydrateItems,
+  hydrateLayout,
   readLayout,
   serializeItems,
   writeLayout,
@@ -174,12 +174,14 @@ export function usePagedIconGridLayout({
         persisted = persistedLayoutRef.current
       }
 
-      const nextItems = hydrateItems(icons, persisted?.items ?? null)
+      const hydratedLayout = hydrateLayout(icons, persisted)
+      const nextItems = hydratedLayout.items
+      const persistedForItems = hydratedLayout.layout
       const nextItemIds = nextItems.map(getId)
       const nextDockKeys = hydrationEnvironment.dockEnabled
-        ? hydrateDockKeys(nextItemIds, persisted?.dockKeys)
+        ? hydrateDockKeys(nextItemIds, persistedForItems?.dockKeys)
         : []
-      const rawSlots = (persisted?.slots ?? []).map(key =>
+      const rawSlots = (persistedForItems?.slots ?? []).map(key =>
         key ? key.replace(/^(desktop|customapp):/, '') : null
       )
       const hasDims = Boolean(
@@ -189,9 +191,9 @@ export function usePagedIconGridLayout({
       persistedDimsRef.current = hasDims
         ? { pageSize: persisted!.pageSize!, columns: persisted!.columns! }
         : null
-      persistedCoordinatesRef.current = persisted?.coordinates
+      persistedCoordinatesRef.current = persistedForItems?.coordinates
       persistedGeometryKeyRef.current = persisted?.geometryKey ?? null
-      persistedScrollGroupsRef.current = persisted?.scrollGroups
+      persistedScrollGroupsRef.current = persistedForItems?.scrollGroups
 
       if (hydrationSource !== 'memory') {
         if (

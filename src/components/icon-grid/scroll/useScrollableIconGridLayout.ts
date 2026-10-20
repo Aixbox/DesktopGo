@@ -33,7 +33,7 @@ import {
 } from '../domain/layoutHydrationPolicy'
 import {
   hydrateDockKeys,
-  hydrateItems,
+  hydrateLayout,
   readLayout,
   serializeItems,
   writeLayout,
@@ -206,12 +206,14 @@ export function useScrollableIconGridLayout({
         persisted = persistedLayoutRef.current
       }
 
-      const nextItems = hydrateItems(icons, persisted?.items ?? null)
+      const hydratedLayout = hydrateLayout(icons, persisted)
+      const nextItems = hydratedLayout.items
+      const persistedForItems = hydratedLayout.layout
       const nextItemIds = nextItems.map(getId)
       const nextDockKeys = hydrationEnvironment.dockEnabled
-        ? hydrateDockKeys(nextItemIds, persisted?.dockKeys)
+        ? hydrateDockKeys(nextItemIds, persistedForItems?.dockKeys)
         : []
-      const rawSlots = (persisted?.slots ?? []).map(key =>
+      const rawSlots = (persistedForItems?.slots ?? []).map(key =>
         key ? key.replace(/^(desktop|customapp):/, '') : null
       )
       const hasDims = Boolean(
@@ -241,11 +243,11 @@ export function useScrollableIconGridLayout({
       layoutBaselineRef.current = false
       const nextOuterItemIds = resolveOuterItemIds(nextItemIds, nextDockKeys)
       const nextScrollGroups = normalizeScrollGroups({
-        groups: persisted?.scrollGroups,
+        groups: persistedForItems?.scrollGroups,
         outerItemIds: nextOuterItemIds,
         legacySlots: rawSlots,
-        legacyPageSize: persisted?.pageSize ?? Math.max(1, rawSlots.length),
-        hasExplicitItems: persisted?.scrollGroupItemsExplicit === true,
+        legacyPageSize: persistedForItems?.pageSize ?? Math.max(1, rawSlots.length),
+        hasExplicitItems: persistedForItems?.scrollGroupItemsExplicit === true,
         defaultName: index => translate('网格 {index}', { index: index + 1 }),
       })
       itemsRef.current = nextItems

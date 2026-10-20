@@ -14,7 +14,7 @@ import type {
 } from '../model'
 import { makeFolderId, SCROLL_GROUP_ICONS } from '../model'
 import type { DesktopIcon } from '../../../types'
-import { buildIconSelectionKey } from '../../../stores/iconStore'
+import { buildIconSelectionKey } from '../../../lib/iconKey'
 
 export const LAYOUT_KEY = 'desktopgo.launchpad.layout.v1'
 export const SCROLL_LAYOUT_KEY = 'desktopgo.launchpad.layout.scroll.v1'
@@ -92,59 +92,59 @@ const normalizePersistedItemCoordinates = (
 }
 
 type PersistedLayoutPayload =
-      | { version: 1; items: PersistedItem[] }
-      | { version: 2; items: PersistedItem[]; slots: unknown[] }
-      | { version: 3; items: PersistedItem[]; slots: unknown[]; dockKeys: unknown[] }
-      | { version: 4; items: PersistedItem[]; slots: unknown[]; dockKeys: unknown[] }
-      | {
-          version: 5
-          items: PersistedItem[]
-          slots: unknown[]
-          dockKeys: unknown[]
-          pageSize?: number
-          columns?: number
-        }
-      | {
-          version: 6
-          items: PersistedItem[]
-          slots: unknown[]
-          dockKeys: unknown[]
-          pageSize?: number
-          columns?: number
-          coordinates?: unknown
-        }
-      | {
-          version: 7
-          items: PersistedItem[]
-          slots: unknown[]
-          dockKeys: unknown[]
-          pageSize?: number
-          columns?: number
-          coordinates?: unknown
-          geometryKey?: unknown
-        }
-      | {
-          version: 8
-          items: PersistedItem[]
-          slots: unknown[]
-          dockKeys: unknown[]
-          pageSize?: number
-          columns?: number
-          coordinates?: unknown
-          geometryKey?: unknown
-          scrollGroups?: unknown
-        }
-      | {
-          version: 9
-          items: PersistedItem[]
-          slots: unknown[]
-          dockKeys: unknown[]
-          pageSize?: number
-          columns?: number
-          coordinates?: unknown
-          geometryKey?: unknown
-          scrollGroups?: unknown
-        }
+  | { version: 1; items: PersistedItem[] }
+  | { version: 2; items: PersistedItem[]; slots: unknown[] }
+  | { version: 3; items: PersistedItem[]; slots: unknown[]; dockKeys: unknown[] }
+  | { version: 4; items: PersistedItem[]; slots: unknown[]; dockKeys: unknown[] }
+  | {
+      version: 5
+      items: PersistedItem[]
+      slots: unknown[]
+      dockKeys: unknown[]
+      pageSize?: number
+      columns?: number
+    }
+  | {
+      version: 6
+      items: PersistedItem[]
+      slots: unknown[]
+      dockKeys: unknown[]
+      pageSize?: number
+      columns?: number
+      coordinates?: unknown
+    }
+  | {
+      version: 7
+      items: PersistedItem[]
+      slots: unknown[]
+      dockKeys: unknown[]
+      pageSize?: number
+      columns?: number
+      coordinates?: unknown
+      geometryKey?: unknown
+    }
+  | {
+      version: 8
+      items: PersistedItem[]
+      slots: unknown[]
+      dockKeys: unknown[]
+      pageSize?: number
+      columns?: number
+      coordinates?: unknown
+      geometryKey?: unknown
+      scrollGroups?: unknown
+    }
+  | {
+      version: 9
+      items: PersistedItem[]
+      slots: unknown[]
+      dockKeys: unknown[]
+      pageSize?: number
+      columns?: number
+      coordinates?: unknown
+      geometryKey?: unknown
+      scrollGroups?: unknown
+    }
 
 export const parsePersistedLayout = (raw: string): PersistedLayout | null => {
   const parsed = JSON.parse(raw) as unknown
@@ -207,7 +207,9 @@ export const parsePersistedLayout = (raw: string): PersistedLayout | null => {
         const id = 'id' in entry && typeof entry.id === 'string' ? entry.id.trim() : ''
         const itemIds =
           'itemIds' in entry && Array.isArray(entry.itemIds)
-            ? entry.itemIds.filter((itemId: unknown): itemId is string => typeof itemId === 'string')
+            ? entry.itemIds.filter(
+                (itemId: unknown): itemId is string => typeof itemId === 'string'
+              )
             : []
         return [
           {
@@ -344,10 +346,10 @@ export const hydrateDockKeys = (
     itemIds
   )
 
-export const hydrateItems = (
+const hydrateItemsWithFolderAliases = (
   icons: DesktopIcon[],
   persisted: PersistedItem[] | null
-): GridItem[] => {
+): { items: GridItem[]; collapsedFolderAliases: Map<string, string> } => {
   const iconMap = new Map<string, IconItem>()
   icons.forEach(icon => {
     const key = buildIconSelectionKey(icon)
@@ -356,6 +358,7 @@ export const hydrateItems = (
 
   const consumed = new Set<string>()
   const result: GridItem[] = []
+  const collapsedFolderAliases = new Map<string, string>()
   const normalizeLegacyKey = (key: string) => key.replace(/^(desktop|customapp):/, '')
 
   if (persisted) {
@@ -390,6 +393,9 @@ export const hydrateItems = (
         })
       } else if (children.length === 1) {
         result.push(children[0])
+        if (item.id) {
+          collapsedFolderAliases.set('folder:' + item.id, children[0].key)
+        }
       }
     })
   }
@@ -401,5 +407,41 @@ export const hydrateItems = (
     }
   })
 
-  return result
+  return { items: result, collapsedFolderAliases }
 }
+
+export const hydrateLayout = (
+  icons: DesktopIcon[],
+  persisted: PersistedLayout | null
+): { items: GridItem[]; layout: PersistedLayout | null } => {
+  const { items, collapsedFolderAliases } = hydrateItemsWithFolderAliases(
+    icons,
+    persisted?.items ?? null
+  )
+  if (!persisted || collapsedFolderAliases.size === 0) {
+    return { items, layout: persisted }
+  }
+
+  const replaceItemId = (id: string | null): string | null =>
+    id === null ? null : (collapsedFolderAliases.get(id) ?? id)
+
+  return {
+    items,
+    layout: {
+      ...persisted,
+      slots: persisted.slots?.map(replaceItemId) ?? null,
+      dockKeys: persisted.dockKeys.map(replaceItemId),
+      coordinates: persisted.coordinates?.map(coordinate => ({
+        ...coordinate,
+        id: collapsedFolderAliases.get(coordinate.id) ?? coordinate.id,
+      })),
+      scrollGroups: persisted.scrollGroups?.map(group => ({
+        ...group,
+        itemIds: group.itemIds.map(id => collapsedFolderAliases.get(id) ?? id),
+      })),
+    },
+  }
+}
+
+export const hydrateItems = (icons: DesktopIcon[], persisted: PersistedItem[] | null): GridItem[] =>
+  hydrateItemsWithFolderAliases(icons, persisted).items
