@@ -1,13 +1,9 @@
 import { useLayoutEffect, useMemo } from 'react'
 import type { FolderItem, GridItem, IconItem, ScrollGroupMeta } from '../model'
-import { getGridItemSpan } from '../model'
 import type { DragState } from '../state/types'
 import { DRAG_HOLE_ID } from '../domain/slots'
-import {
-  canPlaceItemAtAnchorIndex,
-  getFootprintIndices,
-  getPageAnchorEntries,
-} from '../domain/topLevelLayout'
+import { getPageAnchorEntries } from '../domain/topLevelLayout'
+import { resolveGridPreviewFootprint } from '../domain/gridPreviewFootprint'
 import { compactOuterSlotsWithinPages } from './scrollTopLevelLayout'
 import { buildScrollGroupDragPreviewOrder, buildScrollGroupEntries } from './scrollGroupLayout'
 import type { ScrollGridSection } from '../views/scrollableOuterGridTypes'
@@ -167,28 +163,16 @@ export function useScrollableIconGridViewModel({
   }, [currentPage, launchpadGridViewMode, pageSize, renderOrder, scrollRenderOrder])
   const previewFootprint = useMemo(() => {
     if (dragState?.context !== 'outer') return null
-    if (dragState.previewSlotIndex === null || dragState.folderPreviewTargetId) return null
-    const span = getGridItemSpan(dragState.draggingItem)
-    if (span.cols > 1 || span.rows > 1) return null
-    if (
-      !canPlaceItemAtAnchorIndex(
-        renderOrder,
-        outerViewItems,
-        dragState.previewSlotIndex,
-        span,
-        columns,
-        pageSize
-      )
-    ) {
-      return null
-    }
-    const indices = getFootprintIndices(dragState.previewSlotIndex, span, columns, pageSize)
-    if (!indices) return null
-    const pageStart = currentPage * pageSize
-    const pageEnd = pageStart + pageSize
-    if (indices.some(index => index < pageStart || index >= pageEnd)) return null
-    const localIndex = dragState.previewSlotIndex - pageStart
-    return { row: Math.floor(localIndex / columns), col: localIndex % columns, span }
+    return resolveGridPreviewFootprint({
+      anchorIndex: dragState.previewSlotIndex,
+      currentPage,
+      columns,
+      folderPreviewTargetId: dragState.folderPreviewTargetId,
+      item: dragState.draggingItem,
+      items: outerViewItems,
+      pageSize,
+      slots: renderOrder,
+    })
   }, [columns, currentPage, dragState, outerViewItems, pageSize, renderOrder])
   const pagedActiveHiddenDragIds = useMemo(() => {
     if (!dragState) return []

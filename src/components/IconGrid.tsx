@@ -33,7 +33,6 @@ import {
 import { resolveDockDisplaySlots, resolveOuterItemIds } from './icon-grid/domain/dock'
 import {
   buildPersistedItemCoordinates,
-  canPlaceItemAtAnchorIndex,
   findBestResizeAnchorIndex,
   getFootprintIndices,
   getPageAnchorEntries,
@@ -46,6 +45,7 @@ import {
 } from './icon-grid/domain/dropPolicy'
 import { DragOverlays } from './icon-grid/views/DragOverlays'
 import { OuterGridView } from './icon-grid/views/OuterGridView'
+import { resolveGridPreviewFootprint } from './icon-grid/domain/gridPreviewFootprint'
 import { EdgeGlow } from './icon-grid/views/EdgeGlow'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
 import { DockBar } from './icon-grid/views/DockBar'
@@ -689,34 +689,16 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
 
   const previewFootprint = useMemo(() => {
     if (dragState?.context !== 'outer') return null
-    if (dragState.previewSlotIndex === null || dragState.folderPreviewTargetId) return null
-    const span = getGridItemSpan(dragState.draggingItem)
-    if (span.cols > 1 || span.rows > 1) return null
-    if (
-      !canPlaceItemAtAnchorIndex(
-        renderOrder,
-        Array.from(outerViewItemById.values()),
-        dragState.previewSlotIndex,
-        span,
-        columns,
-        pageSize
-      )
-    ) {
-      return null
-    }
-    const indices = getFootprintIndices(dragState.previewSlotIndex, span, columns, pageSize)
-    if (!indices) return null
-
-    const pageStart = currentPage * pageSize
-    const pageEnd = pageStart + pageSize
-    if (indices.some(index => index < pageStart || index >= pageEnd)) return null
-
-    const localIndex = dragState.previewSlotIndex - pageStart
-    return {
-      row: Math.floor(localIndex / columns),
-      col: localIndex % columns,
-      span,
-    }
+    return resolveGridPreviewFootprint({
+      anchorIndex: dragState.previewSlotIndex,
+      currentPage,
+      columns,
+      folderPreviewTargetId: dragState.folderPreviewTargetId,
+      item: dragState.draggingItem,
+      items: Array.from(outerViewItemById.values()),
+      pageSize,
+      slots: renderOrder,
+    })
   }, [columns, currentPage, dragState, outerViewItemById, pageSize, renderOrder])
 
   usePagedGridReorderAnimations({
