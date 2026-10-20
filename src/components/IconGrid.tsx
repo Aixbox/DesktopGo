@@ -312,8 +312,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     setOpenFolderId,
   })
   const activeDragIdSet = useMemo(() => new Set(dragState?.draggingIds ?? []), [dragState])
-  const isSingleIconDragActive =
-    dragState?.draggingItem.kind === 'icon' && dragState.draggingIds.length === 1
+  const isSingleDragActive = dragState !== null && dragState.draggingIds.length === 1
   const folderRenderOrder =
     dragState && dragState.context === 'folder' ? dragState.workingOrder : folderOrder
   const hiddenDockDraggingIds = useMemo(
@@ -775,7 +774,7 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
            pt-28：网格顶部对齐后，搜索框底（68px）到网格顶 112px，间距恰好
            一个搜索框高（44px）。items-start：图标少时网格贴顶排列，
            不再被垂直居中推到窗口中部。 */
-        data-single-icon-dragging={isSingleIconDragActive ? 'true' : 'false'}
+        data-single-item-dragging={isSingleDragActive ? 'true' : 'false'}
         className={`relative h-full w-full px-16 pt-28 ${dockEnabled ? 'pb-32' : 'pb-12'}`}
         onWheel={handleWheelPageSwitch}
       >
