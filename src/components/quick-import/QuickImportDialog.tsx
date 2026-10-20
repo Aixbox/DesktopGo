@@ -1,5 +1,16 @@
 import { lazy, Suspense } from 'react'
-import { AlertTriangle, Check, CheckCircle2, Download, FileIcon, Pencil, RefreshCw, SearchX, Wand2, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  Check,
+  CheckCircle2,
+  Download,
+  FileIcon,
+  Pencil,
+  RefreshCw,
+  SearchX,
+  Wand2,
+  X,
+} from 'lucide-react'
 import { translate } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -97,16 +108,14 @@ function AppTile({
             <FileIcon className="h-5 w-5 text-muted-foreground" />
           )}
         </span>
-        <span
-          className="min-h-6 w-full overflow-hidden text-[11px] font-medium leading-3 text-foreground [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
-        >
+        <span className="min-h-6 w-full overflow-hidden text-[11px] font-medium leading-3 text-foreground [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
           {app.displayName}
         </span>
       </button>
       {app.status !== 'new' ? (
         <span
           className={cn(
-            'pointer-events-none absolute right-7 top-2 z-10 h-2.5 w-2.5 rounded-full',
+            'pointer-events-none absolute right-0.5 top-0.5 z-10 h-2.5 w-2.5 rounded-full',
             STATUS_DOT_CLASS[app.status]
           )}
         />
@@ -117,7 +126,7 @@ function AppTile({
         title={translate('编辑')}
         onClick={() => onEdit(app.key)}
         disabled={importing}
-        className="absolute right-0.5 top-0.5 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-background/90 text-muted-foreground opacity-100 shadow-sm transition-[opacity,color] hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+        className="absolute right-0 top-5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-background/90 text-muted-foreground opacity-100 shadow-sm transition-[opacity,color] hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
       >
         <Pencil className="h-3 w-3" />
       </button>
@@ -191,7 +200,10 @@ export function QuickImportDialog({ open, onOpenChange, onImported }: QuickImpor
       >
         <div className="flex items-start justify-between gap-4 border-b border-border/80 px-4 py-4 sm:px-5">
           <div className="min-w-0 space-y-1">
-            <h2 id="quick-import-title" className="flex items-center gap-2 text-base font-semibold text-foreground">
+            <h2
+              id="quick-import-title"
+              className="flex items-center gap-2 text-base font-semibold text-foreground"
+            >
               <Wand2 className="h-4 w-4" />
               {translate('快捷导入应用')}
             </h2>
@@ -248,11 +260,18 @@ export function QuickImportDialog({ open, onOpenChange, onImported }: QuickImpor
               <p className="text-sm font-medium">{translate('未发现可导入的应用')}</p>
               <p className="text-xs leading-5 text-muted-foreground">
                 {hiddenSystemToolCount > 0
-                  ? translate('扫描到的应用都是系统自带工具，已默认隐藏；勾选「显示系统工具」可查看。')
+                  ? translate(
+                      '扫描到的应用都是系统自带工具，已默认隐藏；勾选「显示系统工具」可查看。'
+                    )
                   : translate('没有找到可用的应用快捷方式，可以手动添加图标。')}
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => void startScan()} disabled={importing}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void startScan()}
+              disabled={importing}
+            >
               <SearchX className="h-4 w-4" />
               {translate('重新扫描')}
             </Button>
@@ -311,7 +330,9 @@ export function QuickImportDialog({ open, onOpenChange, onImported }: QuickImpor
               <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3 sm:px-5">
                 {hasImportedApps ? (
                   <p className="px-1 text-xs leading-5 text-muted-foreground">
-                    {translate('橙色圆点为已在图标库中的应用，默认不勾选；如需重新导入请手动勾选。')}
+                    {translate(
+                      '橙色圆点为已在图标库中的应用，默认不勾选；如需重新导入请手动勾选。'
+                    )}
                   </p>
                 ) : null}
                 {groups.map(group => {
@@ -356,9 +377,7 @@ export function QuickImportDialog({ open, onOpenChange, onImported }: QuickImpor
                             <span className="text-xs text-muted-foreground">
                               {translate('另有 {count} 个与{sources}重复', {
                                 count: mergedTotal,
-                                sources: sourceMerges
-                                  .map(item => translate(item.target))
-                                  .join('/'),
+                                sources: sourceMerges.map(item => translate(item.target)).join('/'),
                               })}
                             </span>
                           ) : null}
