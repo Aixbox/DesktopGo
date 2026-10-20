@@ -913,7 +913,8 @@ body:focus-visible {
   transition-duration: 210ms;
 }
 
-.launchpad-bg[data-edit-mode='true']::before {
+.launchpad-bg[data-edit-mode='true']::before,
+.launchpad-bg:has([data-single-icon-dragging='true'])::before {
   opacity: 1;
   -webkit-backdrop-filter: blur(18px) saturate(135%);
   backdrop-filter: blur(18px) saturate(135%);
@@ -929,7 +930,8 @@ body:focus-visible {
   transition-duration: 210ms;
 }
 
-.launchpad-bg[data-edit-mode='true'] .launchpad-edit-grid-motion {
+.launchpad-bg[data-edit-mode='true'] .launchpad-edit-grid-motion,
+.launchpad-bg:has([data-single-icon-dragging='true']) .launchpad-edit-grid-motion {
   transform: scale(0.97);
 }
 

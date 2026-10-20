@@ -421,6 +421,8 @@ export function ScrollableIconGrid({
     setOpenFolderId,
   })
   const activeDragIdSet = useMemo(() => new Set(dragState?.draggingIds ?? []), [dragState])
+  const isSingleIconDragActive =
+    dragState?.draggingItem.kind === 'icon' && dragState.draggingIds.length === 1
   const folderRenderOrder =
     dragState && dragState.context === 'folder' ? dragState.workingOrder : folderOrder
   const hiddenDockDraggingIds = useMemo(
@@ -722,6 +724,7 @@ export function ScrollableIconGrid({
   return (
     <LayoutGroup id="folder-shell-layout">
       <div
+        data-single-icon-dragging={isSingleIconDragActive ? 'true' : 'false'}
         className={
           launchpadGridViewMode === 'scroll'
             ? 'scroll-grid-shell relative h-full w-full'
