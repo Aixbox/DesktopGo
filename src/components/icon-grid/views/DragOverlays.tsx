@@ -614,8 +614,8 @@ export function DragOverlays({
               className="pointer-events-none fixed"
               style={{
                 zIndex: item.zIndex,
-                width: iconImageSize,
-                height: iconImageSize,
+                width: item.width,
+                height: item.height,
                 left: 0,
                 top: 0,
                 opacity: item.animate ? item.endOpacity : item.startOpacity,
@@ -625,12 +625,20 @@ export function DragOverlays({
                   : `transform ${reorderAnimationMs}ms ${folderPreviewEasing}, opacity ${reorderAnimationMs}ms ease-out`,
               }}
             >
-              {item.icon.icon_base64 ? (
+              {item.item.kind === 'folder' ? (
+                <FolderGhost
+                  folder={item.item}
+                  slotWidth={slotWidth}
+                  slotHeight={slotHeight}
+                  gridGap={gridGap}
+                  titleLineCount={titleLineCount}
+                />
+              ) : item.item.icon.icon_base64 ? (
                 <img
-                  src={item.icon.icon_base64}
-                  alt={item.icon.name}
+                  src={item.item.icon.icon_base64}
+                  alt={item.item.icon.name}
                   className="launchpad-icon-artwork object-contain"
-                  style={{ width: iconImageSize, height: iconImageSize }}
+                  style={{ width: item.width, height: item.height }}
                   draggable={false}
                 />
               ) : (

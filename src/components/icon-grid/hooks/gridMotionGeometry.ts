@@ -5,6 +5,30 @@ interface GridMotionRect {
   height: number
 }
 
+/** Removes an item's CSS translation after its rect has been restored to grid scale 1. */
+export function removeElementTranslateFromRect(
+  rect: GridMotionRect,
+  translate: { x: number; y: number }
+): GridMotionRect {
+  return {
+    ...rect,
+    left: rect.left - translate.x,
+    top: rect.top - translate.y,
+  }
+}
+
+function resolveElementTranslate(node: HTMLElement): { x: number; y: number } {
+  const transform = window.getComputedStyle(node).transform
+  if (!transform || transform === 'none') return { x: 0, y: 0 }
+
+  try {
+    const matrix = new DOMMatrixReadOnly(transform)
+    return { x: matrix.m41, y: matrix.m42 }
+  } catch {
+    return { x: 0, y: 0 }
+  }
+}
+
 /** Converts a viewport rect measured during centered grid scaling to its scale-1 position. */
 export function resolveRectAtUnitScale(
   rect: GridMotionRect,
@@ -49,4 +73,15 @@ export function resolveUnscaledGridRect(node: HTMLElement): GridMotionRect {
   } catch {
     return rect
   }
+}
+
+/** Reads a grid item's final rect at unit grid scale, excluding its active FLIP translation. */
+export function resolveUntransformedGridRect(
+  node: HTMLElement,
+  translatedNode: HTMLElement = node
+): GridMotionRect {
+  return removeElementTranslateFromRect(
+    resolveUnscaledGridRect(node),
+    resolveElementTranslate(translatedNode)
+  )
 }

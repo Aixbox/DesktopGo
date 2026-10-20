@@ -36,7 +36,7 @@ import {
   getFolderPreviewSlotSize,
 } from '../views/folderVisualPolicy'
 import { normalizeOuterSlots } from '../domain/topLevelLayout'
-import { resolveUnscaledGridRect } from './gridMotionGeometry'
+import { resolveUnscaledGridRect, resolveUntransformedGridRect } from './gridMotionGeometry'
 
 interface IconConfigLike {
   imgSize: number
@@ -326,30 +326,25 @@ export function useDragDropCommit({
     return Math.max(0.38, 0.8 - (index - 1) * 0.12)
   }
 
-  const resolveElementTranslate = (node: HTMLElement): { x: number; y: number } => {
-    const transform = window.getComputedStyle(node).transform
-    if (!transform || transform === 'none') {
-      return { x: 0, y: 0 }
-    }
-
-    try {
-      const matrix = new DOMMatrixReadOnly(transform)
-      return { x: matrix.m41, y: matrix.m42 }
-    } catch {
-      return { x: 0, y: 0 }
-    }
-  }
-
-  const resolveIconFlightTarget = (id: string): { left: number; top: number } | null => {
+  const resolveDropFlightTarget = (
+    id: string,
+    item: GridItem
+  ): { left: number; top: number; width: number; height: number } | null => {
     const tileNode = tileRefs.current.get(id)
     if (!tileNode) return null
 
-    const imageNode = tileNode.querySelector<HTMLElement>('.icon-image')
-    const rect = resolveUnscaledGridRect(imageNode ?? tileNode)
-    const translate = resolveElementTranslate(tileNode)
+    const targetNode =
+      item.kind === 'folder'
+        ? (tileNode.querySelector<HTMLElement>('[data-folder-visual-body]') ?? tileNode)
+        : (tileNode.querySelector<HTMLElement>('.icon-image') ?? tileNode)
+    const rect = resolveUntransformedGridRect(targetNode, tileNode)
+    const width = item.kind === 'folder' ? rect.width : iconConfig.imgSize
+    const height = item.kind === 'folder' ? rect.height : iconConfig.imgSize
     return {
-      left: rect.left - translate.x + (rect.width - iconConfig.imgSize) / 2,
-      top: rect.top - translate.y + (rect.height - iconConfig.imgSize) / 2,
+      left: rect.left + (rect.width - width) / 2,
+      top: rect.top + (rect.height - height) / 2,
+      width,
+      height,
     }
   }
 
@@ -375,11 +370,9 @@ export function useDragDropCommit({
 
       const flights = session.draggingIds.flatMap((id, index) => {
         const item = id === session.draggingId ? session.draggingItem : itemMap.get(id)
-        if (!item || item.kind !== 'icon') {
-          return []
-        }
+        if (!item) return []
 
-        const target = resolveIconFlightTarget(id)
+        const target = resolveDropFlightTarget(id, item)
         if (!target) {
           return []
         }
@@ -388,11 +381,13 @@ export function useDragDropCommit({
         return [
           {
             id,
-            icon: item.icon,
-            startLeft: session.pointerX - iconConfig.imgSize / 2 + offset.x,
-            startTop: session.pointerY - iconConfig.imgSize / 2 + offset.y,
+            item,
+            startLeft: session.pointerX - target.width / 2 + offset.x,
+            startTop: session.pointerY - target.height / 2 + offset.y,
             endLeft: target.left,
             endTop: target.top,
+            width: target.width,
+            height: target.height,
             startScale: getMultiDragStackScale(index),
             endScale: 1,
             startOpacity: getMultiDragStackOpacity(index),
@@ -690,9 +685,8 @@ export function useDragDropCommit({
       } else {
         setFolderPreviewFreezeTargetId(null)
         scheduleFolderCreateTransition(null)
-        const shouldAnimateOuterIconDrop =
-          targetContext === 'outer' && source.kind === 'icon' && !reducedMotion
-        setHiddenOuterItemIds(shouldAnimateOuterIconDrop ? current.draggingIds : [])
+        const shouldAnimateOuterDrop = targetContext === 'outer' && !reducedMotion
+        setHiddenOuterItemIds(shouldAnimateOuterDrop ? current.draggingIds : [])
         setFrozenOuterOrder(null)
         const result = applyOuterDropFromSession({
           base: baseForDrop,
@@ -711,7 +705,7 @@ export function useDragDropCommit({
           targetContext,
           result
         )
-        if (shouldAnimateOuterIconDrop) scheduleMultiDropFlight(current)
+        if (shouldAnimateOuterDrop) scheduleMultiDropFlight(current)
       }
     }
 

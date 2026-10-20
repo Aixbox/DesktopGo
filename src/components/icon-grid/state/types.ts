@@ -73,11 +73,13 @@ export interface FolderDropFlight {
 
 export interface MultiDropFlightItem {
   id: string
-  icon: DesktopIcon
+  item: GridItem
   startLeft: number
   startTop: number
   endLeft: number
   endTop: number
+  width: number
+  height: number
   startScale: number
   endScale: number
   startOpacity: number

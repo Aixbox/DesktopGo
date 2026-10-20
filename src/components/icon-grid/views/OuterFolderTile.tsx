@@ -260,6 +260,7 @@ function FolderBody({
 
     return (
       <div
+        data-folder-visual-body
         className="relative isolate flex cursor-pointer items-center justify-center transition"
         style={{
           width: `${bodyWidth}px`,
@@ -322,6 +323,7 @@ function FolderBody({
 
   return (
     <div
+      data-folder-visual-body
       className="relative isolate flex cursor-pointer items-center justify-center transition"
       style={{
         width: `${bodyWidth}px`,

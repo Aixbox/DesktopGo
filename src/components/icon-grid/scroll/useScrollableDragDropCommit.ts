@@ -6,6 +6,7 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from 'react'
+import { useReducedMotion } from 'framer-motion'
 import type { GridItem, IconItem } from '../model'
 import { getId } from '../model'
 import { compactEmptyPages, DRAG_HOLE_ID } from '../domain/slots'
@@ -35,7 +36,7 @@ import {
   getFolderPreviewSlotSize,
 } from '../views/folderVisualPolicy'
 import { normalizeOuterSlots } from '../domain/topLevelLayout'
-import { resolveUnscaledGridRect } from '../hooks/gridMotionGeometry'
+import { resolveUntransformedGridRect, resolveUnscaledGridRect } from '../hooks/gridMotionGeometry'
 import {
   compactOuterSlotsWithinPages,
   preserveCompactPreviewOrderForCommit,
@@ -103,6 +104,7 @@ export function useScrollableDragDropCommit({
   resolveNearestSlotIndexByContext,
   onFolderCreateCommitted,
 }: UseDragDropCommitParams): UseDragDropCommitResult {
+  const reducedMotion = useReducedMotion()
   const folderDropFlightTimerRef = useRef<number | null>(null)
   const multiDropFlightTimerRef = useRef<number | null>(null)
   const multiDropFlightRafRef = useRef<number | null>(null)
@@ -339,30 +341,25 @@ export function useScrollableDragDropCommit({
     return Math.max(0.38, 0.8 - (index - 1) * 0.12)
   }
 
-  const resolveElementTranslate = (node: HTMLElement): { x: number; y: number } => {
-    const transform = window.getComputedStyle(node).transform
-    if (!transform || transform === 'none') {
-      return { x: 0, y: 0 }
-    }
-
-    try {
-      const matrix = new DOMMatrixReadOnly(transform)
-      return { x: matrix.m41, y: matrix.m42 }
-    } catch {
-      return { x: 0, y: 0 }
-    }
-  }
-
-  const resolveIconFlightTarget = (id: string): { left: number; top: number } | null => {
+  const resolveDropFlightTarget = (
+    id: string,
+    item: GridItem
+  ): { left: number; top: number; width: number; height: number } | null => {
     const tileNode = tileRefs.current.get(id)
     if (!tileNode) return null
 
-    const imageNode = tileNode.querySelector<HTMLElement>('.icon-image')
-    const rect = resolveUnscaledGridRect(imageNode ?? tileNode)
-    const translate = resolveElementTranslate(tileNode)
+    const targetNode =
+      item.kind === 'folder'
+        ? (tileNode.querySelector<HTMLElement>('[data-folder-visual-body]') ?? tileNode)
+        : (tileNode.querySelector<HTMLElement>('.icon-image') ?? tileNode)
+    const rect = resolveUntransformedGridRect(targetNode, tileNode)
+    const width = item.kind === 'folder' ? rect.width : iconConfig.imgSize
+    const height = item.kind === 'folder' ? rect.height : iconConfig.imgSize
     return {
-      left: rect.left - translate.x + (rect.width - iconConfig.imgSize) / 2,
-      top: rect.top - translate.y + (rect.height - iconConfig.imgSize) / 2,
+      left: rect.left + (rect.width - width) / 2,
+      top: rect.top + (rect.height - height) / 2,
+      width,
+      height,
     }
   }
 
@@ -375,6 +372,11 @@ export function useScrollableDragDropCommit({
       cancelAnimationFrame(multiDropFlightRafRef.current)
       multiDropFlightRafRef.current = null
     }
+    if (reducedMotion) {
+      setMultiDropFlight(null)
+      setHiddenOuterItemIds([])
+      return
+    }
 
     multiDropFlightRafRef.current = requestAnimationFrame(() => {
       const itemMap = new Map<string, GridItem>()
@@ -382,11 +384,9 @@ export function useScrollableDragDropCommit({
 
       const flights = session.draggingIds.flatMap((id, index) => {
         const item = id === session.draggingId ? session.draggingItem : itemMap.get(id)
-        if (!item || item.kind !== 'icon') {
-          return []
-        }
+        if (!item) return []
 
-        const target = resolveIconFlightTarget(id)
+        const target = resolveDropFlightTarget(id, item)
         if (!target) {
           return []
         }
@@ -395,11 +395,13 @@ export function useScrollableDragDropCommit({
         return [
           {
             id,
-            icon: item.icon,
-            startLeft: session.pointerX - iconConfig.imgSize / 2 + offset.x,
-            startTop: session.pointerY - iconConfig.imgSize / 2 + offset.y,
+            item,
+            startLeft: session.pointerX - target.width / 2 + offset.x,
+            startTop: session.pointerY - target.height / 2 + offset.y,
             endLeft: target.left,
             endTop: target.top,
+            width: target.width,
+            height: target.height,
             startScale: getMultiDragStackScale(index),
             endScale: 1,
             startOpacity: getMultiDragStackOpacity(index),
@@ -617,7 +619,8 @@ export function useScrollableDragDropCommit({
         setFolderPreviewFreezeTargetId(null)
         scheduleFolderCreateTransition(null)
         setFrozenOuterOrder(null)
-        if (targetContext === 'outer') {
+        const shouldAnimateOuterDrop = targetContext === 'outer' && !reducedMotion
+        if (shouldAnimateOuterDrop) {
           setHiddenOuterItemIds(current.draggingIds)
         } else {
           setHiddenOuterItemIds([])
@@ -642,7 +645,7 @@ export function useScrollableDragDropCommit({
           targetContext,
           result
         )
-        if (targetContext === 'outer') {
+        if (shouldAnimateOuterDrop) {
           scheduleMultiDropFlight(current)
         }
       } else if (canCreateFolder) {
@@ -727,7 +730,8 @@ export function useScrollableDragDropCommit({
       } else {
         setFolderPreviewFreezeTargetId(null)
         scheduleFolderCreateTransition(null)
-        setHiddenOuterItemIds([])
+        const shouldAnimateOuterDrop = targetContext === 'outer' && !reducedMotion
+        setHiddenOuterItemIds(shouldAnimateOuterDrop ? current.draggingIds : [])
         setFrozenOuterOrder(null)
         const result =
           compactPreviewResult ??
@@ -749,6 +753,7 @@ export function useScrollableDragDropCommit({
           targetContext,
           result
         )
+        if (shouldAnimateOuterDrop) scheduleMultiDropFlight(current)
       }
     }
 
