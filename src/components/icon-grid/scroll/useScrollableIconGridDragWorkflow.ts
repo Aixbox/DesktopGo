@@ -28,6 +28,7 @@ import { releaseDragPointerCapture } from '../hooks/dragPointerCapture'
 import { resetOuterInteraction } from '../state/dragMachine'
 import { hasRenderableDragStateChanged } from '../domain/dragWorkflowShared'
 import type { DragState, FolderDropFlight, MultiDropFlightItem, PendingDrag } from '../state/types'
+import { useScrollableMultiDragEdgeAutoScroll } from './useScrollableMultiDragEdgeAutoScroll'
 
 interface DragWorkflowConfig {
   gridGap: number
@@ -598,6 +599,18 @@ export function useScrollableIconGridDragWorkflow({
       processDragMove(queued.pointerId, queued.x, queued.y)
     })
   }
+  const { stop: stopMultiDragEdgeScroll, update: updateMultiDragEdgeScroll } =
+    useScrollableMultiDragEdgeAutoScroll({
+      enabled: isCompactOuterDrop,
+      containerRef,
+      dragRef,
+      onScrolled: scheduleDragMove,
+    })
+
+  const handleActiveDragMove = (pointerId: number, x: number, y: number) => {
+    scheduleDragMove(pointerId, x, y)
+    updateMultiDragEdgeScroll(pointerId, x, y)
+  }
 
   const flushDragMove = (pointerId: number, x: number, y: number) => {
     syncRawDragPointer(pointerId, x, y)
@@ -613,6 +626,7 @@ export function useScrollableIconGridDragWorkflow({
   }
 
   const finishActiveDrag = (pointerId: number) => {
+    stopMultiDragEdgeScroll()
     let completedDrag = dragRef.current
     if (completedDrag?.context === 'folder') {
       const pointer = dragPointerRef.current
@@ -683,6 +697,7 @@ export function useScrollableIconGridDragWorkflow({
 
   const cancelActiveDrag = (pointerId: number) => {
     if (dragRef.current?.pointerId !== pointerId) return
+    stopMultiDragEdgeScroll()
     clearOuterDwellTimer()
     clearEdgeSwitchTimer()
     cancelQueuedDragMove()
@@ -695,7 +710,7 @@ export function useScrollableIconGridDragWorkflow({
 
   const armPointerControllerSession = () => {
     beginDragFnRef.current = beginDrag
-    onDragMoveFnRef.current = scheduleDragMove
+    onDragMoveFnRef.current = handleActiveDragMove
     flushDragMoveFnRef.current = flushDragMove
     finishDragFnRef.current = finishActiveDrag
     clearPendingFnRef.current = clearPending

@@ -12,6 +12,7 @@ import {
   getDesktopFolderTileMetrics,
   scaledRadius,
 } from './folderVisualPolicy'
+import { getStackedIconMotionKey } from './stackedIconMotion'
 
 interface DragGhostPointer {
   pointerX: number
@@ -293,6 +294,7 @@ export function DragOverlays({
   const stackPositionsRef = useRef<StackGhostPosition[]>([])
   const stackedIconsRef = useRef(stackedIcons)
   const lastMoveAtRef = useRef(0)
+  const stackedIconsMotionKey = getStackedIconMotionKey(stackedIcons)
 
   useLayoutEffect(() => {
     stackedIconsRef.current = stackedIcons
@@ -385,10 +387,11 @@ export function DragOverlays({
 
   useEffect(() => {
     const initialPointer = dragPointerRef.current
+    const initialStackedIcons = stackedIconsRef.current
     if (
       !dragSessionId ||
       ghostItem?.kind !== 'icon' ||
-      stackedIcons.length === 0 ||
+      initialStackedIcons.length === 0 ||
       !initialPointer
     ) {
       if (animationFrameRef.current !== null) {
@@ -401,7 +404,7 @@ export function DragOverlays({
       return
     }
 
-    const initialPositions = stackedIcons.map(entry => ({
+    const initialPositions = initialStackedIcons.map(entry => ({
       left: entry.sourceCenter.x - iconImageSize / 2,
       top: entry.sourceCenter.y - iconImageSize / 2,
     }))
@@ -409,7 +412,7 @@ export function DragOverlays({
     const leaderTop = initialPointer.pointerY - iconImageSize / 2
     const startedAt = performance.now()
 
-    stackedIcons.forEach((entry, index) => {
+    initialStackedIcons.forEach((entry, index) => {
       const position = initialPositions[index]
       if (!position) return
       applyGhostTransform(stackNodeRefs.current.get(entry.id) ?? null, position.left, position.top)
@@ -508,7 +511,7 @@ export function DragOverlays({
         animationFrameRef.current = null
       }
     }
-  }, [dragPointerRef, dragSessionId, ghostItem?.kind, iconImageSize, stackedIcons])
+  }, [dragPointerRef, dragSessionId, ghostItem?.kind, iconImageSize, stackedIconsMotionKey])
 
   return (
     <>

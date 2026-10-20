@@ -24,6 +24,7 @@ import { activateDragPointerCapture, releaseDragPointerCapture } from '../hooks/
 import type { GridItem } from '../model'
 import { getGridItemSpan } from '../model'
 import type { ScrollGridSection } from '../views/scrollableOuterGridTypes'
+import { resolveVerticalEdgeScrollSpeed } from './scrollEdgeAutoScrollPolicy'
 import {
   buildScrollGroupEntries,
   moveScrollItemRelative,
@@ -62,8 +63,6 @@ interface PointerDragSession {
 const POINTER_DRAG_DISTANCE = 4
 const TOUCH_DRAG_DELAY_MS = 200
 const POINTER_COLLISION_INTERVAL_MS = 40
-const EDGE_SCROLL_THRESHOLD_PX = 72
-const EDGE_SCROLL_MAX_SPEED_PX = 12
 
 interface UseScrollableOuterGridDragWorkflowParams {
   containerRef: MutableRefObject<HTMLDivElement | null>
@@ -597,20 +596,7 @@ export function useScrollableOuterGridDragWorkflow({
       return
     }
     const { y } = session.latestPoint
-    let speed = 0
-    if (y < rect.top + EDGE_SCROLL_THRESHOLD_PX) {
-      const ratio = Math.min(
-        1,
-        (rect.top + EDGE_SCROLL_THRESHOLD_PX - y) / EDGE_SCROLL_THRESHOLD_PX
-      )
-      speed = -Math.max(1, Math.round(EDGE_SCROLL_MAX_SPEED_PX * ratio))
-    } else if (y > rect.bottom - EDGE_SCROLL_THRESHOLD_PX) {
-      const ratio = Math.min(
-        1,
-        (y - (rect.bottom - EDGE_SCROLL_THRESHOLD_PX)) / EDGE_SCROLL_THRESHOLD_PX
-      )
-      speed = Math.max(1, Math.round(EDGE_SCROLL_MAX_SPEED_PX * ratio))
-    }
+    const speed = resolveVerticalEdgeScrollSpeed(y, rect.top, rect.bottom)
     edgeScrollSpeedRef.current = speed
     if (speed === 0) stopEdgeScroll()
     else ensureEdgeScrollFrame()

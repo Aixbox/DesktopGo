@@ -332,8 +332,7 @@ export function ScrollableOuterGridView({
                             {...sortable.attributes}
                             {...sortable.listeners}
                             onPointerDown={event => {
-                              if (selectionMode) return
-                              event.stopPropagation()
+                              if (!selectionMode) event.stopPropagation()
                               onTilePointerDown(event, entry.id)
                             }}
                             onClickCapture={handleGridClickCapture}
