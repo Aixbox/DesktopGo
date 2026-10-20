@@ -276,7 +276,7 @@ export function ScrollableOuterGridView({
                   gridElementRef.current = node
                   bindGridPageRef(currentPage, node)
                 }}
-                className="relative grid max-w-full content-start"
+                className="launchpad-edit-grid-motion relative grid max-w-full content-start"
                 onPointerDown={handleGridPointerDown}
                 onPointerMove={handleGridPointerMove}
                 onPointerUp={handleGridPointerUp}

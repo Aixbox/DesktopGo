@@ -207,7 +207,7 @@ export function OuterGridView({
 
   return (
     <div
-      className="relative"
+      className="launchpad-edit-grid-motion relative"
       style={{
         width: `${gridWidth}px`,
         height: `${gridHeight}px`,

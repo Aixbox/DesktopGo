@@ -610,6 +610,7 @@ export function Launchpad() {
         <div
           ref={launchpadSurfaceRef}
           data-window-expanded={windowMode === 'fullscreen'}
+          data-edit-mode={selectionMode ? 'true' : 'false'}
           tabIndex={-1}
           className={[
             'launchpad-bg relative flex h-full w-full select-none flex-col items-center justify-center overflow-hidden outline-none',
