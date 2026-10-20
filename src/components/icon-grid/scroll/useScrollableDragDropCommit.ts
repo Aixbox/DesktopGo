@@ -25,7 +25,7 @@ import {
 } from './scrollDropPolicy'
 import { normalizeDockKeys, resolveOuterItemIds } from '../domain/dock'
 import type { DragState, FolderDropFlight, MultiDropFlightItem } from '../state/types'
-import { OUTER_DRAG_RULES } from '../constants'
+import { DROP_FLIGHT_HANDOFF_MS, OUTER_DRAG_RULES } from '../constants'
 import {
   FOLDER_PREVIEW_GAP,
   FOLDER_PREVIEW_OUTER_EXPAND,
@@ -417,9 +417,11 @@ export function useScrollableDragDropCommit({
 
       setMultiDropFlight(flights)
       multiDropFlightTimerRef.current = window.setTimeout(() => {
-        setMultiDropFlight(null)
         setHiddenOuterItemIds(prev => prev.filter(id => !session.draggingIds.includes(id)))
-        multiDropFlightTimerRef.current = null
+        multiDropFlightTimerRef.current = window.setTimeout(() => {
+          setMultiDropFlight(null)
+          multiDropFlightTimerRef.current = null
+        }, DROP_FLIGHT_HANDOFF_MS)
       }, reorderAnimationMs + 60)
     })
   }

@@ -6,6 +6,7 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from 'react'
+import { useReducedMotion } from 'framer-motion'
 import type { GridItem, IconItem } from '../model'
 import { getId } from '../model'
 import { compactEmptyPages, DRAG_HOLE_ID } from '../domain/slots'
@@ -25,7 +26,7 @@ import {
 } from '../domain/dropPolicy'
 import { normalizeDockKeys, resolveOuterItemIds } from '../domain/dock'
 import type { DragState, FolderDropFlight, MultiDropFlightItem } from '../state/types'
-import { OUTER_DRAG_RULES } from '../constants'
+import { DROP_FLIGHT_HANDOFF_MS, OUTER_DRAG_RULES } from '../constants'
 import {
   FOLDER_PREVIEW_GAP,
   FOLDER_PREVIEW_OUTER_EXPAND,
@@ -92,6 +93,7 @@ export function useDragDropCommit({
   resolveNearestDropOrderByContext,
   resolveNearestSlotIndexByContext,
 }: UseDragDropCommitParams): UseDragDropCommitResult {
+  const reducedMotion = useReducedMotion()
   const folderDropFlightTimerRef = useRef<number | null>(null)
   const multiDropFlightTimerRef = useRef<number | null>(null)
   const multiDropFlightRafRef = useRef<number | null>(null)
@@ -360,6 +362,12 @@ export function useDragDropCommit({
       multiDropFlightRafRef.current = null
     }
 
+    if (reducedMotion) {
+      setMultiDropFlight(null)
+      setHiddenOuterItemIds([])
+      return
+    }
+
     multiDropFlightRafRef.current = requestAnimationFrame(() => {
       const itemMap = new Map<string, GridItem>()
       itemsRef.current.forEach(item => itemMap.set(getId(item), item))
@@ -402,9 +410,11 @@ export function useDragDropCommit({
 
       setMultiDropFlight(flights)
       multiDropFlightTimerRef.current = window.setTimeout(() => {
-        setMultiDropFlight(null)
         setHiddenOuterItemIds(prev => prev.filter(id => !session.draggingIds.includes(id)))
-        multiDropFlightTimerRef.current = null
+        multiDropFlightTimerRef.current = window.setTimeout(() => {
+          setMultiDropFlight(null)
+          multiDropFlightTimerRef.current = null
+        }, DROP_FLIGHT_HANDOFF_MS)
       }, reorderAnimationMs + 60)
     })
   }
@@ -679,7 +689,9 @@ export function useDragDropCommit({
       } else {
         setFolderPreviewFreezeTargetId(null)
         scheduleFolderCreateTransition(null)
-        setHiddenOuterItemIds([])
+        const shouldAnimateOuterIconDrop =
+          targetContext === 'outer' && source.kind === 'icon' && !reducedMotion
+        setHiddenOuterItemIds(shouldAnimateOuterIconDrop ? current.draggingIds : [])
         setFrozenOuterOrder(null)
         const result = applyOuterDropFromSession({
           base: baseForDrop,
@@ -698,6 +710,7 @@ export function useDragDropCommit({
           targetContext,
           result
         )
+        if (shouldAnimateOuterIconDrop) scheduleMultiDropFlight(current)
       }
     }
 

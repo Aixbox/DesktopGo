@@ -616,11 +616,13 @@ export function DragOverlays({
                 zIndex: item.zIndex,
                 width: iconImageSize,
                 height: iconImageSize,
-                left: item.animate ? item.endLeft : item.startLeft,
-                top: item.animate ? item.endTop : item.startTop,
+                left: 0,
+                top: 0,
                 opacity: item.animate ? item.endOpacity : item.startOpacity,
-                transform: `scale(${item.animate ? item.endScale : item.startScale})`,
-                transition: `left ${reorderAnimationMs}ms ${folderPreviewEasing}, top ${reorderAnimationMs}ms ${folderPreviewEasing}, transform ${reorderAnimationMs}ms ${folderPreviewEasing}, opacity ${reorderAnimationMs}ms ease-out`,
+                transform: `translate3d(${item.animate ? item.endLeft : item.startLeft}px, ${item.animate ? item.endTop : item.startTop}px, 0) scale(${item.animate ? item.endScale : item.startScale})`,
+                transition: reducedMotion
+                  ? 'none'
+                  : `transform ${reorderAnimationMs}ms ${folderPreviewEasing}, opacity ${reorderAnimationMs}ms ease-out`,
               }}
             >
               {item.icon.icon_base64 ? (

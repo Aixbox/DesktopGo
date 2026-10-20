@@ -262,8 +262,8 @@ export function OuterGridView({
                 ref={node => {
                   bindTileRef(entry.id, node)
                 }}
-                className={`relative justify-self-center self-start transition-opacity duration-150 ${
-                  hideItem ? 'opacity-0' : 'opacity-100'
+                className={`relative justify-self-center self-start ${
+                  hideItem ? 'opacity-0' : 'opacity-100 transition-opacity duration-150'
                 }`}
                 style={{
                   gridColumn: `${entry.col + 1} / span ${entry.span.cols}`,
