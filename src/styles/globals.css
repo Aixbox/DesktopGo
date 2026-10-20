@@ -19,6 +19,7 @@
 }
 
 :root {
+  --launchpad-motion-spring: cubic-bezier(0.22, 1.12, 0.36, 1.02);
   --native-scrollbar-rail-size: 1rem;
   --native-scrollbar-thumb-size: 0.5rem;
   --native-scrollbar-thumb-inset: 0.25rem;
@@ -166,6 +167,68 @@
   opacity: var(--launchpad-icon-opacity, 1);
 }
 
+.launchpad-drag-ghost {
+  filter: drop-shadow(0 12px 16px color-mix(in oklch, var(--foreground) 24%, transparent));
+  transition: filter 180ms ease-out;
+}
+
+.launchpad-drag-ghost-stack {
+  filter: drop-shadow(0 7px 10px color-mix(in oklch, var(--foreground) 16%, transparent));
+}
+
+.launchpad-icon-motion {
+  transform: scale(1);
+  transition: transform 180ms var(--launchpad-motion-spring);
+}
+
+.icon-item:hover .launchpad-icon-motion {
+  transform: scale(1.035);
+  filter: drop-shadow(0 6px 8px color-mix(in oklch, var(--foreground) 16%, transparent));
+}
+
+.icon-item:active .launchpad-icon-motion {
+  transform: scale(0.975);
+  filter: drop-shadow(0 2px 3px color-mix(in oklch, var(--foreground) 10%, transparent));
+  transition-duration: 100ms;
+}
+
+.launchpad-dock-motion {
+  transform: translate3d(0, 0, 0) scale(1);
+  transition:
+    transform 180ms var(--launchpad-motion-spring),
+    filter 180ms ease-out;
+}
+
+.launchpad-dock-motion:hover {
+  transform: translate3d(0, -2px, 0) scale(1.02);
+  filter: drop-shadow(0 6px 8px color-mix(in oklch, var(--foreground) 15%, transparent));
+}
+
+.launchpad-dock-motion:active {
+  transform: translate3d(0, 0, 0) scale(0.975);
+  filter: drop-shadow(0 2px 3px color-mix(in oklch, var(--foreground) 10%, transparent));
+  transition-duration: 100ms;
+}
+
+.folder-tile-body {
+  transition:
+    filter 180ms var(--launchpad-motion-spring),
+    opacity 180ms ease-out;
+}
+
+.folder-tile-body:hover {
+  filter: brightness(1.025) saturate(1.04);
+}
+
+.folder-tile-body:active {
+  filter: brightness(0.985) saturate(0.98);
+  transition-duration: 100ms;
+}
+
+.launchpad-drop-flight {
+  filter: drop-shadow(0 10px 14px color-mix(in oklch, var(--foreground) 18%, transparent));
+}
+
 .scroll-grid-icon-tile:hover .scroll-grid-icon-surface {
   transform: translate3d(0, -2px, 0) scale(1.015);
   filter: drop-shadow(0 7px 8px color-mix(in oklch, var(--foreground) 18%, transparent));
@@ -195,20 +258,19 @@
   pointer-events: none;
   opacity: 0;
   background-color: color-mix(in oklch, var(--background) 58%, transparent);
-  transform: translate3d(-50%, -50%, 0);
+  transform: translate3d(-50%, -50%, 0) scale(0.94);
   /* idle 态不再挂 backdrop-filter: blur(0)——视觉上无差别，却常驻创建
      backdrop root，是透明窗口合成状态损坏的触发源之一。 */
   transition:
-    width 150ms cubic-bezier(0.22, 1, 0.36, 1),
-    height 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 180ms var(--launchpad-motion-spring),
     opacity 150ms ease-out,
     background-color 150ms ease-out;
-  will-change: width, height, opacity;
 }
 
 .folder-drop-receiver-backdrop[data-folder-drop-receiver='active'] {
   opacity: 1;
   background-color: color-mix(in oklch, var(--background) 68%, transparent);
+  transform: translate3d(-50%, -50%, 0) scale(1);
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
 }
@@ -399,13 +461,39 @@
   .scroll-grid-group-grip,
   .scroll-grid-icon-tile,
   .scroll-grid-icon-surface,
-  .folder-drop-receiver-backdrop {
+  .folder-drop-receiver-backdrop,
+  .launchpad-drag-ghost,
+  .folder-tile-body,
+  .launchpad-drop-flight,
+  .launchpad-icon-motion,
+  .launchpad-dock-motion {
     transition-duration: 0.01ms !important;
   }
 
   .scroll-grid-icon-tile:hover .scroll-grid-icon-surface,
   .scroll-grid-icon-tile:active .scroll-grid-icon-surface {
     transform: none;
+  }
+
+  .icon-item:hover .launchpad-icon-motion,
+  .icon-item:active .launchpad-icon-motion {
+    transform: none;
+    filter: none;
+  }
+
+  .launchpad-dock-motion:hover,
+  .launchpad-dock-motion:active {
+    transform: none;
+    filter: none;
+  }
+
+  .folder-drop-receiver-backdrop[data-folder-drop-receiver='active'] {
+    transform: translate3d(-50%, -50%, 0) scale(1);
+  }
+
+  .folder-tile-body:hover,
+  .folder-tile-body:active {
+    filter: none;
   }
 
   [data-scroll-sortable-id] {

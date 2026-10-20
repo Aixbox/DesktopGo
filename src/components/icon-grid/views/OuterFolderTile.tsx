@@ -219,16 +219,14 @@ function FolderDropReceiverBackdrop({
   shapeHeight,
   surfaceRadius,
 }: FolderDropReceiverBackdropProps) {
-  const expansion = active ? 8 : 0
-
   return (
     <div
       className="folder-drop-receiver-backdrop"
       data-folder-drop-receiver={active ? 'active' : 'idle'}
       aria-hidden="true"
       style={{
-        width: `${shapeWidth + expansion}px`,
-        height: `${shapeHeight + expansion}px`,
+        width: `${shapeWidth + 8}px`,
+        height: `${shapeHeight + 8}px`,
         borderRadius: scaledRadius(surfaceRadius + 4),
       }}
     />
@@ -261,7 +259,7 @@ function FolderBody({
     return (
       <div
         data-folder-visual-body
-        className="relative isolate flex cursor-pointer items-center justify-center transition"
+        className="folder-tile-body relative isolate flex cursor-pointer items-center justify-center transition"
         style={{
           width: `${bodyWidth}px`,
           height: `${bodyHeight}px`,
@@ -324,7 +322,7 @@ function FolderBody({
   return (
     <div
       data-folder-visual-body
-      className="relative isolate flex cursor-pointer items-center justify-center transition"
+      className="folder-tile-body relative isolate flex cursor-pointer items-center justify-center transition"
       style={{
         width: `${bodyWidth}px`,
         height: `${bodyHeight}px`,

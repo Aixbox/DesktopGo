@@ -700,8 +700,8 @@ export function DockBar({
                             title={customNames[item.icon.path] ?? item.icon.name}
                             aria-label={customNames[item.icon.path] ?? item.icon.name}
                             aria-pressed={selectionMode ? selectedSet.has(id) : undefined}
-                            className={`relative flex cursor-pointer items-center justify-center rounded-icon-tile border-none bg-transparent p-0 shadow-none transition ${
-                              selectionMode ? '' : 'hover:-translate-y-0.5 active:translate-y-0'
+                            className={`relative flex cursor-pointer items-center justify-center rounded-icon-tile border-none bg-transparent p-0 shadow-none ${
+                              selectionMode ? '' : 'launchpad-dock-motion'
                             }`}
                             style={{ width: dockButtonSize, height: dockButtonSize }}
                             onClick={event => {
@@ -779,8 +779,8 @@ export function DockBar({
                               type="button"
                               title={item.name}
                               aria-label={item.name}
-                              className={`relative flex cursor-pointer items-center justify-center rounded-icon-tile border-none bg-transparent p-0 shadow-none transition ${
-                                selectionMode ? '' : 'hover:-translate-y-0.5 active:translate-y-0'
+                              className={`relative flex cursor-pointer items-center justify-center rounded-icon-tile border-none bg-transparent p-0 shadow-none ${
+                                selectionMode ? '' : 'launchpad-dock-motion'
                               }`}
                               style={{ width: dockButtonSize, height: dockButtonSize }}
                               onClick={event => {

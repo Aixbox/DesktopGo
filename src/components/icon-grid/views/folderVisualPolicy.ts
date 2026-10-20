@@ -5,11 +5,12 @@ import {
   ICON_GRID_TITLE_GAP,
 } from '../../../types'
 import type { FolderSize, GridSpan } from '../model'
+import { MOTION_SPRING_EASING } from '../constants'
 
 export const FOLDER_PREVIEW_PADDING = 4
 export const FOLDER_PREVIEW_GAP = 2
 export const FOLDER_PREVIEW_OUTER_EXPAND = 5
-export const FOLDER_PREVIEW_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
+export const FOLDER_PREVIEW_EASING = MOTION_SPRING_EASING
 export const FOLDER_PREVIEW_TOP_OFFSET = 12
 export const FOLDER_MODAL_MAX_WIDTH = 620
 export const FOLDER_MODAL_MAX_HEIGHT = 480

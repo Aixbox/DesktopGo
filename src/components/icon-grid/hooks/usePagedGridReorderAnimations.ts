@@ -2,9 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from 
 import type { FolderItem } from '../model'
 import { DRAG_HOLE_ID } from '../domain/slots'
 import { DOCK_GAP } from '../domain/dock'
-import { GRID_GAP, REORDER_ANIMATION_MS } from '../constants'
+import { GRID_GAP, MOTION_SPRING_EASING, REORDER_ANIMATION_MS } from '../constants'
+import { readCurrentTranslate } from './reorderMotion'
 
-const REORDER_EASING = 'ease'
+const REORDER_EASING = MOTION_SPRING_EASING
 
 export function usePagedGridReorderAnimationRefs() {
   const tileRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -130,6 +131,7 @@ export function usePagedGridReorderAnimations({
       previousFolderEntriesRef.current = []
       return
     }
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
     const previousIndexById = new Map<string, number>()
     previousFolderEntriesRef.current.forEach((entry, index) => {
@@ -139,21 +141,23 @@ export function usePagedGridReorderAnimations({
     const stepX = folderItemWidth + GRID_GAP
     const stepY = folderItemHeight + GRID_GAP
 
-    folderRenderOrder.forEach((entry, newIndex) => {
-      if (entry === null || entry === DRAG_HOLE_ID) return
-      const previousIndex = previousIndexById.get(entry)
-      if (previousIndex === undefined || previousIndex === newIndex) return
-      const deltaX = ((previousIndex % folderColumns) - (newIndex % folderColumns)) * stepX
-      const deltaY =
-        (Math.floor(previousIndex / folderColumns) - Math.floor(newIndex / folderColumns)) * stepY
-      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return
-      animateWithTransformTimer(
-        folderTileRefs.current.get(entry),
-        entry,
-        `translate3d(${deltaX}px, ${deltaY}px, 0px)`,
-        folderAnimationTimersRef
-      )
-    })
+    if (!reducedMotion)
+      folderRenderOrder.forEach((entry, newIndex) => {
+        if (entry === null || entry === DRAG_HOLE_ID) return
+        const previousIndex = previousIndexById.get(entry)
+        if (previousIndex === undefined || previousIndex === newIndex) return
+        const deltaX = ((previousIndex % folderColumns) - (newIndex % folderColumns)) * stepX
+        const deltaY =
+          (Math.floor(previousIndex / folderColumns) - Math.floor(newIndex / folderColumns)) * stepY
+        if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return
+        const currentTranslate = readCurrentTranslate(folderTileRefs.current.get(entry))
+        animateWithTransformTimer(
+          folderTileRefs.current.get(entry),
+          entry,
+          `translate3d(${deltaX + currentTranslate.x}px, ${deltaY + currentTranslate.y}px, 0px)`,
+          folderAnimationTimersRef
+        )
+      })
     previousFolderEntriesRef.current = folderRenderOrder
   }, [
     folderAnimationTimersRef,
@@ -167,6 +171,7 @@ export function usePagedGridReorderAnimations({
   ])
 
   useLayoutEffect(() => {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const previousIndexById = new Map<string, number>()
     previousDockEntriesRef.current.forEach((entry, index) => {
       if (entry === null || entry === DRAG_HOLE_ID) return
@@ -174,19 +179,21 @@ export function usePagedGridReorderAnimations({
     })
     const stepX = Math.max(dockIconImageSize + 12, 52) + DOCK_GAP
 
-    dockRenderSlots.forEach((entry, newIndex) => {
-      if (entry === null || entry === DRAG_HOLE_ID) return
-      const previousIndex = previousIndexById.get(entry)
-      if (previousIndex === undefined || previousIndex === newIndex) return
-      const deltaX = (previousIndex - newIndex) * stepX
-      if (Math.abs(deltaX) < 0.5) return
-      animateWithTransformTimer(
-        dockItemRefs.current.get(entry),
-        entry,
-        `translate3d(${deltaX}px, 0px, 0px)`,
-        dockAnimationTimersRef
-      )
-    })
+    if (!reducedMotion)
+      dockRenderSlots.forEach((entry, newIndex) => {
+        if (entry === null || entry === DRAG_HOLE_ID) return
+        const previousIndex = previousIndexById.get(entry)
+        if (previousIndex === undefined || previousIndex === newIndex) return
+        const deltaX = (previousIndex - newIndex) * stepX
+        if (Math.abs(deltaX) < 0.5) return
+        const currentTranslate = readCurrentTranslate(dockItemRefs.current.get(entry))
+        animateWithTransformTimer(
+          dockItemRefs.current.get(entry),
+          entry,
+          `translate3d(${deltaX + currentTranslate.x}px, ${currentTranslate.y}px, 0px)`,
+          dockAnimationTimersRef
+        )
+      })
     previousDockEntriesRef.current = dockRenderSlots
   }, [
     dockAnimationTimersRef,

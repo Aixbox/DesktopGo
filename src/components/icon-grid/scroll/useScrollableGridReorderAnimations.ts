@@ -2,23 +2,10 @@ import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from 'react
 import type { FolderItem } from '../model'
 import { DRAG_HOLE_ID } from '../domain/slots'
 import { DOCK_GAP } from '../domain/dock'
-import { GRID_GAP, REORDER_ANIMATION_MS } from '../constants'
+import { GRID_GAP, MOTION_SPRING_EASING, REORDER_ANIMATION_MS } from '../constants'
+import { readCurrentTranslate } from '../hooks/reorderMotion'
 
-const REORDER_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
-
-const readCurrentTranslate = (node: HTMLElement): { x: number; y: number } => {
-  const transform = window.getComputedStyle(node).transform
-  if (!transform || transform === 'none') return { x: 0, y: 0 }
-  try {
-    const matrix = new DOMMatrixReadOnly(transform)
-    return {
-      x: Number.isFinite(matrix.m41) ? matrix.m41 : 0,
-      y: Number.isFinite(matrix.m42) ? matrix.m42 : 0,
-    }
-  } catch {
-    return { x: 0, y: 0 }
-  }
-}
+const REORDER_EASING = MOTION_SPRING_EASING
 
 interface UseScrollableGridReorderAnimationsParams {
   tileRefs: MutableRefObject<Map<string, HTMLDivElement>>
@@ -76,6 +63,11 @@ export function useScrollableGridReorderAnimations({
       previousPageEntriesRef.current = pageItems
       return
     }
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reducedMotion) {
+      previousPageEntriesRef.current = pageItems
+      return
+    }
     const previousIndexById = new Map<string, number>()
     previousPageEntriesRef.current.forEach((entry, index) => {
       if (entry === null || entry === DRAG_HOLE_ID) return
@@ -108,6 +100,7 @@ export function useScrollableGridReorderAnimations({
       previousFolderEntriesRef.current = []
       return
     }
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const previousIndexById = new Map<string, number>()
     previousFolderEntriesRef.current.forEach((entry, index) => {
       if (entry === null || entry === DRAG_HOLE_ID) return
@@ -115,21 +108,24 @@ export function useScrollableGridReorderAnimations({
     })
     const stepX = folderItemWidth + GRID_GAP
     const stepY = folderItemHeight + GRID_GAP
-    folderRenderOrder.forEach((entry, nextIndex) => {
-      if (entry === null || entry === DRAG_HOLE_ID) return
-      const previousIndex = previousIndexById.get(entry)
-      if (previousIndex === undefined || previousIndex === nextIndex) return
-      const deltaX = ((previousIndex % folderColumns) - (nextIndex % folderColumns)) * stepX
-      const deltaY =
-        (Math.floor(previousIndex / folderColumns) - Math.floor(nextIndex / folderColumns)) * stepY
-      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return
-      animateWithTransformTimer(
-        folderTileRefs.current.get(entry),
-        entry,
-        `translate3d(${deltaX}px, ${deltaY}px, 0px)`,
-        folderAnimationTimersRef
-      )
-    })
+    if (!reducedMotion)
+      folderRenderOrder.forEach((entry, nextIndex) => {
+        if (entry === null || entry === DRAG_HOLE_ID) return
+        const previousIndex = previousIndexById.get(entry)
+        if (previousIndex === undefined || previousIndex === nextIndex) return
+        const deltaX = ((previousIndex % folderColumns) - (nextIndex % folderColumns)) * stepX
+        const deltaY =
+          (Math.floor(previousIndex / folderColumns) - Math.floor(nextIndex / folderColumns)) *
+          stepY
+        if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return
+        const currentTranslate = readCurrentTranslate(folderTileRefs.current.get(entry))
+        animateWithTransformTimer(
+          folderTileRefs.current.get(entry),
+          entry,
+          `translate3d(${deltaX + currentTranslate.x}px, ${deltaY + currentTranslate.y}px, 0px)`,
+          folderAnimationTimersRef
+        )
+      })
     previousFolderEntriesRef.current = folderRenderOrder
   }, [
     folderColumns,
@@ -141,25 +137,28 @@ export function useScrollableGridReorderAnimations({
   ])
 
   useLayoutEffect(() => {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const previousIndexById = new Map<string, number>()
     previousDockEntriesRef.current.forEach((entry, index) => {
       if (entry === null || entry === DRAG_HOLE_ID) return
       previousIndexById.set(entry, index)
     })
     const stepX = Math.max(dockIconImageSize + 12, 52) + DOCK_GAP
-    dockRenderSlots.forEach((entry, nextIndex) => {
-      if (entry === null || entry === DRAG_HOLE_ID) return
-      const previousIndex = previousIndexById.get(entry)
-      if (previousIndex === undefined || previousIndex === nextIndex) return
-      const deltaX = (previousIndex - nextIndex) * stepX
-      if (Math.abs(deltaX) < 0.5) return
-      animateWithTransformTimer(
-        dockItemRefs.current.get(entry),
-        entry,
-        `translate3d(${deltaX}px, 0px, 0px)`,
-        dockAnimationTimersRef
-      )
-    })
+    if (!reducedMotion)
+      dockRenderSlots.forEach((entry, nextIndex) => {
+        if (entry === null || entry === DRAG_HOLE_ID) return
+        const previousIndex = previousIndexById.get(entry)
+        if (previousIndex === undefined || previousIndex === nextIndex) return
+        const deltaX = (previousIndex - nextIndex) * stepX
+        if (Math.abs(deltaX) < 0.5) return
+        const currentTranslate = readCurrentTranslate(dockItemRefs.current.get(entry))
+        animateWithTransformTimer(
+          dockItemRefs.current.get(entry),
+          entry,
+          `translate3d(${deltaX + currentTranslate.x}px, ${currentTranslate.y}px, 0px)`,
+          dockAnimationTimersRef
+        )
+      })
     previousDockEntriesRef.current = dockRenderSlots
   }, [dockIconImageSize, dockItemRefs, dockRenderSlots])
 

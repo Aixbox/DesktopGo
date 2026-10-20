@@ -17,6 +17,9 @@ export const DRAG_LONG_PRESS_MS = 300
 export const DRAG_PENDING_MOVE_TOLERANCE = 7
 export const EVASION_REARM_DISTANCE = 14
 export const REORDER_ANIMATION_MS = 300
+// Shared motion language for layout changes: a quick settle with a restrained
+// overshoot keeps reflow feeling physical without turning into a visible bounce.
+export const MOTION_SPRING_EASING = 'cubic-bezier(0.22, 1.12, 0.36, 1.02)'
 export const DROP_FLIGHT_HANDOFF_MS = 240
 export const FOLDER_SHARED_LAYOUT_WINDOW_MS = 320
 export const IMPORT_HIGHLIGHT_MS = 4200

@@ -129,7 +129,7 @@ export const Icon = memo(function Icon({
       ? ''
       : usesScrollMotion
         ? 'scroll-grid-icon-surface'
-        : 'group-hover:scale-105 group-active:scale-95'
+        : 'launchpad-icon-motion'
 
   return (
     <IconContextMenu icon={icon} disabled={selectionMode || isRenaming}>

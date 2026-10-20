@@ -12,6 +12,13 @@ import {
   getDesktopFolderTileMetrics,
   scaledRadius,
 } from './folderVisualPolicy'
+import {
+  createDragGhostMotionState,
+  IDLE_DRAG_GHOST_MOTION,
+  resolveDragGhostMotion,
+  stepDragGhostMotion,
+  type DragGhostMotion,
+} from './dragGhostMotion'
 import { getStackedIconMotionKey } from './stackedIconMotion'
 
 interface DragGhostPointer {
@@ -263,9 +270,14 @@ function FolderGhost({
   )
 }
 
-function applyGhostTransform(node: HTMLDivElement | null, left: number, top: number) {
+function applyGhostTransform(
+  node: HTMLDivElement | null,
+  left: number,
+  top: number,
+  motion: DragGhostMotion = IDLE_DRAG_GHOST_MOTION
+) {
   if (!node) return
-  node.style.transform = `translate3d(${left}px, ${top}px, 0)`
+  node.style.transform = `translate3d(${left}px, ${top}px, 0) rotate(${motion.rotate}deg) scale(${motion.scaleX}, ${motion.scaleY})`
 }
 
 export function DragOverlays({
@@ -293,6 +305,14 @@ export function DragOverlays({
   const trailSamplesRef = useRef<PointerTrailSample[]>([])
   const stackPositionsRef = useRef<StackGhostPosition[]>([])
   const stackedIconsRef = useRef(stackedIcons)
+  const pointerMotionRef = useRef<{
+    x: number
+    y: number
+    timestamp: number
+    velocityX: number
+    velocityY: number
+  } | null>(null)
+  const dragGhostMotionStateRef = useRef(createDragGhostMotionState())
   const lastMoveAtRef = useRef(0)
   const stackedIconsMotionKey = getStackedIconMotionKey(stackedIcons)
 
@@ -326,12 +346,14 @@ export function DragOverlays({
   useLayoutEffect(() => {
     const currentPointer = dragPointerRef.current
     if (!currentPointer || !ghostItem) return
+    const motion = dragGhostMotionStateRef.current.motion
     applyGhostTransform(
       leaderNodeRef.current,
       currentPointer.pointerX - ghostWidth / 2,
-      currentPointer.pointerY - ghostHeight / 2
+      currentPointer.pointerY - ghostHeight / 2,
+      motion
     )
-  }, [dragPointerRef, dragSessionId, ghostHeight, ghostItem, ghostWidth])
+  }, [dragPointerRef, dragSessionId, ghostHeight, ghostItem, ghostWidth, reducedMotion])
 
   useLayoutEffect(() => {
     if (ghostItem?.kind !== 'icon' || stackedIcons.length === 0) return
@@ -361,29 +383,69 @@ export function DragOverlays({
         cancelAnimationFrame(pointerAnimationFrameRef.current)
         pointerAnimationFrameRef.current = null
       }
+      pointerMotionRef.current = null
+      dragGhostMotionStateRef.current = createDragGhostMotionState()
       return
     }
 
-    const tick = () => {
+    pointerMotionRef.current = null
+    dragGhostMotionStateRef.current = createDragGhostMotionState()
+    const resolvePointerMotion = (pointer: DragGhostPointer, timestamp: number) => {
+      const previous = pointerMotionRef.current
+      if (!previous) {
+        pointerMotionRef.current = {
+          x: pointer.pointerX,
+          y: pointer.pointerY,
+          timestamp,
+          velocityX: 0,
+          velocityY: 0,
+        }
+        return IDLE_DRAG_GHOST_MOTION
+      }
+
+      const elapsed = Math.max(8, Math.min(50, timestamp - previous.timestamp))
+      const rawVelocityX = (pointer.pointerX - previous.x) / elapsed
+      const rawVelocityY = (pointer.pointerY - previous.y) / elapsed
+      const velocityX = previous.velocityX * 0.68 + rawVelocityX * 0.32
+      const velocityY = previous.velocityY * 0.68 + rawVelocityY * 0.32
+      pointerMotionRef.current = {
+        x: pointer.pointerX,
+        y: pointer.pointerY,
+        timestamp,
+        velocityX,
+        velocityY,
+      }
+      const targetMotion = resolveDragGhostMotion(velocityX, velocityY, reducedMotion ?? false)
+      dragGhostMotionStateRef.current = stepDragGhostMotion(
+        dragGhostMotionStateRef.current,
+        targetMotion,
+        elapsed
+      )
+      return dragGhostMotionStateRef.current.motion
+    }
+
+    const tick = (timestamp: number) => {
       const latestPointer = dragPointerRef.current
       if (latestPointer) {
+        const motion = resolvePointerMotion(latestPointer, timestamp)
         applyGhostTransform(
           leaderNodeRef.current,
           latestPointer.pointerX - ghostWidth / 2,
-          latestPointer.pointerY - ghostHeight / 2
+          latestPointer.pointerY - ghostHeight / 2,
+          motion
         )
       }
-      pointerAnimationFrameRef.current = requestAnimationFrame(tick)
+      pointerAnimationFrameRef.current = requestAnimationFrame(nextTimestamp => tick(nextTimestamp))
     }
 
-    tick()
+    pointerAnimationFrameRef.current = requestAnimationFrame(timestamp => tick(timestamp))
     return () => {
       if (pointerAnimationFrameRef.current !== null) {
         cancelAnimationFrame(pointerAnimationFrameRef.current)
         pointerAnimationFrameRef.current = null
       }
     }
-  }, [dragPointerRef, dragSessionId, ghostHeight, ghostItem, ghostWidth])
+  }, [dragPointerRef, dragSessionId, ghostHeight, ghostItem, ghostWidth, reducedMotion])
 
   useEffect(() => {
     const initialPointer = dragPointerRef.current
@@ -525,7 +587,7 @@ export function DragOverlays({
                   <div
                     key={entry.id}
                     ref={node => setStackNodeRef(entry.id, node)}
-                    className="pointer-events-none fixed"
+                    className="launchpad-drag-ghost launchpad-drag-ghost-stack pointer-events-none fixed"
                     style={{
                       zIndex: 48 - index,
                       width: iconImageSize,
@@ -533,6 +595,7 @@ export function DragOverlays({
                       left: 0,
                       top: 0,
                       willChange: 'transform',
+                      transformOrigin: 'center center',
                     }}
                   >
                     <div
@@ -562,13 +625,14 @@ export function DragOverlays({
 
           <div
             ref={leaderNodeRef}
-            className="pointer-events-none fixed z-50"
+            className="launchpad-drag-ghost pointer-events-none fixed z-50"
             style={{
               width: ghostWidth,
               height: ghostHeight,
               left: 0,
               top: 0,
               willChange: 'transform',
+              transformOrigin: 'center center',
             }}
           >
             <div
@@ -611,13 +675,14 @@ export function DragOverlays({
         ? multiDropFlight.map(item => (
             <div
               key={item.id}
-              className="pointer-events-none fixed"
+              className="launchpad-drop-flight pointer-events-none fixed"
               style={{
                 zIndex: item.zIndex,
                 width: item.width,
                 height: item.height,
                 left: 0,
                 top: 0,
+                transformOrigin: 'center center',
                 opacity: item.animate ? item.endOpacity : item.startOpacity,
                 transform: `translate3d(${item.animate ? item.endLeft : item.startLeft}px, ${item.animate ? item.endTop : item.startTop}px, 0) scale(${item.animate ? item.endScale : item.startScale})`,
                 transition: reducedMotion
@@ -650,22 +715,18 @@ export function DragOverlays({
 
       {folderDropFlight ? (
         <div
-          className="pointer-events-none fixed z-[55]"
+          className="launchpad-drop-flight pointer-events-none fixed z-[55]"
           style={{
-            left:
-              (folderDropFlight.animate ? folderDropFlight.endX : folderDropFlight.startX) -
-              (folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize) /
-                2,
-            top:
-              (folderDropFlight.animate ? folderDropFlight.endY : folderDropFlight.startY) -
-              (folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize) /
-                2,
-            width: folderDropFlight.animate ? folderDropFlight.endSize : folderDropFlight.startSize,
-            height: folderDropFlight.animate
-              ? folderDropFlight.endSize
-              : folderDropFlight.startSize,
+            left: folderDropFlight.startX - folderDropFlight.startSize / 2,
+            top: folderDropFlight.startY - folderDropFlight.startSize / 2,
+            width: folderDropFlight.startSize,
+            height: folderDropFlight.startSize,
             opacity: folderDropFlight.animate ? 0.92 : 1,
-            transition: `left ${reorderAnimationMs}ms ${folderPreviewEasing}, top ${reorderAnimationMs}ms ${folderPreviewEasing}, width ${reorderAnimationMs}ms ${folderPreviewEasing}, height ${reorderAnimationMs}ms ${folderPreviewEasing}, opacity ${reorderAnimationMs}ms ease-out`,
+            transformOrigin: 'center center',
+            transform: `translate3d(${folderDropFlight.animate ? folderDropFlight.endX - folderDropFlight.startX : 0}px, ${folderDropFlight.animate ? folderDropFlight.endY - folderDropFlight.startY : 0}px, 0) scale(${folderDropFlight.animate ? folderDropFlight.endSize / Math.max(1, folderDropFlight.startSize) : 1})`,
+            transition: reducedMotion
+              ? 'none'
+              : `transform ${reorderAnimationMs}ms ${folderPreviewEasing}, opacity ${reorderAnimationMs}ms ease-out`,
           }}
         >
           {folderDropFlight.icon.icon_base64 ? (

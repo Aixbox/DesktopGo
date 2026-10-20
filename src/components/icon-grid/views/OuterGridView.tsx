@@ -11,9 +11,10 @@ import type { FolderSize, GridSpan } from '../model'
 import type { PageAnchorEntry } from '../domain/topLevelLayout'
 import { FolderCreatePreview } from './FolderVisuals'
 import { OuterFolderTile } from './OuterFolderTile'
+import { MOTION_SPRING_EASING } from '../constants'
 
 const PAGE_SLIDE_MS = 280
-const PAGE_SLIDE_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
+const PAGE_SLIDE_EASING = MOTION_SPRING_EASING
 
 interface IconConfigLike {
   imgSize: number
@@ -361,10 +362,7 @@ export function OuterGridView({
           style={{ top: `calc(100% + ${paginationOffset}px)` }}
           onMouseLeave={() => onHoverPage?.(null)}
         >
-          <div
-            className="flex items-center"
-            style={{ columnGap: `${paginationDotGap ?? 10}px` }}
-          >
+          <div className="flex items-center" style={{ columnGap: `${paginationDotGap ?? 10}px` }}>
             {Array.from({ length: pageCount ?? 0 }, (_, index) => {
               const isCurrent = currentPage === index
               const isHovered = hoverPage === index
@@ -394,7 +392,6 @@ export function OuterGridView({
           </div>
         </div>
       ) : null}
-
     </div>
   )
 }

@@ -25,6 +25,7 @@ import type { GridItem } from '../model'
 import { getGridItemSpan } from '../model'
 import type { ScrollGridSection } from '../views/scrollableOuterGridTypes'
 import { resolveVerticalEdgeScrollSpeed } from './scrollEdgeAutoScrollPolicy'
+import { MOTION_SPRING_EASING } from '../constants'
 import {
   buildScrollGroupEntries,
   moveScrollItemRelative,
@@ -396,7 +397,7 @@ export function useScrollableOuterGridDragWorkflow({
           { transform: `translate3d(${deltaX}px, ${deltaY}px, 0)` },
           { transform: 'translate3d(0, 0, 0)' },
         ],
-        { duration: reorderAnimationMs, easing: 'ease' }
+        { duration: reorderAnimationMs, easing: MOTION_SPRING_EASING }
       )
       const clearAnimation = () => {
         if (gridFlipAnimationsRef.current.get(id) === animation) {
