@@ -298,12 +298,18 @@ function FolderGhost({
         }}
       >
         <div
-          className="absolute inset-0 grid place-items-center"
+          className="absolute inset-0 grid place-content-center place-items-center"
           style={{
             padding: `${innerPadding}px`,
             gap: `${innerGap}px`,
             gridTemplateColumns: `repeat(${cols}, minmax(0, ${iconSize}px))`,
             gridTemplateRows: `repeat(${rows}, minmax(0, ${iconSize}px))`,
+            transform:
+              folder.size === '1x2'
+                ? 'translateY(-2px)'
+                : folder.size === '2x1'
+                  ? 'translateX(-2px)'
+                  : undefined,
           }}
         >
           {standardPreviewIcons.map(icon => (
