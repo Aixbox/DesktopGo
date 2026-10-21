@@ -87,3 +87,9 @@ export interface MultiDropFlightItem {
   animate: boolean
   zIndex: number
 }
+
+export interface DropImpactEvent {
+  sequence: number
+  itemId: string
+  targetId: string
+}

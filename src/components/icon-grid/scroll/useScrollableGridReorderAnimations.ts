@@ -4,6 +4,8 @@ import { DRAG_HOLE_ID } from '../domain/slots'
 import { DOCK_GAP } from '../domain/dock'
 import { GRID_GAP, MOTION_SPRING_EASING, REORDER_ANIMATION_MS } from '../constants'
 import { readCurrentTranslate } from '../hooks/reorderMotion'
+import type { DropImpactEvent } from '../state/types'
+import { animateDropImpactNodes } from '../views/dropImpactMotion'
 
 const REORDER_EASING = MOTION_SPRING_EASING
 
@@ -24,6 +26,7 @@ interface UseScrollableGridReorderAnimationsParams {
   folderItemHeight: number
   dockRenderSlots: Array<string | null>
   dockIconImageSize: number
+  dropImpact: DropImpactEvent | null
 }
 
 export function useScrollableGridReorderAnimations({
@@ -43,27 +46,38 @@ export function useScrollableGridReorderAnimations({
   folderItemHeight,
   dockRenderSlots,
   dockIconImageSize,
+  dropImpact,
 }: UseScrollableGridReorderAnimationsParams) {
   const previousPageEntriesRef = useRef<Array<string | null>>([])
   const previousPageRef = useRef(0)
   const previousFolderEntriesRef = useRef<Array<string | null>>([])
   const previousDockEntriesRef = useRef<Array<string | null>>([])
   const tileAnimationTimersRef = useRef(new Map<string, number>())
+  const tileImpactAnimationsRef = useRef(new Map<string, Animation>())
   const folderAnimationTimersRef = useRef(new Map<string, number>())
   const dockAnimationTimersRef = useRef(new Map<string, number>())
+  const lastDropImpactSequenceRef = useRef(0)
 
   useLayoutEffect(() => {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const isNewDropImpact =
+      dropImpact !== null && dropImpact.sequence !== lastDropImpactSequenceRef.current
+    if (isNewDropImpact && dropImpact) {
+      lastDropImpactSequenceRef.current = dropImpact.sequence
+    }
+
     if (launchpadGridViewMode === 'scroll') {
       previousPageRef.current = currentPage
-      previousPageEntriesRef.current = pageItems
-      return
-    }
-    if (previousPageRef.current !== currentPage) {
+      if (!isNewDropImpact) {
+        previousPageEntriesRef.current = pageItems
+        return
+      }
+    } else if (previousPageRef.current !== currentPage) {
       previousPageRef.current = currentPage
       previousPageEntriesRef.current = pageItems
       return
     }
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
     if (reducedMotion) {
       previousPageEntriesRef.current = pageItems
       return
@@ -75,6 +89,34 @@ export function useScrollableGridReorderAnimations({
     })
     const stepX = itemWidth + GRID_GAP
     const stepY = itemHeight + GRID_GAP
+    if (isNewDropImpact && dropImpact) {
+      const previousPositions = new Map<string, { left: number; top: number }>()
+      pageItems.forEach((entry, nextIndex) => {
+        if (entry === null || entry === DRAG_HOLE_ID) return
+        const previousIndex = previousIndexById.get(entry)
+        const node = tileRefs.current.get(entry)
+        if (previousIndex === undefined || !node) return
+        const next = node.getBoundingClientRect()
+        previousPositions.set(entry, {
+          left: next.left + ((previousIndex % columns) - (nextIndex % columns)) * stepX,
+          top:
+            next.top +
+            (Math.floor(previousIndex / columns) - Math.floor(nextIndex / columns)) * stepY,
+        })
+      })
+      animateDropImpactNodes({
+        nodes: tileRefs.current,
+        animations: tileImpactAnimationsRef.current,
+        previousPositions,
+        impact: dropImpact,
+        itemWidth,
+        itemHeight,
+        gridGap: GRID_GAP,
+        reducedMotion: false,
+      })
+      previousPageEntriesRef.current = pageItems
+      return
+    }
     pageItems.forEach((entry, nextIndex) => {
       if (entry === null || entry === DRAG_HOLE_ID) return
       const previousIndex = previousIndexById.get(entry)
@@ -93,7 +135,16 @@ export function useScrollableGridReorderAnimations({
       )
     })
     previousPageEntriesRef.current = pageItems
-  }, [columns, currentPage, itemHeight, itemWidth, launchpadGridViewMode, pageItems, tileRefs])
+  }, [
+    columns,
+    currentPage,
+    dropImpact,
+    itemHeight,
+    itemWidth,
+    launchpadGridViewMode,
+    pageItems,
+    tileRefs,
+  ])
 
   useLayoutEffect(() => {
     if (!openFolder) {
@@ -164,11 +215,14 @@ export function useScrollableGridReorderAnimations({
 
   useEffect(() => {
     const tileTimers = tileAnimationTimersRef.current
+    const tileImpactAnimations = tileImpactAnimationsRef.current
     const folderTimers = folderAnimationTimersRef.current
     const dockTimers = dockAnimationTimersRef.current
     return () => {
       tileTimers.forEach(timer => window.clearTimeout(timer))
       tileTimers.clear()
+      tileImpactAnimations.forEach(animation => animation.cancel())
+      tileImpactAnimations.clear()
       folderTimers.forEach(timer => window.clearTimeout(timer))
       folderTimers.clear()
       dockTimers.forEach(timer => window.clearTimeout(timer))

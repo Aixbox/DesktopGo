@@ -26,6 +26,8 @@ import { getGridItemSpan } from '../model'
 import type { ScrollGridSection } from '../views/scrollableOuterGridTypes'
 import { resolveVerticalEdgeScrollSpeed } from './scrollEdgeAutoScrollPolicy'
 import { MOTION_SPRING_EASING } from '../constants'
+import type { DropImpactEvent } from '../state/types'
+import { animateDropImpactNodes } from '../views/dropImpactMotion'
 import {
   buildScrollGroupEntries,
   moveScrollItemRelative,
@@ -124,6 +126,8 @@ export function useScrollableOuterGridDragWorkflow({
   const gridItemRefs = useRef(new Map<string, HTMLDivElement>())
   const pendingGridFlipRef = useRef<Map<string, GridItemPosition> | null>(null)
   const gridFlipAnimationsRef = useRef(new Map<string, Animation>())
+  const dropImpactSequenceRef = useRef(0)
+  const lastDropImpactSequenceRef = useRef(0)
   const pointerDragSessionRef = useRef<PointerDragSession | null>(null)
   const pointerOverlayFrameRef = useRef<number | null>(null)
   const pointerCollisionTimerRef = useRef<number | null>(null)
@@ -137,10 +141,19 @@ export function useScrollableOuterGridDragWorkflow({
   const [keyboardDraggedItemId, setKeyboardDraggedItemId] = useState<string | null>(null)
   const [previewItemIds, setPreviewItemIds] = useState<string[] | null>(null)
   const [layoutMotionActive, setLayoutMotionActive] = useState(false)
+  const [dropImpact, setDropImpact] = useState<DropImpactEvent | null>(null)
   const reducedMotion = useReducedMotion()
   const itemSensors = useSensors(
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
+  const emitDropImpact = (itemId: string, targetId: string) => {
+    dropImpactSequenceRef.current += 1
+    setDropImpact({
+      sequence: dropImpactSequenceRef.current,
+      itemId,
+      targetId,
+    })
+  }
   const entries = useMemo(() => {
     if (!previewItemIds) return committedEntries
     const previewEntries = buildScrollGroupEntries(previewItemIds, activeItemById, layoutColumns)
@@ -370,7 +383,26 @@ export function useScrollableOuterGridDragWorkflow({
     const previousPositions = internalPositions ?? externalPositions
     pendingGridFlipRef.current = null
     externalGridFlipPositionsRef.current = null
-    if (!previousPositions || reducedMotion) return
+    const isNewDropImpact =
+      dropImpact !== null && dropImpact.sequence !== lastDropImpactSequenceRef.current
+    if (isNewDropImpact && dropImpact) {
+      lastDropImpactSequenceRef.current = dropImpact.sequence
+    }
+    if (reducedMotion) return
+    if (isNewDropImpact && dropImpact) {
+      animateDropImpactNodes({
+        nodes: gridItemRefs.current,
+        animations: gridFlipAnimationsRef.current,
+        previousPositions,
+        impact: dropImpact,
+        itemWidth,
+        itemHeight,
+        gridGap,
+        reducedMotion: false,
+      })
+      return
+    }
+    if (!previousPositions) return
     if (!internalPositions && externalPositions) {
       gridFlipAnimationsRef.current.forEach(animation => animation.cancel())
       gridFlipAnimationsRef.current.clear()
@@ -412,6 +444,10 @@ export function useScrollableOuterGridDragWorkflow({
     activeDraggedItemId,
     entries,
     externalGridFlipPositionsRef,
+    gridGap,
+    itemHeight,
+    itemWidth,
+    dropImpact,
     reducedMotion,
     reorderAnimationMs,
   ])
@@ -686,6 +722,7 @@ export function useScrollableOuterGridDragWorkflow({
     const droppedOnGrid = Boolean(target?.closest('[data-scroll-grid-inner]'))
     const mergeTarget = logicalDropPosition === 'middle' ? (logicalDrop?.entry.id ?? null) : null
     const shouldMerge = mergeTarget !== null && mergeTarget !== activeId
+    const impactTargetId = mergeTarget ?? (droppedOnGrid ? activeId : null)
     let finalPreviewOrder = previewOrderRef.current
     if (
       droppedOnGrid &&
@@ -720,11 +757,13 @@ export function useScrollableOuterGridDragWorkflow({
     }
     if (shouldMerge && mergeTarget) {
       onMergeItems(activeId, mergeTarget)
+      emitDropImpact(activeId, mergeTarget)
       return
     }
     if (droppedOnGrid && activeSection && finalPreviewOrder) {
       onCommitItemOrder(activeSection.groupId, finalPreviewOrder)
     }
+    if (impactTargetId) emitDropImpact(activeId, impactTargetId)
   }
 
   const handleGridPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -814,6 +853,7 @@ export function useScrollableOuterGridDragWorkflow({
     commitPreviewOrder(activeId, overId, sourceIndex < targetIndex ? 'after' : 'before', 0)
   }
   const handleKeyboardItemDragEnd = (_event: DragEndEvent) => {
+    const activeId = keyboardDraggedItemId
     const finalPreviewOrder = previewOrderRef.current
     captureGridItemPositions()
     setKeyboardDraggedItemId(null)
@@ -821,6 +861,7 @@ export function useScrollableOuterGridDragWorkflow({
     if (activeSection && finalPreviewOrder) {
       onCommitItemOrder(activeSection.groupId, finalPreviewOrder)
     }
+    if (activeId) emitDropImpact(activeId, activeId)
   }
   const handleKeyboardItemDragCancel = (_event: DragCancelEvent) => {
     captureGridItemPositions()

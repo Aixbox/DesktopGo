@@ -27,7 +27,14 @@ import {
 import { releaseDragPointerCapture } from '../hooks/dragPointerCapture'
 import { resetOuterInteraction } from '../state/dragMachine'
 import { hasRenderableDragStateChanged } from '../domain/dragWorkflowShared'
-import type { DragState, FolderDropFlight, MultiDropFlightItem, PendingDrag } from '../state/types'
+import type {
+  DragState,
+  DropImpactEvent,
+  FolderDropFlight,
+  MultiDropFlightItem,
+  PendingDrag,
+} from '../state/types'
+import { resolveOuterDropImpactTarget } from '../views/dropImpactMotion'
 import { useScrollableMultiDragEdgeAutoScroll } from './useScrollableMultiDragEdgeAutoScroll'
 
 interface DragWorkflowConfig {
@@ -108,6 +115,7 @@ interface UseIconGridDragWorkflowResult {
   dragPointerRef: MutableRefObject<{ pointerX: number; pointerY: number } | null>
   folderDropFlight: FolderDropFlight | null
   multiDropFlight: MultiDropFlightItem[] | null
+  dropImpact: DropImpactEvent | null
   folderPreviewFreezeTargetId: string | null
   folderCreateTransitionTargetId: string | null
   hiddenOuterItemIds: string[]
@@ -217,6 +225,8 @@ export function useScrollableIconGridDragWorkflow({
   const compactScrollLastHitIdRef = useRef<string | null>(null)
 
   const [dragState, setDragState] = useState<DragState | null>(null)
+  const [dropImpact, setDropImpact] = useState<DropImpactEvent | null>(null)
+  const dropImpactSequenceRef = useRef(0)
 
   useEffect(() => {
     renderedDragStateRef.current = dragState
@@ -673,7 +683,12 @@ export function useScrollableIconGridDragWorkflow({
           return remainingChildren.length === 1 ? remainingChildren[0].key : null
         })()
       : null
+    const impactTarget = completedDrag ? resolveOuterDropImpactTarget(completedDrag) : null
     if (!finishDrag(pointerId)) return
+    if (impactTarget) {
+      dropImpactSequenceRef.current += 1
+      setDropImpact({ ...impactTarget, sequence: dropImpactSequenceRef.current })
+    }
     if (completedDrag?.context === 'outer' && folderCreateTargetId === null) {
       onOuterDragFinished?.(completedDrag, folderCreateTargetId, sourceFolderReplacementId)
     }
@@ -947,6 +962,7 @@ export function useScrollableIconGridDragWorkflow({
     dragPointerRef,
     folderDropFlight,
     multiDropFlight,
+    dropImpact,
     folderPreviewFreezeTargetId,
     folderCreateTransitionTargetId,
     hiddenOuterItemIds,

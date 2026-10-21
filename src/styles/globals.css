@@ -229,6 +229,33 @@
   filter: drop-shadow(0 10px 14px color-mix(in oklch, var(--foreground) 18%, transparent));
 }
 
+@keyframes launchpad-drop-settle {
+  0% {
+    transform: scale(1, 1) rotate(0deg);
+  }
+
+  24% {
+    transform: scale(0.964, 1.036) rotate(-2deg);
+  }
+
+  50% {
+    transform: scale(1.02, 0.98) rotate(0.9deg);
+  }
+
+  74% {
+    transform: scale(0.995, 1.005) rotate(-0.25deg);
+  }
+
+  100% {
+    transform: scale(1, 1) rotate(0deg);
+  }
+}
+
+.launchpad-drop-flight-shape {
+  transform-origin: center center;
+  animation: launchpad-drop-settle 400ms cubic-bezier(0.22, 1.12, 0.36, 1.02) both;
+}
+
 .scroll-grid-icon-tile:hover .scroll-grid-icon-surface {
   transform: translate3d(0, -2px, 0) scale(1.015);
   filter: drop-shadow(0 7px 8px color-mix(in oklch, var(--foreground) 18%, transparent));
@@ -485,6 +512,10 @@
   .launchpad-dock-motion:active {
     transform: none;
     filter: none;
+  }
+
+  .launchpad-drop-flight-shape {
+    animation: none;
   }
 
   .folder-drop-receiver-backdrop[data-folder-drop-receiver='active'] {

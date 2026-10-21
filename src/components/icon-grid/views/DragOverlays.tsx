@@ -753,25 +753,36 @@ export function DragOverlays({
                   : `transform ${reorderAnimationMs}ms ${folderPreviewEasing}, opacity ${reorderAnimationMs}ms ease-out`,
               }}
             >
-              {item.item.kind === 'folder' ? (
-                <FolderGhost
-                  folder={item.item}
-                  slotWidth={slotWidth}
-                  slotHeight={slotHeight}
-                  gridGap={gridGap}
-                  titleLineCount={titleLineCount}
-                />
-              ) : item.item.icon.icon_base64 ? (
-                <img
-                  src={item.item.icon.icon_base64}
-                  alt={item.item.icon.name}
-                  className="launchpad-icon-artwork object-contain"
-                  style={{ width: item.width, height: item.height }}
-                  draggable={false}
-                />
-              ) : (
-                <AppWindow className="h-8 w-8 text-foreground/70" />
-              )}
+              <div
+                className={
+                  item.animate ? 'launchpad-drop-flight-shape h-full w-full' : 'h-full w-full'
+                }
+                style={{
+                  animationDelay: reducedMotion
+                    ? undefined
+                    : `${Math.round(reorderAnimationMs * 0.42)}ms`,
+                }}
+              >
+                {item.item.kind === 'folder' ? (
+                  <FolderGhost
+                    folder={item.item}
+                    slotWidth={slotWidth}
+                    slotHeight={slotHeight}
+                    gridGap={gridGap}
+                    titleLineCount={titleLineCount}
+                  />
+                ) : item.item.icon.icon_base64 ? (
+                  <img
+                    src={item.item.icon.icon_base64}
+                    alt={item.item.icon.name}
+                    className="launchpad-icon-artwork object-contain"
+                    style={{ width: item.width, height: item.height }}
+                    draggable={false}
+                  />
+                ) : (
+                  <AppWindow className="h-8 w-8 text-foreground/70" />
+                )}
+              </div>
             </div>
           ))
         : null}
@@ -792,16 +803,29 @@ export function DragOverlays({
               : `transform ${reorderAnimationMs}ms ${folderPreviewEasing}, opacity ${reorderAnimationMs}ms ease-out`,
           }}
         >
-          {folderDropFlight.icon.icon_base64 ? (
-            <img
-              src={folderDropFlight.icon.icon_base64}
-              alt={folderDropFlight.icon.name}
-              className="launchpad-icon-artwork h-full w-full object-contain"
-              draggable={false}
-            />
-          ) : (
-            <AppWindow className="h-full w-full text-foreground/70" />
-          )}
+          <div
+            className={
+              folderDropFlight.animate
+                ? 'launchpad-drop-flight-shape h-full w-full'
+                : 'h-full w-full'
+            }
+            style={{
+              animationDelay: reducedMotion
+                ? undefined
+                : `${Math.round(reorderAnimationMs * 0.42)}ms`,
+            }}
+          >
+            {folderDropFlight.icon.icon_base64 ? (
+              <img
+                src={folderDropFlight.icon.icon_base64}
+                alt={folderDropFlight.icon.name}
+                className="launchpad-icon-artwork h-full w-full object-contain"
+                draggable={false}
+              />
+            ) : (
+              <AppWindow className="h-full w-full text-foreground/70" />
+            )}
+          </div>
         </div>
       ) : null}
     </>

@@ -4,6 +4,8 @@ import { DRAG_HOLE_ID } from '../domain/slots'
 import { DOCK_GAP } from '../domain/dock'
 import { GRID_GAP, MOTION_SPRING_EASING, REORDER_ANIMATION_MS } from '../constants'
 import { readCurrentTranslate } from './reorderMotion'
+import type { DropImpactEvent } from '../state/types'
+import { animateDropImpactNodes } from '../views/dropImpactMotion'
 
 const REORDER_EASING = MOTION_SPRING_EASING
 
@@ -19,6 +21,7 @@ export function usePagedGridReorderAnimationRefs() {
   const previousDockEntriesRef = useRef<Array<string | null>>([])
   const folderAnimationTimersRef = useRef<Map<string, number>>(new Map())
   const dockAnimationTimersRef = useRef<Map<string, number>>(new Map())
+  const lastDropImpactSequenceRef = useRef(0)
 
   const capturePagedGridItemPositions = useCallback(() => {
     const positions = new Map<string, { left: number; top: number }>()
@@ -41,6 +44,7 @@ export function usePagedGridReorderAnimationRefs() {
     previousDockEntriesRef,
     folderAnimationTimersRef,
     dockAnimationTimersRef,
+    lastDropImpactSequenceRef,
     capturePagedGridItemPositions,
   }
 }
@@ -51,6 +55,8 @@ interface UsePagedGridReorderAnimationsParams {
   animationRefs: PagedGridReorderAnimationRefs
   activeDragIdSet: Set<string>
   pageItems: Array<string | null>
+  itemWidth: number
+  itemHeight: number
   openFolder: FolderItem | null
   folderRenderOrder: Array<string | null>
   folderColumns: number
@@ -58,12 +64,15 @@ interface UsePagedGridReorderAnimationsParams {
   folderItemHeight: number
   dockRenderSlots: Array<string | null>
   dockIconImageSize: number
+  dropImpact: DropImpactEvent | null
 }
 
 export function usePagedGridReorderAnimations({
   animationRefs,
   activeDragIdSet,
   pageItems,
+  itemWidth,
+  itemHeight,
   openFolder,
   folderRenderOrder,
   folderColumns,
@@ -71,6 +80,7 @@ export function usePagedGridReorderAnimations({
   folderItemHeight,
   dockRenderSlots,
   dockIconImageSize,
+  dropImpact,
 }: UsePagedGridReorderAnimationsParams) {
   const {
     tileRefs,
@@ -82,12 +92,32 @@ export function usePagedGridReorderAnimations({
     previousDockEntriesRef,
     folderAnimationTimersRef,
     dockAnimationTimersRef,
+    lastDropImpactSequenceRef,
   } = animationRefs
 
   useLayoutEffect(() => {
     const previousPositions = pendingGridFlipPositionsRef.current
     pendingGridFlipPositionsRef.current = null
-    if (!previousPositions || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const isNewDropImpact =
+      dropImpact !== null && dropImpact.sequence !== lastDropImpactSequenceRef.current
+    if (isNewDropImpact && dropImpact) {
+      lastDropImpactSequenceRef.current = dropImpact.sequence
+    }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (isNewDropImpact && dropImpact) {
+      animateDropImpactNodes({
+        nodes: tileRefs.current,
+        animations: gridFlipAnimationsRef.current,
+        previousPositions,
+        impact: dropImpact,
+        itemWidth,
+        itemHeight,
+        gridGap: GRID_GAP,
+        reducedMotion: false,
+      })
+      return
+    }
+    if (!previousPositions) return
 
     const movedItems: Array<{
       id: string
@@ -124,7 +154,17 @@ export function usePagedGridReorderAnimations({
       animation.oncancel = clearAnimation
       gridFlipAnimationsRef.current.set(id, animation)
     })
-  }, [activeDragIdSet, gridFlipAnimationsRef, pageItems, pendingGridFlipPositionsRef, tileRefs])
+  }, [
+    activeDragIdSet,
+    dropImpact,
+    gridFlipAnimationsRef,
+    itemHeight,
+    itemWidth,
+    lastDropImpactSequenceRef,
+    pageItems,
+    pendingGridFlipPositionsRef,
+    tileRefs,
+  ])
 
   useLayoutEffect(() => {
     if (!openFolder) {

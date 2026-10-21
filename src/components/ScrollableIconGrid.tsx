@@ -326,6 +326,7 @@ export function ScrollableIconGrid({
     dragPointerRef,
     folderDropFlight,
     multiDropFlight,
+    dropImpact,
     folderPreviewFreezeTargetId,
     folderCreateTransitionTargetId,
     hiddenOuterItemIds,
@@ -716,6 +717,7 @@ export function ScrollableIconGrid({
     folderItemHeight,
     dockRenderSlots,
     dockIconImageSize: iconConfig.imgSize,
+    dropImpact,
   })
 
   useEffect(() => () => clearEdgeSwitchTimer(), [clearEdgeSwitchTimer])

@@ -33,6 +33,8 @@ import {
   hasRenderableDragStateChanged,
 } from '../domain/dragWorkflowShared'
 import type { DragState, FolderDropFlight, MultiDropFlightItem, PendingDrag } from '../state/types'
+import type { DropImpactEvent } from '../state/types'
+import { resolveOuterDropImpactTarget } from '../views/dropImpactMotion'
 
 interface DragWorkflowConfig {
   gridGap: number
@@ -96,6 +98,7 @@ interface UseIconGridDragWorkflowResult {
   dragPointerRef: MutableRefObject<{ pointerX: number; pointerY: number } | null>
   folderDropFlight: FolderDropFlight | null
   multiDropFlight: MultiDropFlightItem[] | null
+  dropImpact: DropImpactEvent | null
   folderPreviewFreezeTargetId: string | null
   folderCreateTransitionTargetId: string | null
   hiddenOuterItemIds: string[]
@@ -184,7 +187,8 @@ export function useIconGridDragWorkflow({
   const dragPointerCaptureTargetRef = useRef<HTMLElement | null>(null)
 
   const [dragState, setDragState] = useState<DragState | null>(null)
-
+  const [dropImpact, setDropImpact] = useState<DropImpactEvent | null>(null)
+  const dropImpactSequenceRef = useRef(0)
   useEffect(() => {
     renderedDragStateRef.current = dragState
   }, [dragState])
@@ -289,7 +293,6 @@ export function useIconGridDragWorkflow({
 
     dragPointerRef.current = { pointerX: next.pointerX, pointerY: next.pointerY }
   }
-
   const captureOuterPreviewBeforeChange = (previous: DragState | null, next: DragState | null) => {
     if (!onBeforeOuterPreviewChange) return
     const previousIsOuter = previous?.context === 'outer'
@@ -315,7 +318,6 @@ export function useIconGridDragWorkflow({
     renderedDragStateRef.current = next
     setDragState(next)
   }
-
   const publishMoveDragState = (next: DragState | null) => {
     syncDragRuntime(next)
     if (!hasRenderableDragStateChanged(renderedDragStateRef.current, next, 'paged')) return
@@ -748,7 +750,12 @@ export function useIconGridDragWorkflow({
         }
       }
     }
+    const impactTarget = completedDrag ? resolveOuterDropImpactTarget(completedDrag) : null
     if (!finishDrag(pointerId)) return
+    if (impactTarget) {
+      dropImpactSequenceRef.current += 1
+      setDropImpact({ ...impactTarget, sequence: dropImpactSequenceRef.current })
+    }
     dragPointerCaptureTargetRef.current = releaseDragPointerCapture(
       dragPointerCaptureTargetRef.current,
       pointerId
@@ -976,6 +983,7 @@ export function useIconGridDragWorkflow({
     dragPointerRef,
     folderDropFlight,
     multiDropFlight,
+    dropImpact,
     folderPreviewFreezeTargetId,
     folderCreateTransitionTargetId,
     hiddenOuterItemIds,

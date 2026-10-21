@@ -243,13 +243,13 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
   const reorderAnimationRefs = usePagedGridReorderAnimationRefs()
   const { tileRefs, folderTileRefs, dockItemRefs, capturePagedGridItemPositions } =
     reorderAnimationRefs
-
   const {
     dragState,
     dragRef,
     dragPointerRef,
     folderDropFlight,
     multiDropFlight,
+    dropImpact,
     folderPreviewFreezeTargetId,
     folderCreateTransitionTargetId,
     hiddenOuterItemIds,
@@ -673,7 +673,6 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     }
     return currentSlice
   }, [renderOrder, currentPage, pageSize])
-
   const pageAnchorEntries = useMemo(
     () =>
       getPageAnchorEntries(
@@ -685,7 +684,6 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
       ),
     [columns, currentPage, outerViewItemById, pageSize, renderOrder]
   )
-
   const previewFootprint = useMemo(() => {
     if (dragState?.context !== 'outer') return null
     return resolveGridPreviewFootprint({
@@ -704,6 +702,8 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     animationRefs: reorderAnimationRefs,
     activeDragIdSet,
     pageItems,
+    itemWidth,
+    itemHeight,
     openFolder,
     folderRenderOrder,
     folderColumns,
@@ -711,8 +711,8 @@ export function IconGrid({ icons, layoutResetToken, importPlacementRequest }: Ic
     folderItemHeight,
     dockRenderSlots,
     dockIconImageSize: iconConfig.imgSize,
+    dropImpact,
   })
-
   useEffect(() => {
     return () => {
       clearFolderSharedLayoutTimer()
