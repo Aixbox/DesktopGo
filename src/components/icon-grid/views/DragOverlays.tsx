@@ -3,10 +3,11 @@ import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from 'react
 import { useReducedMotion } from 'framer-motion'
 import type { DesktopIcon } from '../../../types'
 import { useIconStore } from '../../../stores/iconStore'
-import type { FolderItem, GridItem } from '../model'
+import type { FolderItem, GridItem, IconItem } from '../model'
 import { getGridItemSpan } from '../model'
 import type { FolderDropFlight, MultiDropFlightItem } from '../state/types'
 import { FolderIconVisual } from './FolderVisuals'
+import { getDesktopLargeFolderPreviewLayout } from './folderPreviewPolicy'
 import {
   DESKTOP_FOLDER_SURFACE_CLASS,
   getDesktopFolderTileMetrics,
@@ -60,6 +61,53 @@ const getGhostFolderSurfaceRadius = (panelBase: number) =>
 
 const getSingleSlotGhostPreviewInset = (panelBase: number) =>
   Math.round(clampNumber(panelBase * 0.06, 3, 5))
+
+function GhostSplitPreviewIcon({ icons, size }: { icons: IconItem[]; size: number }) {
+  const miniGap = 1
+  const miniPadding = 1
+  const miniIconSize = Math.max(5, Math.floor((size - miniPadding * 2 - miniGap) / 2))
+
+  return (
+    <div
+      aria-hidden="true"
+      className="grid grid-cols-2 grid-rows-2 place-items-center overflow-hidden rounded-icon-tile"
+      style={{ width: size, height: size, padding: miniPadding, gap: miniGap }}
+    >
+      {Array.from({ length: 4 }, (_, index) => {
+        const icon = icons[index]
+        const artworkSize = Math.max(5, Math.floor(miniIconSize * GHOST_PREVIEW_ICON_SCALE))
+        const fallbackSize = Math.max(
+          5,
+          Math.floor(miniIconSize * GHOST_PREVIEW_ICON_FALLBACK_SCALE)
+        )
+        return (
+          <div
+            key={index}
+            className="flex items-center justify-center overflow-hidden rounded-icon-tile bg-foreground/[0.04] dark:bg-white/[0.06]"
+            style={{ width: miniIconSize, height: miniIconSize }}
+          >
+            {icon ? (
+              icon.icon.icon_base64 ? (
+                <img
+                  src={icon.icon.icon_base64}
+                  alt=""
+                  className="launchpad-icon-artwork object-contain"
+                  style={{ width: artworkSize, height: artworkSize }}
+                  draggable={false}
+                />
+              ) : (
+                <AppWindow
+                  className="text-foreground/55 dark:text-white/70"
+                  style={{ width: fallbackSize, height: fallbackSize }}
+                />
+              )
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 interface StackGhostPosition {
   left: number
@@ -220,8 +268,10 @@ function FolderGhost({
     )
   }
 
-  const previewIcons =
-    folder.size === '2x2' ? folder.children.slice(0, 9) : folder.children.slice(0, 3)
+  const previewLayout = getDesktopLargeFolderPreviewLayout(folder.size, folder.children.length)
+  const previewIcons = folder.children.slice(0, previewLayout.visibleIconCount)
+  const standardPreviewIcons = previewIcons.slice(0, previewLayout.standardIconCount)
+  const splitPreviewIcons = previewIcons.slice(previewLayout.standardIconCount)
   const rows = folder.size === '2x2' ? 3 : folder.size === '1x2' ? 3 : 1
   const cols = folder.size === '2x2' ? 3 : folder.size === '2x1' ? 3 : 1
   const iconSize = Math.max(
@@ -256,7 +306,7 @@ function FolderGhost({
             gridTemplateRows: `repeat(${rows}, minmax(0, ${iconSize}px))`,
           }}
         >
-          {previewIcons.map(icon => (
+          {standardPreviewIcons.map(icon => (
             <GhostPreviewIcon
               key={icon.key}
               iconBase64={icon.icon.icon_base64}
@@ -264,6 +314,13 @@ function FolderGhost({
               size={iconSize}
             />
           ))}
+          {previewLayout.splitLastSlot ? (
+            <GhostSplitPreviewIcon
+              key={'split-preview-' + folder.id}
+              icons={splitPreviewIcons}
+              size={iconSize}
+            />
+          ) : null}
         </div>
       </div>
     </div>

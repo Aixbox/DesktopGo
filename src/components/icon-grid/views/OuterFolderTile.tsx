@@ -22,7 +22,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '../../ui/context-menu'
-import type { FolderItem, FolderSize, GridSpan } from '../model'
+import type { FolderItem, FolderSize, GridSpan, IconItem } from '../model'
 import {
   DESKTOP_FOLDER_SURFACE_CLASS,
   FOLDER_SHARED_LAYOUT_TRANSITION,
@@ -31,6 +31,7 @@ import {
   scaledRadius,
 } from './folderVisualPolicy'
 import { FolderIconVisual } from './FolderVisuals'
+import { getDesktopLargeFolderPreviewLayout } from './folderPreviewPolicy'
 
 interface OuterFolderTileProps {
   folder: FolderItem
@@ -190,6 +191,88 @@ function PreviewIconButton({
   )
 }
 
+interface MiniPreviewArtworkProps {
+  iconBase64: string
+  size: number
+}
+
+function MiniPreviewArtwork({ iconBase64, size }: MiniPreviewArtworkProps) {
+  return iconBase64 ? (
+    <img
+      src={iconBase64}
+      alt=""
+      className="launchpad-icon-artwork object-contain"
+      style={{
+        width: Math.max(5, Math.floor(size * PREVIEW_ICON_SCALE)),
+        height: Math.max(5, Math.floor(size * PREVIEW_ICON_SCALE)),
+      }}
+      draggable={false}
+    />
+  ) : (
+    <AppWindow
+      className="text-foreground/55 dark:text-white/70"
+      style={{
+        width: Math.max(5, Math.floor(size * PREVIEW_ICON_FALLBACK_SCALE)),
+        height: Math.max(5, Math.floor(size * PREVIEW_ICON_FALLBACK_SCALE)),
+      }}
+    />
+  )
+}
+
+interface SplitPreviewIconButtonProps {
+  folderName: string
+  icons: IconItem[]
+  size: number
+  onOpenFolder: () => void
+}
+
+function SplitPreviewIconButton({
+  folderName,
+  icons,
+  size,
+  onOpenFolder,
+}: SplitPreviewIconButtonProps) {
+  const miniGap = 1
+  const miniPadding = 1
+  const miniIconSize = Math.max(5, Math.floor((size - miniPadding * 2 - miniGap) / 2))
+
+  return (
+    <button
+      type="button"
+      aria-label={folderName}
+      className="flex cursor-pointer items-center justify-center rounded-icon-tile transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:scale-[0.97]"
+      style={{ width: size, height: size }}
+      title={folderName}
+      onPointerDown={event => event.stopPropagation()}
+      onClick={event => {
+        event.stopPropagation()
+        onOpenFolder()
+      }}
+    >
+      <span
+        aria-hidden="true"
+        className="grid h-full w-full grid-cols-2 grid-rows-2 place-items-center overflow-hidden"
+        style={{ padding: miniPadding, gap: miniGap }}
+      >
+        {Array.from({ length: 4 }, (_, index) => {
+          const icon = icons[index]
+          return (
+            <span
+              key={index}
+              className="flex items-center justify-center overflow-hidden rounded-icon-tile bg-foreground/[0.04] dark:bg-white/[0.06]"
+              style={{ width: miniIconSize, height: miniIconSize }}
+            >
+              {icon ? (
+                <MiniPreviewArtwork iconBase64={icon.icon.icon_base64} size={miniIconSize} />
+              ) : null}
+            </span>
+          )
+        })}
+      </span>
+    </button>
+  )
+}
+
 interface FolderBodyProps {
   folder: FolderItem
   bodyWidth: number
@@ -302,8 +385,10 @@ function FolderBody({
     )
   }
 
-  const previewIcons =
-    folder.size === '2x2' ? folder.children.slice(0, 9) : folder.children.slice(0, 3)
+  const previewLayout = getDesktopLargeFolderPreviewLayout(folder.size, folder.children.length)
+  const previewIcons = folder.children.slice(0, previewLayout.visibleIconCount)
+  const standardPreviewIcons = previewIcons.slice(0, previewLayout.standardIconCount)
+  const splitPreviewIcons = previewIcons.slice(previewLayout.standardIconCount)
 
   const renderVertical = folder.size === '1x2'
   const renderHorizontal = folder.size === '2x1'
@@ -364,7 +449,7 @@ function FolderBody({
             gridTemplateRows: `repeat(${rows}, minmax(0, ${iconSize}px))`,
           }}
         >
-          {previewIcons.map(icon => (
+          {standardPreviewIcons.map(icon => (
             <PreviewIconButton
               key={icon.key}
               path={icon.icon.path}
@@ -376,6 +461,15 @@ function FolderBody({
               onLaunchIcon={onLaunchIcon}
             />
           ))}
+          {previewLayout.splitLastSlot ? (
+            <SplitPreviewIconButton
+              key={'split-preview-' + folder.id}
+              folderName={folder.name}
+              icons={splitPreviewIcons}
+              size={iconSize}
+              onOpenFolder={() => onOpenFolder(folder.id)}
+            />
+          ) : null}
         </div>
       </motion.div>
     </div>
