@@ -14,6 +14,7 @@ import {
   isBackgroundBlur,
   isBackgroundOverlay,
   isLaunchpadBackgroundDataUri,
+  isLaunchpadBackgroundImage,
   normalizeThemeAccentColor,
 } from './appearancePolicy.ts'
 
@@ -35,6 +36,8 @@ assert.equal(deriveAccentPalette('blue'), null)
 assert.equal(isLaunchpadBackgroundDataUri('data:image/webp;base64,AAAA'), true)
 assert.equal(isLaunchpadBackgroundDataUri('data:image/svg+xml;base64,AAAA'), false)
 assert.equal(isLaunchpadBackgroundDataUri('https://example.com/background.jpg'), false)
+assert.equal(isLaunchpadBackgroundImage('/wallpapers/cloud.png'), true)
+assert.equal(isLaunchpadBackgroundImage('https://example.com/background.jpg'), false)
 
 const bluePixels = new Uint8ClampedArray([
   37, 99, 235, 255, 37, 99, 235, 255, 30, 64, 175, 255, 245, 245, 245, 255,
@@ -60,7 +63,7 @@ assert.equal(backgroundBlurToPixels(0), 0)
 assert.equal(backgroundBlurToPixels(BACKGROUND_BLUR_MAX), BACKGROUND_BLUR_MAX_PX)
 assert.equal(backgroundBlurToPixels(50), BACKGROUND_BLUR_MAX_PX / 2)
 assert.equal(backgroundBlurToPixels(999), BACKGROUND_BLUR_MAX_PX)
-assert.equal(backgroundBlurToPixels(Number.NaN), 0)
+assert.equal(backgroundBlurToPixels(Number.NaN), backgroundBlurToPixels(DEFAULT_BACKGROUND_BLUR))
 
 assert.equal(isBackgroundOverlay(0), true)
 assert.equal(isBackgroundOverlay(BACKGROUND_OVERLAY_MAX), true)

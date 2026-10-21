@@ -6,6 +6,7 @@ import {
   deriveAccentPalette,
   extractAccentColorFromPixels,
   isLaunchpadBackgroundDataUri,
+  isLaunchpadBackgroundImage,
   normalizeThemeAccentColor,
   DEFAULT_FOREGROUND_TONE,
   FOREGROUND_TONE_COLOR,
@@ -33,6 +34,7 @@ export {
   getAccentForegroundColor,
   isForegroundTone,
   isLaunchpadBackgroundDataUri,
+  isLaunchpadBackgroundImage,
   normalizeThemeAccentColor,
   type ForegroundTone,
 } from './appearancePolicy'
@@ -119,7 +121,7 @@ export function applyAppearance({
   root.style.setProperty('--launchpad-label-color', FOREGROUND_TONE_COLOR[tone])
   root.style.setProperty('--launchpad-label-text-shadow', LABEL_TONE_TEXT_SHADOW[tone])
 
-  if (isLaunchpadBackgroundDataUri(backgroundImage)) {
+  if (isLaunchpadBackgroundImage(backgroundImage)) {
     const overlay = clampBackgroundOverlay(backgroundOverlay)
     const blurPixels = backgroundBlurToPixels(backgroundBlur)
     root.style.setProperty('--launchpad-background-image', `url("${backgroundImage}")`)

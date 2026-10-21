@@ -21,6 +21,10 @@ import {
 } from '@/types'
 import { isIconManagerViewMode } from './iconManager'
 import {
+  DEFAULT_BUILTIN_WALLPAPER_IMAGE,
+  DEFAULT_BUILTIN_WALLPAPER_SOURCE,
+} from './builtinWallpapers'
+import {
   DEFAULT_LAUNCHPAD_OPEN_FOCUS_TARGET,
   isLaunchpadOpenFocusTarget,
 } from './launchpadOpenFocus'
@@ -28,10 +32,11 @@ import {
   DEFAULT_BACKGROUND_BLUR,
   DEFAULT_BACKGROUND_OVERLAY,
   DEFAULT_FOREGROUND_TONE,
+  DEFAULT_THEME_ACCENT_COLOR,
   isBackgroundBlur,
   isBackgroundOverlay,
   isForegroundTone,
-  isLaunchpadBackgroundDataUri,
+  isLaunchpadBackgroundImage,
   normalizeThemeAccentColor,
   type ForegroundTone,
 } from './appearancePolicy'
@@ -141,11 +146,11 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   titleLineCount: 'two',
   launchpadGridViewMode: 'paged',
   themeMode: 'system',
-  themeAccentColor: '',
-  launchpadBackgroundImage: '',
+  themeAccentColor: DEFAULT_THEME_ACCENT_COLOR,
+  launchpadBackgroundImage: DEFAULT_BUILTIN_WALLPAPER_IMAGE,
   launchpadBackgroundOverlay: DEFAULT_BACKGROUND_OVERLAY,
   launchpadBackgroundBlur: DEFAULT_BACKGROUND_BLUR,
-  launchpadBackgroundSource: '',
+  launchpadBackgroundSource: DEFAULT_BUILTIN_WALLPAPER_SOURCE,
   launchpadLabelTone: DEFAULT_FOREGROUND_TONE,
   selectedForegroundTone: DEFAULT_FOREGROUND_TONE,
   autoExtractThemeColor: true,
@@ -160,7 +165,7 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   iconContextMenuMode: 'custom',
   deleteIconSourceFile: false,
   createFileTargetDir: '',
-  deleteNewFileSource: false,
+  deleteNewFileSource: true,
 }
 
 const SETTINGS_STORE_PATH = import.meta.env.DEV ? 'dev/settings.json' : 'settings.json'
@@ -198,8 +203,8 @@ const isThemeMode = (value: unknown): value is ThemeMode =>
 const isThemeAccentColor = (value: unknown): value is string =>
   typeof value === 'string' && (value === '' || normalizeThemeAccentColor(value) !== null)
 
-const isLaunchpadBackgroundImage = (value: unknown): value is string =>
-  typeof value === 'string' && (value === '' || isLaunchpadBackgroundDataUri(value))
+const isSavedLaunchpadBackgroundImage = (value: unknown): value is string =>
+  typeof value === 'string' && (value === '' || isLaunchpadBackgroundImage(value))
 
 const isAutoExtractThemeColor = (value: unknown): value is boolean => typeof value === 'boolean'
 
@@ -228,7 +233,7 @@ const validators: {
   launchpadGridViewMode: isLaunchpadGridViewMode,
   themeMode: isThemeMode,
   themeAccentColor: isThemeAccentColor,
-  launchpadBackgroundImage: isLaunchpadBackgroundImage,
+  launchpadBackgroundImage: isSavedLaunchpadBackgroundImage,
   launchpadBackgroundOverlay: isBackgroundOverlay,
   launchpadBackgroundBlur: isBackgroundBlur,
   launchpadBackgroundSource: (value): value is string => typeof value === 'string',

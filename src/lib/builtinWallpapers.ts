@@ -14,3 +14,9 @@ export const BUILTIN_WALLPAPERS: BuiltinWallpaper[] = [
   { id: 'grassland-tree', name: '草原暮色', src: '/wallpapers/Grassland-trees.jpg' },
   { id: 'ocean-highway', name: '海滨列车', src: '/wallpapers/Ocean-Highway.jpg' },
 ]
+
+/** 新安装实例使用的内置壁纸，保持默认外观与开发环境一致。 */
+export const DEFAULT_BUILTIN_WALLPAPER_ID = 'sunny-clouds'
+export const DEFAULT_BUILTIN_WALLPAPER_SOURCE = `builtin:${DEFAULT_BUILTIN_WALLPAPER_ID}`
+export const DEFAULT_BUILTIN_WALLPAPER_IMAGE =
+  BUILTIN_WALLPAPERS.find(wallpaper => wallpaper.id === DEFAULT_BUILTIN_WALLPAPER_ID)?.src ?? ''

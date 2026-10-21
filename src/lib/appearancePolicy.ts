@@ -1,15 +1,17 @@
-export const DEFAULT_THEME_ACCENT_COLOR = ''
+import { BUILTIN_WALLPAPERS } from './builtinWallpapers'
+
+export const DEFAULT_THEME_ACCENT_COLOR = '#087eb0'
 export const MAX_BACKGROUND_DATA_URI_LENGTH = 1_600_000
 
 /** 蒙版浓度：0 表示完全不遮挡背景图，100 表示接近纯色。 */
 export const BACKGROUND_OVERLAY_MIN = 0
 export const BACKGROUND_OVERLAY_MAX = 90
-export const DEFAULT_BACKGROUND_OVERLAY = 0
+export const DEFAULT_BACKGROUND_OVERLAY = 11
 
 /** 背景模糊强度百分比；100% 对应 BACKGROUND_BLUR_MAX_PX 的实际半径。 */
 export const BACKGROUND_BLUR_MIN = 0
 export const BACKGROUND_BLUR_MAX = 100
-export const DEFAULT_BACKGROUND_BLUR = 0
+export const DEFAULT_BACKGROUND_BLUR = 21
 export const BACKGROUND_BLUR_MAX_PX = 40
 
 function clampInteger(value: number, min: number, max: number, fallback: number): number {
@@ -94,6 +96,16 @@ export function isLaunchpadBackgroundDataUri(value: string): boolean {
   return (
     value.length <= MAX_BACKGROUND_DATA_URI_LENGTH &&
     /^data:image\/(?:jpeg|png|webp);base64,/i.test(value)
+  )
+}
+
+const BUILTIN_BACKGROUND_IMAGE_URLS = new Set(BUILTIN_WALLPAPERS.map(wallpaper => wallpaper.src))
+
+/** 允许使用应用内置资源作为默认背景，也允许用户保存的压缩 data URI。 */
+export function isLaunchpadBackgroundImage(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    (isLaunchpadBackgroundDataUri(value) || BUILTIN_BACKGROUND_IMAGE_URLS.has(value))
   )
 }
 

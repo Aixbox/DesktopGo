@@ -45,7 +45,7 @@ const SEARCH_PROFILE_VERSION_KEY = 'search.profileVersion'
 
 export const DEFAULT_SEARCH_SETTINGS: SearchSettings = {
   liveOnType: true,
-  debounceMs: 120,
+  debounceMs: 50,
   autoSelectFirst: true,
   openOnEnter: true,
   openOnDoubleClick: true,
