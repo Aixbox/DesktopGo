@@ -37,12 +37,13 @@ fn resolve_db_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
     crate::storage_profile::app_local_data_path(app_handle, DB_FILE_NAME)
 }
 
-fn open_db(app_handle: &tauri::AppHandle) -> Result<Connection, String> {
+pub(crate) fn open_db(app_handle: &tauri::AppHandle) -> Result<Connection, String> {
     let db_path = resolve_db_path(app_handle)?;
     let conn = Connection::open(&db_path)
         .map_err(|e| format!("Failed to open SQLite database {:?}: {}", db_path, e))?;
     conn.execute(CREATE_KV_TABLE_SQL, [])
         .map_err(|e| format!("Failed to initialize SQLite schema: {}", e))?;
+    crate::layout_versions::ensure_schema(&conn)?;
     Ok(conn)
 }
 

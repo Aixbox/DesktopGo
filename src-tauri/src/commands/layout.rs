@@ -1,4 +1,46 @@
 use crate::layout_db;
+use crate::layout_versions;
+
+#[tauri::command]
+pub fn list_layout_versions(
+    app_handle: tauri::AppHandle,
+    scope: String,
+) -> Result<Vec<layout_versions::LayoutVersionMeta>, String> {
+    layout_versions::list_layout_versions(&app_handle, &scope)
+}
+
+#[tauri::command]
+pub fn get_layout_version(
+    app_handle: tauri::AppHandle,
+    id: String,
+) -> Result<Option<layout_versions::LayoutVersionDetail>, String> {
+    layout_versions::get_layout_version(&app_handle, &id)
+}
+
+#[tauri::command]
+pub fn save_layout_version(
+    app_handle: tauri::AppHandle,
+    scope: String,
+    kind: String,
+    name: Option<String>,
+    payload: String,
+) -> Result<layout_versions::LayoutVersionMeta, String> {
+    layout_versions::save_layout_version(&app_handle, &scope, &kind, name.as_deref(), &payload)
+}
+
+#[tauri::command]
+pub fn rename_layout_version(
+    app_handle: tauri::AppHandle,
+    id: String,
+    name: String,
+) -> Result<(), String> {
+    layout_versions::rename_layout_version(&app_handle, &id, &name)
+}
+
+#[tauri::command]
+pub fn delete_layout_version(app_handle: tauri::AppHandle, id: String) -> Result<(), String> {
+    layout_versions::delete_layout_version(&app_handle, &id)
+}
 
 #[tauri::command]
 pub fn get_layout_payload(

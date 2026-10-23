@@ -34,6 +34,14 @@ import { LaunchpadSelectionToolbar } from '@/components/launchpad/LaunchpadSelec
 import { useLaunchpadIconImportController } from '@/components/launchpad/useLaunchpadIconImportController'
 import { useLaunchpadSurfaceInteractions } from '@/components/launchpad/useLaunchpadSurfaceInteractions'
 import { useLaunchpadWindowController } from '@/components/launchpad/useLaunchpadWindowController'
+import { LayoutLibraryDrawer } from '@/components/layout-library/LayoutLibraryDrawer'
+import { LayoutNameDialog } from '@/components/layout-library/LayoutNameDialog'
+import {
+  LAYOUT_DRAWER_COLLAPSED_HEIGHT,
+  LAYOUT_DRAWER_HEIGHT,
+  resolveCurrentGeometryKey,
+} from '@/components/layout-library/layoutLibrary'
+import { useLayoutLibraryController } from '@/components/layout-library/useLayoutLibraryController'
 import { useSearch } from '@/lib/search/useSearch'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { useToast } from '@/components/ui/toast'
@@ -63,6 +71,8 @@ export function Launchpad() {
     hydrateSettings,
     iconCornerRadius,
     iconOpacity,
+    iconSize,
+    dockEnabled,
     windowMode,
     launchpadGridViewMode,
     selectionMode,
@@ -175,6 +185,40 @@ export function Launchpad() {
   const preloadGridView = useCallback((mode: 'paged' | 'scroll') => {
     void (mode === 'scroll' ? loadScrollableIconGrid() : loadIconGrid())
   }, [])
+  const currentLayoutGeometryKey = useMemo(
+    () => resolveCurrentGeometryKey(windowMode, iconSize, dockEnabled),
+    [dockEnabled, iconSize, windowMode]
+  )
+  const bumpLayoutToken = useCallback(() => {
+    setLayoutResetToken(current => current + 1)
+  }, [setLayoutResetToken])
+  const handleBeforeLayoutLibraryOpen = useCallback(() => {
+    clearSelection()
+    setIsSearchPanelOpen(false)
+    setIsFilterMenuOpen(false)
+  }, [clearSelection])
+  const layoutLibrary = useLayoutLibraryController({
+    currentGeometryKey: currentLayoutGeometryKey,
+    gridViewMode: launchpadGridViewMode,
+    fetchIcons,
+    bumpLayoutToken,
+    isAiOrganizeMode,
+    onBeforeOpen: handleBeforeLayoutLibraryOpen,
+  })
+  const {
+    isLayoutLibraryOpen,
+    layoutPreviewId,
+    layoutVersionsRefreshToken,
+    layoutNameDialogOpen,
+    openLayoutLibrary,
+    previewLayoutVersion,
+    applyLayoutPreview,
+    cancelLayoutPreview,
+    saveCurrentLayout,
+    openLayoutNameDialog,
+    closeLayoutNameDialog,
+  } = layoutLibrary
+  const [layoutDrawerCollapsed, setLayoutDrawerCollapsed] = useState(false)
   const windowController = useLaunchpadWindowController({
     fetchIcons,
     hydrateSettings,
@@ -200,6 +244,10 @@ export function Launchpad() {
   } = windowController
   const aiOrganizeLayoutOpen = isAiOrganizeSidebarOpen || aiOrganizeSidebarReady
   const aiOrganizeUiActive = isAiOrganizeMode || aiOrganizeSidebarReady
+  // 布局抽屉展开时翻页指示器要抬到抽屉上方，折叠后按折叠高度算。
+  const paginationBottom = isLayoutLibraryOpen
+    ? (layoutDrawerCollapsed ? LAYOUT_DRAWER_COLLAPSED_HEIGHT : LAYOUT_DRAWER_HEIGHT) + 16
+    : 0
   const resetAiOrganizeRunState = useCallback(() => {
     setAiOrganizeRunState({
       canApply: false,
@@ -222,9 +270,11 @@ export function Launchpad() {
     clearSelection()
     setIsSearchPanelOpen(false)
     setIsFilterMenuOpen(false)
+    // 布局库开着时进 AI 会同时挂两个侧栏，先把预览回滚再收起。
+    if (isLayoutLibraryOpen) void cancelLayoutPreview()
     setIsAiOrganizeMode(true)
     setIsAiOrganizeSidebarOpen(true)
-  }, [clearSelection])
+  }, [cancelLayoutPreview, clearSelection, isLayoutLibraryOpen])
 
   const toggleAiOrganizeSidebar = useCallback(() => {
     if (!isAiOrganizeMode) {
@@ -272,7 +322,7 @@ export function Launchpad() {
     setSelectedIconKeys,
     clearSelection,
     enterSelectionMode: handleEnterSelectionMode,
-    isAiOrganizeMode: aiOrganizeUiActive,
+    isInteractionLocked: aiOrganizeUiActive || isLayoutLibraryOpen,
     hasSearchKeyword,
     isSearchPanelOpen: isSearchPanelVisible,
     closeSearchPanel: () => setIsSearchPanelOpen(false),
@@ -544,6 +594,12 @@ export function Launchpad() {
       if (target?.closest(SEARCH_FLOATING_MENU_SELECTOR)) return
       if (target?.closest('[data-dock-menu="true"]')) return
       if (document.querySelector('[data-folder-modal="true"]')) return
+      // 布局侧栏开着时，Esc 先退出预览，别顺手把启动台也关掉。
+      if (isLayoutLibraryOpen) {
+        event.preventDefault()
+        void cancelLayoutPreview()
+        return
+      }
       if (isSearchPanelVisible || hasSearchKeyword) return
 
       requestCloseLaunchpad()
@@ -553,7 +609,13 @@ export function Launchpad() {
     return () => {
       window.removeEventListener('keydown', handlePageEscape)
     }
-  }, [hasSearchKeyword, isSearchPanelVisible, requestCloseLaunchpad])
+  }, [
+    cancelLayoutPreview,
+    hasSearchKeyword,
+    isLayoutLibraryOpen,
+    isSearchPanelVisible,
+    requestCloseLaunchpad,
+  ])
 
   const handleHideSelected = () => {
     if (selectedIconKeys.length === 0) return
@@ -625,6 +687,8 @@ export function Launchpad() {
           onPointerUp={handleBackgroundPointerUp}
           onPointerCancel={handleBackgroundPointerCancel}
           onPointerLeave={handleBackgroundPointerLeave}
+          // 布局预览期间连启动台自己的右键菜单也不给开，避免改网格模式把预览搅乱。
+          onContextMenu={isLayoutLibraryOpen ? event => event.preventDefault() : undefined}
           onClick={handleBackgroundClick}
         >
           <LaunchpadWindowControls
@@ -657,7 +721,9 @@ export function Launchpad() {
             >
               <div
                 data-search-placeholder
-                className="launchpad-search-shell absolute inset-x-0 top-6 z-40 mx-auto w-full max-w-2xl px-6"
+                className={`launchpad-search-shell absolute inset-x-0 top-6 z-40 mx-auto w-full max-w-2xl px-6 transition-opacity ${
+                  isLayoutLibraryOpen ? 'pointer-events-none opacity-35' : ''
+                }`}
               >
                 <div className="relative min-w-0">
                   {aiOrganizeUiActive ? (
@@ -819,6 +885,8 @@ export function Launchpad() {
                 addIconDisabled={isImportingDrop || addIconDialogOpen}
                 onAddIcon={() => handleAddIcons()}
                 onQuickImport={() => setIsQuickImportOpen(true)}
+                interactionLocked={isLayoutLibraryOpen}
+                paginationBottom={paginationBottom}
               />
             </div>
 
@@ -837,6 +905,20 @@ export function Launchpad() {
                 onApplied={handleAiOrganizeApplied}
               />
             ) : null}
+
+            {isLayoutLibraryOpen ? (
+              <LayoutLibraryDrawer
+                currentGeometryKey={currentLayoutGeometryKey}
+                previewId={layoutPreviewId}
+                refreshToken={layoutVersionsRefreshToken}
+                collapsed={layoutDrawerCollapsed}
+                onToggleCollapsed={() => setLayoutDrawerCollapsed(current => !current)}
+                onPreview={previewLayoutVersion}
+                onApply={applyLayoutPreview}
+                onCancel={cancelLayoutPreview}
+                onSaveCurrent={openLayoutNameDialog}
+              />
+            ) : null}
           </div>
         </div>
       </ContextMenuTrigger>
@@ -847,8 +929,22 @@ export function Launchpad() {
         onCreateNewFile={kind => void handleCreateNewFile(kind)}
         onSelectIcons={handleEnterSelectionMode}
         onAiOrganize={enterAiOrganizeMode}
+        onOpenLayoutLibrary={() => {
+          setLayoutDrawerCollapsed(false)
+          void openLayoutLibrary()
+        }}
+        onSaveLayout={openLayoutNameDialog}
         onOpenSettings={openSettings}
       />
+      {layoutNameDialogOpen ? (
+        <LayoutNameDialog
+          title={translate('保存当前布局')}
+          description={translate('给当前的分页布局起个名字，之后可以在布局库里一键应用。')}
+          confirmLabel={translate('保存')}
+          onCancel={closeLayoutNameDialog}
+          onConfirm={saveCurrentLayout}
+        />
+      ) : null}
       <LaunchpadIconImportLayer controller={iconImport} />
 
       <Suspense fallback={null}>

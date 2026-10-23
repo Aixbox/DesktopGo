@@ -1,0 +1,53 @@
+export const EN_LAYOUT_LIBRARY_MESSAGES: Record<string, string> = {
+  布局: 'Layout',
+  布局库: 'Layout library',
+  布局名称: 'Layout name',
+  保存当前布局: 'Save current layout',
+  保存当前: 'Save current',
+  已保存: 'Saved',
+  已保存布局: 'Saved layouts',
+  历史: 'History',
+  历史布局: 'Layout history',
+  应用布局: 'Apply layout',
+  应用前: 'Before applying',
+  预览布局: 'Preview layouts',
+  '正在预览：{name}': 'Previewing: {name}',
+  展开布局库: 'Expand the layout library',
+  收起布局库: 'Collapse the layout library',
+  无缩略图: 'No preview',
+  重排: 're-flow',
+  '{count} 页': '{count} pages',
+  '布局库只支持分页网格。': 'The layout library only works with the paged grid.',
+  '还没有保存的布局。用「保存当前」记下现在的摆放。':
+    'No saved layouts yet. Use "Save current" to store the current arrangement.',
+  '还没有保存的布局。点右上角把现在的摆放存下来。':
+    'No saved layouts yet. Use the button above to store the current arrangement.',
+  '还没有历史快照，改动布局后会自动记录。':
+    'No snapshots yet. Layout changes are recorded automatically.',
+  '{count} 个图标': '{count} icons',
+  '正在加载...': 'Loading...',
+  '加载布局失败，请重试。': 'Failed to load layouts. Please try again.',
+  '加载布局库失败，请重试。': 'Failed to load the layout library. Please try again.',
+  布局已不存在: 'This layout no longer exists',
+  预览布局失败: 'Failed to preview the layout',
+  恢复原布局失败: 'Failed to restore the previous layout',
+  当前布局为空: 'The current layout is empty',
+  '已应用布局。': 'Layout applied.',
+  '已保存布局「{name}」。': 'Saved layout "{name}".',
+  保存布局失败: 'Failed to save the layout',
+  '给当前的分页布局起个名字，之后可以在布局库里一键应用。':
+    'Name the current paged layout so you can apply it from the layout library.',
+  '保存当前的分页布局，随时在启动台里预览并应用。':
+    'Save the current paged layout and apply it from the launchpad.',
+  未命名布局: 'Untitled layout',
+  重命名: 'Rename',
+  重命名布局: 'Rename layout',
+  重命名失败: 'Rename failed',
+  删除布局失败: 'Failed to delete the layout',
+  '换个好记的名字，启动台的布局库里会同步显示。':
+    'Use an easy-to-remember name; it shows up in the launchpad layout library.',
+  '确定删除布局「{name}」吗？': 'Delete the layout "{name}"?',
+  '每次改动布局都会自动留一份快照，只保留最近 {count} 份。':
+    'A snapshot is kept after each layout change, keeping the latest {count}.',
+  '请先退出 AI 整理，再打开布局库。': 'Exit AI organize first, then open the layout library.',
+}

@@ -15,6 +15,7 @@ import type {
 import { makeFolderId, SCROLL_GROUP_ICONS } from '../model'
 import type { DesktopIcon } from '../../../types'
 import { buildIconSelectionKey } from '../../../lib/iconKey'
+import { recordAutoLayoutSnapshot } from '../../layout-library/layoutLibrary'
 
 export const LAYOUT_KEY = 'desktopgo.launchpad.layout.v1'
 export const SCROLL_LAYOUT_KEY = 'desktopgo.launchpad.layout.scroll.v1'
@@ -306,6 +307,27 @@ export const writeLayout = async (
     key,
     payload: serialized,
   })
+  recordAutoLayoutSnapshot(serialized, scope)
+}
+
+/** 读取当前布局的原始 payload（版本迁移、恢复预览都按原串写回，避免二次序列化丢字段）。 */
+export const readLayoutPayload = async (
+  scope: LaunchpadLayoutScope = 'paged'
+): Promise<string | null> => invoke<string | null>('get_layout_payload', { key: getLayoutKey(scope) })
+
+/**
+ * 直接把一份原始 payload 写回当前布局。
+ *
+ * 与 `writeLayout` 的区别：不重算坐标、不记历史快照（预览与撤销都是瞬态），
+ * 但会同步写入去重缓存，否则网格下一次保存同内容时会被误判为"已写过"而跳过。
+ */
+export const applyLayoutPayload = async (
+  payload: string,
+  scope: LaunchpadLayoutScope = 'paged'
+): Promise<void> => {
+  const key = getLayoutKey(scope)
+  await invoke('set_layout_payload', { key, payload })
+  lastWrittenPayloadByKey.set(key, payload)
 }
 
 export const writePersistedLayout = async (

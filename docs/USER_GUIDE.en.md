@@ -119,6 +119,28 @@ How to enter edit mode:
 - Right-click the empty launchpad background and click "Edit Icons"
 - Or long-press on the empty background
 
+### 🗂️ Layout Library
+
+Paged grid arrangements can be stored and swapped back in as a whole.
+
+The "Layout" context menu has two entries:
+
+- "Layout Library": opens a drawer from the bottom of the window; click a card and the grid rearranges immediately
+- "Save Current Layout": names and stores the current arrangement
+
+Clicking a card only previews it. Confirm with "Apply layout"; "Cancel" writes the previous arrangement back.
+
+The drawer has two tabs:
+
+- Saved: your named layouts, which can be renamed or deleted
+- History: a snapshot is recorded after every layout change, keeping the latest 50
+
+Each card carries a thumbnail drawn from the first two pages, so the density and arrangement are visible at a glance. Old layouts do not match when the window size, icon size, or Dock switch has changed; those cards are marked "re-flow" and applying them keeps only the icon order.
+
+The grid is locked while previewing: icons cannot be clicked, dragged, or right-clicked, and paging is the only interaction. The right side of the drawer bar collapses it to a single strip so the whole page is visible. Esc cancels.
+
+The settings page has a matching "Layout library" page: save, rename, delete, plus a read-only history list.
+
 ## ⚙️ 5. Settings Overview
 
 The settings window is mainly divided into the following areas:
@@ -168,6 +190,19 @@ Available actions:
 
 The icon library only requires importing and managing items; there are no storage directories or sync tasks to maintain.
 
+### 📐 Layout Library
+
+The Layout Library page manages paged grid layouts.
+
+Available actions:
+
+- Save the current layout under a name
+- Rename a saved layout
+- Delete a saved layout
+- Review the snapshot history (read-only, for recovering an earlier arrangement)
+
+Applying a layout does not happen here: go back to the launchpad, right-click "Layout → Layout Library", then preview and apply from the main window sidebar.
+
 ### 🔄 Updates
 
 - The update page reads update information from GitHub Releases
@@ -187,6 +222,7 @@ Main persisted data:
 
 - General settings: stored in `settings.json`
 - Launchpad layout, search settings, and related state: stored in the local SQLite database `app_state.db`
+- Saved layouts and history snapshots: the `layout_versions` table in the same `app_state.db`
 - Icon library data and icon caches: stored in the local app data directory
 
 Notes:

@@ -1177,6 +1177,23 @@ body:focus-visible {
 }
 
 /*
+ * 布局抽屉从窗口底部滑上来。抽屉是浮层不是布局的一部分：它不改网格高度，
+ * 不然一打开抽屉分页行列就会重算，预览的布局跟缩略图就对不上了。
+ */
+@keyframes launchpad-layout-drawer-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.launchpad-layout-drawer {
+  animation: launchpad-layout-drawer-in 180ms ease-out;
+}
+
+/*
  * 蒙版可以调到很低，直接压在壁纸上的文字不能再依赖主题前景色。默认沿用系统桌面
  * 图标的处理：统一白字 + 紧凑深色投影。深色投影读起来是「深度」而不是「发光」，
  * 因此在浅色壁纸上也不会像反色光晕那样抢视线。

@@ -23,7 +23,8 @@ interface UseLaunchpadSurfaceInteractionsParams {
   setSelectedIconKeys: (keys: string[]) => void
   clearSelection: () => void
   enterSelectionMode: () => void
-  isAiOrganizeMode: boolean
+  /** AI 整理或布局侧栏打开时，网格点击不再按背景点击/框选处理。 */
+  isInteractionLocked: boolean
   hasSearchKeyword: boolean
   isSearchPanelOpen: boolean
   closeSearchPanel: () => void
@@ -39,7 +40,7 @@ export function useLaunchpadSurfaceInteractions({
   setSelectedIconKeys,
   clearSelection,
   enterSelectionMode,
-  isAiOrganizeMode,
+  isInteractionLocked,
   hasSearchKeyword,
   isSearchPanelOpen,
   closeSearchPanel,
@@ -166,7 +167,7 @@ export function useLaunchpadSurfaceInteractions({
       })
       return
     }
-    if (isAiOrganizeMode || selectionMode || event.button !== 0 || hasSearchKeyword) return
+    if (isInteractionLocked || selectionMode || event.button !== 0 || hasSearchKeyword) return
     if (!startedOnBackground) return
     longPressTriggeredRef.current = false
     clearBackgroundLongPressTimer()
@@ -203,7 +204,7 @@ export function useLaunchpadSurfaceInteractions({
       if (isTrueBackgroundClick) clearSelection()
       return
     }
-    if (isAiOrganizeMode) return
+    if (isInteractionLocked) return
     if (
       windowMode === 'fullscreen' &&
       !hasSearchKeyword &&

@@ -4,6 +4,7 @@ import { getCurrentLanguage } from './i18n/language'
 import { EN_SEARCH_MESSAGES } from './i18n/searchMessages'
 import { EN_APPEARANCE_MESSAGES } from './i18n/appearanceMessages'
 import { EN_AI_MESSAGES } from './i18n/aiMessages'
+import { EN_LAYOUT_LIBRARY_MESSAGES } from './i18n/layoutMessages'
 import { EN_QUICK_IMPORT_MESSAGES } from './i18n/quickImportMessages'
 
 export { useI18n } from './i18n/context'
@@ -748,6 +749,7 @@ const EN_MESSAGES: Record<string, string> = {
   '运行时间 降序': 'Run time descending',
   ...EN_SEARCH_MESSAGES,
   ...EN_AI_MESSAGES,
+  ...EN_LAYOUT_LIBRARY_MESSAGES,
   '更新配置已刷新。': 'Updater configuration refreshed.',
   '读取更新配置失败：{error}': 'Failed to read updater configuration: {error}',
   '安装程序即将接管，应用会自动退出。':

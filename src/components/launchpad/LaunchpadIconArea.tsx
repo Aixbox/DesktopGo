@@ -25,6 +25,10 @@ interface LaunchpadIconAreaProps {
   addIconDisabled: boolean
   onAddIcon: () => void
   onQuickImport: () => void
+  /** 布局预览期间锁住网格：除翻页外的指针交互全部失效。 */
+  interactionLocked?: boolean
+  /** 翻页指示器要避开的底部高度（布局抽屉）。 */
+  paginationBottom?: number
 }
 
 /**
@@ -43,9 +47,11 @@ export function LaunchpadIconArea({
   addIconDisabled,
   onAddIcon,
   onQuickImport,
+  interactionLocked = false,
+  paginationBottom = 0,
 }: LaunchpadIconAreaProps) {
   return (
-    <div className="flex h-full min-h-0 items-center justify-center">
+    <div className="relative flex h-full min-h-0 items-center justify-center">
       {loading ? (
         <div className="flex items-center gap-3">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/40 border-t-foreground" />
@@ -150,9 +156,24 @@ export function LaunchpadIconArea({
             icons={icons}
             layoutResetToken={layoutResetToken}
             importPlacementRequest={importPlacementRequest}
+            paginationBottom={paginationBottom}
           />
         </Suspense>
       )}
+
+      {/* 布局预览的遮罩：挡住图标、Dock、文件夹弹层的所有指针事件。
+          顶部留 64px 给窗口控制按钮（最小化/关闭不是布局功能，得能按）。
+          翻页按钮与指示器的 z-index 在它之上，滚轮也会冒泡到网格根节点继续翻页。 */}
+      {interactionLocked ? (
+        <div
+          data-layout-preview-shield
+          className="absolute inset-x-0 bottom-0 top-16 z-50 cursor-default"
+          onContextMenu={event => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+        />
+      ) : null}
     </div>
   )
 }

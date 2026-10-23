@@ -21,6 +21,7 @@ import {
   RefreshCw,
   Info,
   Images,
+  LayoutTemplate,
   Search,
   Minus,
   Square,
@@ -32,17 +33,26 @@ import { AboutPanel } from '@/components/settings/AboutPanel'
 import { AiSettingsPanel } from '@/components/settings/AiSettingsPanel'
 import { GeneralSettingsPanel } from '@/components/settings/GeneralSettingsPanel'
 import { IconManagerPanel } from '@/components/settings/IconManagerPanel'
+import { LayoutLibraryPanel } from '@/components/settings/LayoutLibraryPanel'
 import {
   shouldSkipReturnToMainOnClose,
   waitForWindowPersistentSync,
 } from '@/components/settings/windowPersistentSync'
 
-type NavItem = 'settings' | 'search' | 'iconManager' | 'ai' | 'update' | 'about'
+type NavItem =
+  | 'settings'
+  | 'search'
+  | 'iconManager'
+  | 'layoutLibrary'
+  | 'ai'
+  | 'update'
+  | 'about'
 
 const NAV_ITEMS: { key: NavItem; label: string; icon: ReactNode }[] = [
   { key: 'settings', label: '设置', icon: <SettingsIcon className="w-4 h-4" /> },
   { key: 'search', label: '搜索', icon: <Search className="w-4 h-4" /> },
   { key: 'iconManager', label: '图标库', icon: <Images className="w-4 h-4" /> },
+  { key: 'layoutLibrary', label: '布局库', icon: <LayoutTemplate className="w-4 h-4" /> },
   { key: 'ai', label: 'AI 助手', icon: <Bot className="w-4 h-4" /> },
   { key: 'update', label: '更新', icon: <RefreshCw className="w-4 h-4" /> },
   { key: 'about', label: '关于', icon: <Info className="w-4 h-4" /> },
@@ -52,6 +62,7 @@ const NAV_CONTENT_WIDTH: Record<NavItem, string> = {
   settings: 'max-w-[1120px]',
   search: 'max-w-[1180px]',
   iconManager: 'max-w-[1240px]',
+  layoutLibrary: 'max-w-[1120px]',
   ai: 'max-w-[1120px]',
   update: 'max-w-[1240px]',
   about: 'max-w-[1360px]',
@@ -93,7 +104,8 @@ export function Settings() {
   const initialTab = useMemo(() => {
     const params = new URLSearchParams(window.location.search)
     const tab = params.get('tab')
-    return (tab && ['settings', 'search', 'iconManager', 'ai', 'update', 'about'].includes(tab)
+    return (tab &&
+      ['settings', 'search', 'iconManager', 'layoutLibrary', 'ai', 'update', 'about'].includes(tab)
       ? tab
       : 'settings') as NavItem
   }, [])
@@ -297,6 +309,7 @@ export function Settings() {
                 <SearchSettingsPanel onOpenIconLibrary={openIconManager} />
               )}
               {activeNav === 'iconManager' && <IconManagerPanel />}
+              {activeNav === 'layoutLibrary' && <LayoutLibraryPanel />}
               {activeNav === 'ai' && <AiSettingsPanel />}
               {activeNav === 'update' && <UpdatePanel />}
               {activeNav === 'about' && <AboutPanel />}

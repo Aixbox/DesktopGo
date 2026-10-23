@@ -9,12 +9,15 @@ import {
   FileType2,
   Folder,
   FolderCog,
+  LayoutTemplate,
+  Library,
   ListChecks,
   MonitorCog,
   PanelsTopLeft,
   Plus,
   Presentation,
   Rows3,
+  Save,
   Scaling,
   Settings,
   type LucideIcon,
@@ -103,6 +106,8 @@ interface LaunchpadContextMenuContentProps {
   onCreateNewFile: (kind: string) => void
   onSelectIcons: () => void
   onAiOrganize: () => void
+  onOpenLayoutLibrary: () => void
+  onSaveLayout: () => void
   onOpenSettings: () => void
 }
 
@@ -112,6 +117,8 @@ export function LaunchpadContextMenuContent({
   onCreateNewFile,
   onSelectIcons,
   onAiOrganize,
+  onOpenLayoutLibrary,
+  onSaveLayout,
   onOpenSettings,
 }: LaunchpadContextMenuContentProps) {
   const {
@@ -200,6 +207,22 @@ export function LaunchpadContextMenuContent({
         <Bot className={MENU_ICON_CLASS} aria-hidden="true" />
         {translate('AI 智能整理')}
       </ContextMenuItem>
+      <ContextMenuSub>
+        <ContextMenuSubTrigger className="gap-2">
+          <LayoutTemplate className={MENU_ICON_CLASS} aria-hidden="true" />
+          {translate('布局')}
+        </ContextMenuSubTrigger>
+        <ContextMenuSubContent className="w-48">
+          <ContextMenuItem className="gap-2" onSelect={onOpenLayoutLibrary}>
+            <Library className={MENU_ICON_CLASS} aria-hidden="true" />
+            {translate('布局库')}
+          </ContextMenuItem>
+          <ContextMenuItem className="gap-2" onSelect={onSaveLayout}>
+            <Save className={MENU_ICON_CLASS} aria-hidden="true" />
+            {translate('保存当前布局')}
+          </ContextMenuItem>
+        </ContextMenuSubContent>
+      </ContextMenuSub>
       <ContextMenuSeparator />
       <ContextMenuCheckboxItem
         className="gap-2"
