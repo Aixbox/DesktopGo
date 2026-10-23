@@ -144,25 +144,31 @@ export function useLayoutLibraryController({
     toast.success(translate('已应用布局。'), { key: 'layout-library', title: translate('布局') })
   }, [finish, previewId, toast])
 
-  /** 把网格写回打开抽屉时记下的原样；不动抽屉的开关状态。 */
-  const restoreBaselineLayout = useCallback(async () => {
-    const baseline = baselineRef.current
-    if (baseline === null) return
-    try {
-      const { applyLayoutPayload } = await import('@/components/icon-grid/services/layoutStore')
-      await applyLayoutPayload(baseline, 'paged')
-      bumpLayoutToken()
-      await fetchIcons()
-    } catch (error) {
-      reportError(translate('恢复原布局失败'), error)
-    }
-  }, [bumpLayoutToken, fetchIcons, reportError])
+  /**
+   * 把网格写回打开抽屉时记下的原样；不动抽屉的开关状态。
+   * 原串显式传入：`finish()` 会清空 baselineRef，靠调用方在关抽屉前先取出来。
+   */
+  const restoreBaselineLayout = useCallback(
+    async (baseline: string | null) => {
+      if (baseline === null) return
+      try {
+        const { applyLayoutPayload } = await import('@/components/icon-grid/services/layoutStore')
+        await applyLayoutPayload(baseline, 'paged')
+        bumpLayoutToken()
+        await fetchIcons()
+      } catch (error) {
+        reportError(translate('恢复原布局失败'), error)
+      }
+    },
+    [bumpLayoutToken, fetchIcons, reportError]
+  )
 
   const cancelPreview = useCallback(async () => {
     const hadPreview = previewId !== null
+    const baseline = baselineRef.current
     finish()
     if (!hadPreview) return
-    await restoreBaselineLayout()
+    await restoreBaselineLayout(baseline)
   }, [finish, previewId, restoreBaselineLayout])
 
   // 预览期间启动台失焦（用户切走 / 窗口被隐藏）：把预览收掉。
@@ -249,8 +255,9 @@ export function useLayoutLibraryController({
         // 删掉的正是当前预览的那份：预览对象没了，网格写回打开抽屉时的原样，
         // 但抽屉留着（用户可能接着删/选别的），所以不走 cancelPreview。
         if (version.id === previewId) {
+          const baseline = baselineRef.current
           setPreviewId(null)
-          await restoreBaselineLayout()
+          await restoreBaselineLayout(baseline)
         }
         setRefreshToken(current => current + 1)
         toast.success(translate('已删除布局「{name}」。', { name: label }), {
