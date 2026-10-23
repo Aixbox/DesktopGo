@@ -132,7 +132,7 @@ Clicking a card only previews it. Confirm with "Apply layout"; "Cancel" writes t
 
 The drawer has two tabs:
 
-- Saved: your named layouts, which can be renamed or deleted
+- Saved: your named layouts. Hover a card to reveal rename and delete buttons in its top-right corner
 - History: a snapshot is recorded after every layout change, keeping the latest 50
 
 Each card carries a thumbnail drawn from the first two pages, so the density and arrangement are visible at a glance. Old layouts do not match when the window size, icon size, or Dock switch has changed; those cards are marked "re-flow" and applying them keeps only the icon order.
@@ -201,7 +201,7 @@ Available actions:
 - Delete a saved layout
 - Review the snapshot history (read-only, for recovering an earlier arrangement)
 
-Applying a layout does not happen here: go back to the launchpad, right-click "Layout → Layout Library", then preview and apply from the main window sidebar.
+Applying a layout does not happen here: go back to the launchpad, right-click "Layout → Layout Library", then preview and apply from the drawer at the bottom of the main window.
 
 ### 🔄 Updates
 

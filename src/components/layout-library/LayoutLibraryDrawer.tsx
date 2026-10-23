@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react'
 import type { WheelEvent } from 'react'
-import { ChevronDown, ChevronUp, History, LayoutTemplate, Loader2 } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronUp,
+  History,
+  LayoutTemplate,
+  Loader2,
+  Pencil,
+  Trash2,
+} from 'lucide-react'
 import { translate } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -23,6 +31,8 @@ interface LayoutLibraryDrawerProps {
   onApply: () => void | Promise<void>
   onCancel: () => void | Promise<void>
   onSaveCurrent: () => void
+  onRename: (version: LayoutVersionMeta) => void
+  onDelete: (version: LayoutVersionMeta) => void | Promise<void>
 }
 
 type DrawerTab = 'saved' | 'history'
@@ -38,36 +48,73 @@ interface VersionCardProps {
   active: boolean
   geometryMatched: boolean
   onSelect: () => void
+  onRename: () => void
+  onDelete: () => void
 }
 
-function VersionCard({ version, active, geometryMatched, onSelect }: VersionCardProps) {
+/* 卡片本身是按钮，重命名/删除不能塞进它里面（按钮不能嵌套），
+   所以两个动作做成浮在缩略图上的兄弟节点，只在悬停或键盘聚焦时露出来。 */
+function VersionCard({
+  version,
+  active,
+  geometryMatched,
+  onSelect,
+  onRename,
+  onDelete,
+}: VersionCardProps) {
   const pages = pageCount(version)
+  const manageable = version.kind === 'saved'
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        'flex h-[104px] w-[136px] shrink-0 flex-col gap-1.5 rounded-xl border p-1.5 text-left transition-colors',
-        active
-          ? 'border-primary/55 bg-primary/10'
-          : 'border-border/70 bg-card/70 hover:border-border hover:bg-accent/60'
-      )}
-    >
-      <div className="relative h-[52px] w-full rounded-md bg-foreground/[0.04] p-1">
-        <LayoutThumbnailView thumbnail={version.thumbnail} />
-        {geometryMatched ? null : (
-          <span className="absolute right-1 top-1 rounded bg-background/85 px-1 text-[9px] leading-4 text-muted-foreground">
-            {translate('重排')}
-          </span>
+    <div className="group relative shrink-0">
+      <button
+        type="button"
+        onClick={onSelect}
+        className={cn(
+          'flex h-[104px] w-[136px] flex-col gap-1.5 rounded-xl border p-1.5 text-left transition-colors',
+          active
+            ? 'border-primary/55 bg-primary/10'
+            : 'border-border/70 bg-card/70 hover:border-border hover:bg-accent/60'
         )}
-      </div>
-      <span className="truncate text-xs font-medium">{versionLabel(version)}</span>
-      <span className="truncate text-[10px] leading-3 text-muted-foreground">
-        {translate('{count} 个图标', { count: version.iconCount })}
-        {pages > 1 ? ` · ${translate('{count} 页', { count: pages })}` : ''}
-        {version.name ? ` · ${formatLayoutVersionTime(version.createdAt)}` : ''}
-      </span>
-    </button>
+      >
+        <div className="relative h-[52px] w-full rounded-md bg-foreground/[0.04] p-1">
+          <LayoutThumbnailView thumbnail={version.thumbnail} />
+          {geometryMatched ? null : (
+            <span className="absolute left-1 top-1 rounded bg-background/85 px-1 text-[9px] leading-4 text-muted-foreground">
+              {translate('重排')}
+            </span>
+          )}
+        </div>
+        <span className="truncate text-xs font-medium">{versionLabel(version)}</span>
+        <span className="truncate text-[10px] leading-3 text-muted-foreground">
+          {translate('{count} 个图标', { count: version.iconCount })}
+          {pages > 1 ? ` · ${translate('{count} 页', { count: pages })}` : ''}
+          {version.name ? ` · ${formatLayoutVersionTime(version.createdAt)}` : ''}
+        </span>
+      </button>
+
+      {manageable ? (
+        <div className="pointer-events-none absolute right-1 top-1 flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
+          <button
+            type="button"
+            aria-label={translate('重命名布局')}
+            title={translate('重命名布局')}
+            onClick={onRename}
+            className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border border-border/70 bg-background/90 text-muted-foreground shadow-sm backdrop-blur-sm transition-colors hover:text-foreground"
+          >
+            <Pencil className="h-2.5 w-2.5" />
+          </button>
+          <button
+            type="button"
+            aria-label={translate('删除布局')}
+            title={translate('删除布局')}
+            onClick={onDelete}
+            className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border border-border/70 bg-background/90 text-muted-foreground shadow-sm backdrop-blur-sm transition-colors hover:border-destructive/40 hover:text-destructive"
+          >
+            <Trash2 className="h-2.5 w-2.5" />
+          </button>
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -82,6 +129,8 @@ export function LayoutLibraryDrawer({
   onApply,
   onCancel,
   onSaveCurrent,
+  onRename,
+  onDelete,
 }: LayoutLibraryDrawerProps) {
   const toast = useToast()
   const [versions, setVersions] = useState<LayoutVersionMeta[] | null>(null)
@@ -132,7 +181,7 @@ export function LayoutLibraryDrawer({
     <div className="absolute inset-x-0 bottom-0 z-[60]">
       <div
         data-layout-drawer
-        className="launchpad-layout-drawer border-t border-border/80 bg-card/92 shadow-[0_-18px_48px_rgba(15,23,42,0.24)] backdrop-blur-xl"
+        className="launchpad-layout-drawer overflow-hidden rounded-t-2xl border-t border-border/80 bg-card/92 shadow-[0_-18px_48px_rgba(15,23,42,0.24)] backdrop-blur-xl"
         onWheel={handleWheel}
       >
         <div className="flex h-12 items-center gap-2 px-4">
@@ -213,6 +262,8 @@ export function LayoutLibraryDrawer({
                     active={version.id === previewId}
                     geometryMatched={version.geometryKey === currentGeometryKey}
                     onSelect={() => void onPreview(version)}
+                    onRename={() => onRename(version)}
+                    onDelete={() => void onDelete(version)}
                   />
                 ))}
               </div>

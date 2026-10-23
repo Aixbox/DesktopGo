@@ -43,10 +43,13 @@ export const EN_LAYOUT_LIBRARY_MESSAGES: Record<string, string> = {
   重命名: 'Rename',
   重命名布局: 'Rename layout',
   重命名失败: 'Rename failed',
+  删除布局: 'Delete layout',
   删除布局失败: 'Failed to delete the layout',
   '换个好记的名字，启动台的布局库里会同步显示。':
     'Use an easy-to-remember name; it shows up in the launchpad layout library.',
   '确定删除布局「{name}」吗？': 'Delete the layout "{name}"?',
+  '已重命名为「{name}」。': 'Renamed to "{name}".',
+  '已删除布局「{name}」。': 'Deleted the layout "{name}".',
   '每次改动布局都会自动留一份快照，只保留最近 {count} 份。':
     'A snapshot is kept after each layout change, keeping the latest {count}.',
   '请先退出 AI 整理，再打开布局库。': 'Exit AI organize first, then open the layout library.',

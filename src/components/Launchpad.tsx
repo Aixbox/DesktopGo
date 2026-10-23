@@ -209,13 +209,15 @@ export function Launchpad() {
     isLayoutLibraryOpen,
     layoutPreviewId,
     layoutVersionsRefreshToken,
-    layoutNameDialogOpen,
+    layoutNameDialog,
     openLayoutLibrary,
     previewLayoutVersion,
     applyLayoutPreview,
     cancelLayoutPreview,
-    saveCurrentLayout,
+    submitLayoutName,
     openLayoutNameDialog,
+    openLayoutRenameDialog,
+    deleteLayoutVersion,
     closeLayoutNameDialog,
   } = layoutLibrary
   const [layoutDrawerCollapsed, setLayoutDrawerCollapsed] = useState(false)
@@ -917,6 +919,8 @@ export function Launchpad() {
                 onApply={applyLayoutPreview}
                 onCancel={cancelLayoutPreview}
                 onSaveCurrent={openLayoutNameDialog}
+                onRename={openLayoutRenameDialog}
+                onDelete={deleteLayoutVersion}
               />
             ) : null}
           </div>
@@ -936,13 +940,22 @@ export function Launchpad() {
         onSaveLayout={openLayoutNameDialog}
         onOpenSettings={openSettings}
       />
-      {layoutNameDialogOpen ? (
+      {layoutNameDialog ? (
         <LayoutNameDialog
-          title={translate('保存当前布局')}
-          description={translate('给当前的分页布局起个名字，之后可以在布局库里一键应用。')}
-          confirmLabel={translate('保存')}
+          title={
+            layoutNameDialog.mode === 'rename' ? translate('重命名布局') : translate('保存当前布局')
+          }
+          description={
+            layoutNameDialog.mode === 'rename'
+              ? translate('换个好记的名字，启动台的布局库里会同步显示。')
+              : translate('给当前的分页布局起个名字，之后可以在布局库里一键应用。')
+          }
+          initialName={layoutNameDialog.mode === 'rename' ? layoutNameDialog.initialName : ''}
+          confirmLabel={
+            layoutNameDialog.mode === 'rename' ? translate('重命名') : translate('保存')
+          }
           onCancel={closeLayoutNameDialog}
-          onConfirm={saveCurrentLayout}
+          onConfirm={submitLayoutName}
         />
       ) : null}
       <LaunchpadIconImportLayer controller={iconImport} />
