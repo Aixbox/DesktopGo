@@ -40,7 +40,7 @@ fn normalize_window_mode(value: &str) -> Option<&'static str> {
     }
 }
 
-fn read_saved_window_mode(app: &tauri::AppHandle) -> Option<&'static str> {
+pub(crate) fn read_saved_window_mode(app: &tauri::AppHandle) -> Option<&'static str> {
     app.store(storage_profile::settings_store_path())
         .ok()
         .and_then(|store| {
@@ -326,15 +326,18 @@ pub(crate) fn sync_main_window_dom_visibility(window: &tauri::WebviewWindow, del
     let _ = window.eval(script);
 }
 
-pub(crate) fn resolve_initial_main_window_size(app: &tauri::AppHandle) -> (f64, f64) {
-    let (width, height) = match read_saved_window_mode(app) {
+/// 已保存窗口模式对应的内容区尺寸（逻辑像素，不含四周阴影留白）。
+///
+/// 已删除的 small 模式在读取时归一化为 None，与前端一起回退到中等窗口。
+pub(crate) fn resolve_saved_main_window_content_size(app: &tauri::AppHandle) -> (f64, f64) {
+    match read_saved_window_mode(app) {
         Some("large") => (MAIN_WINDOW_LARGE_WIDTH, MAIN_WINDOW_LARGE_HEIGHT),
-        // 已删除的 small 模式在读取时归一化为 None，与前端一起回退到中等窗口。
-        Some("fullscreen") | Some("medium") | None => {
-            (MAIN_WINDOW_MEDIUM_WIDTH, MAIN_WINDOW_MEDIUM_HEIGHT)
-        }
-        Some(_) => (MAIN_WINDOW_MEDIUM_WIDTH, MAIN_WINDOW_MEDIUM_HEIGHT),
-    };
+        _ => (MAIN_WINDOW_MEDIUM_WIDTH, MAIN_WINDOW_MEDIUM_HEIGHT),
+    }
+}
+
+pub(crate) fn resolve_initial_main_window_size(app: &tauri::AppHandle) -> (f64, f64) {
+    let (width, height) = resolve_saved_main_window_content_size(app);
     window_size_with_shadow(width, height)
 }
 

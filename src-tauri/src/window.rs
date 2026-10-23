@@ -20,11 +20,12 @@ use crate::tray::{refresh_settings_window_title, refresh_tray_menu, settings_win
 use crate::window_style::{
     apply_main_window_runtime_mode, apply_main_window_style, build_window_bootstrap_script,
     main_window_persistent_enabled, main_window_should_use_transparent_surface,
-    main_window_uses_delayed_reveal, read_saved_window_style, resolve_initial_main_window_size,
-    resolve_main_window_background_color, resolved_theme_is_dark,
+    main_window_uses_delayed_reveal, read_saved_window_mode, read_saved_window_style,
+    resolve_initial_main_window_size, resolve_main_window_background_color,
+    resolve_saved_main_window_content_size, resolved_theme_is_dark,
     schedule_main_window_style_refresh, sync_main_window_dom_visibility, window_size_with_shadow,
 };
-use crate::MainWindowState;
+use crate::{DisplayLayout, MainWindowState};
 
 const MAIN_WINDOW_FOCUS_RETRY_DELAY_MS: u64 = 40;
 const MAIN_WINDOW_BLUR_GUARD_MS: u64 = 1200;
@@ -100,6 +101,8 @@ pub(crate) fn show_main_window(app: &tauri::AppHandle) {
         let delayed_reveal = main_window_uses_delayed_reveal(app);
         sync_main_window_dom_visibility(&window, delayed_reveal);
         let _ = window.unminimize();
+        // 改过分辨率/缩放后，旧的居中坐标已经失效，显示前先摆回工作区正中。
+        align_main_window_to_display(app, &window);
         let _ = window.show();
         if let Err(error) = crate::window_icon::refresh(&window) {
             eprintln!("Warning: Failed to refresh main window icon after showing: {error}");
@@ -118,6 +121,154 @@ pub(crate) fn show_main_window(app: &tauri::AppHandle) {
         refresh_tray_menu(app);
         schedule_main_window_focus_retry(app.clone());
     }
+}
+
+/// 主窗口所在显示器的工作区与缩放比例。
+fn resolve_display_layout(window: &tauri::WebviewWindow) -> Option<DisplayLayout> {
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten())?;
+    let work_area = monitor.work_area();
+
+    Some(DisplayLayout {
+        monitor: monitor.name().cloned(),
+        x: work_area.position.x,
+        y: work_area.position.y,
+        width: work_area.size.width,
+        height: work_area.size.height,
+        scale_milli: (monitor.scale_factor() * 1000.0).round() as u32,
+    })
+}
+
+/// 记下当前显示器布局，作为下次判断“分辨率/缩放变了没有”的基准。
+fn store_display_layout(app: &tauri::AppHandle, layout: DisplayLayout) {
+    if let Ok(mut stored) = app.state::<MainWindowState>().display_layout.lock() {
+        *stored = Some(layout);
+    }
+}
+
+fn remember_display_layout(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
+    if let Some(layout) = resolve_display_layout(window) {
+        store_display_layout(app, layout);
+    }
+}
+
+/// 是否要按当前显示器重新摆放主窗口。
+///
+/// 同一台显示器换了分辨率或缩放：旧坐标已经不是居中位置，必须重排。
+/// 换到另一台显示器是用户自己拖过去的，保持原样；但窗口整块落在工作区外时得拉回来。
+fn main_window_needs_display_realign(
+    previous: Option<&DisplayLayout>,
+    current: &DisplayLayout,
+    outside_work_area: bool,
+) -> bool {
+    let layout_changed =
+        previous.is_some_and(|previous| previous.monitor == current.monitor && previous != current);
+    layout_changed || outside_work_area
+}
+
+fn bounds_outside_work_area(
+    left: i32,
+    top: i32,
+    width: u32,
+    height: u32,
+    layout: &DisplayLayout,
+) -> bool {
+    let right = left + width as i32;
+    let bottom = top + height as i32;
+    let area_right = layout.x + layout.width as i32;
+    let area_bottom = layout.y + layout.height as i32;
+
+    right <= layout.x || left >= area_right || bottom <= layout.y || top >= area_bottom
+}
+
+fn main_window_outside_work_area(window: &tauri::WebviewWindow, layout: &DisplayLayout) -> bool {
+    let (Ok(position), Ok(size)) = (window.outer_position(), window.outer_size()) else {
+        return false;
+    };
+
+    bounds_outside_work_area(position.x, position.y, size.width, size.height, layout)
+}
+
+fn center_position_in_layout(layout: &DisplayLayout, width: u32, height: u32) -> (i32, i32) {
+    (
+        layout.x + (layout.width as i32 - width as i32) / 2,
+        layout.y + (layout.height as i32 - height as i32) / 2,
+    )
+}
+
+/// 主窗口内容区的目标物理尺寸（含四周阴影留白，与建窗时的 `inner_size` 一致）。
+/// 全屏模式铺满工作区；屏幕比窗口还小时按工作区截断，免得居中出现负坐标。
+fn main_window_target_size(app: &tauri::AppHandle, layout: &DisplayLayout) -> (u32, u32) {
+    let (width, height) = if read_saved_window_mode(app) == Some("fullscreen") {
+        (layout.width, layout.height)
+    } else {
+        let (content_width, content_height) = resolve_saved_main_window_content_size(app);
+        let (width, height) = window_size_with_shadow(content_width, content_height);
+        let scale = f64::from(layout.scale_milli) / 1000.0;
+        (
+            (width * scale).round() as u32,
+            (height * scale).round() as u32,
+        )
+    };
+
+    clamp_to_work_area(width, height, layout)
+}
+
+fn clamp_to_work_area(width: u32, height: u32, layout: &DisplayLayout) -> (u32, u32) {
+    (
+        width.clamp(1, layout.width.max(1)),
+        height.clamp(1, layout.height.max(1)),
+    )
+}
+
+fn place_main_window_in_layout(
+    app: &tauri::AppHandle,
+    window: &tauri::WebviewWindow,
+    layout: &DisplayLayout,
+) -> Result<(), String> {
+    let (width, height) = main_window_target_size(app, layout);
+    let (x, y) = center_position_in_layout(layout, width, height);
+
+    window
+        .set_size(tauri::PhysicalSize::new(width, height))
+        .map_err(|error| format!("Failed to resize main window after display change: {error}"))?;
+    window
+        .set_position(tauri::PhysicalPosition::new(x, y))
+        .map_err(|error| format!("Failed to move main window after display change: {error}"))
+}
+
+/// 显示前按当前显示器校正主窗口位置。
+///
+/// 建窗时 `center()` 只算一次位置，之后 `show()` 不会重算，所以改了分辨率或缩放再按
+/// Ctrl+Space 呼出时，窗口还停在旧工作区的坐标上。这里只在显示器布局真的变了（或窗口
+/// 已经落回工作区外）时才重排，用户自己拖到别处、换到另一台显示器的位置都保留。
+fn align_main_window_to_display(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
+    // 最小化时窗口矩形是任务栏图标位置、`SetWindowPos` 也改不了恢复位置，
+    // 这一步直接跳过：既不动窗口，也不把主显示器的布局误写成基准。
+    if window.is_minimized().unwrap_or(false) {
+        return;
+    }
+    let Some(layout) = resolve_display_layout(window) else {
+        return;
+    };
+    let state = app.state::<MainWindowState>();
+    let outside = main_window_outside_work_area(window, &layout);
+    let previous = state
+        .display_layout
+        .lock()
+        .ok()
+        .and_then(|stored| stored.as_ref().cloned());
+
+    if main_window_needs_display_realign(previous.as_ref(), &layout, outside) {
+        if let Err(error) = place_main_window_in_layout(app, window, &layout) {
+            eprintln!("Warning: {error}");
+        }
+    }
+
+    store_display_layout(app, layout);
 }
 
 pub(crate) fn hide_main_window(app: &tauri::AppHandle) {
@@ -264,6 +415,8 @@ pub(crate) fn create_main_window(app: &tauri::AppHandle) {
 
     match builder.build() {
         Ok(window) => {
+            // 建窗时 `center()` 用的是当前显示器，这个快照就是后续比对的基准。
+            remember_display_layout(app, &window);
             if let Err(error) = crate::window_icon::install(&window) {
                 eprintln!("Warning: Failed to install main window icon: {error}");
             }
@@ -709,5 +862,113 @@ mod tests {
             resolve_activation_window_pos_flags() | SWP_SHOWWINDOW,
             resolve_activation_window_pos_flags()
         );
+    }
+
+    fn layout(monitor: &str, x: i32, y: i32, width: u32, height: u32) -> DisplayLayout {
+        DisplayLayout {
+            monitor: Some(monitor.to_string()),
+            x,
+            y,
+            width,
+            height,
+            scale_milli: 1000,
+        }
+    }
+
+    #[test]
+    fn display_realign_ignores_the_first_snapshot() {
+        // 建窗时已经居中过，没有基准就没有“变化”，不该多动一次窗口。
+        assert!(!main_window_needs_display_realign(
+            None,
+            &layout("\\\\.\\DISPLAY1", 0, 0, 1920, 1040),
+            false
+        ));
+    }
+
+    #[test]
+    fn display_realign_triggers_when_the_same_monitor_changes_resolution() {
+        let previous = layout("\\\\.\\DISPLAY1", 0, 0, 1920, 1040);
+        let current = layout("\\\\.\\DISPLAY1", 0, 0, 2560, 1400);
+
+        assert!(main_window_needs_display_realign(
+            Some(&previous),
+            &current,
+            false
+        ));
+    }
+
+    #[test]
+    fn display_realign_triggers_when_the_scale_factor_changes() {
+        let previous = layout("\\\\.\\DISPLAY1", 0, 0, 1920, 1040);
+        let mut current = previous.clone();
+        current.scale_milli = 1500;
+
+        assert!(main_window_needs_display_realign(
+            Some(&previous),
+            &current,
+            false
+        ));
+    }
+
+    #[test]
+    fn display_realign_keeps_the_window_where_the_user_dragged_it() {
+        // 用户把启动台拖到副屏：显示器换了，位置是用户挑的，不要抢回来。
+        let previous = layout("\\\\.\\DISPLAY1", 0, 0, 1920, 1040);
+        let current = layout("\\\\.\\DISPLAY2", 1920, 0, 2560, 1400);
+
+        assert!(!main_window_needs_display_realign(
+            Some(&previous),
+            &current,
+            false
+        ));
+    }
+
+    #[test]
+    fn display_realign_pulls_back_a_window_left_outside_the_work_area() {
+        let previous = layout("\\\\.\\DISPLAY1", 0, 0, 1920, 1040);
+
+        assert!(main_window_needs_display_realign(
+            Some(&previous),
+            &previous,
+            true
+        ));
+    }
+
+    #[test]
+    fn work_area_overlap_detects_a_fully_displaced_window() {
+        let area = layout("\\\\.\\DISPLAY1", 0, 0, 1920, 1040);
+
+        // 1920x1040 缩到 1280x720 后，原来居中的 1312x752 窗口右侧和下方都出了界，
+        // 但仍有重叠：不算“整块跑出去”，靠分辨率变化判断。
+        assert!(!bounds_outside_work_area(304, 144, 1312, 752, &area));
+        assert!(bounds_outside_work_area(-4000, 0, 1312, 752, &area));
+        assert!(bounds_outside_work_area(0, 2000, 1312, 752, &area));
+        assert!(bounds_outside_work_area(1920, 0, 1312, 752, &area));
+    }
+
+    #[test]
+    fn center_position_follows_the_work_area_origin() {
+        let primary = layout("\\\\.\\DISPLAY1", 0, 0, 1920, 1040);
+        assert_eq!(center_position_in_layout(&primary, 1312, 752), (304, 144));
+
+        // 副屏在主屏左侧时工作区 x 为负，居中位置也要跟着移。
+        let secondary = layout("\\\\.\\DISPLAY2", -1920, 0, 1920, 1040);
+        assert_eq!(
+            center_position_in_layout(&secondary, 1312, 752),
+            (-1616, 144)
+        );
+    }
+
+    #[test]
+    fn window_size_shrinks_only_when_it_cannot_fit_the_work_area() {
+        let area = layout("\\\\.\\DISPLAY1", 0, 0, 1920, 1040);
+
+        assert_eq!(clamp_to_work_area(1312, 752, &area), (1312, 752));
+        assert_eq!(clamp_to_work_area(1632, 932, &area), (1632, 932));
+
+        // 1280x720 的屏幕上，大窗口只能截断到工作区，否则居中出现负坐标。
+        let small = layout("\\\\.\\DISPLAY1", 0, 0, 1280, 680);
+        assert_eq!(clamp_to_work_area(1312, 752, &small), (1280, 680));
+        assert_eq!(center_position_in_layout(&small, 1280, 680), (0, 0));
     }
 }

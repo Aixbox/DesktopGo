@@ -53,8 +53,8 @@ use std::sync::atomic::Ordering;
 use tauri::{Manager, RunEvent};
 
 pub(crate) use app_state::{
-    MainWindowState, WindowPersistentChangedPayload, SETTINGS_RETURNED_TO_MAIN_EVENT,
-    WINDOW_PERSISTENT_CHANGED_EVENT,
+    DisplayLayout, MainWindowState, WindowPersistentChangedPayload,
+    SETTINGS_RETURNED_TO_MAIN_EVENT, WINDOW_PERSISTENT_CHANGED_EVENT,
 };
 pub(crate) use startup::{read_launch_on_startup_enabled, set_launch_on_startup_enabled};
 pub(crate) use tray::TrayState;
