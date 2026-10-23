@@ -75,6 +75,12 @@ struct GridArea {
     rows: i64,
 }
 
+/// 缩略图结构版本。
+///
+/// 2 起文件夹成员图标按网格的真实九宫格带上（之前只存 4 个），画法也从
+/// 「逐格平铺」改成了「按锚点 + 跨度铺」。低于这个版本的记录启动时重算。
+const THUMBNAIL_VERSION: i64 = 2;
+
 /// 列表里画的缩略图：只存第一页，按锚点和跨度铺开。
 ///
 /// 早先存的是 0/1 占用表，画出来一片灰格子；现在存的是每个 item 的位置和图标 id，
@@ -82,6 +88,9 @@ struct GridArea {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutThumbnail {
+    /// 结构版本；缺省的旧记录按 1 处理，会被回填重算。
+    #[serde(default = "default_thumbnail_version")]
+    pub version: i64,
     pub columns: i64,
     pub rows: i64,
     /// 第一页里所有锚点；`default` 是给旧库里其它版本的缩略图留的兼容。
@@ -90,6 +99,10 @@ pub struct LayoutThumbnail {
     /// 总页数（不只是画出来的第一页）。
     #[serde(default)]
     pub page_total: i64,
+}
+
+fn default_thumbnail_version() -> i64 {
+    1
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -120,18 +133,19 @@ pub(crate) fn ensure_schema(conn: &Connection) -> Result<(), String> {
     backfill_thumbnails(conn)
 }
 
-/// 老记录的缩略图是 0/1 占用表或逐格列表，画不出文件夹和真实跨度。
-/// 按 payload 重算一遍补上，没有 pageSize/columns 的重算不出来，保持原样。
+/// 老记录的缩略图结构对不上（0/1 占用表、逐格列表，或者只带了 4 个成员图标），
+/// 按 payload 重算一遍补上；没有 pageSize/columns 的重算不出来，保持原样。
 /// 启动时跑一次，行数受上限约束。
 fn backfill_thumbnails(conn: &Connection) -> Result<(), String> {
+    let outdated = format!("%\"version\":{}%", THUMBNAIL_VERSION);
     let mut stmt = conn
         .prepare(
             "SELECT id, payload FROM layout_versions
-             WHERE thumbnail IS NULL OR thumbnail NOT LIKE '%\"entries\"%'",
+             WHERE thumbnail IS NULL OR thumbnail NOT LIKE ?1",
         )
         .map_err(|e| format!("Failed to prepare the thumbnail backfill: {}", e))?;
     let pending = stmt
-        .query_map([], |row| {
+        .query_map(params![outdated], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
         .map_err(|e| format!("Failed to read layouts for the thumbnail backfill: {}", e))?
@@ -247,6 +261,7 @@ fn build_thumbnail(payload: &serde_json::Value) -> Option<LayoutThumbnail> {
     let cells_per_page = (columns * rows) as usize;
     let total_cells = slots.len().max(items.len()).max(1);
     Some(LayoutThumbnail {
+        version: THUMBNAIL_VERSION,
         columns,
         rows,
         entries,
@@ -463,7 +478,11 @@ fn entry_from(item: &serde_json::Value, key: &str, area: GridArea) -> ThumbnailE
     }
 }
 
-/// 文件夹里前 4 个图标的 key，缩略图按这个画内部的小预览。
+/// 文件夹里最多带多少个成员图标：2x2 文件夹在网格里是 3x3 九格，塞满时最后一格
+/// 再摊成 2x2 的迷你预览，所以 8 + 4 起步，多留一个。
+const FOLDER_PREVIEW_CHILD_LIMIT: usize = 13;
+
+/// 文件夹成员图标的 key，缩略图按这个画内部的小预览。
 fn folder_children(item: &serde_json::Value) -> Vec<String> {
     item.get("children")
         .and_then(|value| value.as_array())
@@ -471,7 +490,7 @@ fn folder_children(item: &serde_json::Value) -> Vec<String> {
             children
                 .iter()
                 .filter_map(|child| child.as_str())
-                .take(4)
+                .take(FOLDER_PREVIEW_CHILD_LIMIT)
                 .map(str::to_string)
                 .collect()
         })
@@ -741,8 +760,8 @@ mod tests {
                     cols: 2,
                     rows: 2,
                     name: Some("工具".into()),
-                    // 缩略图只画前 4 个小预览。
-                    children: vec!["x".into(), "y".into(), "z".into(), "w".into()],
+                    // 2x2 是 3x3 九格，成员图标全带上。
+                    children: vec!["x".into(), "y".into(), "z".into(), "w".into(), "v".into()],
                 },
                 // 第 7 个槽位落在第三行第一列，文件夹的 footprint 不影响它。
                 ThumbnailEntry {

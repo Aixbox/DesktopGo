@@ -60,6 +60,12 @@ export function LayoutLibraryPanel() {
     if (icons.length === 0) void fetchIcons()
   }, [fetchIcons, icons.length])
 
+  // 缩略图按当前图标尺寸和标题行数还原间距，设置页得先把这些设置读进 store。
+  const hydrateSettings = useIconStore(state => state.hydrateSettings)
+  useEffect(() => {
+    void hydrateSettings()
+  }, [hydrateSettings])
+
   const allVersions = versions ?? []
   const savedVersions = allVersions.filter(version => version.kind === 'saved')
   const historyVersions = allVersions.filter(version => version.kind === 'auto')
