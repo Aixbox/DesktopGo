@@ -5,6 +5,26 @@ import { DRAG_HOLE_ID, getSlotRowColWithinPage, isVacantSlot } from './slots'
 export const getEvasionIntentSignature = (targetId: string, zone: HoverZone) =>
   `${targetId}:${zone}`
 
+export const hasPointerExitedEvasionHold = ({
+  pointerX,
+  pointerY,
+  centerX,
+  centerY,
+  stepX,
+  stepY,
+  exitMargin,
+}: {
+  pointerX: number
+  pointerY: number
+  centerX: number
+  centerY: number
+  stepX: number
+  stepY: number
+  exitMargin: number
+}) =>
+  Math.abs(pointerX - centerX) > Math.max(0, stepX) / 2 + Math.max(0, exitMargin) ||
+  Math.abs(pointerY - centerY) > Math.max(0, stepY) / 2 + Math.max(0, exitMargin)
+
 export const getEvasionReadyDelay = ({
   now,
   dwellStartedAt,

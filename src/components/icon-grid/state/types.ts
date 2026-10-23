@@ -28,11 +28,11 @@ export interface DragState {
   lastEvasionTriggerPointer: { x: number; y: number } | null
   lastEvasionAt: number | null
   /**
-   * 避让之前的顺序。避让只是预览：指针一离开避让出来的那个格子就退回这个顺序，
-   * 只有真的在那里松手才把避让结果提交下去。
+   * 避让之前的基线顺序。拖动中按当前 footprint 从这份基线重算预览，
+   * 松手时才提交最终顺序。
    */
   evasionBaseOrder?: Array<string | null> | null
-  /** 触发避让时指针所在格子的锚点，用来判断指针有没有离开那个格子。 */
+  /** 避让预览的锚点；多格拖动项按完整 footprint 定位，并带边界缓冲。 */
   evasionHoldIndex?: number | null
   initialCenters: Record<string, { x: number; y: number }>
 }

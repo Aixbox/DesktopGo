@@ -17,6 +17,7 @@ export const WHEEL_PAGE_COOLDOWN_MS = 180
 export const LAYOUT_PAGE_STEP_EVENT = 'launchpad:layout-page-step'
 export const DRAG_LONG_PRESS_MS = 300
 export const DRAG_PENDING_MOVE_TOLERANCE = 7
+export const EVASION_HOLD_EXIT_MARGIN = 16
 export const EVASION_REARM_DISTANCE = 14
 export const REORDER_ANIMATION_MS = 300
 // Shared motion language for layout changes: a quick settle with a restrained

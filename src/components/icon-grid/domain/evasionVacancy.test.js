@@ -61,4 +61,69 @@ assert(
   '连续避让不得改变图标集合'
 )
 
+const largeFolder = {
+  kind: 'folder',
+  id: 'large',
+  name: 'Large',
+  size: '2x2',
+  children: [],
+}
+const footprintIcons = ['a', 'b', 'c', 'd'].map(makeIcon)
+const footprintItems = [...footprintIcons, largeFolder]
+const footprintBaseOrder = Array.from({ length: 12 }, () => null)
+footprintBaseOrder[2] = 'a'
+footprintBaseOrder[3] = 'b'
+footprintBaseOrder[6] = 'c'
+footprintBaseOrder[7] = 'd'
+const footprintHit = {
+  targetId: 'a',
+  targetIndex: 2,
+  targetRect: makeRect(100, 0, 100, 100),
+  overlapRect: makeRect(100, 0, 30, 30),
+  iou: 0.09,
+  intersectionArea: 900,
+  centerManhattanDistance: 10,
+  zone: 'left',
+}
+
+const fullFootprintPreview = applyOuterEvasionPolicy(
+  footprintBaseOrder,
+  footprintHit,
+  12,
+  4,
+  true,
+  {
+    items: footprintItems,
+    draggingItem: largeFolder,
+    draggingIds: ['folder:large'],
+    targetAnchorIndex: 2,
+  }
+).order
+assert(
+  [2, 3, 6, 7].every(index => !['a', 'b', 'c', 'd'].includes(fullFootprintPreview[index])),
+  '2x2 文件夹首次避让时，四个占位格的图标都应让开'
+)
+
+const partialFootprintPreview = applyOuterEvasionPolicy(
+  footprintBaseOrder,
+  footprintHit,
+  12,
+  4,
+  true,
+  {
+    items: footprintItems,
+    draggingItem: largeFolder,
+    draggingIds: ['folder:large'],
+    targetAnchorIndex: 1,
+  }
+).order
+assert(
+  partialFootprintPreview[3] === 'b' && partialFootprintPreview[7] === 'd',
+  '2x2 文件夹左移后，已释放的右侧两格应恢复原图标'
+)
+assert(
+  partialFootprintPreview[2] !== 'a' && partialFootprintPreview[6] !== 'c',
+  '仍与文件夹 footprint 重叠的左侧两格图标应继续避让'
+)
+
 console.log('分页避让 vacancy 测试通过')

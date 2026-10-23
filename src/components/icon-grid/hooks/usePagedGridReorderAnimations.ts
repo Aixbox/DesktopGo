@@ -2,8 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from 
 import type { FolderItem } from '../model'
 import { DRAG_HOLE_ID } from '../domain/slots'
 import { DOCK_GAP } from '../domain/dock'
-import { GRID_GAP, MOTION_SPRING_EASING, REORDER_ANIMATION_MS } from '../constants'
-import { readCurrentTranslate } from './reorderMotion'
+import { GRID_GAP, MOTION_SPRING_EASING } from '../constants'
+import { getReorderAnimationDuration, readCurrentTranslate } from './reorderMotion'
 import type { DropImpactEvent } from '../state/types'
 import { animateDropImpactNodes } from '../views/dropImpactMotion'
 
@@ -137,13 +137,18 @@ export function usePagedGridReorderAnimations({
     })
 
     movedItems.forEach(({ id, node, deltaX, deltaY }) => {
+      const duration = getReorderAnimationDuration(
+        deltaX,
+        deltaY,
+        Math.max(itemWidth, itemHeight) + GRID_GAP
+      )
       node.style.willChange = 'transform'
       const animation = node.animate(
         [
           { transform: `translate3d(${deltaX}px, ${deltaY}px, 0)` },
           { transform: 'translate3d(0, 0, 0)' },
         ],
-        { duration: REORDER_ANIMATION_MS, easing: REORDER_EASING }
+        { duration, easing: REORDER_EASING }
       )
       const clearAnimation = () => {
         if (gridFlipAnimationsRef.current.get(id) !== animation) return
@@ -195,7 +200,10 @@ export function usePagedGridReorderAnimations({
           folderTileRefs.current.get(entry),
           entry,
           `translate3d(${deltaX + currentTranslate.x}px, ${deltaY + currentTranslate.y}px, 0px)`,
-          folderAnimationTimersRef
+          folderAnimationTimersRef,
+          deltaX,
+          deltaY,
+          Math.max(stepX, stepY)
         )
       })
     previousFolderEntriesRef.current = folderRenderOrder
@@ -231,7 +239,10 @@ export function usePagedGridReorderAnimations({
           dockItemRefs.current.get(entry),
           entry,
           `translate3d(${deltaX + currentTranslate.x}px, ${currentTranslate.y}px, 0px)`,
-          dockAnimationTimersRef
+          dockAnimationTimersRef,
+          deltaX,
+          0,
+          stepX
         )
       })
     previousDockEntriesRef.current = dockRenderSlots
@@ -262,9 +273,13 @@ function animateWithTransformTimer(
   node: HTMLDivElement | undefined,
   itemId: string,
   initialTransform: string,
-  timersRef: RefObject<Map<string, number>>
+  timersRef: RefObject<Map<string, number>>,
+  deltaX: number,
+  deltaY: number,
+  referenceDistance: number
 ) {
   if (!node) return
+  const duration = getReorderAnimationDuration(deltaX, deltaY, referenceDistance)
   const existingTimer = timersRef.current.get(itemId)
   if (existingTimer !== undefined) {
     window.clearTimeout(existingTimer)
@@ -275,13 +290,13 @@ function animateWithTransformTimer(
   node.style.willChange = 'transform'
   node.style.transform = initialTransform
   void node.offsetWidth
-  node.style.transition = `transform ${REORDER_ANIMATION_MS}ms ${REORDER_EASING}`
+  node.style.transition = 'transform ' + duration + 'ms ' + REORDER_EASING
   node.style.transform = 'translate3d(0px, 0px, 0px)'
   const timer = window.setTimeout(() => {
     node.style.transition = ''
     node.style.transform = ''
     node.style.willChange = ''
     timersRef.current.delete(itemId)
-  }, REORDER_ANIMATION_MS + 40)
+  }, duration + 40)
   timersRef.current.set(itemId, timer)
 }
