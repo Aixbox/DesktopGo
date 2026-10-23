@@ -339,6 +339,8 @@ export function useIconGridDragWorkflow({
     resolveCandidateAnchorIndexByContext,
     findTopLevelMaxOverlapHit,
     resolveTopLevelOverlapPreviewIndex,
+    revertTopLevelEvasion,
+    settleTopLevelEvasion,
     tryApplyTopLevelEvasion,
   } = usePagedDragGeometryController({
     gridGap: config.gridGap,
@@ -483,6 +485,8 @@ export function useIconGridDragWorkflow({
       lastEvasionSignature: null,
       lastEvasionTriggerPointer: null,
       lastEvasionAt: null,
+      evasionBaseOrder: null,
+      evasionHoldIndex: null,
       initialCenters: {
         ...collectCenters(folderTileRefs.current),
         [latest.draggingId]: { x: latest.pointerX, y: latest.pointerY },
@@ -581,6 +585,9 @@ export function useIconGridDragWorkflow({
       lastEvasionSignature: null,
       lastEvasionTriggerPointer: null,
       lastEvasionAt: null,
+      // 换了容器就是另起一份顺序，之前的避让基线作废。
+      evasionBaseOrder: null,
+      evasionHoldIndex: null,
       initialCenters,
     }
     const previewSlotIndex = resolveNearestSlotIndexByContext(nextState, { allowOutside: true })
@@ -690,6 +697,8 @@ export function useIconGridDragWorkflow({
     scheduleFolderAutoOpen,
     triggerTopLevelDwellEvasion,
     findHitByContext,
+    revertTopLevelEvasion,
+    settleTopLevelEvasion,
     publishMoveDragState,
   })
 
@@ -856,16 +865,19 @@ export function useIconGridDragWorkflow({
     pendingMoveTolerance: config.dragPendingMoveTolerance,
   })
 
-  const handleTilePointerDown = (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => {
+  /** 三处按下入口共用：记下起点，长按到时间才真正开始拖。 */
+  const armPendingPointerDrag = (
+    event: ReactPointerEvent<HTMLDivElement>,
+    pending: Pick<PendingDrag, 'context' | 'sourceFolderId' | 'itemId'>
+  ) => {
     if (event.button !== 0) return
     armPointerControllerSession()
     const rect = event.currentTarget.getBoundingClientRect()
+    const pointerId = event.pointerId
     pendingPointerCaptureTargetRef.current = event.currentTarget
     pendingRef.current = {
-      context: 'outer',
-      sourceFolderId: null,
-      pointerId: event.pointerId,
-      itemId,
+      ...pending,
+      pointerId,
       startX: event.clientX,
       startY: event.clientY,
       offsetX: event.clientX - rect.left,
@@ -873,61 +885,23 @@ export function useIconGridDragWorkflow({
     }
     clearTimer()
     timerRef.current = window.setTimeout(() => {
-      const pending = pendingRef.current
-      if (!pending || pending.pointerId !== event.pointerId) return
-      beginDrag(pending, pending.startX, pending.startY)
+      const queued = pendingRef.current
+      if (!queued || queued.pointerId !== pointerId) return
+      beginDrag(queued, queued.startX, queued.startY)
     }, config.dragLongPressMs)
   }
+
+  const handleTilePointerDown = (event: ReactPointerEvent<HTMLDivElement>, itemId: string) =>
+    armPendingPointerDrag(event, { context: 'outer', sourceFolderId: null, itemId })
 
   const handleFolderTilePointerDown = (
     event: ReactPointerEvent<HTMLDivElement>,
     folderId: string,
     itemId: string
-  ) => {
-    if (event.button !== 0) return
-    armPointerControllerSession()
-    const rect = event.currentTarget.getBoundingClientRect()
-    pendingPointerCaptureTargetRef.current = event.currentTarget
-    pendingRef.current = {
-      context: 'folder',
-      sourceFolderId: folderId,
-      pointerId: event.pointerId,
-      itemId,
-      startX: event.clientX,
-      startY: event.clientY,
-      offsetX: event.clientX - rect.left,
-      offsetY: event.clientY - rect.top,
-    }
-    clearTimer()
-    timerRef.current = window.setTimeout(() => {
-      const pending = pendingRef.current
-      if (!pending || pending.pointerId !== event.pointerId) return
-      beginDrag(pending, pending.startX, pending.startY)
-    }, config.dragLongPressMs)
-  }
+  ) => armPendingPointerDrag(event, { context: 'folder', sourceFolderId: folderId, itemId })
 
-  const handleDockItemPointerDown = (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => {
-    if (event.button !== 0) return
-    armPointerControllerSession()
-    const rect = event.currentTarget.getBoundingClientRect()
-    pendingPointerCaptureTargetRef.current = event.currentTarget
-    pendingRef.current = {
-      context: 'dock',
-      sourceFolderId: null,
-      pointerId: event.pointerId,
-      itemId,
-      startX: event.clientX,
-      startY: event.clientY,
-      offsetX: event.clientX - rect.left,
-      offsetY: event.clientY - rect.top,
-    }
-    clearTimer()
-    timerRef.current = window.setTimeout(() => {
-      const pending = pendingRef.current
-      if (!pending || pending.pointerId !== event.pointerId) return
-      beginDrag(pending, pending.startX, pending.startY)
-    }, config.dragLongPressMs)
-  }
+  const handleDockItemPointerDown = (event: ReactPointerEvent<HTMLDivElement>, itemId: string) =>
+    armPendingPointerDrag(event, { context: 'dock', sourceFolderId: null, itemId })
 
   const handleTileClickCapture = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (performance.now() < suppressClickUntilRef.current) {
@@ -940,7 +914,10 @@ export function useIconGridDragWorkflow({
     const current = dragRef.current
     if (!current || current.context !== 'outer') return
     clearOuterDwellTimer()
-    const next = { ...resetOuterInteraction(current, null), dockPreviewIndex: null }
+    const next = {
+      ...resetOuterInteraction(settleTopLevelEvasion(current), null),
+      dockPreviewIndex: null,
+    }
     commitDragState(next)
   }
 

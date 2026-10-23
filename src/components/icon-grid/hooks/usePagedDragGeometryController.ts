@@ -419,6 +419,43 @@ export function usePagedDragGeometryController({
     )
   }
 
+  /** 指针落在哪个格子上：只看几何，不受当前顺序影响，用来判断避让还算不算数。 */
+  const resolveEvasionHoldIndex = (state: DragState): number | null => {
+    if (state.context === 'dock') {
+      return resolveNearestSlotIndexByContext(state, { allowOutside: true })
+    }
+    if (state.context !== 'outer') return null
+    const metrics = resolveGridMetrics('outer')
+    if (!metrics.gridElement) return null
+    // 不带跨度：按住不放时指针停在哪一格，避让就在哪一格算数。
+    return resolveNearestSlotIndexByMetrics(state, metrics, gridGap, { allowOutside: true })
+  }
+
+  /** 无条件把顺序退回避让之前：要切到别的交互（比如预览合并文件夹）时用。 */
+  const revertTopLevelEvasion = (state: DragState): DragState => {
+    const baseOrder = state.evasionBaseOrder ?? null
+    if (!baseOrder) return state
+    return {
+      ...state,
+      workingOrder: baseOrder,
+      evasionBaseOrder: null,
+      evasionHoldIndex: null,
+      lastEvasionSignature: null,
+      lastEvasionTriggerPointer: null,
+    }
+  }
+
+  /**
+   * 避让只是预览。指针还停在避让出来的那个格子上就保持原样；只要挪到别的格子，
+   * 先把顺序整份退回避让之前，后面的落点再按恢复后的顺序重新算。
+   */
+  const settleTopLevelEvasion = (state: DragState): DragState => {
+    if (!state.evasionBaseOrder) return state
+    const holdIndex = state.evasionHoldIndex ?? null
+    if (holdIndex !== null && resolveEvasionHoldIndex(state) === holdIndex) return state
+    return revertTopLevelEvasion(state)
+  }
+
   const tryApplyTopLevelEvasion = (
     state: DragState,
     overlapHit: OuterOverlapHit,
@@ -448,6 +485,9 @@ export function usePagedDragGeometryController({
       lastEvasionTriggerPointer: { x: state.pointerX, y: state.pointerY },
       lastEvasionAt: now,
       dwellStartedAt: now,
+      // 连着避让时保留最早那份基线，退回才能回到拖动开始时的样子。
+      evasionBaseOrder: state.evasionBaseOrder ?? state.workingOrder,
+      evasionHoldIndex: resolveEvasionHoldIndex(state),
     }
   }
 
@@ -464,6 +504,8 @@ export function usePagedDragGeometryController({
     resolveCandidateAnchorIndexByContext,
     findTopLevelMaxOverlapHit,
     resolveTopLevelOverlapPreviewIndex,
+    revertTopLevelEvasion,
+    settleTopLevelEvasion,
     tryApplyTopLevelEvasion,
   }
 }

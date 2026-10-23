@@ -223,6 +223,8 @@ function buildInitialDragState(
     lastEvasionSignature: null,
     lastEvasionTriggerPointer: null,
     lastEvasionAt: null,
+    evasionBaseOrder: null,
+    evasionHoldIndex: null,
     initialCenters,
   }
 }

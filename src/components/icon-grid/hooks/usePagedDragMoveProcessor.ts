@@ -51,6 +51,8 @@ interface PagedDragMoveProcessorParams {
     nearestSlotIndex: number | null,
     candidateAnchorIndex: number | null
   ) => number | null
+  settleTopLevelEvasion: (state: DragState) => DragState
+  revertTopLevelEvasion: (state: DragState) => DragState
   scheduleFolderAutoOpen: (targetFolderId: string) => void
   triggerTopLevelDwellEvasion: (intent: { targetId: string; zone: HoverZone }) => void
   findHitByContext: (state: DragState, x: number, y: number) => DragHit | null
@@ -106,38 +108,41 @@ function processTopLevelMove(
   x: number,
   y: number
 ) {
-  if (state.context === 'outer') runtime.maybeHandleOuterEdgeSwitch(state, x, y)
+  // 上一次的避让能不能留着，取决于指针这会儿还在不在那个格子上。
+  // 先结算，再算落点，不然落点会按已经挪过的顺序算出来。
+  const settled = runtime.settleTopLevelEvasion(state)
+  if (settled.context === 'outer') runtime.maybeHandleOuterEdgeSwitch(settled, x, y)
   else runtime.clearEdgeSwitchTimer()
 
-  const nearestSlotIndex = runtime.resolveNearestSlotIndexByContext(state, { allowOutside: true })
-  const candidateAnchorIndex = runtime.resolveCandidateAnchorIndexByContext(state, {
+  const nearestSlotIndex = runtime.resolveNearestSlotIndexByContext(settled, { allowOutside: true })
+  const candidateAnchorIndex = runtime.resolveCandidateAnchorIndexByContext(settled, {
     allowOutside: true,
   })
-  let overlapHit = runtime.findTopLevelMaxOverlapHit(state)
-  if (overlapHit && state.draggingIds.includes(overlapHit.targetId)) overlapHit = null
+  let overlapHit = runtime.findTopLevelMaxOverlapHit(settled)
+  if (overlapHit && settled.draggingIds.includes(overlapHit.targetId)) overlapHit = null
   if (!overlapHit) {
-    publishTopLevelReset(runtime, state, nearestSlotIndex)
+    publishTopLevelReset(runtime, settled, nearestSlotIndex)
     return
   }
 
-  const itemMap = buildDragItemMap(state, runtime.itemsRef.current)
+  const itemMap = buildDragItemMap(settled, runtime.itemsRef.current)
   const target = itemMap.get(overlapHit.targetId)
   if (!target) {
-    publishTopLevelReset(runtime, state, nearestSlotIndex)
+    publishTopLevelReset(runtime, settled, nearestSlotIndex)
     return
   }
 
   const context: TopLevelMoveContext = {
     runtime,
-    state,
-    source: state.draggingItem,
+    state: settled,
+    source: settled.draggingItem,
     target,
     overlapHit,
     nearestSlotIndex,
     candidateAnchorIndex,
   }
-  if (state.context === 'dock') {
-    if (runtime.isDraggingFromDock(state.draggingId)) processDockReorderMove(context)
+  if (settled.context === 'dock') {
+    if (runtime.isDraggingFromDock(settled.draggingId)) processDockReorderMove(context)
     else processDockExternalMove(context)
     return
   }
@@ -250,10 +255,13 @@ function processOuterOverlapMove(context: TopLevelMoveContext) {
   const { runtime, state, source, target, overlapHit, nearestSlotIndex, candidateAnchorIndex } =
     context
   const now = performance.now()
+  const previewFolder = canPreviewFolder(source, target, overlapHit, state.draggingIds.length > 1)
+  // 要合并/新建文件夹了，避让那点位移先退干净，别把挪过的顺序带进落点。
+  const base = previewFolder ? runtime.revertTopLevelEvasion(state) : state
   const next: DragState = {
-    ...state,
+    ...base,
     previewSlotIndex: runtime.resolveTopLevelOverlapPreviewIndex(
-      state,
+      base,
       target,
       overlapHit,
       nearestSlotIndex,
@@ -266,7 +274,7 @@ function processOuterOverlapMove(context: TopLevelMoveContext) {
     centerStartedAt: null,
   }
 
-  if (canPreviewFolder(source, target, overlapHit, state.draggingIds.length > 1)) {
+  if (previewFolder) {
     runtime.clearOuterDwellTimer()
     next.folderPreviewTargetId = overlapHit.targetId
     next.dwellStartedAt = null
@@ -279,7 +287,7 @@ function processOuterOverlapMove(context: TopLevelMoveContext) {
   }
 
   next.folderPreviewTargetId = null
-  scheduleOuterEvasion(runtime, state, next, overlapHit, now)
+  scheduleOuterEvasion(runtime, base, next, overlapHit, now)
 }
 
 function scheduleOuterEvasion(
