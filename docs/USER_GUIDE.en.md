@@ -135,7 +135,7 @@ The drawer has two tabs:
 - Saved: your named layouts. Hover a card to reveal rename and delete buttons in its top-right corner
 - History: a snapshot is recorded after every layout change, keeping the latest 50
 
-Each card carries a thumbnail drawn from the first two pages, so the density and arrangement are visible at a glance. Old layouts do not match when the window size, icon size, or Dock switch has changed; those cards are marked "re-flow" and applying them keeps only the icon order.
+Each card carries a thumbnail of the first page: the current wallpaper underneath, with icons and folders drawn at their real positions and spans, so a folder visibly occupies its 2x2 or 1x2 footprint. Hovering a card pops up an enlarged copy of the same thumbnail, and the small thumbnails in Settings do the same. Old layouts do not match when the window size, icon size, or Dock switch has changed; those cards are marked "re-flow" and applying them keeps only the icon order.
 
 The grid is locked while previewing: icons cannot be clicked, dragged, or right-clicked, and paging is the only interaction. The right side of the drawer bar collapses it to a single strip so the whole page is visible. Esc cancels.
 

@@ -4,19 +4,34 @@ import { buildGridGeometryKey } from '../icon-grid/domain/gridGeometry'
 /** 布局库只对分页网格开放；滚动模式的分组结构是另一套，先不混进来。 */
 export type LayoutLibraryScope = 'paged'
 
-/** 底部抽屉展开时的高度（逻辑像素），翻页指示器按它上移避开。 */
-export const LAYOUT_DRAWER_HEIGHT = 173
+/** 底部抽屉展开时的高度（逻辑像素）：顶栏 48 + 卡片区 136 + 上边框 1，翻页指示器按它上移避开。 */
+export const LAYOUT_DRAWER_HEIGHT = 185
 /** 抽屉折叠后只剩顶栏。 */
 export const LAYOUT_DRAWER_COLLAPSED_HEIGHT = 49
 
 export type LayoutVersionKind = 'auto' | 'saved'
 
-/** 后端算好的缩略图：每页一行 columns * rows 的 0/1 占用格子。 */
+/** 缩略图里的一个条目：锚点在哪一格、占几行几列，文件夹能占 2x2。 */
+export interface LayoutThumbnailEntry {
+  /** `folder:<id>` 表示文件夹，其余是图标 id。 */
+  key: string
+  col: number
+  row: number
+  cols: number
+  rows: number
+  /** 文件夹名；图标没有。 */
+  name?: string
+  /** 文件夹里前几个图标的 id，缩略图按它画内部预览。 */
+  children?: string[]
+}
+
+/** 后端算好的缩略图：只存第一页，按锚点和跨度铺开。 */
 export interface LayoutThumbnail {
   columns: number
   rows: number
-  pages: number[][]
-  morePages: number
+  entries: LayoutThumbnailEntry[]
+  /** 总页数，卡片上的「N 页」用它。 */
+  pageTotal: number
 }
 
 export interface LayoutVersionMeta {

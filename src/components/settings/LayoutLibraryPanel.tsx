@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { History, Pencil, Save, Trash2 } from 'lucide-react'
 import { translate } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
 import { readLayoutPayload } from '@/components/icon-grid/services/layoutStore'
 import { LayoutNameDialog } from '@/components/layout-library/LayoutNameDialog'
+import { LayoutHoverPreview } from '@/components/layout-library/LayoutHoverPreview'
 import { LayoutThumbnailView } from '@/components/layout-library/LayoutThumbnailView'
+import { useLayoutHoverPreview } from '@/components/layout-library/useLayoutHoverPreview'
+import { useIconStore } from '@/stores/iconStore'
 import {
   deleteLayoutVersion,
   formatLayoutVersionTime,
@@ -20,10 +23,15 @@ type DialogState = { mode: 'save' } | { mode: 'rename'; version: LayoutVersionMe
 /** 设置页的布局库：保存当前布局、重命名、删除。应用布局在启动台侧栏里做。 */
 export function LayoutLibraryPanel() {
   const toast = useToast()
+  const icons = useIconStore(state => state.icons)
   const [versions, setVersions] = useState<LayoutVersionMeta[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [dialog, setDialog] = useState<DialogState>(null)
   const loading = versions === null
+  // 列表里的缩略图只有几十像素宽，悬停时弹一张放大的看细节。
+  const hoverPreview = useLayoutHoverPreview()
+  // 缩略图要按 id 取真实图标，列表本身不带图。
+  const iconImages = useMemo(() => new Map(icons.map(icon => [icon.id, icon.icon_base64])), [icons])
 
   const reportError = useCallback(
     (message: string, error: unknown) => {
@@ -45,6 +53,12 @@ export function LayoutLibraryPanel() {
   useEffect(() => {
     reload()
   }, [reload])
+
+  // 设置页是独立窗口，图标库要自己拉一次，不然缩略图全是占位块。
+  const fetchIcons = useIconStore(state => state.fetchIcons)
+  useEffect(() => {
+    if (icons.length === 0) void fetchIcons()
+  }, [fetchIcons, icons.length])
 
   const allVersions = versions ?? []
   const savedVersions = allVersions.filter(version => version.kind === 'saved')
@@ -123,11 +137,17 @@ export function LayoutLibraryPanel() {
               </p>
             ) : (
               savedVersions.map(version => (
-                <div key={version.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                <div
+                  key={version.id}
+                  className="flex items-center justify-between gap-3 px-4 py-3"
+                  onMouseEnter={event => hoverPreview.show(event.currentTarget, version.thumbnail)}
+                  onMouseLeave={hoverPreview.hide}
+                >
                   <div className="flex min-w-0 items-center gap-3">
                     <LayoutThumbnailView
                       thumbnail={version.thumbnail}
-                      className="h-9 w-16 shrink-0"
+                      iconImages={iconImages}
+                      className="h-10 w-[72px] shrink-0"
                     />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">
@@ -144,7 +164,10 @@ export function LayoutLibraryPanel() {
                       size="sm"
                       variant="ghost"
                       className="h-7 px-2"
-                      onClick={() => setDialog({ mode: 'rename', version })}
+                      onClick={() => {
+                        hoverPreview.hide()
+                        setDialog({ mode: 'rename', version })
+                      }}
                     >
                       <Pencil className="h-3.5 w-3.5" />
                       {translate('重命名')}
@@ -154,7 +177,10 @@ export function LayoutLibraryPanel() {
                       variant="ghost"
                       className="h-7 px-2 text-muted-foreground hover:text-red-500"
                       disabled={busy}
-                      onClick={() => void handleDelete(version)}
+                      onClick={() => {
+                        hoverPreview.hide()
+                        void handleDelete(version)
+                      }}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                       {translate('删除')}
@@ -186,11 +212,17 @@ export function LayoutLibraryPanel() {
             </p>
           ) : (
             historyVersions.slice(0, 10).map(version => (
-              <div key={version.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+              <div
+                key={version.id}
+                className="flex items-center justify-between gap-3 px-4 py-2.5"
+                onMouseEnter={event => hoverPreview.show(event.currentTarget, version.thumbnail)}
+                onMouseLeave={hoverPreview.hide}
+              >
                 <div className="flex min-w-0 items-center gap-3">
                   <LayoutThumbnailView
                     thumbnail={version.thumbnail}
-                    className="h-7 w-12 shrink-0"
+                    iconImages={iconImages}
+                    className="h-8 w-16 shrink-0"
                   />
                   <span className="truncate text-sm">
                     {version.name?.trim() || formatLayoutVersionTime(version.createdAt)}
@@ -204,6 +236,10 @@ export function LayoutLibraryPanel() {
           )}
         </div>
       </section>
+
+      {hoverPreview.anchor ? (
+        <LayoutHoverPreview anchor={hoverPreview.anchor} iconImages={iconImages} />
+      ) : null}
 
       {dialog ? (
         <LayoutNameDialog
