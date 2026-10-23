@@ -60,10 +60,7 @@ export function LaunchpadIconArea({
           </span>
         </div>
       ) : error && icons.length === 0 ? (
-        <div
-          role="alert"
-          className="flex max-w-md flex-col items-center gap-3 px-6 text-center"
-        >
+        <div role="alert" className="flex max-w-md flex-col items-center gap-3 px-6 text-center">
           <div className="space-y-1">
             <p className="launchpad-wallpaper-text text-sm font-medium text-foreground">
               {translate('图标库加载失败，请重试。')}
@@ -102,12 +99,7 @@ export function LaunchpadIconArea({
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              onClick={onQuickImport}
-              disabled={addIconDisabled}
-            >
+            <Button type="button" size="sm" onClick={onQuickImport} disabled={addIconDisabled}>
               <Wand2 className="h-4 w-4" />
               {translate('快捷导入')}
             </Button>
@@ -157,23 +149,10 @@ export function LaunchpadIconArea({
             layoutResetToken={layoutResetToken}
             importPlacementRequest={importPlacementRequest}
             paginationBottom={paginationBottom}
+            interactionLocked={interactionLocked}
           />
         </Suspense>
       )}
-
-      {/* 布局预览的遮罩：挡住图标、Dock、文件夹弹层的所有指针事件。
-          顶部留 64px 给窗口控制按钮（最小化/关闭不是布局功能，得能按）。
-          翻页按钮与指示器的 z-index 在它之上，滚轮也会冒泡到网格根节点继续翻页。 */}
-      {interactionLocked ? (
-        <div
-          data-layout-preview-shield
-          className="absolute inset-x-0 bottom-0 top-16 z-50 cursor-default"
-          onContextMenu={event => {
-            event.preventDefault()
-            event.stopPropagation()
-          }}
-        />
-      ) : null}
     </div>
   )
 }

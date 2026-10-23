@@ -69,6 +69,7 @@ import {
   EVASION_REARM_DISTANCE,
   FOLDER_SHARED_LAYOUT_WINDOW_MS,
   GRID_GAP,
+  LAYOUT_PAGE_STEP_EVENT,
   PAGINATION_ACTIVE_WIDTH,
   PAGINATION_DOT_GAP,
   PAGINATION_DOT_SIZE,
@@ -84,6 +85,8 @@ interface IconGridProps {
   importPlacementRequest?: PagedImportPlacementRequest | null
   /** 翻页指示器距容器底部的像素值；传 0 时按 Dock 开关用默认间距。 */
   paginationBottom?: number
+  /** 布局预览期间锁住网格：除翻页外的指针交互全部失效。 */
+  interactionLocked?: boolean
 }
 
 const EVASION_DWELL_MS = 250
@@ -94,6 +97,7 @@ export function IconGrid({
   layoutResetToken,
   importPlacementRequest,
   paginationBottom = 0,
+  interactionLocked = false,
 }: IconGridProps) {
   const {
     iconSize,
@@ -488,19 +492,8 @@ export function IconGrid({
   if (currentPage >= pageCount) setCurrentPage(pageCount - 1)
   if (hoverPage !== null && hoverPage >= pageCount) setHoverPage(null)
 
-  const handleWheelPageSwitch = (event: ReactWheelEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement | null
-    if (target?.closest('[data-dock]')) return
-
-    const isOuterDrag = dragState?.context === 'outer'
-    if (openFolder && !isOuterDrag) return
-    if (dragState && dragState.context !== 'outer') return
-    if (pageCount <= 1) return
-
-    const primaryDelta =
-      Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
-    if (Math.abs(primaryDelta) < 0.1) return
-    event.preventDefault()
+  const stepPageByWheelDelta = (primaryDelta: number, isOuterDrag: boolean) => {
+    if (pageCount <= 1 || Math.abs(primaryDelta) < 0.1) return
 
     const now = performance.now()
     if (now < wheelCooldownUntilRef.current) return
@@ -529,6 +522,40 @@ export function IconGrid({
     currentPageRef.current = nextPage
     setCurrentPage(nextPage)
   }
+
+  const handleWheelPageSwitch = (event: ReactWheelEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | null
+    if (target?.closest('[data-dock]')) return
+
+    const isOuterDrag = dragState?.context === 'outer'
+    if (openFolder && !isOuterDrag) return
+    if (dragState && dragState.context !== 'outer') return
+
+    const primaryDelta =
+      Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
+    if (Math.abs(primaryDelta) < 0.1) return
+    event.preventDefault()
+    stepPageByWheelDelta(primaryDelta, isOuterDrag)
+  }
+
+  /* 布局抽屉浮在网格之上，落在抽屉上的滚轮到不了根节点的 onWheel。
+     把抽屉那层转过来的增量接到同一套累积逻辑上，预览时滚轮才整屏可用。 */
+  const stepPageByWheelDeltaRef = useRef<(delta: number) => void>(() => {})
+  useEffect(() => {
+    stepPageByWheelDeltaRef.current = delta =>
+      stepPageByWheelDelta(delta, dragState?.context === 'outer')
+  })
+  useEffect(() => {
+    const onExternalWheel = (event: Event) => {
+      const delta = (event as CustomEvent<number>).detail
+      if (typeof delta !== 'number' || !Number.isFinite(delta)) return
+      stepPageByWheelDeltaRef.current(delta)
+    }
+    window.addEventListener(LAYOUT_PAGE_STEP_EVENT, onExternalWheel)
+    return () => {
+      window.removeEventListener(LAYOUT_PAGE_STEP_EVENT, onExternalWheel)
+    }
+  }, [])
 
   const handleResizeFolder = (folderId: string, size: FolderSize) => {
     const resizedFolderEntryId = `folder:${folderId}`
@@ -952,6 +979,22 @@ export function IconGrid({
             onOpenFolder={openFolderWithAnimation}
             onRemoveItem={key => {
               setDockKeys(current => current.filter(entry => entry !== key))
+            }}
+          />
+        ) : null}
+
+        {/* 布局预览的遮罩：挡住图标、Dock、文件夹弹层的所有指针事件。
+            必须留在根节点内部——滚轮翻页的 onWheel 挂在根上，遮罩放到外层
+            会把 wheel 拦在网格子树外面，剩按钮能翻、滚轮失效。
+            顶部留 64px 给窗口控制按钮（最小化/关闭不是布局功能，得能按）；
+            翻页按钮与指示器 z-[55] 在遮罩之上，点击照常可用。 */}
+        {interactionLocked ? (
+          <div
+            data-layout-preview-shield
+            className="absolute inset-x-0 bottom-0 top-16 z-50 cursor-default"
+            onContextMenu={event => {
+              event.preventDefault()
+              event.stopPropagation()
             }}
           />
         ) : null}

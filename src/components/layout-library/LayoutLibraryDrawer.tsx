@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
+import type { WheelEvent } from 'react'
 import { ChevronDown, ChevronUp, History, LayoutTemplate, Loader2 } from 'lucide-react'
 import { translate } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
+import { LAYOUT_PAGE_STEP_EVENT } from '@/components/icon-grid/constants'
 import {
   formatLayoutVersionTime,
   listLayoutVersions,
@@ -106,6 +108,15 @@ export function LayoutLibraryDrawer({
     }
   }, [refreshToken, toast])
 
+  /* 抽屉盖在网格上方，落在抽屉上的滚轮到不了网格，翻页就断了。
+     这里把增量原样转给网格，阈值累积和冷却都由网格那边统一处理。 */
+  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
+    const primaryDelta =
+      Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
+    if (Math.abs(primaryDelta) < 0.1) return
+    window.dispatchEvent(new CustomEvent(LAYOUT_PAGE_STEP_EVENT, { detail: primaryDelta }))
+  }
+
   const allVersions = versions ?? []
   const savedVersions = allVersions.filter(version => version.kind === 'saved')
   const historyVersions = allVersions.filter(version => version.kind === 'auto')
@@ -122,6 +133,7 @@ export function LayoutLibraryDrawer({
       <div
         data-layout-drawer
         className="launchpad-layout-drawer border-t border-border/80 bg-card/92 shadow-[0_-18px_48px_rgba(15,23,42,0.24)] backdrop-blur-xl"
+        onWheel={handleWheel}
       >
         <div className="flex h-12 items-center gap-2 px-4">
           <div className="accent-tonal flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border">

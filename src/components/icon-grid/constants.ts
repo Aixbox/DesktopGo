@@ -13,6 +13,8 @@ export const DRAG_EDGE_SWITCH_ZONE = 72
 export const DRAG_EDGE_SWITCH_MS = 600
 export const WHEEL_PAGE_DELTA_THRESHOLD = 54
 export const WHEEL_PAGE_COOLDOWN_MS = 180
+/** 布局抽屉浮在网格之上，它把自己的滚轮增量用这个事件转给网格翻页。 */
+export const LAYOUT_PAGE_STEP_EVENT = 'launchpad:layout-page-step'
 export const DRAG_LONG_PRESS_MS = 300
 export const DRAG_PENDING_MOVE_TOLERANCE = 7
 export const EVASION_REARM_DISTANCE = 14
