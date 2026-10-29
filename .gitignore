@@ -44,3 +44,5 @@ helloagents/
 
 # WorkBuddy AI 助手本地工作目录（项目记忆、会话状态等个人环境数据，不入库）
 .workbuddy/
+
+docs/upgrade
