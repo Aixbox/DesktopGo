@@ -65,7 +65,10 @@ export const buildAiOrganizeLayoutWrite = ({
     hasExplicitItems: baselineLayout?.scrollGroupItemsExplicit === true,
     defaultName: defaultScrollGroupName,
   })
-  return { scope, scrollGroups: prependNewAiFoldersToFirstScrollGroup(scrollGroups, items, baselineLayout) }
+  return {
+    scope,
+    scrollGroups: prependNewAiFoldersToFirstScrollGroup(scrollGroups, items, baselineLayout),
+  }
 }
 
 /**
@@ -80,9 +83,7 @@ const prependNewAiFoldersToFirstScrollGroup = (
   baselineLayout: PersistedLayout | null
 ): ScrollGroupMeta[] => {
   const baselineFolderIds = new Set(
-    (baselineLayout?.items ?? [])
-      .filter(item => item.type === 'folder')
-      .map(item => item.id)
+    (baselineLayout?.items ?? []).filter(item => item.type === 'folder').map(item => item.id)
   )
   const newFolderIds = items
     .filter(item => item.kind === 'folder' && !baselineFolderIds.has(item.id))
@@ -145,6 +146,7 @@ export const writeAiOrganizeLayoutState = async ({
     undefined,
     undefined,
     scrollGroups,
-    scope
+    scope,
+    baselineLayout?.folderProfileId
   )
 }

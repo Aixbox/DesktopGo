@@ -40,6 +40,18 @@ assert(
   resolveDockInsertIndexFromCenters(340, [100, 200, 300]) === 3,
   '指针落在最后一个 Dock 图标右侧时，插位索引应为末尾'
 )
+assert(
+  resolveDockInsertIndexFromCenters(225, [300, 200, 100], { rtl: true }) === 1,
+  'RTL Dock 中指针落在前两个逻辑图标之间时，插位索引应保持逻辑顺序'
+)
+assert(
+  resolveDockInsertIndexFromCenters(325, [300, 200, 100], { rtl: true }) === 0,
+  'RTL Dock 中指针落在首个逻辑图标外侧时，插位索引应为 0'
+)
+assert(
+  resolveDockInsertIndexFromCenters(75, [300, 200, 100], { rtl: true }) === 3,
+  'RTL Dock 中指针落在末尾逻辑图标外侧时，插位索引应为末尾'
+)
 
 const occupiedSlots = buildDockOccupiedSlotEntries(['a', null, 'b', 'c'])
 assert(

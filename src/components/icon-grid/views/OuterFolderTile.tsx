@@ -24,6 +24,12 @@ import {
 } from '../../ui/context-menu'
 import type { FolderItem, FolderSize, GridSpan, IconItem } from '../model'
 import {
+  DEFAULT_FOLDER_LAYOUT_PROFILE,
+  FOLDER_LAYOUT_PROFILES,
+  getFolderPreviewItems,
+  getFolderStackedItems,
+} from '../domain/folderLayout'
+import {
   DESKTOP_FOLDER_SURFACE_CLASS,
   FOLDER_SHARED_LAYOUT_TRANSITION,
   getDesktopFolderTileMetrics,
@@ -338,6 +344,11 @@ function FolderBody({
   if (folder.size === '1x1') {
     const previewInset = getSingleSlotPreviewInset(panelBase)
     const previewSize = Math.max(24, shapeWidth - previewInset * 2)
+    const previewIcons = getFolderPreviewItems(folder.children, DEFAULT_FOLDER_LAYOUT_PROFILE)
+    const stackedPreviewIcons = getFolderStackedItems(
+      folder.children,
+      DEFAULT_FOLDER_LAYOUT_PROFILE
+    )
 
     return (
       <div
@@ -376,7 +387,60 @@ function FolderBody({
           }}
         >
           <FolderIconVisual
-            icons={folder.children.map(child => child.icon)}
+            icons={previewIcons.map(child => child.icon)}
+            stackedIcons={stackedPreviewIcons.map(child => child.icon)}
+            imgSize={previewSize}
+            withSurface={false}
+          />
+        </motion.div>
+      </div>
+    )
+  }
+
+  if (folder.size === '2x2') {
+    const previewIcons = getFolderPreviewItems(folder.children, FOLDER_LAYOUT_PROFILES.big)
+    const stackedPreviewIcons = getFolderStackedItems(folder.children, FOLDER_LAYOUT_PROFILES.big)
+    const previewSize = Math.max(28, Math.min(shapeWidth, shapeHeight) - innerPadding * 2)
+
+    return (
+      <div
+        data-folder-visual-body
+        className="folder-tile-body relative isolate flex cursor-pointer items-center justify-center transition"
+        style={{
+          width: `${bodyWidth}px`,
+          height: `${bodyHeight}px`,
+          borderRadius: scaledRadius(surfaceRadius),
+        }}
+        title={folder.name}
+        onClick={event => {
+          event.stopPropagation()
+          onOpenFolder(folder.id)
+        }}
+      >
+        <FolderDropReceiverBackdrop
+          active={folderPreview}
+          shapeWidth={shapeWidth}
+          shapeHeight={shapeHeight}
+          surfaceRadius={surfaceRadius}
+        />
+        <motion.div
+          layoutId={sharedLayoutActive ? getFolderSharedLayoutId(folder.id) : undefined}
+          transition={FOLDER_SHARED_LAYOUT_TRANSITION}
+          className={`${DESKTOP_FOLDER_SURFACE_CLASS} z-10 flex items-center justify-center transition-all duration-200 ${
+            highlightSurface
+              ? 'border-border/70 bg-background/72 shadow-[0_0_0_1px_rgba(15,23,42,0.06),0_10px_26px_rgba(15,23,42,0.14)] dark:border-white/40 dark:bg-black/40 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_10px_26px_rgba(0,0,0,0.26)]'
+              : ''
+          }`}
+          data-folder-body-hitbox
+          style={{
+            width: `${shapeWidth}px`,
+            height: `${shapeHeight}px`,
+            borderRadius: scaledRadius(surfaceRadius),
+          }}
+        >
+          <FolderIconVisual
+            icons={previewIcons.map(child => child.icon)}
+            stackedIcons={stackedPreviewIcons.map(child => child.icon)}
             imgSize={previewSize}
             withSurface={false}
           />
@@ -392,8 +456,8 @@ function FolderBody({
 
   const renderVertical = folder.size === '1x2'
   const renderHorizontal = folder.size === '2x1'
-  const rows = folder.size === '2x2' ? 3 : renderVertical ? 3 : 1
-  const cols = folder.size === '2x2' ? 3 : renderHorizontal ? 3 : 1
+  const rows = renderVertical ? 3 : 1
+  const cols = renderHorizontal ? 3 : 1
   const iconSize = Math.max(
     14,
     Math.floor(

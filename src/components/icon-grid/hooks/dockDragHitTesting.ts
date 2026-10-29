@@ -100,9 +100,13 @@ export const resolveDockNearestSlotIndex = ({
 
   const occupiedSlots = resolveOccupiedSlots(slotNodes)
   if (occupiedSlots.length === 0) return 0
+  const rtl =
+    typeof window !== 'undefined' &&
+    window.getComputedStyle(dockContainer ?? document.documentElement).direction === 'rtl'
   return resolveDockInsertIndexFromCenters(
     state.pointerX,
-    occupiedSlots.map(entry => entry.rect.left + entry.rect.width / 2)
+    occupiedSlots.map(entry => entry.rect.left + entry.rect.width / 2),
+    { rtl }
   )
 }
 

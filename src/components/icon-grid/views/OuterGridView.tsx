@@ -1,19 +1,22 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
+  useEffect,
   useLayoutEffect,
   useRef,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react'
+import { useReducedMotion } from 'framer-motion'
 import { Icon } from '../../Icon'
 import type { FolderSize, GridSpan } from '../model'
 import type { PageAnchorEntry } from '../domain/topLevelLayout'
 import { FolderCreatePreview } from './FolderVisuals'
 import { OuterFolderTile } from './OuterFolderTile'
+import { WidgetTile } from './WidgetTile'
 import { COLOROS_MOTION, MOTION_SPRING_EASING } from '../constants'
+import { resolveMotionDuration } from '../domain/motionTokens'
 
-const PAGE_SLIDE_MS = COLOROS_MOTION.workspacePageSnapMs
 const PAGE_SLIDE_EASING = MOTION_SPRING_EASING
 
 interface IconConfigLike {
@@ -52,6 +55,7 @@ interface OuterGridViewProps {
   onOpenFolder: (folderId: string) => void
   onLaunchIcon: (path: string) => void
   onResizeFolder: (folderId: string, size: FolderSize) => void
+  onResizeWidget?: (widgetId: string, spanX: number, spanY: number) => void
   onDissolveFolder: (folderId: string) => void
   bindTileRef: (id: string, node: HTMLDivElement | null) => void
   reorderAnimationMs: number
@@ -105,6 +109,7 @@ export function OuterGridView({
   onOpenFolder,
   onLaunchIcon,
   onResizeFolder,
+  onResizeWidget,
   onDissolveFolder,
   bindTileRef,
   reorderAnimationMs,
@@ -122,8 +127,11 @@ export function OuterGridView({
   onHoverPage,
   onSwitchPage,
 }: OuterGridViewProps) {
+  const prefersReduced = useReducedMotion() ?? false
+  const pageSlideMs = resolveMotionDuration(COLOROS_MOTION.workspacePageSnapMs, prefersReduced)
   const prevPageRef = useRef(currentPage)
   const slideTimerRef = useRef<number | null>(null)
+  const slideAnimationTokenRef = useRef(0)
   const snapshotCloneRef = useRef<HTMLDivElement | null>(null)
   const prevGridSnapshotRef = useRef<HTMLDivElement | null>(null)
   const gridClipRef = useRef<HTMLDivElement | null>(null)
@@ -161,6 +169,14 @@ export function OuterGridView({
     }
 
     const direction = currentPage > prevPage ? 1 : -1
+    const animationToken = ++slideAnimationTokenRef.current
+
+    if (pageSlideMs === 0) {
+      grid.style.transition = ''
+      grid.style.transform = ''
+      prevGridSnapshotRef.current = grid.cloneNode(true) as HTMLDivElement
+      return
+    }
 
     // Only clip while a page slide is in-flight; otherwise let icon/folder
     // shadows extend beyond the grid edges instead of being cut off.
@@ -185,7 +201,7 @@ export function OuterGridView({
     clone.style.transition = 'none'
     clone.style.transform = 'translate3d(0, 0, 0)'
     void clone.offsetWidth
-    clone.style.transition = `transform ${PAGE_SLIDE_MS}ms ${PAGE_SLIDE_EASING}, opacity ${PAGE_SLIDE_MS}ms ${PAGE_SLIDE_EASING}`
+    clone.style.transition = `transform ${pageSlideMs}ms ${PAGE_SLIDE_EASING}, opacity ${pageSlideMs}ms ${PAGE_SLIDE_EASING}`
     clone.style.transform = `translate3d(${-direction * slideDistance}px, 0, 0)`
     clone.style.opacity = '0'
 
@@ -193,21 +209,41 @@ export function OuterGridView({
     grid.style.transition = 'none'
     grid.style.transform = `translate3d(${direction * slideDistance}px, 0, 0)`
     void grid.offsetWidth
-    grid.style.transition = `transform ${PAGE_SLIDE_MS}ms ${PAGE_SLIDE_EASING}`
+    grid.style.transition = `transform ${pageSlideMs}ms ${PAGE_SLIDE_EASING}`
     grid.style.transform = 'translate3d(0, 0, 0)'
 
     // Save new page snapshot after animation content is ready
     prevGridSnapshotRef.current = grid.cloneNode(true) as HTMLDivElement
 
     slideTimerRef.current = window.setTimeout(() => {
+      if (slideAnimationTokenRef.current !== animationToken) return
       grid.style.transition = ''
       grid.style.transform = ''
       clone.remove()
       snapshotCloneRef.current = null
       slideTimerRef.current = null
       clipContainer.style.overflow = ''
-    }, PAGE_SLIDE_MS + 40)
-  }, [currentPage, gridWidth, gridRef])
+    }, pageSlideMs + 40)
+  }, [currentPage, gridRef, gridWidth, pageSlideMs])
+
+  useEffect(() => {
+    return () => {
+      slideAnimationTokenRef.current += 1
+      if (slideTimerRef.current !== null) {
+        window.clearTimeout(slideTimerRef.current)
+        slideTimerRef.current = null
+      }
+      snapshotCloneRef.current?.remove()
+      snapshotCloneRef.current = null
+      const grid = gridRef.current
+      if (grid) {
+        grid.style.transition = ''
+        grid.style.transform = ''
+      }
+      const clipContainer = gridClipRef.current
+      if (clipContainer) clipContainer.style.overflow = ''
+    }
+  }, [gridRef])
 
   return (
     <div
@@ -305,7 +341,7 @@ export function OuterGridView({
                       tileHeight={itemHeight}
                     />
                   </div>
-                ) : (
+                ) : entry.item.kind === 'folder' ? (
                   <OuterFolderTile
                     folder={entry.item}
                     span={entry.span}
@@ -322,6 +358,15 @@ export function OuterGridView({
                     onLaunchIcon={onLaunchIcon}
                     onResizeFolder={onResizeFolder}
                     onDissolveFolder={onDissolveFolder}
+                  />
+                ) : (
+                  <WidgetTile
+                    widget={entry.item}
+                    span={entry.span}
+                    slotWidth={itemWidth}
+                    slotHeight={itemHeight}
+                    gridGap={gridGap}
+                    onResize={onResizeWidget}
                   />
                 )}
               </div>

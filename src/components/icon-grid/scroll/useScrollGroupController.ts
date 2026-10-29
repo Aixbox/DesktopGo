@@ -212,6 +212,7 @@ export function useScrollGroupController({
     const source = itemsRef.current.find(item => getId(item) === sourceId)
     const target = itemsRef.current.find(item => getId(item) === targetId)
     if (!source || source.kind !== 'icon' || !target) return
+    if (target.kind !== 'icon' && target.kind !== 'folder') return
     let replacement: FolderItem
     if (target.kind === 'folder') {
       if (target.children.some(child => child.key === source.key)) return

@@ -5,6 +5,8 @@ import { clampNumber } from '../domain/geometry'
 import { DRAG_HOLE_ID } from '../domain/slots'
 import type { DragState } from '../state/types'
 import { canPlaceItemAtAnchorIndex, normalizeOuterSlots } from '../domain/topLevelLayout'
+import { planFolderDropTransaction } from '../domain/folderDropTransaction'
+import type { FolderLayoutProfile } from '../domain/folderLayout'
 import { compactOuterSlotsWithinPages } from './scrollTopLevelLayout'
 
 export const applyFolderCreateFromSession = (
@@ -66,14 +68,27 @@ export const applyFolderCreateFromSession = (
 export const applyAddToFolderFromSession = (
   base: GridItem[],
   session: DragState,
-  targetFolderId: string
-): { items: GridItem[]; slots: Array<string | null> } => {
+  targetFolderId: string,
+  folderProfile?: FolderLayoutProfile
+): {
+  items: GridItem[]
+  slots: Array<string | null>
+  folderDrop: ReturnType<typeof planFolderDropTransaction>
+} => {
   const baseSlots = session.workingOrder.map(slot => (slot === DRAG_HOLE_ID ? null : slot))
   const map = new Map<string, GridItem>()
   base.forEach(item => map.set(getId(item), item))
   const targetFolder = map.get(targetFolderId)
   if (!targetFolder || targetFolder.kind !== 'folder') {
-    return { items: base, slots: baseSlots }
+    return {
+      items: base,
+      slots: baseSlots,
+      folderDrop: planFolderDropTransaction({
+        currentChildren: [],
+        incomingChildren: [],
+        profile: folderProfile,
+      }),
+    }
   }
 
   const draggingIds = session.draggingIds.length > 0 ? session.draggingIds : [session.draggingId]
@@ -83,16 +98,26 @@ export const applyAddToFolderFromSession = (
     return item?.kind === 'icon' ? [item] : []
   })
   if (draggedIcons.length === 0) {
-    return { items: base, slots: baseSlots }
+    return {
+      items: base,
+      slots: baseSlots,
+      folderDrop: planFolderDropTransaction({
+        currentChildren: targetFolder.children,
+        incomingChildren: [],
+        profile: folderProfile,
+      }),
+    }
   }
 
-  const nextFolderChildren = [...targetFolder.children]
-  const existingChildKeys = new Set(targetFolder.children.map(child => child.key))
-  draggedIcons.forEach(icon => {
-    if (existingChildKeys.has(icon.key)) return
-    existingChildKeys.add(icon.key)
-    nextFolderChildren.push(icon)
+  const folderDrop = planFolderDropTransaction({
+    currentChildren: targetFolder.children,
+    incomingChildren: draggedIcons,
+    profile: folderProfile,
   })
+  if (!folderDrop.accepted) {
+    return { items: base, slots: baseSlots, folderDrop }
+  }
+  const nextFolderChildren = folderDrop.nextChildren
   const nextTargetFolder = { ...targetFolder, children: nextFolderChildren }
   map.set(targetFolderId, nextTargetFolder)
 
@@ -109,7 +134,7 @@ export const applyAddToFolderFromSession = (
     }
     nextItems.push(item)
   })
-  return { items: nextItems, slots: nextSlots }
+  return { items: nextItems, slots: nextSlots, folderDrop }
 }
 
 interface ApplyOuterDropFromSessionParams {

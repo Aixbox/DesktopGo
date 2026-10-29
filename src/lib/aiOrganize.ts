@@ -1,7 +1,7 @@
 import type { DesktopIcon } from '../types'
 import { buildIconSelectionKey } from './iconKey.ts'
 import type { FolderSize, GridItem, IconItem } from '../components/icon-grid/model.ts'
-import { makeFolderId } from '../components/icon-grid/model.ts'
+import { getId, makeFolderId } from '../components/icon-grid/model.ts'
 
 export interface AiIconInput {
   key: string
@@ -57,6 +57,7 @@ const collectIconItems = (items: GridItem[]): Map<string, IconItem> => {
       map.set(item.key, item)
       return
     }
+    if (item.kind !== 'folder') return
     item.children.forEach(child => {
       map.set(child.key, child)
     })
@@ -125,6 +126,10 @@ export function applyAiGroupsToLayout(items: GridItem[], groups: AiGroup[]): Gri
       if (!consumed.has(item.key)) {
         leftover.push(item)
       }
+      return
+    }
+    if (item.kind !== 'folder') {
+      if (!consumed.has(getId(item))) leftover.push(item)
       return
     }
     // 旧文件夹：保留未被 AI 重新分组的子项；若仍有 >=2 项则保留文件夹，

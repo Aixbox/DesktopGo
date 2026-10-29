@@ -7,6 +7,7 @@ import type { FolderItem, GridItem, IconItem } from '../model'
 import { getGridItemSpan } from '../model'
 import type { FolderDropFlight, MultiDropFlightItem } from '../state/types'
 import { FolderIconVisual } from './FolderVisuals'
+import { WidgetTile } from './WidgetTile'
 import { getDesktopLargeFolderPreviewLayout } from './folderPreviewPolicy'
 import {
   DESKTOP_FOLDER_SURFACE_CLASS,
@@ -383,15 +384,15 @@ export function DragOverlays({
     stackedIconsRef.current = stackedIcons
   }, [stackedIcons])
 
-  const folderSpan = ghostItem?.kind === 'folder' ? getGridItemSpan(ghostItem) : null
-  const folderFootprintWidth = folderSpan
-    ? folderSpan.cols * slotWidth + Math.max(0, folderSpan.cols - 1) * gridGap
+  const ghostSpan = ghostItem && ghostItem.kind !== 'icon' ? getGridItemSpan(ghostItem) : null
+  const ghostFootprintWidth = ghostSpan
+    ? ghostSpan.cols * slotWidth + Math.max(0, ghostSpan.cols - 1) * gridGap
     : 0
-  const folderFootprintHeight = folderSpan
-    ? folderSpan.rows * slotHeight + Math.max(0, folderSpan.rows - 1) * gridGap
+  const ghostFootprintHeight = ghostSpan
+    ? ghostSpan.rows * slotHeight + Math.max(0, ghostSpan.rows - 1) * gridGap
     : 0
-  const ghostWidth = ghostItem?.kind === 'folder' ? folderFootprintWidth : iconImageSize
-  const ghostHeight = ghostItem?.kind === 'folder' ? folderFootprintHeight : iconImageSize
+  const ghostWidth = ghostItem?.kind === 'icon' ? iconImageSize : ghostFootprintWidth
+  const ghostHeight = ghostItem?.kind === 'icon' ? iconImageSize : ghostFootprintHeight
   const compactScale = compactPreview
     ? Math.min(1, compactPreviewSize / Math.max(1, ghostWidth, ghostHeight))
     : 1
@@ -720,13 +721,22 @@ export function DragOverlays({
                 ) : (
                   <AppWindow className="h-8 w-8 text-foreground/70" />
                 )
-              ) : (
+              ) : ghostItem.kind === 'folder' ? (
                 <FolderGhost
                   folder={ghostItem}
                   slotWidth={slotWidth}
                   slotHeight={slotHeight}
                   gridGap={gridGap}
                   titleLineCount={titleLineCount}
+                />
+              ) : (
+                <WidgetTile
+                  widget={ghostItem}
+                  span={getGridItemSpan(ghostItem)}
+                  slotWidth={slotWidth}
+                  slotHeight={slotHeight}
+                  gridGap={gridGap}
+                  dragPreview
                 />
               )}
             </div>
@@ -770,6 +780,15 @@ export function DragOverlays({
                     slotHeight={slotHeight}
                     gridGap={gridGap}
                     titleLineCount={titleLineCount}
+                  />
+                ) : item.item.kind === 'widget' ? (
+                  <WidgetTile
+                    widget={item.item}
+                    span={getGridItemSpan(item.item)}
+                    slotWidth={slotWidth}
+                    slotHeight={slotHeight}
+                    gridGap={gridGap}
+                    dragPreview
                   />
                 ) : item.item.icon.icon_base64 ? (
                   <img

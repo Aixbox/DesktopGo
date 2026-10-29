@@ -9,6 +9,7 @@ import {
   type SetStateAction,
 } from 'react'
 import type { GridItem, HoverZone } from '../model'
+import type { FolderLayoutProfile } from '../domain/folderLayout'
 import { getId } from '../model'
 import { areSlotsEqual } from '../domain/slots'
 import {
@@ -35,6 +36,7 @@ import {
 import type { DragState, FolderDropFlight, MultiDropFlightItem, PendingDrag } from '../state/types'
 import type { DropImpactEvent } from '../state/types'
 import { resolveOuterDropImpactTarget } from '../views/dropImpactMotion'
+import { captureDragOriginFocus, restoreDragOriginFocus } from './dragFocus'
 
 interface DragWorkflowConfig {
   gridGap: number
@@ -65,7 +67,7 @@ interface UseIconGridDragWorkflowParams {
   folderColumns: number
   folderItemWidth: number
   folderItemHeight: number
-  folderOrderLength: number
+  folderLayoutProfile?: FolderLayoutProfile
   itemById: Map<string, GridItem>
   containerRef: MutableRefObject<HTMLDivElement | null>
   gridRef: MutableRefObject<HTMLDivElement | null>
@@ -130,7 +132,7 @@ export function useIconGridDragWorkflow({
   folderColumns,
   folderItemWidth,
   folderItemHeight,
-  folderOrderLength,
+  folderLayoutProfile,
   itemById,
   containerRef,
   gridRef,
@@ -158,6 +160,7 @@ export function useIconGridDragWorkflow({
 }: UseIconGridDragWorkflowParams): UseIconGridDragWorkflowResult {
   const selectedIconKeySet = new Set(selectedIconKeys)
   const pendingRef = useRef<PendingDrag | null>(null)
+  const dragOriginFocusRef = useRef<HTMLElement | null>(null)
   const dragRef = useRef<DragState | null>(null)
   const beginDragFnRef = useRef<(pending: PendingDrag, x: number, y: number) => void>(
     () => undefined
@@ -352,7 +355,6 @@ export function useIconGridDragWorkflow({
     folderColumns,
     folderItemWidth,
     folderItemHeight,
-    folderOrderLength,
     iconImageSize: iconConfig.imgSize,
     gridRef,
     folderGridRef,
@@ -394,6 +396,7 @@ export function useIconGridDragWorkflow({
     reorderAnimationMs: config.reorderAnimationMs,
     iconConfig,
     columns,
+    folderLayoutProfile,
     pageSizeRef,
     tileRefs,
     itemsRef,
@@ -761,6 +764,7 @@ export function useIconGridDragWorkflow({
     }
     const impactTarget = completedDrag ? resolveOuterDropImpactTarget(completedDrag) : null
     if (!finishDrag(pointerId)) return
+    restoreDragOriginFocus(dragOriginFocusRef)
     if (impactTarget) {
       dropImpactSequenceRef.current += 1
       setDropImpact({ ...impactTarget, sequence: dropImpactSequenceRef.current })
@@ -781,6 +785,7 @@ export function useIconGridDragWorkflow({
   const abortPendingDrag = (pointerId: number) => {
     if (pendingRef.current?.pointerId !== pointerId) return
     clearPending()
+    restoreDragOriginFocus(dragOriginFocusRef)
     suppressClickUntilRef.current = performance.now() + 300
   }
 
@@ -796,6 +801,7 @@ export function useIconGridDragWorkflow({
       pointerId
     )
     commitDragState(null)
+    restoreDragOriginFocus(dragOriginFocusRef)
   }
 
   const armPointerControllerSession = () => {
@@ -872,6 +878,7 @@ export function useIconGridDragWorkflow({
   ) => {
     if (event.button !== 0) return
     armPointerControllerSession()
+    dragOriginFocusRef.current = captureDragOriginFocus(event.currentTarget)
     const rect = event.currentTarget.getBoundingClientRect()
     const pointerId = event.pointerId
     pendingPointerCaptureTargetRef.current = event.currentTarget

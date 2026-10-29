@@ -1,4 +1,5 @@
 import type { GridItem, IconItem } from '../model'
+import { getId } from '../model'
 import { getFolderChildrenById } from './folderPolicy'
 import { DRAG_HOLE_ID, areSlotsEqual } from './slots'
 import type { DragState } from '../state/types'
@@ -45,7 +46,7 @@ export const buildDragItemMap = (state: DragState, items: GridItem[]): Map<strin
   if (state.context === 'folder') {
     return new Map(getFolderIconMapById(state.sourceFolderId, items))
   }
-  return new Map(items.map(item => [item.kind === 'folder' ? `folder:${item.id}` : item.key, item]))
+  return new Map(items.map(item => [getId(item), item]))
 }
 
 export const resolveSelectedIconDragIds = (

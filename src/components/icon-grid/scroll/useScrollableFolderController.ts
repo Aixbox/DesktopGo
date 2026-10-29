@@ -13,9 +13,9 @@ import {
 } from '../domain/topLevelLayout'
 import { compactEmptyPages } from '../domain/slots'
 import { dissolveFolderInTopLevelLayout } from '../domain/folderPolicy'
-import { getDefaultFolderColumnCount, getLayoutNormalizationMetrics } from '../domain/gridGeometry'
+import { getLayoutNormalizationMetrics } from '../domain/gridGeometry'
+import { DEFAULT_FOLDER_LAYOUT_PROFILE, type FolderLayoutProfile } from '../domain/folderLayout'
 import type { LayoutDimensionsTracker } from '../state/layoutDimensionsTracker'
-import { FOLDER_MODAL_MAX_WIDTH } from '../views/folderVisualPolicy'
 import { FOLDER_SHARED_LAYOUT_WINDOW_MS } from '../constants'
 
 interface UseScrollableFolderControllerParams {
@@ -32,6 +32,7 @@ interface UseScrollableFolderControllerParams {
   layoutDimensionsTracker: LayoutDimensionsTracker
   columnWidth: number
   rowHeight: number
+  folderLayoutProfile?: FolderLayoutProfile
 }
 
 interface UseScrollableFolderKeyboardDismissParams {
@@ -78,6 +79,7 @@ export function useScrollableFolderController({
   layoutDimensionsTracker,
   columnWidth,
   rowHeight,
+  folderLayoutProfile = DEFAULT_FOLDER_LAYOUT_PROFILE,
 }: UseScrollableFolderControllerParams) {
   const folderPanelRef = useRef<HTMLDivElement>(null)
   const folderGridContainerRef = useRef<HTMLDivElement>(null)
@@ -88,9 +90,7 @@ export function useScrollableFolderController({
   const [activeFolderSharedLayoutId, setActiveFolderSharedLayoutId] = useState<string | null>(null)
   const [folderItemWidth, setFolderItemWidth] = useState(columnWidth)
   const [folderItemHeight, setFolderItemHeight] = useState(rowHeight)
-  const [folderColumns, setFolderColumns] = useState(() =>
-    getDefaultFolderColumnCount(columnWidth, FOLDER_MODAL_MAX_WIDTH)
-  )
+  const [folderColumns, setFolderColumns] = useState(() => Math.max(1, folderLayoutProfile.columns))
   const openFolder = useMemo(() => {
     if (!openFolderId) return null
     const found = items.find(item => item.kind === 'folder' && item.id === openFolderId)
@@ -129,7 +129,7 @@ export function useScrollableFolderController({
     cancelPendingFolderClose()
     setFolderItemWidth(columnWidth)
     setFolderItemHeight(rowHeight)
-    setFolderColumns(getDefaultFolderColumnCount(columnWidth, FOLDER_MODAL_MAX_WIDTH))
+    setFolderColumns(Math.max(1, folderLayoutProfile.columns))
     setActiveFolderSharedLayoutId(folderId)
     setOpenFolderId(folderId)
     scheduleFolderSharedLayoutRelease(folderId)
@@ -159,11 +159,9 @@ export function useScrollableFolderController({
     let frame = 0
     const recalculate = () => {
       const first = folderGridRef.current?.querySelector<HTMLElement>('[data-folder-grid-item]')
-      const tileWidth = first?.offsetWidth ?? columnWidth
-      const tileHeight = first?.offsetHeight ?? rowHeight
-      setFolderItemWidth(tileWidth)
-      setFolderItemHeight(tileHeight)
-      setFolderColumns(getDefaultFolderColumnCount(tileWidth, FOLDER_MODAL_MAX_WIDTH))
+      setFolderItemWidth(first?.offsetWidth ?? columnWidth)
+      setFolderItemHeight(first?.offsetHeight ?? rowHeight)
+      setFolderColumns(Math.max(1, folderLayoutProfile.columns))
     }
     const schedule = () => {
       cancelAnimationFrame(frame)
@@ -179,7 +177,7 @@ export function useScrollableFolderController({
       observer.disconnect()
       window.removeEventListener('resize', schedule)
     }
-  }, [columnWidth, folderOrder.length, openFolder, rowHeight])
+  }, [columnWidth, folderLayoutProfile.columns, folderOrder.length, openFolder, rowHeight])
 
   useEffect(
     () => () => {

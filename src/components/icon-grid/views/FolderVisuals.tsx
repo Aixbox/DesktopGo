@@ -122,13 +122,30 @@ export const FolderCreatePreview = memo(function FolderCreatePreview({
 interface FolderIconVisualProps {
   icons: DesktopIcon[]
   imgSize: number
+  /** Extra children kept outside the active preview page, shown as a stack. */
+  stackedIcons?: DesktopIcon[]
   expanded?: boolean
   withSurface?: boolean
+}
+
+function FolderPreviewArtwork({ icon, size }: { icon: DesktopIcon; size: number }) {
+  return icon.icon_base64 ? (
+    <img
+      src={icon.icon_base64}
+      alt=""
+      className="h-full w-full object-contain"
+      style={{ width: size, height: size }}
+      draggable={false}
+    />
+  ) : (
+    <AppWindow className="h-full w-full text-foreground/70" style={{ width: size, height: size }} />
+  )
 }
 
 export function FolderIconVisual({
   icons,
   imgSize,
+  stackedIcons = [],
   expanded = false,
   withSurface = true,
 }: FolderIconVisualProps) {
@@ -153,6 +170,7 @@ export function FolderIconVisual({
     width: `${imgSize}px`,
     height: `${imgSize}px`,
   } as const
+  const visibleStack = stackedIcons.slice(0, 2)
 
   return (
     <div className="relative" style={frameStyle} aria-hidden="true" data-folder-icon-visual>
@@ -161,35 +179,51 @@ export function FolderIconVisual({
         className={`${withSurface ? FOLDER_SURFACE_CLASS : ''} absolute transition-[left,top,width,height] duration-200 ease-out`}
         style={surfaceStyle}
       >
-        {icons.slice(0, 4).map((icon, idx) => {
-          const row = Math.floor(idx / 2)
-          const col = idx % 2
-          const left = outerExpand + FOLDER_PREVIEW_PADDING + col * (slotSize + FOLDER_PREVIEW_GAP)
-          const top = outerExpand + FOLDER_PREVIEW_PADDING + row * (slotSize + FOLDER_PREVIEW_GAP)
-          return (
-            <div
-              key={`${icon.id}-${idx}`}
-              className="launchpad-icon-artwork absolute overflow-hidden transition-[left,top] duration-200 ease-out"
-              style={{
-                left: `${left}px`,
-                top: `${top}px`,
-                width: `${slotSize}px`,
-                height: `${slotSize}px`,
-              }}
-            >
-              {icon.icon_base64 ? (
-                <img
-                  src={icon.icon_base64}
-                  alt={icon.name}
-                  className="h-full w-full object-contain"
-                  draggable={false}
-                />
-              ) : (
-                <AppWindow className="h-full w-full text-foreground/70" />
-              )}
-            </div>
-          )
-        })}
+        <div className="relative h-full w-full">
+          {visibleStack.map((icon, index) => {
+            const offset = (index + 1) * Math.max(2, Math.floor(slotSize * 0.08))
+            const stackSize = Math.max(6, Math.floor(slotSize * (0.9 - index * 0.06)))
+            return (
+              <div
+                key={`stack-${icon.id}-${index}`}
+                data-folder-stacked-preview="true"
+                className="pointer-events-none absolute overflow-hidden rounded-[22%] border border-foreground/[0.12] bg-background/42 opacity-80 shadow-[0_2px_6px_rgba(15,23,42,0.14)] dark:border-white/16 dark:bg-black/28"
+                style={{
+                  left: `${outerExpand + FOLDER_PREVIEW_PADDING + offset}px`,
+                  top: `${outerExpand + FOLDER_PREVIEW_PADDING + offset}px`,
+                  width: `${stackSize}px`,
+                  height: `${stackSize}px`,
+                  transform: `rotate(${index === 0 ? -3 : 4}deg)`,
+                  zIndex: index,
+                }}
+              >
+                <FolderPreviewArtwork icon={icon} size={stackSize} />
+              </div>
+            )
+          })}
+          {icons.slice(0, 4).map((icon, idx) => {
+            const row = Math.floor(idx / 2)
+            const col = idx % 2
+            const left =
+              outerExpand + FOLDER_PREVIEW_PADDING + col * (slotSize + FOLDER_PREVIEW_GAP)
+            const top = outerExpand + FOLDER_PREVIEW_PADDING + row * (slotSize + FOLDER_PREVIEW_GAP)
+            return (
+              <div
+                key={`${icon.id}-${idx}`}
+                className="launchpad-icon-artwork absolute overflow-hidden transition-[left,top] duration-200 ease-out"
+                style={{
+                  left: `${left}px`,
+                  top: `${top}px`,
+                  width: `${slotSize}px`,
+                  height: `${slotSize}px`,
+                  zIndex: 2,
+                }}
+              >
+                <FolderPreviewArtwork icon={icon} size={slotSize} />
+              </div>
+            )
+          })}
+        </div>
       </div>
     </div>
   )

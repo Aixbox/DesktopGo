@@ -9,6 +9,7 @@ import {
   type SetStateAction,
 } from 'react'
 import type { GridItem, HoverZone } from '../model'
+import type { FolderLayoutProfile } from '../domain/folderLayout'
 import { getId } from '../model'
 import { areSlotsEqual } from '../domain/slots'
 import { getFolderChildrenById } from '../domain/folderPolicy'
@@ -36,6 +37,7 @@ import type {
 } from '../state/types'
 import { resolveOuterDropImpactTarget } from '../views/dropImpactMotion'
 import { useScrollableMultiDragEdgeAutoScroll } from './useScrollableMultiDragEdgeAutoScroll'
+import { captureDragOriginFocus, restoreDragOriginFocus } from '../hooks/dragFocus'
 
 interface DragWorkflowConfig {
   gridGap: number
@@ -67,7 +69,7 @@ interface UseIconGridDragWorkflowParams {
   folderColumns: number
   folderItemWidth: number
   folderItemHeight: number
-  folderOrderLength: number
+  folderLayoutProfile?: FolderLayoutProfile
   itemById: Map<string, GridItem>
   containerRef: MutableRefObject<HTMLDivElement | null>
   gridRef: MutableRefObject<HTMLDivElement | null>
@@ -151,7 +153,7 @@ export function useScrollableIconGridDragWorkflow({
   folderColumns,
   folderItemWidth,
   folderItemHeight,
-  folderOrderLength,
+  folderLayoutProfile,
   itemById,
   containerRef,
   gridRef,
@@ -185,6 +187,7 @@ export function useScrollableIconGridDragWorkflow({
   const selectedIconKeySet = new Set(selectedIconKeys)
   const isCompactOuterDrop = outerDropMode === 'compact-page'
   const pendingRef = useRef<PendingDrag | null>(null)
+  const dragOriginFocusRef = useRef<HTMLElement | null>(null)
   const dragRef = useRef<DragState | null>(null)
   const beginDragFnRef = useRef<(pending: PendingDrag, x: number, y: number) => void>(
     () => undefined
@@ -407,7 +410,6 @@ export function useScrollableIconGridDragWorkflow({
     folderColumns,
     folderItemWidth,
     folderItemHeight,
-    folderOrderLength,
     isCompactOuterDrop,
     getOuterMinPageCount,
     itemById,
@@ -447,6 +449,7 @@ export function useScrollableIconGridDragWorkflow({
     reorderAnimationMs: config.reorderAnimationMs,
     iconConfig,
     columns,
+    folderLayoutProfile,
     pageSizeRef,
     tileRefs,
     itemsRef,
@@ -685,6 +688,7 @@ export function useScrollableIconGridDragWorkflow({
       : null
     const impactTarget = completedDrag ? resolveOuterDropImpactTarget(completedDrag) : null
     if (!finishDrag(pointerId)) return
+    restoreDragOriginFocus(dragOriginFocusRef)
     if (impactTarget) {
       dropImpactSequenceRef.current += 1
       setDropImpact({ ...impactTarget, sequence: dropImpactSequenceRef.current })
@@ -707,6 +711,7 @@ export function useScrollableIconGridDragWorkflow({
   const abortPendingDrag = (pointerId: number) => {
     if (pendingRef.current?.pointerId !== pointerId) return
     clearPending()
+    restoreDragOriginFocus(dragOriginFocusRef)
     suppressClickUntilRef.current = performance.now() + 300
   }
 
@@ -721,6 +726,7 @@ export function useScrollableIconGridDragWorkflow({
       pointerId
     )
     commitDragState(null)
+    restoreDragOriginFocus(dragOriginFocusRef)
   }
 
   const armPointerControllerSession = () => {
@@ -793,6 +799,7 @@ export function useScrollableIconGridDragWorkflow({
   const handleTilePointerDown = (event: ReactPointerEvent<HTMLDivElement>, itemId: string) => {
     if (event.button !== 0) return
     armPointerControllerSession()
+    dragOriginFocusRef.current = captureDragOriginFocus(event.currentTarget)
     const rect = event.currentTarget.getBoundingClientRect()
     pendingPointerCaptureTargetRef.current = event.currentTarget
     pendingRef.current = {

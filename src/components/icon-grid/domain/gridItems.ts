@@ -6,6 +6,10 @@ import {
   replaceFolderChildren,
 } from './folderPolicy'
 
+/** Build the id index once for drag/normalize hot paths instead of scanning items repeatedly. */
+export const buildGridItemIndex = (items: readonly GridItem[]): Map<string, GridItem> =>
+  new Map(items.map(item => [getId(item), item]))
+
 export const filterItemsByIds = (items: GridItem[], ids: string[]): GridItem[] => {
   const idSet = new Set(ids)
   return items.filter(item => idSet.has(getId(item)))

@@ -61,8 +61,22 @@ export const resolveDockInsertIndexByDisplayIndex = (
   ).length
 }
 
-export const resolveDockInsertIndexFromCenters = (pointerX: number, centers: number[]): number => {
+export const resolveDockInsertIndexFromCenters = (
+  pointerX: number,
+  centers: number[],
+  options?: { rtl?: boolean }
+): number => {
   if (centers.length === 0) return 0
+
+  if (options?.rtl) {
+    if (pointerX >= centers[0]) return 0
+    for (let index = 0; index < centers.length - 1; index += 1) {
+      const midpoint = (centers[index] + centers[index + 1]) / 2
+      if (pointerX > midpoint) return index
+    }
+    return centers.length
+  }
+
   if (pointerX <= centers[0]) return 0
 
   for (let index = 0; index < centers.length - 1; index += 1) {

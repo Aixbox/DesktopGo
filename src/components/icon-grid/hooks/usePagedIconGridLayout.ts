@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import type { DesktopIcon } from '../../../types'
-import type { GridItem, PersistedLayout } from '../model'
+import type { FolderLayoutProfileId, GridItem, PersistedLayout } from '../model'
 import { getGridItemSpan, getId } from '../model'
 import { compactEmptyPages, areSlotsEqual } from '../domain/slots'
 import { clampNumber } from '../domain/geometry'
@@ -29,8 +29,11 @@ import {
   isSuspiciousSingleCellPageGeometry,
 } from '../domain/gridGeometry'
 import { filterItemsByIds } from '../domain/gridItems'
+import { measureLayoutPerformance } from '../domain/layoutPerformance'
 import { createLayoutDimensionsTracker } from '../state/layoutDimensionsTracker'
 import { GRID_GAP, IMPORT_HIGHLIGHT_MS } from '../constants'
+import { getFolderLayoutProfile } from '../domain/folderLayout'
+import { useWidgetResizeHandler } from './useWidgetResizeHandler'
 
 export interface PagedImportPlacementRequest {
   token: number
@@ -76,6 +79,7 @@ export function usePagedIconGridLayout({
   const persistedGeometryKeyRef = useRef<string | null>(null)
   const persistedLayoutRef = useRef<PersistedLayout | null>(null)
   const persistedScrollGroupsRef = useRef<PersistedLayout['scrollGroups']>(undefined)
+  const persistedFolderProfileIdRef = useRef<FolderLayoutProfileId | undefined>(undefined)
   const persistedLayoutLoadedRef = useRef(false)
   const persistedLayoutLoadPromiseRef = useRef<Promise<PersistedLayout | null> | null>(null)
   const hydrationBlockedRef = useRef(false)
@@ -101,6 +105,8 @@ export function usePagedIconGridLayout({
   const [outerSlots, setOuterSlots] = useState<Array<string | null>>([])
   const [dockKeys, setDockKeys] = useState<Array<string | null>>([])
   const [hydrationError, setHydrationError] = useState<string | null>(null)
+  const [folderLayoutProfileId, setFolderLayoutProfileId] =
+    useState<FolderLayoutProfileId>('standard')
   const [layoutDimensionsTracker] = useState(() =>
     createLayoutDimensionsTracker({ pageSize: Math.max(1, columns * rows), columns })
   )
@@ -109,7 +115,15 @@ export function usePagedIconGridLayout({
   const itemIds = useMemo(() => items.map(getId), [items])
   const itemLayoutSignature = useMemo(
     () =>
-      items.map(item => (item.kind === 'folder' ? `${item.id}:${item.size}` : item.key)).join('|'),
+      items
+        .map(item =>
+          item.kind === 'folder'
+            ? `${item.id}:${item.size}`
+            : item.kind === 'widget'
+              ? `${item.id}:${item.spanX}x${item.spanY}`
+              : item.key
+        )
+        .join('|'),
     [items]
   )
   const activeDockKeys = useMemo(() => (dockEnabled ? dockKeys : []), [dockEnabled, dockKeys])
@@ -118,6 +132,15 @@ export function usePagedIconGridLayout({
     [activeDockKeys, itemIds]
   )
   const pageSize = Math.max(1, columns * rows)
+  const handleResizeWidget = useWidgetResizeHandler({
+    itemsRef,
+    outerSlotsRef,
+    dockKeysRef,
+    pageSizeRef,
+    columns,
+    setItems,
+    setOuterSlots,
+  })
 
   const clearImportHighlightTimer = () => {
     if (importHighlightTimerRef.current === null) return
@@ -154,6 +177,7 @@ export function usePagedIconGridLayout({
             layoutDimensions.columns
           ),
           geometryKey: persistedGeometryKeyRef.current ?? undefined,
+          folderProfileId: persistedFolderProfileIdRef.current,
         }
       } else {
         if (
@@ -185,7 +209,11 @@ export function usePagedIconGridLayout({
         persisted = persistedLayoutRef.current
       }
 
-      const hydratedLayout = hydrateLayout(icons, persisted)
+      const hydratedLayout = measureLayoutPerformance(
+        'hydrate',
+        () => hydrateLayout(icons, persisted),
+        { scope: 'paged', itemCount: icons.length }
+      )
       const nextItems = hydratedLayout.items
       const persistedForItems = hydratedLayout.layout
       const nextItemIds = nextItems.map(getId)
@@ -205,6 +233,8 @@ export function usePagedIconGridLayout({
       persistedCoordinatesRef.current = persistedForItems?.coordinates
       persistedGeometryKeyRef.current = persisted?.geometryKey ?? null
       persistedScrollGroupsRef.current = persistedForItems?.scrollGroups
+      persistedFolderProfileIdRef.current = persistedForItems?.folderProfileId
+      setFolderLayoutProfileId(persistedForItems?.folderProfileId ?? 'standard')
 
       if (hydrationSource !== 'memory') {
         if (
@@ -261,7 +291,9 @@ export function usePagedIconGridLayout({
           layoutDimensions.pageSize,
           layoutDimensions.columns,
           nextGeometryKey,
-          persistedScrollGroupsRef.current
+          persistedScrollGroupsRef.current,
+          'paged',
+          persistedFolderProfileIdRef.current
         )
       )
       .catch(error => {
@@ -323,7 +355,12 @@ export function usePagedIconGridLayout({
     }
     const schedule = () => {
       cancelAnimationFrame(animationFrame)
-      animationFrame = requestAnimationFrame(recalculate)
+      animationFrame = requestAnimationFrame(() =>
+        measureLayoutPerformance('measure', recalculate, {
+          scope: 'paged',
+          itemCount: itemsRef.current.length,
+        })
+      )
     }
 
     schedule()
@@ -367,32 +404,42 @@ export function usePagedIconGridLayout({
       previousDimensions.columns
     )
 
-    const normalized = !layoutBaselineRef.current
-      ? persistedDimsRef.current
-        ? resizeSlotPages(
-            outerSlotsRef.current,
-            outerItems,
-            persistedDimsRef.current.pageSize,
-            layoutMetrics.pageSize,
-            persistedDimsRef.current.columns,
-            layoutMetrics.columns,
-            persistedCoordinatesRef.current ?? null
-          )
-        : normalizeOuterSlots(
-            outerSlotsRef.current,
-            outerItems,
-            layoutMetrics.pageSize,
-            layoutMetrics.columns
-          )
-      : resizeSlotPages(
-          outerSlotsRef.current,
-          outerItems,
-          previousDimensions.pageSize,
-          layoutMetrics.pageSize,
-          previousDimensions.columns,
-          layoutMetrics.columns,
-          currentCoordinates
-        )
+    const normalized = measureLayoutPerformance(
+      'normalize',
+      () =>
+        !layoutBaselineRef.current
+          ? persistedDimsRef.current
+            ? resizeSlotPages(
+                outerSlotsRef.current,
+                outerItems,
+                persistedDimsRef.current.pageSize,
+                layoutMetrics.pageSize,
+                persistedDimsRef.current.columns,
+                layoutMetrics.columns,
+                persistedCoordinatesRef.current ?? null
+              )
+            : normalizeOuterSlots(
+                outerSlotsRef.current,
+                outerItems,
+                layoutMetrics.pageSize,
+                layoutMetrics.columns
+              )
+          : resizeSlotPages(
+              outerSlotsRef.current,
+              outerItems,
+              previousDimensions.pageSize,
+              layoutMetrics.pageSize,
+              previousDimensions.columns,
+              layoutMetrics.columns,
+              currentCoordinates
+            ),
+      {
+        scope: 'paged',
+        itemCount: outerItems.length,
+        columns: layoutMetrics.columns,
+        pageSize: layoutMetrics.pageSize,
+      }
+    )
     layoutBaselineRef.current = true
 
     // 不做稀疏页"修复"：用户把图标分摊到多页是合法布局，页数多不等于数据损坏。
@@ -591,6 +638,7 @@ export function usePagedIconGridLayout({
     itemHeight,
     items,
     setItems,
+    handleResizeWidget,
     importHighlightIds,
     outerSlots,
     setOuterSlots,
@@ -600,6 +648,7 @@ export function usePagedIconGridLayout({
     activeDockKeys,
     outerItemIds,
     pageSize,
+    folderLayoutProfile: getFolderLayoutProfile(folderLayoutProfileId),
     hydrationError,
   }
 }

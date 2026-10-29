@@ -9,7 +9,7 @@ import {
 } from 'react'
 import type { DesktopIcon } from '../../../types'
 import { translate } from '../../../lib/i18n'
-import type { GridItem, PersistedLayout, ScrollGroupMeta } from '../model'
+import type { FolderLayoutProfileId, GridItem, PersistedLayout, ScrollGroupMeta } from '../model'
 import { getGridItemSpan, getId } from '../model'
 import { compactEmptyPages, areSlotsEqual } from '../domain/slots'
 import { clampNumber } from '../domain/geometry'
@@ -41,7 +41,10 @@ import {
 import { createLayoutDimensionsTracker } from '../state/layoutDimensionsTracker'
 import { compactOuterSlotsWithinPages } from './scrollTopLevelLayout'
 import { normalizeScrollGroups, placeItemsInScrollGroup } from './scrollGroupLayout'
+import { measureLayoutPerformance } from '../domain/layoutPerformance'
 import { GRID_GAP, IMPORT_HIGHLIGHT_MS } from '../constants'
+import { getFolderLayoutProfile } from '../domain/folderLayout'
+import { useWidgetResizeHandler } from '../hooks/useWidgetResizeHandler'
 
 export interface ScrollImportPlacementRequest {
   token: number
@@ -92,6 +95,7 @@ export function useScrollableIconGridLayout({
   const persistedLayoutRef = useRef<PersistedLayout | null>(null)
   const persistedLayoutLoadedRef = useRef(false)
   const persistedLayoutLoadPromiseRef = useRef<Promise<PersistedLayout | null> | null>(null)
+  const persistedFolderProfileIdRef = useRef<FolderLayoutProfileId | undefined>(undefined)
   const hydrationBlockedRef = useRef(false)
   const hydratedLayoutResetTokenRef = useRef(layoutResetToken)
   const persistedLayoutResetTokenRef = useRef<number | null>(null)
@@ -119,6 +123,8 @@ export function useScrollableIconGridLayout({
   const [outerSlots, setOuterSlots] = useState<Array<string | null>>([])
   const [dockKeys, setDockKeys] = useState<Array<string | null>>([])
   const [hydrationError, setHydrationError] = useState<string | null>(null)
+  const [folderLayoutProfileId, setFolderLayoutProfileId] =
+    useState<FolderLayoutProfileId>('standard')
   const [layoutDimensionsTracker] = useState(() =>
     createLayoutDimensionsTracker({ pageSize: Math.max(1, columns * rows), columns })
   )
@@ -130,7 +136,15 @@ export function useScrollableIconGridLayout({
   const itemIds = useMemo(() => items.map(getId), [items])
   const itemLayoutSignature = useMemo(
     () =>
-      items.map(item => (item.kind === 'folder' ? `${item.id}:${item.size}` : item.key)).join('|'),
+      items
+        .map(item =>
+          item.kind === 'folder'
+            ? `${item.id}:${item.size}`
+            : item.kind === 'widget'
+              ? `${item.id}:${item.spanX}x${item.spanY}`
+              : item.key
+        )
+        .join('|'),
     [items]
   )
   const activeDockKeys = useMemo(() => (dockEnabled ? dockKeys : []), [dockEnabled, dockKeys])
@@ -140,6 +154,15 @@ export function useScrollableIconGridLayout({
   )
   const pageSize = Math.max(1, columns * rows)
   const scrollGroupCount = Math.max(1, scrollGroups.length)
+  const handleResizeWidget = useWidgetResizeHandler({
+    itemsRef,
+    outerSlotsRef,
+    dockKeysRef,
+    pageSizeRef,
+    columns,
+    setItems,
+    setOuterSlots,
+  })
 
   const clearImportHighlightTimer = () => {
     if (importHighlightTimerRef.current === null) return
@@ -186,6 +209,7 @@ export function useScrollableIconGridLayout({
           geometryKey: persistedGeometryKeyRef.current ?? undefined,
           scrollGroups: scrollGroupsRef.current,
           scrollGroupItemsExplicit: true,
+          folderProfileId: persistedFolderProfileIdRef.current,
         }
       } else {
         if (
@@ -217,7 +241,11 @@ export function useScrollableIconGridLayout({
         persisted = persistedLayoutRef.current
       }
 
-      const hydratedLayout = hydrateLayout(icons, persisted)
+      const hydratedLayout = measureLayoutPerformance(
+        'hydrate',
+        () => hydrateLayout(icons, persisted),
+        { scope: 'scroll', itemCount: icons.length }
+      )
       const nextItems = hydratedLayout.items
       const persistedForItems = hydratedLayout.layout
       const nextItemIds = nextItems.map(getId)
@@ -235,6 +263,8 @@ export function useScrollableIconGridLayout({
         : null
       persistedCoordinatesRef.current = persisted?.coordinates
       persistedGeometryKeyRef.current = persisted?.geometryKey ?? null
+      persistedFolderProfileIdRef.current = persistedForItems?.folderProfileId
+      setFolderLayoutProfileId(persistedForItems?.folderProfileId ?? 'standard')
       if (hydrationSource !== 'memory') {
         if (
           hydrationEnvironment.launchpadGridViewMode !== 'scroll' &&
@@ -304,7 +334,8 @@ export function useScrollableIconGridLayout({
           layoutDimensions.columns,
           nextGeometryKey,
           scrollGroups,
-          'scroll'
+          'scroll',
+          persistedFolderProfileIdRef.current
         )
       )
       .catch(error => console.error('Failed to persist launchpad layout:', error))
@@ -428,7 +459,12 @@ export function useScrollableIconGridLayout({
     const schedule = () => {
       if (sidebarTransitioning) return
       cancelAnimationFrame(animationFrame)
-      animationFrame = requestAnimationFrame(recalculate)
+      animationFrame = requestAnimationFrame(() =>
+        measureLayoutPerformance('measure', recalculate, {
+          scope: 'scroll',
+          itemCount: itemsRef.current.length,
+        })
+      )
     }
     if (sidebarTransitioning) {
       sidebarTransitionTimer = window.setTimeout(
@@ -488,32 +524,42 @@ export function useScrollableIconGridLayout({
       previousDimensions.pageSize,
       previousDimensions.columns
     )
-    const normalized = !layoutBaselineRef.current
-      ? persistedDimsRef.current
-        ? resizeSlotPages(
-            outerSlotsRef.current,
-            outerItems,
-            persistedDimsRef.current.pageSize,
-            layoutMetrics.pageSize,
-            persistedDimsRef.current.columns,
-            layoutMetrics.columns,
-            persistedCoordinatesRef.current ?? null
-          )
-        : normalizeOuterSlots(
-            outerSlotsRef.current,
-            outerItems,
-            layoutMetrics.pageSize,
-            layoutMetrics.columns
-          )
-      : resizeSlotPages(
-          outerSlotsRef.current,
-          outerItems,
-          previousDimensions.pageSize,
-          layoutMetrics.pageSize,
-          previousDimensions.columns,
-          layoutMetrics.columns,
-          currentCoordinates
-        )
+    const normalized = measureLayoutPerformance(
+      'normalize',
+      () =>
+        !layoutBaselineRef.current
+          ? persistedDimsRef.current
+            ? resizeSlotPages(
+                outerSlotsRef.current,
+                outerItems,
+                persistedDimsRef.current.pageSize,
+                layoutMetrics.pageSize,
+                persistedDimsRef.current.columns,
+                layoutMetrics.columns,
+                persistedCoordinatesRef.current ?? null
+              )
+            : normalizeOuterSlots(
+                outerSlotsRef.current,
+                outerItems,
+                layoutMetrics.pageSize,
+                layoutMetrics.columns
+              )
+          : resizeSlotPages(
+              outerSlotsRef.current,
+              outerItems,
+              previousDimensions.pageSize,
+              layoutMetrics.pageSize,
+              previousDimensions.columns,
+              layoutMetrics.columns,
+              currentCoordinates
+            ),
+      {
+        scope: 'scroll',
+        itemCount: outerItems.length,
+        columns: layoutMetrics.columns,
+        pageSize: layoutMetrics.pageSize,
+      }
+    )
     layoutBaselineRef.current = true
     const compacted =
       launchpadGridViewMode === 'scroll'
@@ -739,6 +785,7 @@ export function useScrollableIconGridLayout({
     currentPageRef,
     dockKeys,
     dockKeysRef,
+    handleResizeWidget,
     gridRef,
     importHighlightIds,
     itemHeight,
@@ -761,5 +808,6 @@ export function useScrollableIconGridLayout({
     setOuterSlots,
     setScrollGroups,
     hydrationError,
+    folderLayoutProfile: getFolderLayoutProfile(folderLayoutProfileId),
   }
 }

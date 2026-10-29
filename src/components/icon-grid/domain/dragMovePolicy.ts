@@ -11,6 +11,7 @@ import {
   isVacantSlot,
 } from './slots'
 import { getFootprintIndices } from './topLevelLayout'
+import { buildGridItemIndex } from './gridItems'
 import {
   applyDirectionalShift,
   evaluateDirectionalEvasion,
@@ -864,7 +865,9 @@ export const applyOuterEvasionPolicy = (
   const targetAnchorIndex = options?.targetAnchorIndex ?? hit.targetIndex
   const pageStart = getPageStartBySlotIndex(targetAnchorIndex, safePageSize)
   const directions = resolveEvasionDirectionCandidates(hit.overlapRect, hit.targetRect)
-  const targetItem = options?.items?.find(item => getId(item) === hit.targetId) ?? null
+  const targetItem = options?.items
+    ? (buildGridItemIndex(options.items).get(hit.targetId) ?? null)
+    : null
   const draggingSpan = options?.draggingItem ? getGridItemSpan(options.draggingItem) : null
   const targetSpan = targetItem ? getGridItemSpan(targetItem) : null
   const pageHasFootprintItem =

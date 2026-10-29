@@ -23,6 +23,7 @@ import type { PageAnchorEntry } from '../domain/topLevelLayout'
 import { activateDragPointerCapture, releaseDragPointerCapture } from '../hooks/dragPointerCapture'
 import type { GridItem } from '../model'
 import { getGridItemSpan } from '../model'
+import { resolveKeyboardDropAction } from '../domain/keyboardDropPolicy'
 import type { ScrollGridSection } from '../views/scrollableOuterGridTypes'
 import { resolveVerticalEdgeScrollSpeed } from './scrollEdgeAutoScrollPolicy'
 import { MOTION_SPRING_EASING } from '../constants'
@@ -852,12 +853,21 @@ export function useScrollableOuterGridDragWorkflow({
     if (sourceIndex < 0 || targetIndex < 0) return
     commitPreviewOrder(activeId, overId, sourceIndex < targetIndex ? 'after' : 'before', 0)
   }
-  const handleKeyboardItemDragEnd = (_event: DragEndEvent) => {
+  const handleKeyboardItemDragEnd = (event: DragEndEvent) => {
     const activeId = keyboardDraggedItemId
     const finalPreviewOrder = previewOrderRef.current
+    const sourceItem = activeId ? activeItemById.get(activeId) : null
+    const overId = event.over ? String(event.over.id) : null
+    const targetItem = overId ? activeItemById.get(overId) : null
+    const dropAction = resolveKeyboardDropAction({ source: sourceItem, target: targetItem })
     captureGridItemPositions()
     setKeyboardDraggedItemId(null)
     finishItemDrag()
+    if (dropAction?.kind === 'merge') {
+      onMergeItems(dropAction.sourceId, dropAction.targetId)
+      emitDropImpact(dropAction.sourceId, dropAction.targetId)
+      return
+    }
     if (activeSection && finalPreviewOrder) {
       onCommitItemOrder(activeSection.groupId, finalPreviewOrder)
     }

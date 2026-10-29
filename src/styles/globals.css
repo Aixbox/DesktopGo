@@ -5,16 +5,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* 强制保持动画：忽略 Windows "关闭动画效果" 系统设置 */
+/* Respect the platform reduced-motion preference for every launchpad layer. */
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,
   ::after {
-    animation-duration: revert-layer !important;
-    animation-delay: revert-layer !important;
-    transition-duration: revert-layer !important;
-    transition-delay: revert-layer !important;
-    scroll-behavior: smooth !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

@@ -1,4 +1,5 @@
 import type { PersistedItem, PersistedLayout, PersistedPlacement, ScrollGroupMeta } from '../model'
+import { getFolderLayoutProfile, getFolderPlacement } from './folderLayout'
 
 export type LayoutValidationSeverity = 'error' | 'warning'
 
@@ -26,16 +27,19 @@ const isPositiveInteger = (value: unknown): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value > 0
 
 const itemId = (item: PersistedItem): string =>
-  item.type === 'icon' ? item.key : `folder:${item.id}`
+  item.type === 'icon' ? item.key : `${item.type}:${item.id}`
 
 const isPersistedItem = (value: unknown): value is PersistedItem => {
   if (!value || typeof value !== 'object') return false
   const candidate = value as { type?: unknown }
-  return candidate.type === 'icon' || candidate.type === 'folder'
+  return candidate.type === 'icon' || candidate.type === 'folder' || candidate.type === 'widget'
 }
 
 const isFolderSize = (value: unknown): boolean =>
   value === undefined || value === '1x1' || value === '1x2' || value === '2x1' || value === '2x2'
+
+const isFolderProfileId = (value: unknown): boolean =>
+  value === undefined || value === 'standard' || value === 'simple' || value === 'big'
 
 const validateItemShape = (item: PersistedItem, index: number): LayoutValidationIssue[] => {
   if (!item || typeof item !== 'object') {
@@ -45,7 +49,52 @@ const validateItemShape = (item: PersistedItem, index: number): LayoutValidation
     return isNonEmptyString(item.key) ? [] : [issue(`items[${index}].key`, '图标 key 不能为空')]
   }
   if (item.type !== 'folder') {
-    return [issue(`items[${index}].type`, '项目 type 必须是 icon 或 folder')]
+    if (item.type !== 'widget') {
+      return [issue(`items[${index}].type`, '项目 type 必须是 icon、folder 或 widget')]
+    }
+    const widgetIssues: LayoutValidationIssue[] = []
+    if (!isNonEmptyString(item.id))
+      widgetIssues.push(issue(`items[${index}].id`, 'Widget id 不能为空'))
+    if (!isNonEmptyString(item.provider)) {
+      widgetIssues.push(issue(`items[${index}].provider`, 'Widget provider 不能为空'))
+    }
+    if (!isNonEmptyString(item.label)) {
+      widgetIssues.push(issue(`items[${index}].label`, 'Widget label 不能为空'))
+    }
+    ;(['spanX', 'spanY'] as const).forEach(field => {
+      if (!isPositiveInteger(item[field])) {
+        widgetIssues.push(issue(`items[${index}].${field}`, `Widget ${field} 必须是正整数`))
+      }
+    })
+    ;(['minSpanX', 'minSpanY', 'maxSpanX', 'maxSpanY'] as const).forEach(field => {
+      const value = item[field]
+      if (value !== undefined && !isPositiveInteger(value)) {
+        widgetIssues.push(issue(`items[${index}].${field}`, `Widget ${field} 必须是正整数`))
+      }
+    })
+    if (
+      item.appWidgetId !== undefined &&
+      (!Number.isInteger(item.appWidgetId) || item.appWidgetId < 0)
+    ) {
+      widgetIssues.push(issue(`items[${index}].appWidgetId`, 'Widget appWidgetId 必须是非负整数'))
+    }
+    if (isPositiveInteger(item.spanX) && isPositiveInteger(item.spanY)) {
+      const minSpanX = item.minSpanX ?? 1
+      const minSpanY = item.minSpanY ?? 1
+      const maxSpanX = item.maxSpanX ?? item.spanX
+      const maxSpanY = item.maxSpanY ?? item.spanY
+      if (minSpanX > maxSpanX || minSpanX > item.spanX || item.spanX > maxSpanX) {
+        widgetIssues.push(
+          issue(`items[${index}]`, 'Widget spanX 必须落在 minSpanX/maxSpanX 范围内')
+        )
+      }
+      if (minSpanY > maxSpanY || minSpanY > item.spanY || item.spanY > maxSpanY) {
+        widgetIssues.push(
+          issue(`items[${index}]`, 'Widget spanY 必须落在 minSpanY/maxSpanY 范围内')
+        )
+      }
+    }
+    return widgetIssues
   }
   const issues: LayoutValidationIssue[] = []
   if (!isNonEmptyString(item.id)) issues.push(issue(`items[${index}].id`, '文件夹 id 不能为空'))
@@ -69,7 +118,7 @@ const collectReferenceIssues = (layout: PersistedLayout): LayoutValidationIssue[
     const id = itemId(item)
     if (seenTopLevelIds.has(id)) issues.push(issue(`items[${index}]`, `重复项目 id: ${id}`))
     seenTopLevelIds.add(id)
-    if (item.type === 'icon' || !Array.isArray(item.children)) return
+    if (item.type !== 'folder' || !Array.isArray(item.children)) return
     item.children.forEach((child, childIndex) => {
       if (iconIds.has(child)) {
         issues.push(issue(`items[${index}].children[${childIndex}]`, `重复文件夹成员: ${child}`))
@@ -351,6 +400,22 @@ const validatePlacements = (
       if (placement.spanX !== 1 || placement.spanY !== 1) {
         issues.push(issue(`placements[${index}]`, 'folder child 当前只支持 1×1 span'))
       }
+      const expectedFolderCell = getFolderPlacement(
+        placement.rank,
+        getFolderLayoutProfile(layout.folderProfileId)
+      )
+      if (
+        placement.page !== expectedFolderCell.page ||
+        placement.row !== expectedFolderCell.row ||
+        placement.col !== expectedFolderCell.col
+      ) {
+        issues.push(
+          issue(
+            `placements[${index}]`,
+            `folder child 坐标与 profile rank 不一致，应为 page=${expectedFolderCell.page}, row=${expectedFolderCell.row}, col=${expectedFolderCell.col}`
+          )
+        )
+      }
       const key = placementKey(container)
       registerRank(key, placement.rank, index)
       registerPage(key, placement.page, placement.rank)
@@ -420,6 +485,9 @@ export const validatePersistedLayout = (layout: PersistedLayout): LayoutValidati
   }
   if (layout.geometryKey !== undefined && !isNonEmptyString(layout.geometryKey)) {
     issues.push(issue('geometryKey', 'geometryKey 必须是非空字符串'))
+  }
+  if (!isFolderProfileId(layout.folderProfileId)) {
+    issues.push(issue('folderProfileId', 'folderProfileId 必须是 standard/simple/big'))
   }
   if (layout.coordinates !== undefined && !Array.isArray(layout.coordinates)) {
     issues.push(issue('coordinates', 'coordinates 必须是数组'))

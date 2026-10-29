@@ -8,6 +8,7 @@ import {
 } from 'react'
 import { useReducedMotion } from 'framer-motion'
 import type { GridItem, IconItem } from '../model'
+import type { FolderLayoutProfile } from '../domain/folderLayout'
 import { getId } from '../model'
 import { compactEmptyPages, DRAG_HOLE_ID } from '../domain/slots'
 import { moveDragHoleToIndex } from '../domain/evasionPolicy'
@@ -50,6 +51,7 @@ interface UseDragDropCommitParams {
   reorderAnimationMs: number
   iconConfig: IconConfigLike
   columns: number
+  folderLayoutProfile?: FolderLayoutProfile
   outerDropMode?: 'paged' | 'compact-page'
   getOuterMinPageCount?: () => number
   pageSizeRef: MutableRefObject<number>
@@ -87,6 +89,7 @@ export function useScrollableDragDropCommit({
   reorderAnimationMs,
   iconConfig,
   columns,
+  folderLayoutProfile,
   outerDropMode = 'paged',
   getOuterMinPageCount,
   pageSizeRef,
@@ -220,8 +223,16 @@ export function useScrollableDragDropCommit({
     originalOuterSlots: Array<string | null>,
     originalDockKeys: Array<string | null>,
     targetContext: 'outer' | 'dock',
-    result: { items: GridItem[]; slots: Array<string | null> }
+    result: {
+      items: GridItem[]
+      slots: Array<string | null>
+      folderDrop?: { accepted: boolean }
+    }
   ) => {
+    if (result.folderDrop && !result.folderDrop.accepted) {
+      commitLayouts(originalItems, originalOuterSlots, originalDockKeys)
+      return
+    }
     if (
       session.sourceFolderId &&
       session.draggingItem.kind === 'icon' &&
@@ -486,7 +497,12 @@ export function useScrollableDragDropCommit({
     const originalOuterSlots = outerSlotsRef.current
     const originalDockKeys = dockKeysRef.current
     const baseForDrop = extractDraggedIconsFromSourceFolders(originalItems, session)
-    const result = applyAddToFolderFromSession(baseForDrop, session, targetFolderId)
+    const result = applyAddToFolderFromSession(
+      baseForDrop,
+      session,
+      targetFolderId,
+      folderLayoutProfile
+    )
     const nextTargetFolder = result.items.find(
       item => item.kind === 'folder' && getId(item) === targetFolderId
     )
@@ -605,7 +621,8 @@ export function useScrollableDragDropCommit({
         const result = applyAddToFolderFromSession(
           baseForDrop,
           current,
-          addToFolderTargetId as string
+          addToFolderTargetId as string,
+          folderLayoutProfile
         )
         commitTopLevelSessionResult(
           current,

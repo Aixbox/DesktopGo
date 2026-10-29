@@ -22,6 +22,7 @@ import type { PageAnchorEntry } from '../domain/topLevelLayout'
 import { useScrollableOuterGridDragWorkflow } from '../scroll/useScrollableOuterGridDragWorkflow'
 import { FolderCreatePreview } from './FolderVisuals'
 import { OuterFolderTile } from './OuterFolderTile'
+import { WidgetTile } from './WidgetTile'
 import { ScrollableGroupNavigation } from './ScrollableGroupNavigation'
 import type { GridItemPosition, ScrollGridSection } from './scrollableOuterGridTypes'
 
@@ -77,6 +78,7 @@ interface ScrollableOuterGridViewProps {
   onOpenFolder: (folderId: string) => void
   onLaunchIcon: (path: string) => void
   onResizeFolder: (folderId: string, size: FolderSize) => void
+  onResizeWidget?: (widgetId: string, spanX: number, spanY: number) => void
   onDissolveFolder: (folderId: string) => void
   bindTileRef: (id: string, node: HTMLDivElement | null) => void
   bindGridPageRef: (page: number, node: HTMLDivElement | null) => void
@@ -150,6 +152,7 @@ export function ScrollableOuterGridView({
   onOpenFolder,
   onLaunchIcon,
   onResizeFolder,
+  onResizeWidget,
   onDissolveFolder,
   bindTileRef,
   bindGridPageRef,
@@ -363,7 +366,7 @@ export function ScrollableOuterGridView({
                                   tileHeight={itemHeight}
                                 />
                               </div>
-                            ) : (
+                            ) : entry.item.kind === 'folder' ? (
                               <OuterFolderTile
                                 folder={entry.item}
                                 span={entry.span}
@@ -380,6 +383,15 @@ export function ScrollableOuterGridView({
                                 onLaunchIcon={onLaunchIcon}
                                 onResizeFolder={onResizeFolder}
                                 onDissolveFolder={onDissolveFolder}
+                              />
+                            ) : (
+                              <WidgetTile
+                                widget={entry.item}
+                                span={entry.span}
+                                slotWidth={itemWidth}
+                                slotHeight={itemHeight}
+                                gridGap={gridGap}
+                                onResize={onResizeWidget}
                               />
                             )}
                           </div>
@@ -407,7 +419,7 @@ export function ScrollableOuterGridView({
                           onToggleSelect={NOOP}
                           motionProfile="scroll"
                         />
-                      ) : (
+                      ) : keyboardDraggedItem.kind === 'folder' ? (
                         <OuterFolderTile
                           folder={keyboardDraggedItem}
                           span={keyboardDraggedSpan ?? { cols: 1, rows: 1 }}
@@ -424,6 +436,15 @@ export function ScrollableOuterGridView({
                           onLaunchIcon={NOOP}
                           onResizeFolder={NOOP}
                           onDissolveFolder={NOOP}
+                        />
+                      ) : (
+                        <WidgetTile
+                          widget={keyboardDraggedItem}
+                          span={keyboardDraggedSpan ?? { cols: 1, rows: 1 }}
+                          slotWidth={itemWidth}
+                          slotHeight={itemHeight}
+                          gridGap={gridGap}
+                          dragPreview
                         />
                       )}
                     </div>

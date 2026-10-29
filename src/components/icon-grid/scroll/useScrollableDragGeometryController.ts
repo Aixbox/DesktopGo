@@ -49,7 +49,6 @@ interface ScrollableDragGeometryControllerParams {
   folderColumns: number
   folderItemWidth: number
   folderItemHeight: number
-  folderOrderLength: number
   isCompactOuterDrop: boolean
   getOuterMinPageCount?: () => number
   itemById: Map<string, GridItem>
@@ -83,6 +82,16 @@ interface ScrollableDragGeometryControllerParams {
   getActiveScrollGroupItemIds?: () => string[]
 }
 
+const resolveFolderGridRows = (gridElement: HTMLElement | null, columns: number): number => {
+  const safeColumns = Math.max(1, columns)
+  const childCount = gridElement?.children.length ?? 0
+  const totalRows = Math.max(1, Math.ceil(childCount / safeColumns))
+  const pageCount = Number(gridElement?.dataset.folderPageCount)
+  return Number.isFinite(pageCount) && pageCount > 0
+    ? Math.max(1, Math.ceil(totalRows / pageCount))
+    : totalRows
+}
+
 export function useScrollableDragGeometryController(
   params: ScrollableDragGeometryControllerParams
 ) {
@@ -98,7 +107,6 @@ export function useScrollableDragGeometryController(
     folderColumns,
     folderItemWidth,
     folderItemHeight,
-    folderOrderLength,
     isCompactOuterDrop,
     getOuterMinPageCount,
     itemById,
@@ -328,10 +336,11 @@ export function useScrollableDragGeometryController(
   }
   const resolveGridMetrics = (context: 'outer' | 'folder' | 'dock') => {
     if (context === 'folder') {
+      const gridElement = folderGridRef.current
       return {
-        gridElement: folderGridRef.current,
+        gridElement,
         columns: Math.max(1, folderColumns),
-        rows: Math.max(1, Math.ceil(Math.max(1, folderOrderLength) / Math.max(1, folderColumns))),
+        rows: resolveFolderGridRows(gridElement, folderColumns),
         itemWidth: folderItemWidth,
         itemHeight: folderItemHeight,
         pageOffset: 0,

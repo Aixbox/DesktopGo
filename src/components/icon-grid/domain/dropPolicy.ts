@@ -5,6 +5,9 @@ import { clampNumber } from './geometry'
 import { DRAG_HOLE_ID } from './slots'
 import type { DragState } from '../state/types'
 import { canPlaceItemAtAnchorIndex, normalizeOuterSlots } from './topLevelLayout'
+import { planFolderDropTransaction } from './folderDropTransaction'
+import type { FolderLayoutProfile } from './folderLayout'
+import { buildGridItemIndex } from './gridItems'
 
 export const applyFolderCreateFromSession = (
   base: GridItem[],
@@ -65,14 +68,23 @@ export const applyFolderCreateFromSession = (
 export const applyAddToFolderFromSession = (
   base: GridItem[],
   session: DragState,
-  targetFolderId: string
-): { items: GridItem[]; slots: Array<string | null> } => {
+  targetFolderId: string,
+  folderProfile?: FolderLayoutProfile
+): {
+  items: GridItem[]
+  slots: Array<string | null>
+  folderDrop: ReturnType<typeof planFolderDropTransaction>
+} => {
   const baseSlots = session.workingOrder.map(slot => (slot === DRAG_HOLE_ID ? null : slot))
   const map = new Map<string, GridItem>()
   base.forEach(item => map.set(getId(item), item))
   const targetFolder = map.get(targetFolderId)
   if (!targetFolder || targetFolder.kind !== 'folder') {
-    return { items: base, slots: baseSlots }
+    return {
+      items: base,
+      slots: baseSlots,
+      folderDrop: planFolderDropTransaction({ currentChildren: [], incomingChildren: [], profile: folderProfile }),
+    }
   }
 
   const draggingIds = session.draggingIds.length > 0 ? session.draggingIds : [session.draggingId]
@@ -82,16 +94,26 @@ export const applyAddToFolderFromSession = (
     return item?.kind === 'icon' ? [item] : []
   })
   if (draggedIcons.length === 0) {
-    return { items: base, slots: baseSlots }
+    return {
+      items: base,
+      slots: baseSlots,
+      folderDrop: planFolderDropTransaction({
+        currentChildren: targetFolder.children,
+        incomingChildren: [],
+        profile: folderProfile,
+      }),
+    }
   }
 
-  const nextFolderChildren = [...targetFolder.children]
-  const existingChildKeys = new Set(targetFolder.children.map(child => child.key))
-  draggedIcons.forEach(icon => {
-    if (existingChildKeys.has(icon.key)) return
-    existingChildKeys.add(icon.key)
-    nextFolderChildren.push(icon)
+  const folderDrop = planFolderDropTransaction({
+    currentChildren: targetFolder.children,
+    incomingChildren: draggedIcons,
+    profile: folderProfile,
   })
+  if (!folderDrop.accepted) {
+    return { items: base, slots: baseSlots, folderDrop }
+  }
+  const nextFolderChildren = folderDrop.nextChildren
   const nextTargetFolder = { ...targetFolder, children: nextFolderChildren }
   map.set(targetFolderId, nextTargetFolder)
 
@@ -108,7 +130,7 @@ export const applyAddToFolderFromSession = (
     }
     nextItems.push(item)
   })
-  return { items: nextItems, slots: nextSlots }
+  return { items: nextItems, slots: nextSlots, folderDrop }
 }
 
 interface ApplyOuterDropFromSessionParams {
@@ -230,6 +252,7 @@ const applyPagedOuterDrop = ({
 }): { items: GridItem[]; slots: Array<string | null> } => {
   const safePageSize = Math.max(1, pageSize)
   const safeColumns = Math.max(1, columns)
+  const itemById = buildGridItemIndex(items)
   const clampedDropIndex = clampNumber(dropIndex, 0, Number.MAX_SAFE_INTEGER)
   const pageStart = Math.floor(clampedDropIndex / safePageSize) * safePageSize
   const insertedSlots = [...slots]
@@ -243,11 +266,13 @@ const applyPagedOuterDrop = ({
     dropIndex: clampedDropIndex,
     dragIds,
     previewSlots,
+    itemById,
   })
   const stabilizedSlots = stabilizeMultiDropPage({
     sourceSlots: slots,
     insertedSlots,
     items,
+    itemById,
     pageStart,
     pageSize: safePageSize,
     columns: safeColumns,
@@ -284,6 +309,7 @@ const applyPagedOuterDrop = ({
 const placeIdsIntoSlotsRowMajor = ({
   slots,
   items,
+  itemById,
   ids,
   pageStart,
   pageSize,
@@ -291,6 +317,7 @@ const placeIdsIntoSlotsRowMajor = ({
 }: {
   slots: Array<string | null>
   items: GridItem[]
+  itemById: ReadonlyMap<string, GridItem>
   ids: string[]
   pageStart: number
   pageSize: number
@@ -301,7 +328,7 @@ const placeIdsIntoSlotsRowMajor = ({
 
   for (let anchorIndex = pageStart; anchorIndex < pageStart + pageSize && remainingIds.length > 0; anchorIndex += 1) {
     const itemId = remainingIds[0]
-    const item = items.find(candidate => getId(candidate) === itemId)
+    const item = itemById.get(itemId)
     if (!item) {
       remainingIds.shift()
       continue
@@ -331,6 +358,7 @@ const placeIdsIntoSlotsRowMajor = ({
 const placeIdsIntoInsertedPagesRowMajor = ({
   prefixSlots,
   items,
+  itemById,
   ids,
   pageStart,
   pageSize,
@@ -338,6 +366,7 @@ const placeIdsIntoInsertedPagesRowMajor = ({
 }: {
   prefixSlots: Array<string | null>
   items: GridItem[]
+  itemById: ReadonlyMap<string, GridItem>
   ids: string[]
   pageStart: number
   pageSize: number
@@ -354,6 +383,7 @@ const placeIdsIntoInsertedPagesRowMajor = ({
     const placement = placeIdsIntoSlotsRowMajor({
       slots: nextSlots,
       items,
+      itemById,
       ids: remainingIds,
       pageStart: targetPageStart,
       pageSize,
@@ -375,6 +405,7 @@ const insertIntoPageFromAnchor = ({
   slots,
   sourceSlots,
   items,
+  itemById,
   pageStart,
   pageSize,
   columns,
@@ -385,6 +416,7 @@ const insertIntoPageFromAnchor = ({
   slots: Array<string | null>
   sourceSlots: Array<string | null>
   items: GridItem[]
+  itemById: ReadonlyMap<string, GridItem>
   pageStart: number
   pageSize: number
   columns: number
@@ -435,7 +467,7 @@ const insertIntoPageFromAnchor = ({
 
   const remainingCarryIds: string[] = []
   carryIds.forEach(id => {
-    const item = items.find(candidate => getId(candidate) === id)
+    const item = itemById.get(id)
     if (!item) return
     const span = getGridItemSpan(item)
     let placed = false
@@ -461,6 +493,7 @@ const stabilizeMultiDropPage = ({
   sourceSlots,
   insertedSlots,
   items,
+  itemById,
   pageStart,
   pageSize,
   columns,
@@ -469,6 +502,7 @@ const stabilizeMultiDropPage = ({
   sourceSlots: Array<string | null>
   insertedSlots: Array<string | null>
   items: GridItem[]
+  itemById: ReadonlyMap<string, GridItem>
   pageStart: number
   pageSize: number
   columns: number
@@ -512,6 +546,7 @@ const stabilizeMultiDropPage = ({
   const nextPagePlacement = placeIdsIntoSlotsRowMajor({
     slots: [...nextSlots, ...nextPageSlots],
     items,
+    itemById,
     ids: insertedPageQueue,
     pageStart: pageEnd,
     pageSize,
@@ -527,6 +562,7 @@ const stabilizeMultiDropPage = ({
   const insertedOverflowPages = placeIdsIntoInsertedPagesRowMajor({
     prefixSlots: nextSlots,
     items,
+    itemById,
     ids: insertedPageQueue,
     pageStart: pageEnd,
     pageSize,

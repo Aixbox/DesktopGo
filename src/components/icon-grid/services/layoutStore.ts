@@ -10,10 +10,12 @@ import {
 import type {
   GridItem,
   IconItem,
+  WidgetItem,
   PersistedGridCoordinate,
   PersistedItem,
   PersistedItemCoordinates,
   PersistedLayout,
+  FolderLayoutProfileId,
   PersistedPlacement,
   PersistedPlacementContainer,
   ScrollGroupIcon,
@@ -74,13 +76,27 @@ export const serializeItems = (items: GridItem[]): PersistedItem[] =>
   items.map<PersistedItem>(item =>
     item.kind === 'icon'
       ? { type: 'icon', key: item.key }
-      : {
+      : item.kind === 'folder'
+        ? {
           type: 'folder',
           id: item.id,
           name: item.name,
           size: item.size,
           children: item.children.map(child => child.key),
-        }
+          }
+        : {
+            type: 'widget',
+            id: item.id,
+            provider: item.provider,
+            label: item.label,
+            spanX: item.spanX,
+            spanY: item.spanY,
+            minSpanX: item.minSpanX,
+            minSpanY: item.minSpanY,
+            maxSpanX: item.maxSpanX,
+            maxSpanY: item.maxSpanY,
+            ...(item.appWidgetId === undefined ? {} : { appWidgetId: item.appWidgetId }),
+          }
   )
 
 const normalizePersistedGridCoordinate = (value: unknown): PersistedGridCoordinate | null => {
@@ -323,7 +339,11 @@ type PersistedLayoutPayload =
       revision?: unknown
       checksum?: unknown
       placements?: unknown
+      folderProfileId?: unknown
     }
+
+const isFolderLayoutProfileId = (value: unknown): value is FolderLayoutProfileId =>
+  value === 'standard' || value === 'simple' || value === 'big'
 
 const hashLayoutString = (value: string): string => {
   let hash = 2166136261
@@ -345,6 +365,7 @@ const buildIntegrityPayload = (layout: PersistedLayout) => ({
   geometryKey: layout.geometryKey,
   scrollGroups: layout.scrollGroups,
   placements: layout.placements,
+  folderProfileId: layout.folderProfileId,
 })
 
 export const serializeLayoutForIntegrity = (layout: PersistedLayout): string =>
@@ -449,6 +470,10 @@ export const parsePersistedLayout = (raw: string): PersistedLayout | null => {
     const placements = normalizePersistedPlacements(payload.placements)
     if (placements === null) return null
     result.placements = placements
+    if (payload.folderProfileId !== undefined) {
+      if (!isFolderLayoutProfileId(payload.folderProfileId)) return null
+      result.folderProfileId = payload.folderProfileId
+    }
   }
   return result
 }
@@ -570,7 +595,8 @@ const buildPersistedLayout = (
   pageSize?: number,
   columns?: number,
   geometryKey?: string,
-  scrollGroups?: ScrollGroupMeta[]
+  scrollGroups?: ScrollGroupMeta[],
+  folderProfileId?: FolderLayoutProfileId
 ): PersistedLayout => ({
   items: serializeItems(items),
   slots,
@@ -583,6 +609,7 @@ const buildPersistedLayout = (
       : undefined,
   geometryKey,
   scrollGroups,
+  folderProfileId,
 })
 
 const writePersistedLayoutSnapshot = (
@@ -635,7 +662,8 @@ export const writeLayout = async (
   columns?: number,
   geometryKey?: string,
   scrollGroups?: ScrollGroupMeta[],
-  scope: LaunchpadLayoutScope = 'paged'
+  scope: LaunchpadLayoutScope = 'paged',
+  folderProfileId?: FolderLayoutProfileId
 ) => {
   const layout = buildPersistedLayout(
     items,
@@ -644,7 +672,8 @@ export const writeLayout = async (
     pageSize,
     columns,
     geometryKey,
-    scrollGroups
+    scrollGroups,
+    folderProfileId
   )
   return writePersistedLayoutSnapshot(layout, scope, true)
 }
@@ -721,6 +750,35 @@ const hydrateItemsWithFolderAliases = (
         if (!iconItem) return
         consumed.add(key)
         result.push(iconItem)
+        return
+      }
+
+      if (item.type === 'widget') {
+        if (consumed.has(`widget:${item.id}`)) return
+        const spanX = Number.isInteger(item.spanX) ? Math.max(1, item.spanX) : 1
+        const spanY = Number.isInteger(item.spanY) ? Math.max(1, item.spanY) : 1
+        const minSpanX = Number.isInteger(item.minSpanX) ? Math.max(1, item.minSpanX!) : 1
+        const minSpanY = Number.isInteger(item.minSpanY) ? Math.max(1, item.minSpanY!) : 1
+        const maxSpanX = Number.isInteger(item.maxSpanX)
+          ? Math.max(minSpanX, item.maxSpanX!)
+          : spanX
+        const maxSpanY = Number.isInteger(item.maxSpanY)
+          ? Math.max(minSpanY, item.maxSpanY!)
+          : spanY
+        consumed.add(`widget:${item.id}`)
+        result.push({
+          kind: 'widget',
+          id: item.id,
+          provider: item.provider,
+          label: item.label,
+          spanX,
+          spanY,
+          minSpanX,
+          minSpanY,
+          maxSpanX,
+          maxSpanY,
+          ...(item.appWidgetId === undefined ? {} : { appWidgetId: item.appWidgetId }),
+        } satisfies WidgetItem)
         return
       }
 

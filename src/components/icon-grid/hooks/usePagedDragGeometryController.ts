@@ -39,7 +39,6 @@ interface PagedDragGeometryControllerParams {
   folderColumns: number
   folderItemWidth: number
   folderItemHeight: number
-  folderOrderLength: number
   iconImageSize: number
   gridRef: MutableRefObject<HTMLDivElement | null>
   folderGridRef: MutableRefObject<HTMLDivElement | null>
@@ -55,6 +54,16 @@ interface PagedDragGeometryControllerParams {
   pageSizeRef: MutableRefObject<number>
 }
 
+const resolveFolderGridRows = (gridElement: HTMLElement | null, columns: number): number => {
+  const safeColumns = Math.max(1, columns)
+  const childCount = gridElement?.children.length ?? 0
+  const totalRows = Math.max(1, Math.ceil(childCount / safeColumns))
+  const pageCount = Number(gridElement?.dataset.folderPageCount)
+  return Number.isFinite(pageCount) && pageCount > 0
+    ? Math.max(1, Math.ceil(totalRows / pageCount))
+    : totalRows
+}
+
 export function usePagedDragGeometryController({
   gridGap,
   evasionCooldownMs,
@@ -65,7 +74,6 @@ export function usePagedDragGeometryController({
   folderColumns,
   folderItemWidth,
   folderItemHeight,
-  folderOrderLength,
   iconImageSize,
   gridRef,
   folderGridRef,
@@ -176,10 +184,11 @@ export function usePagedDragGeometryController({
 
   const resolveGridMetrics = (context: 'outer' | 'folder' | 'dock') => {
     if (context === 'folder') {
+      const gridElement = folderGridRef.current
       return {
-        gridElement: folderGridRef.current,
+        gridElement,
         columns: Math.max(1, folderColumns),
-        rows: Math.max(1, Math.ceil(Math.max(1, folderOrderLength) / Math.max(1, folderColumns))),
+        rows: resolveFolderGridRows(gridElement, folderColumns),
         itemWidth: folderItemWidth,
         itemHeight: folderItemHeight,
         pageOffset: 0,

@@ -12,7 +12,6 @@ import {
   PointerEvent as ReactPointerEvent,
   WheelEvent as ReactWheelEvent,
 } from 'react'
-import type { DesktopIcon } from '../../../types'
 import { translate, useI18n } from '@/lib/i18n'
 import { useIconStore } from '@/stores/iconStore'
 import { IconContextMenu } from '@/components/icons/IconContextMenu'
@@ -28,16 +27,28 @@ import {
   DOCK_FOLDER_SURFACE_ACTIVE_CLASS,
   DOCK_FOLDER_SURFACE_CLASS,
   FOLDER_SHARED_LAYOUT_TRANSITION,
-  type DesktopSingleSlotFolderMetrics,
   getDesktopSingleSlotFolderMetrics,
   getFolderSharedLayoutId,
   scaledRadius,
 } from './folderVisualPolicy'
 import { FolderIconVisual } from './FolderVisuals'
+import { DockFolderCreatePreview } from './DockFolderCreatePreview'
+import { WidgetTile } from './WidgetTile'
+import {
+  getHotseatCell,
+  normalizeHotseatEntries,
+  type HotseatEntry,
+  type HotseatOrientation,
+  type HotseatProfile,
+} from '../domain/hotseatLayout'
+import { useDocumentDirection } from '../hooks/useDocumentDirection'
 
 interface DockBarProps {
   alignToContentColumn?: boolean
   displaySlots: Array<string | null>
+  /** Optional ColorOS-style runtime entries (Docker/subscribe/divider included). */
+  hotseatEntries?: HotseatEntry[]
+  hotseatOrientation?: HotseatOrientation
   itemById: Map<string, GridItem>
   dockPreviewIndex: number | null
   dragContext: 'outer' | 'folder' | 'dock' | null
@@ -90,42 +101,6 @@ interface IndicatorDragState {
   trackWidth: number
 }
 
-interface DockFolderCreatePreviewProps {
-  active: boolean
-  icon: DesktopIcon
-  metrics: DesktopSingleSlotFolderMetrics
-  reorderAnimationMs: number
-}
-
-function DockFolderCreatePreview({
-  active,
-  icon,
-  metrics,
-  reorderAnimationMs,
-}: DockFolderCreatePreviewProps) {
-  return (
-    <div className="pointer-events-none absolute inset-0 z-30" aria-hidden="true">
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div
-          className={`${DOCK_FOLDER_SURFACE_CLASS} flex items-center justify-center transition-all duration-200 ${
-            active
-              ? `${DOCK_FOLDER_SURFACE_ACTIVE_CLASS} scale-100 opacity-100`
-              : 'scale-[0.94] opacity-0'
-          }`}
-          style={{
-            width: `${metrics.surfaceSize}px`,
-            height: `${metrics.surfaceSize}px`,
-            borderRadius: scaledRadius(metrics.surfaceRadius),
-            transitionDuration: `${reorderAnimationMs}ms`,
-          }}
-        >
-          <FolderIconVisual icons={[icon]} imgSize={metrics.previewSize} withSurface={false} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
 const resolveDockContentWidth = (slotCount: number, buttonSize: number) => {
   if (slotCount <= 0) return 0
   return slotCount * buttonSize + Math.max(0, slotCount - 1) * DOCK_GAP
@@ -161,6 +136,8 @@ const resolveIndicatorMetrics = (
 export function DockBar({
   alignToContentColumn = false,
   displaySlots,
+  hotseatEntries,
+  hotseatOrientation = 'horizontal',
   itemById,
   dockPreviewIndex,
   dragContext,
@@ -188,6 +165,7 @@ export function DockBar({
   onRemoveItem,
 }: DockBarProps) {
   useI18n()
+  const documentDirection = useDocumentDirection()
   const customNames = useIconStore(state => state.customNames)
 
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -205,8 +183,23 @@ export function DockBar({
   const [hasHorizontalOverflow, setHasHorizontalOverflow] = useState(false)
   const [isIndicatorDragging, setIsIndicatorDragging] = useState(false)
   const dockButtonSize = Math.max(iconImageSize + 12, 52)
+  const isVerticalHotseat = hotseatOrientation === 'vertical'
+  const renderEntries = normalizeHotseatEntries(
+    hotseatEntries ?? displaySlots.map(id => (id ? { kind: 'item', id } : null)),
+    {
+      count: Math.max(1, hotseatEntries?.length ?? displaySlots.length),
+      orientation: hotseatOrientation,
+      rtl: documentDirection === 'rtl',
+    }
+  )
+  const hotseatProfile: HotseatProfile = {
+    count: renderEntries.length,
+    orientation: hotseatOrientation,
+    rtl: documentDirection === 'rtl',
+  }
   const singleSlotFolderMetrics = getDesktopSingleSlotFolderMetrics(iconTileWidth, iconTileHeight)
-  const dockContentWidth = resolveDockContentWidth(displaySlots.length, dockButtonSize)
+  const dockContentWidth = resolveDockContentWidth(renderEntries.length, dockButtonSize)
+  const dockContentHeight = resolveDockContentWidth(renderEntries.length, dockButtonSize)
   const showInsertionPreview =
     dragContext === 'dock' &&
     dockPreviewIndex !== null &&
@@ -225,14 +218,25 @@ export function DockBar({
       parseFloat(panelStyle.paddingRight) +
       parseFloat(panelStyle.borderLeftWidth) +
       parseFloat(panelStyle.borderRightWidth)
+    const verticalChrome =
+      parseFloat(panelStyle.paddingTop) +
+      parseFloat(panelStyle.paddingBottom) +
+      parseFloat(panelStyle.borderTopWidth) +
+      parseFloat(panelStyle.borderBottomWidth)
     const maxPanelContentWidth = Math.max(
       0,
       window.innerWidth - DOCK_PANEL_VIEWPORT_MARGIN * 2 - horizontalChrome
     )
-    const nextOverflow = dockContentWidth - maxPanelContentWidth > DOCK_OVERFLOW_THRESHOLD
+    const maxPanelContentHeight = Math.max(
+      0,
+      window.innerHeight - DOCK_PANEL_VIEWPORT_MARGIN * 2 - verticalChrome
+    )
+    const nextOverflow = isVerticalHotseat
+      ? dockContentHeight - maxPanelContentHeight > DOCK_OVERFLOW_THRESHOLD
+      : dockContentWidth - maxPanelContentWidth > DOCK_OVERFLOW_THRESHOLD
 
     setHasHorizontalOverflow(current => (current === nextOverflow ? current : nextOverflow))
-  }, [dockContentWidth])
+  }, [dockContentHeight, dockContentWidth, isVerticalHotseat])
 
   const syncIndicatorVisual = useCallback(() => {
     const scroller = scrollerRef.current
@@ -474,6 +478,17 @@ export function DockBar({
   const handleScrollWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
     const scroller = event.currentTarget
     if (!hasHorizontalOverflow) return
+    if (isVerticalHotseat) {
+      if (scroller.scrollHeight <= scroller.clientHeight || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
+        return
+      }
+      scroller.scrollTop = Math.max(
+        0,
+        Math.min(scroller.scrollHeight - scroller.clientHeight, scroller.scrollTop + event.deltaY)
+      )
+      event.preventDefault()
+      return
+    }
     if (scroller.scrollWidth <= scroller.clientWidth) return
     if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
 
@@ -621,27 +636,40 @@ export function DockBar({
   }
 
   return (
-    <div
+      <div
       ref={bindDockContainerRef}
       data-dock
-      className={`pointer-events-auto absolute bottom-5 z-20 ${
-        alignToContentColumn ? 'scroll-grid-dock' : 'left-1/2 -translate-x-1/2'
+      data-hotseat-orientation={hotseatProfile.orientation}
+      data-hotseat-rtl={hotseatProfile.rtl ? 'true' : 'false'}
+      data-hotseat-count={hotseatProfile.count}
+      dir={documentDirection}
+      className={`pointer-events-auto absolute z-20 ${
+        isVerticalHotseat
+          ? 'right-5 top-1/2 -translate-y-1/2'
+          : `bottom-5 ${alignToContentColumn ? 'scroll-grid-dock' : 'left-1/2 -translate-x-1/2'}`
       }`}
     >
       <div
         ref={panelRef}
         className="launchpad-glass-panel relative overflow-hidden rounded-dock px-4 py-3 transition-[width] duration-[220ms]"
         style={{
-          maxWidth: alignToContentColumn
-            ? `calc(100vw - var(--scroll-grid-sidebar-width) - ${DOCK_PANEL_VIEWPORT_MARGIN * 2}px)`
-            : `calc(100vw - ${DOCK_PANEL_VIEWPORT_MARGIN * 2}px)`,
+          maxWidth: isVerticalHotseat
+            ? `calc(100vw - ${DOCK_PANEL_VIEWPORT_MARGIN * 2}px)`
+            : alignToContentColumn
+              ? `calc(100vw - var(--scroll-grid-sidebar-width) - ${DOCK_PANEL_VIEWPORT_MARGIN * 2}px)`
+              : `calc(100vw - ${DOCK_PANEL_VIEWPORT_MARGIN * 2}px)`,
+          maxHeight: isVerticalHotseat
+            ? `calc(100vh - ${DOCK_PANEL_VIEWPORT_MARGIN * 2}px)`
+            : undefined,
           transitionTimingFunction: DOCK_CONTAINER_EASING,
         }}
       >
         <div
           ref={scrollerRef}
           id="dock-scroller"
-          className="dock-scrollbar-hidden overflow-x-auto overflow-y-hidden"
+          className={`dock-scrollbar-hidden ${
+            isVerticalHotseat ? 'overflow-x-hidden overflow-y-auto' : 'overflow-x-auto overflow-y-hidden'
+          }`}
           onWheel={handleScrollWheel}
           onScroll={handleScrollerScroll}
         >
@@ -650,10 +678,16 @@ export function DockBar({
               gridRef.current = node
               bindDockGridRef(node)
             }}
-            className="flex w-max items-center"
-            style={{ columnGap: `${DOCK_GAP}px` }}
+            className={`flex items-center ${isVerticalHotseat ? 'h-max flex-col' : 'w-max'}`}
+            style={{
+              columnGap: `${DOCK_GAP}px`,
+              rowGap: `${DOCK_GAP}px`,
+              direction: 'ltr',
+            }}
           >
-            {displaySlots.map((id, index) => {
+            {renderEntries.map((entry, index) => {
+              const cell = getHotseatCell(index, hotseatProfile)
+              const id = entry?.kind === 'item' ? entry.id : null
               const item = id ? (itemById.get(id) ?? null) : null
               const folderPreview =
                 Boolean(id) &&
@@ -672,8 +706,15 @@ export function DockBar({
                     bindDockSlotRef(index, node)
                   }}
                   data-dock-slot
+                  data-hotseat-order={index}
+                  data-hotseat-cell-x={cell.cellX}
+                  data-hotseat-cell-y={cell.cellY}
                   className="relative flex items-center justify-center"
-                  style={{ width: dockButtonSize, height: dockButtonSize }}
+                  style={{
+                    width: dockButtonSize,
+                    height: dockButtonSize,
+                    order: isVerticalHotseat ? cell.cellY : cell.cellX,
+                  }}
                 >
                   {item && id ? (
                     item.kind === 'icon' ? (
@@ -756,7 +797,7 @@ export function DockBar({
                           </button>
                         </div>
                       </IconContextMenu>
-                    ) : (
+                    ) : item.kind === 'folder' ? (
                       <ContextMenu>
                         <ContextMenuTrigger asChild>
                           <div
@@ -845,7 +886,47 @@ export function DockBar({
                           </ContextMenuContent>
                         ) : null}
                       </ContextMenu>
+                    ) : (
+                      <div
+                        ref={node => {
+                          bindDockItemRef(id, node)
+                        }}
+                        data-dock-item
+                        data-dock-key={id}
+                        className="group relative flex items-center justify-center"
+                        style={{ width: dockButtonSize, height: dockButtonSize }}
+                        onPointerDown={event => {
+                          onDockItemPointerDown(event, id)
+                        }}
+                        onClickCapture={onDockItemClickCapture}
+                      >
+                        <WidgetTile
+                          widget={item}
+                          span={{ cols: 1, rows: 1 }}
+                          slotWidth={dockButtonSize}
+                          slotHeight={dockButtonSize}
+                          gridGap={0}
+                        />
+                      </div>
                     )
+                  ) : entry?.kind === 'placeholder' ? (
+                    <div
+                      data-hotseat-placeholder={entry.placeholder}
+                      role={entry.placeholder === 'divider' ? 'separator' : 'status'}
+                      aria-label={translate(
+                        entry.placeholder === 'docker'
+                          ? 'Docker'
+                          : entry.placeholder === 'subscribe'
+                            ? '订阅'
+                            : '分隔线'
+                      )}
+                      className={`pointer-events-none flex items-center justify-center rounded-icon-tile border border-dashed border-border/45 bg-background/35 text-xs text-muted-foreground/80 dark:border-white/20 dark:bg-white/[0.04] ${
+                        entry.placeholder === 'divider' ? 'text-base' : ''
+                      }`}
+                      style={{ width: iconImageSize + 8, height: iconImageSize + 8 }}
+                    >
+                      {entry.placeholder === 'divider' ? '⋮' : entry.placeholder === 'subscribe' ? '☆' : '⋯'}
+                    </div>
                   ) : (
                     <div
                       className={`pointer-events-none flex items-center justify-center rounded-icon-tile border border-dashed transition ${
@@ -863,7 +944,7 @@ export function DockBar({
           </div>
         </div>
 
-        {hasHorizontalOverflow ? (
+        {hasHorizontalOverflow && !isVerticalHotseat ? (
           <div className="pointer-events-none absolute bottom-[-1px] left-4 right-4 h-4">
             <div
               ref={indicatorTrackRef}

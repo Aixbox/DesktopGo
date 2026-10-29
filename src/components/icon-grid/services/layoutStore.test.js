@@ -3,6 +3,7 @@ import {
   hydrateLayout,
   parsePersistedLayout,
   parsePersistedLayoutStrict,
+  serializeItems,
 } from './layoutStore.ts'
 
 function assert(condition, message) {
@@ -81,6 +82,32 @@ assert(
   '文件夹位于 Dock 时，折叠后剩余图标应接替原 Dock 位置'
 )
 
+const widget = {
+  kind: 'widget',
+  id: 'clock',
+  provider: 'com.example.clock',
+  label: 'Clock',
+  spanX: 2,
+  spanY: 1,
+  minSpanX: 1,
+  minSpanY: 1,
+  maxSpanX: 4,
+  maxSpanY: 2,
+}
+const serializedWidget = serializeItems([widget])
+assert(serializedWidget[0].type === 'widget' && serializedWidget[0].spanX === 2, 'Widget 元数据应可序列化')
+const hydratedWidget = hydrateLayout([], {
+  items: serializedWidget,
+  slots: ['widget:clock', null, null, null],
+  dockKeys: [],
+  pageSize: 4,
+  columns: 2,
+})
+assert(
+  hydratedWidget.items[0]?.kind === 'widget' && hydratedWidget.items[0].spanY === 1,
+  'Widget 元数据应在无原生 provider 时保留为可布局占位项'
+)
+
 const validV10Layout = {
   items: [{ type: 'icon', key: 'remaining-icon' }],
   slots: ['remaining-icon'],
@@ -101,6 +128,37 @@ assert(
   parsePersistedLayoutStrict(validV10Payload, 'paged').revision === 7,
   '合法 checksum 应通过严格读取'
 )
+
+const simpleProfileLayout = {
+  ...validV10Layout,
+  folderProfileId: 'simple',
+}
+const simpleProfilePayload = JSON.stringify({
+  version: 10,
+  ...simpleProfileLayout,
+  checksum: calculateLayoutChecksum(simpleProfileLayout),
+})
+const parsedSimpleProfile = parsePersistedLayoutStrict(simpleProfilePayload, 'paged')
+assert(
+  parsedSimpleProfile.folderProfileId === 'simple',
+  'v10 布局应持久化并恢复文件夹 profile'
+)
+
+let invalidFolderProfileRejected = false
+try {
+  parsePersistedLayoutStrict(
+    JSON.stringify({
+      version: 10,
+      ...validV10Layout,
+      folderProfileId: 'unknown',
+      checksum: calculateLayoutChecksum({ ...validV10Layout, folderProfileId: 'unknown' }),
+    }),
+    'paged'
+  )
+} catch {
+  invalidFolderProfileRejected = true
+}
+assert(invalidFolderProfileRejected, '未知文件夹 profile 必须在严格 hydration 时被拒绝')
 
 const canonicalV10Layout = {
   items: [

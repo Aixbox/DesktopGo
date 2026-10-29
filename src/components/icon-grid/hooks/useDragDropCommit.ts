@@ -8,6 +8,7 @@ import {
 } from 'react'
 import { useReducedMotion } from 'framer-motion'
 import type { GridItem, IconItem } from '../model'
+import type { FolderLayoutProfile } from '../domain/folderLayout'
 import { getId } from '../model'
 import { compactEmptyPages, DRAG_HOLE_ID } from '../domain/slots'
 import { moveDragHoleToIndex } from '../domain/evasionPolicy'
@@ -46,6 +47,7 @@ interface UseDragDropCommitParams {
   reorderAnimationMs: number
   iconConfig: IconConfigLike
   columns: number
+  folderLayoutProfile?: FolderLayoutProfile
   pageSizeRef: MutableRefObject<number>
   tileRefs: MutableRefObject<Map<string, HTMLDivElement>>
   itemsRef: MutableRefObject<GridItem[]>
@@ -80,6 +82,7 @@ export function useDragDropCommit({
   reorderAnimationMs,
   iconConfig,
   columns,
+  folderLayoutProfile,
   pageSizeRef,
   tileRefs,
   itemsRef,
@@ -205,8 +208,16 @@ export function useDragDropCommit({
     originalOuterSlots: Array<string | null>,
     originalDockKeys: Array<string | null>,
     targetContext: 'outer' | 'dock',
-    result: { items: GridItem[]; slots: Array<string | null> }
+    result: {
+      items: GridItem[]
+      slots: Array<string | null>
+      folderDrop?: { accepted: boolean }
+    }
   ) => {
+    if (result.folderDrop && !result.folderDrop.accepted) {
+      commitLayouts(originalItems, originalOuterSlots, originalDockKeys)
+      return
+    }
     if (
       session.sourceFolderId &&
       session.draggingItem.kind === 'icon' &&
@@ -455,7 +466,12 @@ export function useDragDropCommit({
     const originalOuterSlots = outerSlotsRef.current
     const originalDockKeys = dockKeysRef.current
     const baseForDrop = extractDraggedIconsFromSourceFolders(originalItems, session)
-    const result = applyAddToFolderFromSession(baseForDrop, session, targetFolderId)
+    const result = applyAddToFolderFromSession(
+      baseForDrop,
+      session,
+      targetFolderId,
+      folderLayoutProfile
+    )
     const nextTargetFolder = result.items.find(
       item => item.kind === 'folder' && getId(item) === targetFolderId
     )
@@ -570,7 +586,8 @@ export function useDragDropCommit({
         const result = applyAddToFolderFromSession(
           baseForDrop,
           current,
-          addToFolderTargetId as string
+          addToFolderTargetId as string,
+          folderLayoutProfile
         )
         commitTopLevelSessionResult(
           current,

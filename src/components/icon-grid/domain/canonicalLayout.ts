@@ -5,12 +5,21 @@ import type {
   PersistedPlacement,
   PersistedPlacementContainer,
 } from '../model'
+import { getFolderLayoutProfile, getFolderPlacement } from './folderLayout'
 
-const getPersistedItemId = (item: PersistedItem): string =>
-  item.type === 'icon' ? item.key : `folder:${item.id}`
+const getPersistedItemId = (item: PersistedItem): string => {
+  if (item.type === 'icon') return item.key
+  return `${item.type}:${item.id}`
+}
 
 const getPersistedItemSpan = (item: PersistedItem): { spanX: number; spanY: number } => {
   if (item.type === 'icon') return { spanX: 1, spanY: 1 }
+  if (item.type === 'widget') {
+    return {
+      spanX: Math.max(1, Math.floor(item.spanX)),
+      spanY: Math.max(1, Math.floor(item.spanY)),
+    }
+  }
   switch (item.size) {
     case '1x2':
       return { spanX: 1, spanY: 2 }
@@ -262,6 +271,7 @@ export const buildCanonicalPlacements = (layout: PersistedLayout): PersistedPlac
   )
   const appendStart = Math.max(0, layout.slots?.length ?? 0)
   let appendIndex = appendStart
+  const folderProfile = getFolderLayoutProfile(layout.folderProfileId)
   layout.items.forEach(item => {
     const id = getPersistedItemId(item)
     if (placedIds.has(id) || dockIds.has(id)) return
@@ -310,15 +320,13 @@ export const buildCanonicalPlacements = (layout: PersistedLayout): PersistedPlac
     if (item.type !== 'folder') return
     const folderId = `folder:${item.id}`
     item.children.forEach((childId, rank) => {
-      const pageCapacity = 12
-      const page = Math.floor(rank / pageCapacity)
-      const localRank = rank % pageCapacity
+      const placement = getFolderPlacement(rank, folderProfile)
       placements.push({
         id: childId,
         container: { folderId },
-        page,
-        row: Math.floor(localRank / 4),
-        col: localRank % 4,
+        page: placement.page,
+        row: placement.row,
+        col: placement.col,
         spanX: 1,
         spanY: 1,
         rank,

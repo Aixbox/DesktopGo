@@ -54,6 +54,7 @@ import {
   getFolderChildSelectionsByIds,
 } from './icon-grid/domain/folderPolicy'
 import { getLayoutNormalizationMetrics } from './icon-grid/domain/gridGeometry'
+import { DragAnnouncementLiveRegion } from './icon-grid/views/DragAnnouncementLiveRegion'
 import { useGridGeometryKey } from './icon-grid/hooks/useGridGeometryKey'
 import { usePageBounds } from './icon-grid/hooks/usePageBounds'
 import {
@@ -149,6 +150,8 @@ export function IconGrid({
     activeDockKeys,
     outerItemIds,
     pageSize,
+    handleResizeWidget,
+    folderLayoutProfile,
   } = usePagedIconGridLayout({
     icons,
     layoutResetToken,
@@ -247,6 +250,7 @@ export function IconGrid({
     renderOrderLength: folderOrder.length,
     columnWidth,
     rowHeight,
+    profile: folderLayoutProfile,
   })
   const selectedSet = useMemo(() => new Set(selectedIconKeys), [selectedIconKeys])
   const iconConfig = ICON_SIZE_CONFIG[iconSize]
@@ -295,7 +299,7 @@ export function IconGrid({
     folderColumns,
     folderItemWidth,
     folderItemHeight,
-    folderOrderLength: folderOrder.length,
+    folderLayoutProfile,
     itemById,
     containerRef,
     gridRef,
@@ -353,7 +357,6 @@ export function IconGrid({
       dockWorkingOrder,
     ]
   )
-
   const draggedFolderChildSelections = useMemo(
     () =>
       dragState
@@ -361,20 +364,17 @@ export function IconGrid({
         : new Map<string, IconItem[]>(),
     [dragState, items]
   )
-
   const outerViewItemById = useMemo(() => {
     if (!dragState || draggedFolderChildSelections.size === 0) {
       return itemById
     }
     const draggingIconIdSet = new Set(dragState.draggingIds)
     if (draggingIconIdSet.size === 0) return itemById
-
     const next = new Map(itemById)
     draggedFolderChildSelections.forEach((_children, folderId) => {
       const folderEntryId = `folder:${folderId}`
       const folder = next.get(folderEntryId)
       if (!folder || folder.kind !== 'folder') return
-
       const nextChildren = folder.children.filter(child => !draggingIconIdSet.has(child.key))
       if (nextChildren.length === 0) {
         next.delete(folderEntryId)
@@ -384,12 +384,10 @@ export function IconGrid({
     })
     return next
   }, [dragState, draggedFolderChildSelections, itemById])
-
   const outerPreviewSpillOrder = useMemo(() => {
     if (!dragState || dragState.context !== 'outer') return null
     if (dragState.folderPreviewTargetId !== null) return null
     if (dragState.previewSlotIndex === null) return null
-
     const baseForPreview = extractDraggedIconsFromSourceFolders(items, dragState.draggingIds)
     const previewBaseItemIdSet = new Set(
       resolveOuterItemIds(baseForPreview.map(getId), activeDockKeys)
@@ -418,7 +416,6 @@ export function IconGrid({
             mode: 'paged',
             sourceSlots: outerSlots,
           })
-
     const draggingIdSet = new Set(dragState.draggingIds)
     const normalizedWorkingOrder = dragState.workingOrder.map(slot => {
       if (slot === DRAG_HOLE_ID) return null
@@ -442,7 +439,6 @@ export function IconGrid({
         currentPageIds.add(slot)
       }
     }
-
     for (let index = 0; index < nextOrder.length; index += 1) {
       if (index >= pageStart && index < pageEnd) continue
       const slot = nextOrder[index]
@@ -492,10 +488,8 @@ export function IconGrid({
 
   const stepPageByWheelDelta = (primaryDelta: number, isOuterDrag: boolean) => {
     if (pageCount <= 1 || Math.abs(primaryDelta) < 0.1) return
-
     const now = performance.now()
     if (now < wheelCooldownUntilRef.current) return
-
     if (
       wheelDeltaRef.current !== 0 &&
       Math.sign(wheelDeltaRef.current) !== Math.sign(primaryDelta)
@@ -797,7 +791,6 @@ export function IconGrid({
   }, [dragState, draggedFolderChildSelections, itemById])
   const canGoLeft = currentPage > 0
   const canGoRight = currentPage < pageCount - 1
-
   return (
     <LayoutGroup id="folder-shell-layout">
       <div
@@ -810,6 +803,12 @@ export function IconGrid({
         className={`relative h-full w-full px-16 pt-28 ${dockEnabled ? 'pb-32' : 'pb-12'}`}
         onWheel={handleWheelPageSwitch}
       >
+        <DragAnnouncementLiveRegion
+          dragState={dragState}
+          itemById={itemById}
+          folderLayoutProfile={folderLayoutProfile}
+          pageSize={pageSize}
+        />
         <EdgeGlow direction="left" active={dragEdgeDirection === 'left'} />
         <EdgeGlow direction="right" active={dragEdgeDirection === 'right'} />
         <div ref={containerRef} className="flex h-full w-full items-start justify-center">
@@ -850,6 +849,7 @@ export function IconGrid({
               void launchApp(path)
             }}
             onResizeFolder={handleResizeFolder}
+            onResizeWidget={handleResizeWidget}
             onDissolveFolder={handleDissolveFolder}
             bindTileRef={(id, node) => {
               if (node) tileRefs.current.set(id, node)
@@ -1011,6 +1011,7 @@ export function IconGrid({
           folderColumns={folderColumns}
           folderItemWidth={folderItemWidth}
           folderItemHeight={folderItemHeight}
+          folderLayoutProfile={folderLayoutProfile}
           folderRenderOrder={folderRenderOrder}
           folderItemById={folderItemById}
           bindFolderTileRef={(id, node) => {

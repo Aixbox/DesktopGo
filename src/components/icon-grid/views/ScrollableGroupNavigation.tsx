@@ -112,6 +112,7 @@ import {
 import { createPortal } from 'react-dom'
 import { translate } from '../../../lib/i18n'
 import type { GridItem, ScrollGroupIcon, ScrollGroupMeta } from '../model'
+import { getId } from '../model'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -225,6 +226,13 @@ function GroupPreviewGlyph({ item, compact = false }: { item: GridItem; compact?
       </span>
     )
   }
+  if (item.kind === 'widget') {
+    return (
+      <span className="flex h-full w-full items-center justify-center text-muted-foreground">
+        <Monitor className={iconClassName} />
+      </span>
+    )
+  }
   if (item.icon.icon_base64) {
     return (
       <span className="flex h-full w-full items-center justify-center">
@@ -262,7 +270,7 @@ function GroupPreviewIcon({ items }: { items: GridItem[] }) {
   return (
     <span className="grid h-7 w-7 shrink-0 grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-[8px] bg-foreground/6 p-1 dark:bg-white/8">
       {items.map(item => (
-        <span key={item.kind === 'folder' ? item.id : item.key} className="overflow-hidden">
+        <span key={getId(item)} className="overflow-hidden">
           <GroupPreviewGlyph item={item} compact />
         </span>
       ))}

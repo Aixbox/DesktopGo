@@ -11,6 +11,9 @@ export type IconItem = {
 
 export type FolderSize = '1x1' | '1x2' | '2x1' | '2x2'
 
+/** Persisted folder profile identifiers mirror the ColorOS device modes. */
+export type FolderLayoutProfileId = 'standard' | 'simple' | 'big'
+
 export interface GridSpan {
   cols: number
   rows: number
@@ -24,7 +27,26 @@ export type FolderItem = {
   children: IconItem[]
 }
 
-export type GridItem = IconItem | FolderItem
+/**
+ * A provider-backed widget placeholder. The provider metadata is persisted so
+ * a resize transaction can be replayed after hydration even when the native
+ * provider view is supplied by a future platform adapter.
+ */
+export type WidgetItem = {
+  kind: 'widget'
+  id: string
+  provider: string
+  label: string
+  spanX: number
+  spanY: number
+  minSpanX: number
+  minSpanY: number
+  maxSpanX: number
+  maxSpanY: number
+  appWidgetId?: number
+}
+
+export type GridItem = IconItem | FolderItem | WidgetItem
 export type DragContext = 'outer' | 'folder' | 'dock'
 
 export const SCROLL_GROUP_ICONS = [
@@ -123,6 +145,19 @@ export type PersistedItem =
       size?: FolderSize
       children: string[]
     }
+  | {
+      type: 'widget'
+      id: string
+      provider: string
+      label: string
+      spanX: number
+      spanY: number
+      minSpanX?: number
+      minSpanY?: number
+      maxSpanX?: number
+      maxSpanY?: number
+      appWidgetId?: number
+    }
 
 export interface PersistedGridCoordinate {
   page: number
@@ -164,16 +199,22 @@ export interface PersistedLayout {
   // 兼容旧版本的几何标识；新版本由完整 measurement key 生成。
   geometryKey?: string
   scrollGroups?: ScrollGroupMeta[]
+  /** Folder columns/rows profile used to materialize child rank/page coordinates. */
+  folderProfileId?: FolderLayoutProfileId
   // v9 起滚动布局使用显式分组成员；v8 及更早版本仍需从 slots 一次性迁移。
   scrollGroupItemsExplicit?: boolean
 }
 
 export const getId = (item: GridItem): string =>
-  item.kind === 'icon' ? item.key : `folder:${item.id}`
+  item.kind === 'icon' ? item.key : `${item.kind}:${item.id}`
 
 export const getGridItemSpan = (item: GridItem): GridSpan => {
-  if (item.kind === 'icon') {
-    return { cols: 1, rows: 1 }
+  if (item.kind === 'icon') return { cols: 1, rows: 1 }
+  if (item.kind === 'widget') {
+    return {
+      cols: Math.max(1, Math.floor(item.spanX)),
+      rows: Math.max(1, Math.floor(item.spanY)),
+    }
   }
 
   switch (item.size) {

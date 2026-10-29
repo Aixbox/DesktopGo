@@ -49,6 +49,7 @@ import { EdgeGlow } from './icon-grid/views/EdgeGlow'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
 import { DockBar } from './icon-grid/views/DockBar'
 import { getFolderChildSelectionsByIds } from './icon-grid/domain/folderPolicy'
+import { DragAnnouncementLiveRegion } from './icon-grid/views/DragAnnouncementLiveRegion'
 import { useGridGeometryKey } from './icon-grid/hooks/useGridGeometryKey'
 import { usePageBounds } from './icon-grid/hooks/usePageBounds'
 import {
@@ -158,6 +159,8 @@ export function ScrollableIconGrid({
     setItems,
     setOuterSlots,
     setScrollGroups,
+    handleResizeWidget,
+    folderLayoutProfile,
   } = useScrollableIconGridLayout({
     icons,
     layoutResetToken,
@@ -173,13 +176,11 @@ export function ScrollableIconGrid({
   })
   const [hoverPage, setHoverPage] = useState<number | null>(null)
   const scrollGroupCount = Math.max(1, scrollGroups.length)
-
   const itemById = useMemo(() => {
     const map = new Map<string, GridItem>()
     items.forEach(item => map.set(getId(item), item))
     return map
   }, [items])
-
   const {
     closeFolderImmediately,
     closeFolderWithAnimation,
@@ -212,6 +213,7 @@ export function ScrollableIconGrid({
     layoutDimensionsTracker,
     columnWidth,
     rowHeight,
+    folderLayoutProfile,
   })
 
   const selectedSet = useMemo(() => new Set(selectedIconKeys), [selectedIconKeys])
@@ -322,7 +324,6 @@ export function ScrollableIconGrid({
       setScrollGroups,
     ]
   )
-
   const {
     dragState,
     dragRef,
@@ -368,7 +369,7 @@ export function ScrollableIconGrid({
     folderColumns,
     folderItemWidth,
     folderItemHeight,
-    folderOrderLength: folderOrder.length,
+    folderLayoutProfile,
     itemById,
     containerRef,
     gridRef,
@@ -385,7 +386,6 @@ export function ScrollableIconGrid({
                 return { element: activeElement, pageIndex: activePageIndex }
               }
             }
-
             const entries = Array.from(scrollGridPageRefs.current.entries()).sort(
               ([a], [b]) => a - b
             )
@@ -461,7 +461,6 @@ export function ScrollableIconGrid({
     dragRef,
     onClose: closeFolderWithAnimation,
   })
-
   const draggedFolderChildSelections = useMemo(
     () =>
       dragState
@@ -469,24 +468,20 @@ export function ScrollableIconGrid({
         : new Map<string, IconItem[]>(),
     [dragState, items]
   )
-
   const outerViewItemById = useMemo(() => {
     if (!dragState || draggedFolderChildSelections.size === 0) {
       return itemById
     }
     const draggingIconIdSet = new Set(dragState.draggingIds)
     if (draggingIconIdSet.size === 0) return itemById
-
     const next = new Map(itemById)
     draggedFolderChildSelections.forEach((children, folderId) => {
       children.forEach(child => {
         next.set(child.key, child)
       })
-
       const folderEntryId = `folder:${folderId}`
       const folder = next.get(folderEntryId)
       if (!folder || folder.kind !== 'folder') return
-
       const nextChildren = folder.children.filter(child => !draggingIconIdSet.has(child.key))
       if (nextChildren.length === 0) {
         next.delete(folderEntryId)
@@ -496,7 +491,6 @@ export function ScrollableIconGrid({
     })
     return next
   }, [dragState, draggedFolderChildSelections, itemById])
-
   const outerPreviewSpillOrder = useMemo(() => {
     if (!dragState || dragState.context !== 'outer') return null
     if (launchpadGridViewMode === 'scroll') {
@@ -504,7 +498,6 @@ export function ScrollableIconGrid({
     }
     if (dragState.folderPreviewTargetId !== null) return null
     if (dragState.previewSlotIndex === null) return null
-
     const baseForPreview = extractDraggedIconsFromSourceFolders(items, dragState.draggingIds)
     const previewBaseItemIdSet = new Set(
       resolveOuterItemIds(baseForPreview.map(getId), activeDockKeys)
@@ -533,7 +526,6 @@ export function ScrollableIconGrid({
             mode: 'paged',
             sourceSlots: outerSlots,
           })
-
     const draggingIdSet = new Set(dragState.draggingIds)
     const normalizedWorkingOrder = dragState.workingOrder.map(slot => {
       if (slot === DRAG_HOLE_ID) return null
@@ -557,7 +549,6 @@ export function ScrollableIconGrid({
         currentPageIds.add(slot)
       }
     }
-
     for (let index = 0; index < nextOrder.length; index += 1) {
       if (index >= pageStart && index < pageEnd) continue
       const slot = nextOrder[index]
@@ -565,10 +556,8 @@ export function ScrollableIconGrid({
         nextOrder[index] = null
       }
     }
-
     return nextOrder
   }, [activeDockKeys, columns, dragState, items, launchpadGridViewMode, outerSlots, pageSize])
-
   const renderOrder = useMemo(() => {
     if (dragState?.context === 'outer') {
       return outerPreviewSpillOrder ?? dragState.workingOrder
@@ -735,6 +724,12 @@ export function ScrollableIconGrid({
         }
         onWheel={launchpadGridViewMode === 'paged' ? handleWheelPageSwitch : undefined}
       >
+        <DragAnnouncementLiveRegion
+          dragState={dragState}
+          itemById={itemById}
+          folderLayoutProfile={folderLayoutProfile}
+          pageSize={pageSize}
+        />
         {launchpadGridViewMode === 'scroll' ? (
           <ScrollableOuterGridView
             containerRef={containerRef}
@@ -780,6 +775,7 @@ export function ScrollableIconGrid({
               void launchApp(path)
             }}
             onResizeFolder={handleResizeFolder}
+            onResizeWidget={handleResizeWidget}
             onDissolveFolder={handleDissolveFolder}
             bindTileRef={(id, node) => {
               if (node) tileRefs.current.set(id, node)
@@ -843,6 +839,7 @@ export function ScrollableIconGrid({
                   void launchApp(path)
                 }}
                 onResizeFolder={handleResizeFolder}
+                onResizeWidget={handleResizeWidget}
                 onDissolveFolder={handleDissolveFolder}
                 bindTileRef={(id, node) => {
                   if (node) tileRefs.current.set(id, node)
@@ -938,6 +935,7 @@ export function ScrollableIconGrid({
           folderColumns={folderColumns}
           folderItemWidth={folderItemWidth}
           folderItemHeight={folderItemHeight}
+          folderLayoutProfile={folderLayoutProfile}
           folderRenderOrder={folderRenderOrder}
           folderItemById={folderItemById}
           bindFolderTileRef={(id, node) => {
