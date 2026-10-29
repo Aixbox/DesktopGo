@@ -34,12 +34,12 @@ import { LaunchpadSelectionToolbar } from '@/components/launchpad/LaunchpadSelec
 import { useLaunchpadIconImportController } from '@/components/launchpad/useLaunchpadIconImportController'
 import { useLaunchpadSurfaceInteractions } from '@/components/launchpad/useLaunchpadSurfaceInteractions'
 import { useLaunchpadWindowController } from '@/components/launchpad/useLaunchpadWindowController'
+import { useGridGeometryKey } from '@/components/icon-grid/hooks/useGridGeometryKey'
 import { LayoutLibraryDrawer } from '@/components/layout-library/LayoutLibraryDrawer'
 import { LayoutNameDialog } from '@/components/layout-library/LayoutNameDialog'
 import {
   LAYOUT_DRAWER_COLLAPSED_HEIGHT,
   LAYOUT_DRAWER_HEIGHT,
-  resolveCurrentGeometryKey,
 } from '@/components/layout-library/layoutLibrary'
 import { useLayoutLibraryController } from '@/components/layout-library/useLayoutLibraryController'
 import { useSearch } from '@/lib/search/useSearch'
@@ -185,10 +185,7 @@ export function Launchpad() {
   const preloadGridView = useCallback((mode: 'paged' | 'scroll') => {
     void (mode === 'scroll' ? loadScrollableIconGrid() : loadIconGrid())
   }, [])
-  const currentLayoutGeometryKey = useMemo(
-    () => resolveCurrentGeometryKey(windowMode, iconSize, dockEnabled),
-    [dockEnabled, iconSize, windowMode]
-  )
+  const currentLayoutGeometryKey = useGridGeometryKey(windowMode, iconSize, dockEnabled)
   const bumpLayoutToken = useCallback(() => {
     setLayoutResetToken(current => current + 1)
   }, [setLayoutResetToken])

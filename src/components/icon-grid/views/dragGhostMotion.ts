@@ -1,3 +1,5 @@
+import { COLOROS_MOTION } from '../constants'
+
 export interface DragGhostMotion {
   rotate: number
   scaleX: number
@@ -49,8 +51,8 @@ export function stepDragGhostMotion(
   deltaMs: number
 ): DragGhostMotionState {
   const deltaSeconds = clamp(deltaMs / 1000, 0.001, 0.034)
-  const stiffness = 280
-  const damping = 30
+  const stiffness = COLOROS_MOTION.spring.stiffness
+  const damping = COLOROS_MOTION.spring.damping
   const nextMotion = { ...state.motion }
   const nextVelocity = { ...state.velocity }
 

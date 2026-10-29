@@ -40,6 +40,51 @@ export interface DragGridMetrics {
   pageOffset: number
 }
 
+/**
+ * Resolve a cell by comparing the pointer with the centers of the few
+ * candidates around its floor-based cell. This uses the same cell origin for
+ * hit testing and placement, including the inter-cell gap, and avoids the
+ * half-cell drift that came from independently rounding x and y ratios.
+ */
+const resolveNearestAxisStart = ({
+  position,
+  origin,
+  cellSize,
+  gap,
+  count,
+  span,
+}: {
+  position: number
+  origin: number
+  cellSize: number
+  gap: number
+  count: number
+  span: number
+}) => {
+  const safeCount = Math.max(1, count)
+  const safeSpan = Math.max(1, Math.min(span, safeCount))
+  const maxStart = Math.max(0, safeCount - safeSpan)
+  const step = cellSize + gap
+  const floorStart = Math.floor((position - origin) / step)
+  const candidates = new Set([
+    clampNumber(floorStart - 1, 0, maxStart),
+    clampNumber(floorStart, 0, maxStart),
+    clampNumber(floorStart + 1, 0, maxStart),
+  ])
+  let best = 0
+  let bestDistance = Number.POSITIVE_INFINITY
+  candidates.forEach(candidate => {
+    const footprintSize = safeSpan * cellSize + Math.max(0, safeSpan - 1) * gap
+    const center = origin + candidate * step + footprintSize / 2
+    const distance = Math.abs(position - center)
+    if (distance < bestDistance || (distance === bestDistance && candidate < best)) {
+      best = candidate
+      bestDistance = distance
+    }
+  })
+  return best
+}
+
 export const findHitByMetrics = (
   state: DragState,
   x: number,
@@ -120,16 +165,22 @@ export const resolveNearestSlotIndexByMetrics = (
 
   const clampedX = clampNumber(state.pointerX, rect.left, rect.right)
   const clampedY = clampNumber(state.pointerY, rect.top, rect.bottom)
-  const col = clampNumber(
-    Math.round((clampedX - rect.left - tileW / 2) / stepX),
-    0,
-    Math.max(0, colCount - 1)
-  )
-  const row = clampNumber(
-    Math.round((clampedY - rect.top - tileH / 2) / stepY),
-    0,
-    Math.max(0, rowCount - 1)
-  )
+  const col = resolveNearestAxisStart({
+    position: clampedX,
+    origin: rect.left,
+    cellSize: tileW,
+    gap: gridGap,
+    count: colCount,
+    span: 1,
+  })
+  const row = resolveNearestAxisStart({
+    position: clampedY,
+    origin: rect.top,
+    cellSize: tileH,
+    gap: gridGap,
+    count: rowCount,
+    span: 1,
+  })
   const slotIndex = row * colCount + col
   const globalSlotIndex = clampNumber(
     pageOffset + slotIndex,
@@ -172,14 +223,24 @@ export const resolveNearestAnchorIndexByMetrics = (
     return null
   }
 
-  const maxCol = Math.max(0, colCount - span.cols)
-  const maxRow = Math.max(0, rowCount - span.rows)
-  const width = span.cols * tileW + Math.max(0, span.cols - 1) * gridGap
-  const height = span.rows * tileH + Math.max(0, span.rows - 1) * gridGap
   const clampedX = clampNumber(state.pointerX, rect.left, rect.right)
   const clampedY = clampNumber(state.pointerY, rect.top, rect.bottom)
-  const col = clampNumber(Math.round((clampedX - rect.left - width / 2) / stepX), 0, maxCol)
-  const row = clampNumber(Math.round((clampedY - rect.top - height / 2) / stepY), 0, maxRow)
+  const col = resolveNearestAxisStart({
+    position: clampedX,
+    origin: rect.left,
+    cellSize: tileW,
+    gap: gridGap,
+    count: colCount,
+    span: span.cols,
+  })
+  const row = resolveNearestAxisStart({
+    position: clampedY,
+    origin: rect.top,
+    cellSize: tileH,
+    gap: gridGap,
+    count: rowCount,
+    span: span.rows,
+  })
   const slotIndex = row * colCount + col
   const globalSlotIndex = clampNumber(
     pageOffset + slotIndex,

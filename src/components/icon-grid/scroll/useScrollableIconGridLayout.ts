@@ -34,7 +34,7 @@ import {
 import {
   hydrateDockKeys,
   hydrateLayout,
-  readLayout,
+  readLayoutStrict,
   serializeItems,
   writeLayout,
 } from '../services/layoutStore'
@@ -92,6 +92,7 @@ export function useScrollableIconGridLayout({
   const persistedLayoutRef = useRef<PersistedLayout | null>(null)
   const persistedLayoutLoadedRef = useRef(false)
   const persistedLayoutLoadPromiseRef = useRef<Promise<PersistedLayout | null> | null>(null)
+  const hydrationBlockedRef = useRef(false)
   const hydratedLayoutResetTokenRef = useRef(layoutResetToken)
   const persistedLayoutResetTokenRef = useRef<number | null>(null)
   const layoutWriteQueueRef = useRef<Promise<void>>(Promise.resolve())
@@ -117,6 +118,7 @@ export function useScrollableIconGridLayout({
   const [importHighlightIds, setImportHighlightIds] = useState<string[]>([])
   const [outerSlots, setOuterSlots] = useState<Array<string | null>>([])
   const [dockKeys, setDockKeys] = useState<Array<string | null>>([])
+  const [hydrationError, setHydrationError] = useState<string | null>(null)
   const [layoutDimensionsTracker] = useState(() =>
     createLayoutDimensionsTracker({ pageSize: Math.max(1, columns * rows), columns })
   )
@@ -198,8 +200,17 @@ export function useScrollableIconGridLayout({
           persistedLayoutResetTokenRef.current = layoutResetToken
         }
         if (!persistedLayoutLoadedRef.current) {
-          persistedLayoutLoadPromiseRef.current ??= readLayout('scroll')
-          persistedLayoutRef.current = await persistedLayoutLoadPromiseRef.current
+          persistedLayoutLoadPromiseRef.current ??= readLayoutStrict('scroll')
+          try {
+            persistedLayoutRef.current = await persistedLayoutLoadPromiseRef.current
+            hydrationBlockedRef.current = false
+            setHydrationError(null)
+          } catch (error) {
+            hydrationBlockedRef.current = true
+            persistedLayoutRef.current = null
+            setHydrationError(String(error))
+            console.error('Failed to hydrate persisted scroll layout:', error)
+          }
           persistedLayoutLoadedRef.current = true
         }
         if (cancelled) return
@@ -276,7 +287,7 @@ export function useScrollableIconGridLayout({
     outerSlotsRef.current = outerSlots
     dockKeysRef.current = dockKeys
     scrollGroupsRef.current = scrollGroups
-    if (!hydratedRef.current || !layoutBaselineRef.current) return
+    if (!hydratedRef.current || !layoutBaselineRef.current || hydrationBlockedRef.current) return
     const layoutDimensions = layoutDimensionsTracker.read()
     if (layoutDimensions.pageSize === 1 && layoutDimensions.columns === 1) return
     const nextGeometryKey =
@@ -749,5 +760,6 @@ export function useScrollableIconGridLayout({
     setItems,
     setOuterSlots,
     setScrollGroups,
+    hydrationError,
   }
 }

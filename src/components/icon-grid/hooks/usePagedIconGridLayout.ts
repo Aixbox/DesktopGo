@@ -7,7 +7,7 @@ import { clampNumber } from '../domain/geometry'
 import {
   hydrateDockKeys,
   hydrateLayout,
-  readLayout,
+  readLayoutStrict,
   serializeItems,
   writeLayout,
 } from '../services/layoutStore'
@@ -78,6 +78,7 @@ export function usePagedIconGridLayout({
   const persistedScrollGroupsRef = useRef<PersistedLayout['scrollGroups']>(undefined)
   const persistedLayoutLoadedRef = useRef(false)
   const persistedLayoutLoadPromiseRef = useRef<Promise<PersistedLayout | null> | null>(null)
+  const hydrationBlockedRef = useRef(false)
   const hydratedLayoutResetTokenRef = useRef(layoutResetToken)
   const persistedLayoutResetTokenRef = useRef<number | null>(null)
   const layoutWriteQueueRef = useRef<Promise<void>>(Promise.resolve())
@@ -99,6 +100,7 @@ export function usePagedIconGridLayout({
   const [importHighlightIds, setImportHighlightIds] = useState<string[]>([])
   const [outerSlots, setOuterSlots] = useState<Array<string | null>>([])
   const [dockKeys, setDockKeys] = useState<Array<string | null>>([])
+  const [hydrationError, setHydrationError] = useState<string | null>(null)
   const [layoutDimensionsTracker] = useState(() =>
     createLayoutDimensionsTracker({ pageSize: Math.max(1, columns * rows), columns })
   )
@@ -166,8 +168,17 @@ export function usePagedIconGridLayout({
           persistedLayoutResetTokenRef.current = layoutResetToken
         }
         if (!persistedLayoutLoadedRef.current) {
-          persistedLayoutLoadPromiseRef.current ??= readLayout()
-          persistedLayoutRef.current = await persistedLayoutLoadPromiseRef.current
+          persistedLayoutLoadPromiseRef.current ??= readLayoutStrict()
+          try {
+            persistedLayoutRef.current = await persistedLayoutLoadPromiseRef.current
+            hydrationBlockedRef.current = false
+            setHydrationError(null)
+          } catch (error) {
+            hydrationBlockedRef.current = true
+            persistedLayoutRef.current = null
+            setHydrationError(String(error))
+            console.error('Failed to hydrate persisted launchpad layout:', error)
+          }
           persistedLayoutLoadedRef.current = true
         }
         if (cancelled) return
@@ -235,7 +246,7 @@ export function usePagedIconGridLayout({
     itemsRef.current = items
     outerSlotsRef.current = outerSlots
     dockKeysRef.current = dockKeys
-    if (!hydratedRef.current || !layoutBaselineRef.current) return
+    if (!hydratedRef.current || !layoutBaselineRef.current || hydrationBlockedRef.current) return
 
     const layoutDimensions = layoutDimensionsTracker.read()
     if (layoutDimensions.pageSize === 1 && layoutDimensions.columns === 1) return
@@ -589,5 +600,6 @@ export function usePagedIconGridLayout({
     activeDockKeys,
     outerItemIds,
     pageSize,
+    hydrationError,
   }
 }

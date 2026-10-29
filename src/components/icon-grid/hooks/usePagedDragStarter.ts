@@ -1,6 +1,7 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { GridItem } from '../model'
-import { DRAG_HOLE_ID, areSlotsEqual } from '../domain/slots'
+import { areSlotsEqual } from '../domain/slots'
+import { removeDraggingIdsFromOrder } from '../domain/dragSession'
 import { getFolderChildrenById } from '../domain/folderPolicy'
 import { normalizeOuterSlots } from '../domain/topLevelLayout'
 import { resolveMixedSelectionDragIds } from '../domain/multiSelectionPolicy'
@@ -184,8 +185,7 @@ function buildInitialDragState(
   x: number,
   y: number
 ): DragState {
-  const workingOrder = [...sourceOrder]
-  workingOrder[sourceIndex] = pending.context === 'folder' ? DRAG_HOLE_ID : null
+  const workingOrder = removeDraggingIdsFromOrder(sourceOrder, draggingIds, pending.context)
   const initialCenters =
     pending.context === 'folder'
       ? collectCenters(params.folderTileRefs.current)

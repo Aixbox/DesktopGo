@@ -11,9 +11,9 @@ import type { FolderSize, GridSpan } from '../model'
 import type { PageAnchorEntry } from '../domain/topLevelLayout'
 import { FolderCreatePreview } from './FolderVisuals'
 import { OuterFolderTile } from './OuterFolderTile'
-import { MOTION_SPRING_EASING } from '../constants'
+import { COLOROS_MOTION, MOTION_SPRING_EASING } from '../constants'
 
-const PAGE_SLIDE_MS = 280
+const PAGE_SLIDE_MS = COLOROS_MOTION.workspacePageSnapMs
 const PAGE_SLIDE_EASING = MOTION_SPRING_EASING
 
 interface IconConfigLike {
@@ -125,15 +125,17 @@ export function OuterGridView({
   const prevPageRef = useRef(currentPage)
   const slideTimerRef = useRef<number | null>(null)
   const snapshotCloneRef = useRef<HTMLDivElement | null>(null)
-  const prevGridSnapshotRef = useRef<string>('')
+  const prevGridSnapshotRef = useRef<HTMLDivElement | null>(null)
   const gridClipRef = useRef<HTMLDivElement | null>(null)
   const highlightedOuterItemIdSet = new Set(highlightedOuterItemIds)
 
-  // Capture grid innerHTML after every render for use as the "old page" snapshot
+  // Capture a detached DOM snapshot after every render for use as the "old page".
+  // Cloning keeps browser-managed attributes and nested nodes intact while
+  // avoiding a second React tree that could receive events during the slide.
   useLayoutEffect(() => {
     const grid = gridRef.current
     if (grid && prevPageRef.current === currentPage) {
-      prevGridSnapshotRef.current = grid.innerHTML
+      prevGridSnapshotRef.current = grid.cloneNode(true) as HTMLDivElement
     }
   })
 
@@ -171,7 +173,8 @@ export function OuterGridView({
     clone.style.position = 'absolute'
     clone.style.inset = '0'
     clone.style.pointerEvents = 'none'
-    clone.innerHTML = prevGridSnapshotRef.current
+    const snapshot = prevGridSnapshotRef.current ?? (grid.cloneNode(true) as HTMLDivElement)
+    clone.replaceChildren(...Array.from(snapshot.childNodes, node => node.cloneNode(true)))
     clipContainer.appendChild(clone)
     snapshotCloneRef.current = clone
 
@@ -194,7 +197,7 @@ export function OuterGridView({
     grid.style.transform = 'translate3d(0, 0, 0)'
 
     // Save new page snapshot after animation content is ready
-    prevGridSnapshotRef.current = grid.innerHTML
+    prevGridSnapshotRef.current = grid.cloneNode(true) as HTMLDivElement
 
     slideTimerRef.current = window.setTimeout(() => {
       grid.style.transition = ''

@@ -53,10 +53,9 @@ import {
   dissolveFolderInTopLevelLayout,
   getFolderChildSelectionsByIds,
 } from './icon-grid/domain/folderPolicy'
-import {
-  buildGridGeometryKey as buildGeometryKey,
-  getLayoutNormalizationMetrics,
-} from './icon-grid/domain/gridGeometry'
+import { getLayoutNormalizationMetrics } from './icon-grid/domain/gridGeometry'
+import { useGridGeometryKey } from './icon-grid/hooks/useGridGeometryKey'
+import { usePageBounds } from './icon-grid/hooks/usePageBounds'
 import {
   extractDraggedIconsFromSourceFolders,
   filterItemsByIds,
@@ -122,7 +121,7 @@ export function IconGrid({
   const columnWidth = ICON_SIZE_CONFIG[iconSize].columnWidth
   const layoutRowHeight = getIconGridLayoutRowHeight(iconSize)
   const rowHeight = getIconGridRowHeight(iconSize)
-  const geometryKey = buildGeometryKey(windowMode, iconSize, dockEnabled)
+  const geometryKey = useGridGeometryKey(windowMode, iconSize, dockEnabled)
   const [hoverPage, setHoverPage] = useState<number | null>(null)
   const [openFolderId, setOpenFolderId] = useState<string | null>(null)
   const [activeFolderSharedLayoutId, setActiveFolderSharedLayoutId] = useState<string | null>(null)
@@ -489,8 +488,7 @@ export function IconGrid({
 
   const outerRenderCount = Math.max(pageSize, renderOrder.length)
   const pageCount = Math.max(1, Math.ceil(outerRenderCount / pageSize))
-  if (currentPage >= pageCount) setCurrentPage(pageCount - 1)
-  if (hoverPage !== null && hoverPage >= pageCount) setHoverPage(null)
+  usePageBounds(currentPage, pageCount, hoverPage, setCurrentPage, setHoverPage, currentPageRef)
 
   const stepPageByWheelDelta = (primaryDelta: number, isOuterDrag: boolean) => {
     if (pageCount <= 1 || Math.abs(primaryDelta) < 0.1) return

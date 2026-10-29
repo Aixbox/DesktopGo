@@ -5,7 +5,7 @@ import {
   ICON_GRID_TITLE_GAP,
 } from '../../../types'
 import type { FolderSize, GridSpan } from '../model'
-import { MOTION_SPRING_EASING } from '../constants'
+import { COLOROS_MOTION, MOTION_SPRING_EASING } from '../constants'
 
 export const FOLDER_PREVIEW_PADDING = 4
 export const FOLDER_PREVIEW_GAP = 2
@@ -17,9 +17,9 @@ export const FOLDER_MODAL_MAX_HEIGHT = 480
 export const FOLDER_MODAL_TRANSITION_EASING = [0.22, 1, 0.36, 1] as const
 export const FOLDER_SHARED_LAYOUT_TRANSITION = {
   type: 'spring',
-  stiffness: 320,
-  damping: 30,
-  mass: 0.9,
+  stiffness: COLOROS_MOTION.spring.stiffness,
+  damping: COLOROS_MOTION.spring.damping,
+  mass: 1,
 } as const
 export const FOLDER_SURFACE_CLASS =
   'relative h-full w-full overflow-hidden rounded-[var(--radius-folder-surface)] border border-border/35 bg-background/42 shadow-[0_4px_12px_rgba(15,23,42,0.1)] backdrop-blur-lg dark:border-white/14 dark:bg-black/24 dark:shadow-[0_4px_12px_rgba(0,0,0,0.18)]'

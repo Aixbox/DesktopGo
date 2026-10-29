@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { buildGridGeometryKey } from '../icon-grid/domain/gridGeometry'
+import { buildGridGeometryKey, readGridGeometryMeasurement } from '../icon-grid/domain/gridGeometry'
 
 /** 布局库只对分页网格开放；滚动模式的分组结构是另一套，先不混进来。 */
 export type LayoutLibraryScope = 'paged'
@@ -129,7 +129,7 @@ if (typeof document !== 'undefined') {
 }
 
 export const resolveCurrentGeometryKey = (windowMode: string, iconSize: string, dock: boolean) =>
-  buildGridGeometryKey(windowMode, iconSize, dock)
+  buildGridGeometryKey(windowMode, iconSize, dock, readGridGeometryMeasurement())
 
 /**
  * 恢复前按当前网格几何校正 payload。

@@ -49,7 +49,8 @@ import { EdgeGlow } from './icon-grid/views/EdgeGlow'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
 import { DockBar } from './icon-grid/views/DockBar'
 import { getFolderChildSelectionsByIds } from './icon-grid/domain/folderPolicy'
-import { buildGridGeometryKey as buildGeometryKey } from './icon-grid/domain/gridGeometry'
+import { useGridGeometryKey } from './icon-grid/hooks/useGridGeometryKey'
+import { usePageBounds } from './icon-grid/hooks/usePageBounds'
 import {
   extractDraggedIconsFromSourceFolders,
   filterItemsByIds,
@@ -122,10 +123,12 @@ export function ScrollableIconGrid({
   const columnWidth = ICON_SIZE_CONFIG[iconSize].columnWidth
   const layoutRowHeight = getIconGridLayoutRowHeight(iconSize)
   const rowHeight = getIconGridRowHeight(iconSize)
-  const geometryKey =
-    launchpadGridViewMode === 'scroll'
-      ? `${buildGeometryKey(windowMode, iconSize, dockEnabled)}:scroll`
-      : buildGeometryKey(windowMode, iconSize, dockEnabled)
+  const geometryKey = useGridGeometryKey(
+    windowMode,
+    iconSize,
+    dockEnabled,
+    launchpadGridViewMode === 'scroll' ? 'scroll' : undefined
+  )
   const {
     activeDockKeys,
     captureScrollGridItemPositions,
@@ -589,8 +592,7 @@ export function ScrollableIconGrid({
       : Math.max(1, Math.ceil(outerRenderCount / pageSize))
   const pageCount =
     launchpadGridViewMode === 'scroll' ? Math.max(1, scrollGroupCount) : layoutPageCount
-  if (currentPage >= pageCount) setCurrentPage(pageCount - 1)
-  if (hoverPage !== null && hoverPage >= pageCount) setHoverPage(null)
+  usePageBounds(currentPage, pageCount, hoverPage, setCurrentPage, setHoverPage, currentPageRef)
 
   const handleWheelPageSwitch = (event: ReactWheelEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null

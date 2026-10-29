@@ -12,6 +12,7 @@ import {
   seedMissingInitialCenters,
 } from './dragWorkflowShared.ts'
 import { DRAG_HOLE_ID } from './slots.ts'
+import { removeDraggingIdsFromOrder } from './dragSession.ts'
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
@@ -24,6 +25,22 @@ assert(fitGridItemCount(300, 96) === 2, '共享网格间距应参与列数计算
 assert(
   buildGridGeometryKey('large', 'medium', true) === 'large:medium:true',
   '分页和滚动模式应使用同一几何缓存键'
+)
+const measuredGeometryKey = buildGridGeometryKey('large', 'medium', true, {
+  viewportWidth: 1440,
+  viewportHeight: 900,
+  visualViewportWidth: 1424,
+  visualViewportHeight: 900,
+  devicePixelRatio: 1.25,
+  orientation: 'landscape',
+  direction: 'rtl',
+})
+assert(
+  measuredGeometryKey.includes('viewport-1440x900') &&
+    measuredGeometryKey.includes('visual-1424x900') &&
+    measuredGeometryKey.includes('dpr-1.25') &&
+    measuredGeometryKey.endsWith('orientation-landscape:dir-rtl'),
+  '完整几何键应包含视口、DPR、方向和 RTL 测量'
 )
 assert(
   JSON.stringify(getLayoutNormalizationMetrics([folder('wide', [], '2x2')], 1, 1)) ===
@@ -65,6 +82,16 @@ const selectedDragIds = resolveSelectedIconDragIds(
 assert(
   JSON.stringify(selectedDragIds) === JSON.stringify(['b']),
   '共享选择解析应保持布局顺序，并排除主拖拽项、洞位和文件夹'
+)
+assert(
+  JSON.stringify(removeDraggingIdsFromOrder(['a', 'b', null, 'c'], ['a', 'c'], 'outer')) ===
+    JSON.stringify([null, 'b', null, null]),
+  '多选外部拖动必须从起点统一清空所有源项目'
+)
+assert(
+  JSON.stringify(removeDraggingIdsFromOrder(['a', 'b'], ['a', 'b'], 'folder')) ===
+    JSON.stringify([DRAG_HOLE_ID, DRAG_HOLE_ID]),
+  '文件夹多选拖动必须为每个源项目建立洞位'
 )
 
 const draggingItem = icon('a')

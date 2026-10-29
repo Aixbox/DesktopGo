@@ -135,15 +135,33 @@ export interface PersistedItemCoordinates {
   cells: PersistedGridCoordinate[]
 }
 
+export type PersistedPlacementContainer = 'workspace' | 'dock' | { folderId: string }
+
+/** Canonical v10 placement record; slots/coordinates remain migration views. */
+export interface PersistedPlacement {
+  id: string
+  container: PersistedPlacementContainer
+  page: number
+  row: number
+  col: number
+  spanX: number
+  spanY: number
+  rank: number
+}
+
 export interface PersistedLayout {
   items: PersistedItem[]
   slots: Array<string | null> | null
   dockKeys: Array<string | null>
+  /** 单调递增的提交版本，用于 preview/commit 和恢复诊断。 */
+  revision?: number
+  /** 对去除 revision/checksum 后的规范 payload 计算的完整性校验值。 */
+  checksum?: string
+  placements?: PersistedPlacement[]
   pageSize?: number
   columns?: number
   coordinates?: PersistedItemCoordinates[]
-  // 网格几何锁定标识，形如 `${windowMode}:${iconSize}:${dockEnabled}`。
-  // 只有该三元组变化时才重新测量列数/行数，避免 DPI/分辨率切换导致图标重排。
+  // 兼容旧版本的几何标识；新版本由完整 measurement key 生成。
   geometryKey?: string
   scrollGroups?: ScrollGroupMeta[]
   // v9 起滚动布局使用显式分组成员；v8 及更早版本仍需从 slots 一次性迁移。

@@ -20,6 +20,26 @@ export const DRAG_PENDING_MOVE_TOLERANCE = 7
 export const EVASION_HOLD_EXIT_MARGIN = 16
 export const EVASION_REARM_DISTANCE = 14
 export const REORDER_ANIMATION_MS = 300
+/** ColorOS Workspace/PagedView timing baseline extracted from OplusLauncher. */
+export const COLOROS_MOTION = {
+  pageSnapMs: 750,
+  workspacePageSnapMs: 600,
+  largeScreenPageSnapMs: 550,
+  largeScreenWorkspacePageSnapMs: 440,
+  adjacentScreenDropMs: 300,
+  workspaceReorderAlarmMs: 650,
+  folderReorderAlarmMs: 200,
+  folderDropMs: 600,
+  spring: {
+    response: 0.3,
+    dampingRatio: 1,
+    stiffness: 438.649,
+    damping: 41.884,
+    minimumVisibleChange: 0.001,
+    positionThreshold: 0.00075,
+    velocityThreshold: 0.046875,
+  },
+} as const
 // Shared motion language for layout changes: a quick settle with a restrained
 // overshoot keeps reflow feeling physical without turning into a visible bounce.
 export const MOTION_SPRING_EASING = 'cubic-bezier(0.22, 1.12, 0.36, 1.02)'
