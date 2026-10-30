@@ -5,8 +5,15 @@ import {
   ArrowUpToLine,
   Grip,
 } from 'lucide-react'
-import { memo, type PointerEvent as ReactPointerEvent } from 'react'
+import {
+  memo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import type { GridSpan, WidgetItem } from '../model'
+import { resolveWidgetResizeGestureSpan } from '../domain/widgetResize'
 import { scaledRadius } from './folderVisualPolicy'
 
 interface WidgetTileProps {
@@ -26,6 +33,23 @@ const clampSpan = (value: number, min: number, max: number): number =>
 const resizeButtonClass =
   'flex h-6 w-6 items-center justify-center rounded-md border border-border/50 text-foreground/65 transition hover:bg-background/70 disabled:pointer-events-none disabled:opacity-30 dark:border-white/16 dark:text-white/70 dark:hover:bg-white/10'
 
+interface ResizePreview {
+  spanX: number
+  spanY: number
+}
+
+interface ResizeSession {
+  pointerId: number
+  axis: 'x' | 'y'
+  direction: 1 | -1
+  startX: number
+  startY: number
+  baseSpanX: number
+  baseSpanY: number
+  latest: ResizePreview
+  moved: boolean
+}
+
 export const WidgetTile = memo(function WidgetTile({
   widget,
   span,
@@ -36,12 +60,19 @@ export const WidgetTile = memo(function WidgetTile({
   onResize,
   dragPreview = false,
 }: WidgetTileProps) {
-  const width = span.cols * slotWidth + Math.max(0, span.cols - 1) * gridGap
-  const height = span.rows * slotHeight + Math.max(0, span.rows - 1) * gridGap
-  const canShrinkX = widget.spanX > widget.minSpanX
-  const canShrinkY = widget.spanY > widget.minSpanY
-  const canGrowX = widget.spanX < widget.maxSpanX
-  const canGrowY = widget.spanY < widget.maxSpanY
+  const resizeSessionRef = useRef<ResizeSession | null>(null)
+  const suppressResizeClickRef = useRef(false)
+  const [resizePreview, setResizePreview] = useState<ResizePreview | null>(null)
+  const baseSpanX = Math.max(1, span.cols)
+  const baseSpanY = Math.max(1, span.rows)
+  const effectiveSpanX = resizePreview?.spanX ?? baseSpanX
+  const effectiveSpanY = resizePreview?.spanY ?? baseSpanY
+  const width = effectiveSpanX * slotWidth + Math.max(0, effectiveSpanX - 1) * gridGap
+  const height = effectiveSpanY * slotHeight + Math.max(0, effectiveSpanY - 1) * gridGap
+  const canShrinkX = effectiveSpanX > widget.minSpanX
+  const canShrinkY = effectiveSpanY > widget.minSpanY
+  const canGrowX = effectiveSpanX < widget.maxSpanX
+  const canGrowY = effectiveSpanY < widget.maxSpanY
 
   const resizeAxis = (axis: 'x' | 'y', delta: number) => {
     if (!onResize) return
@@ -57,18 +88,103 @@ export const WidgetTile = memo(function WidgetTile({
     onResize(widget.id, nextSpanX, nextSpanY)
   }
 
+  const startPointerResize = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    axis: 'x' | 'y',
+    direction: 1 | -1
+  ) => {
+    if (!onResize) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    resizeSessionRef.current = {
+      pointerId: event.pointerId,
+      axis,
+      direction,
+      startX: event.clientX,
+      startY: event.clientY,
+      baseSpanX: widget.spanX,
+      baseSpanY: widget.spanY,
+      latest: { spanX: widget.spanX, spanY: widget.spanY },
+      moved: false,
+    }
+  }
+
+  const movePointerResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const session = resizeSessionRef.current
+    if (!session || session.pointerId !== event.pointerId) return
+    const deltaPixels =
+      session.axis === 'x' ? event.clientX - session.startX : event.clientY - session.startY
+    const next = resolveWidgetResizeGestureSpan({
+      baseSpanX: session.baseSpanX,
+      baseSpanY: session.baseSpanY,
+      deltaPixels,
+      cellPixels: session.axis === 'x' ? slotWidth + gridGap : slotHeight + gridGap,
+      axis: session.axis,
+      direction: session.direction,
+      bounds: {
+        minSpanX: widget.minSpanX,
+        minSpanY: widget.minSpanY,
+        maxSpanX: widget.maxSpanX,
+        maxSpanY: widget.maxSpanY,
+      },
+    })
+    if (next.spanX !== session.baseSpanX || next.spanY !== session.baseSpanY) {
+      session.moved = true
+    }
+    session.latest = next
+    setResizePreview(next)
+  }
+
+  const finishPointerResize = (event: ReactPointerEvent<HTMLButtonElement>, cancelled = false) => {
+    const session = resizeSessionRef.current
+    if (!session || session.pointerId !== event.pointerId) return
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    resizeSessionRef.current = null
+    suppressResizeClickRef.current = session.moved
+    setResizePreview(null)
+    if (!cancelled && session.moved) {
+      onResize?.(widget.id, session.latest.spanX, session.latest.spanY)
+    }
+  }
+
+  const resizePointerProps = (axis: 'x' | 'y', direction: 1 | -1) => ({
+    onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) =>
+      startPointerResize(event, axis, direction),
+    onPointerMove: movePointerResize,
+    onPointerUp: finishPointerResize,
+    onPointerCancel: (event: ReactPointerEvent<HTMLButtonElement>) =>
+      finishPointerResize(event, true),
+  })
+
+  const handleResizeClick = (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    axis: 'x' | 'y',
+    delta: number
+  ) => {
+    event.stopPropagation()
+    if (suppressResizeClickRef.current) {
+      suppressResizeClickRef.current = false
+      return
+    }
+    resizeAxis(axis, delta)
+  }
+
   return (
     <div
       data-widget-id={widget.id}
       data-widget-provider={widget.provider}
-      data-widget-span={`${widget.spanX}x${widget.spanY}`}
+      data-widget-span={`${effectiveSpanX}x${effectiveSpanY}`}
+      data-widget-resize-frame={resizePreview ? 'active' : 'idle'}
       className={`relative flex h-full w-full touch-none flex-col overflow-hidden rounded-[var(--radius-folder-surface)] border bg-background/52 p-3 text-foreground shadow-[0_8px_22px_rgba(15,23,42,0.12)] backdrop-blur-lg dark:border-white/16 dark:bg-black/28 dark:text-white/90 ${
         dragPreview ? 'opacity-85' : ''
       }`}
       style={{ width, height, borderRadius: scaledRadius(18) }}
       onPointerDown={onPointerDown}
       role="group"
-      aria-label={`${widget.label} (${widget.spanX}×${widget.spanY})`}
+      aria-label={`${widget.label} (${effectiveSpanX}×${effectiveSpanY})`}
     >
       <div className="flex min-w-0 items-center gap-2 text-xs font-medium">
         <Grip
@@ -81,9 +197,16 @@ export const WidgetTile = memo(function WidgetTile({
         <span className="text-center">
           {widget.provider}
           <br />
-          {widget.spanX}×{widget.spanY}
+          {effectiveSpanX}×{effectiveSpanY}
         </span>
       </div>
+      {resizePreview ? (
+        <div
+          data-widget-resize-frame="overlay"
+          className="pointer-events-none absolute inset-1 rounded-[var(--radius-folder-surface)] border-2 border-primary/70 bg-primary/8 shadow-[0_0_0_1px_rgba(59,130,246,0.2),0_0_18px_rgba(59,130,246,0.2)] dark:border-sky-200/75 dark:bg-sky-200/8"
+          aria-hidden="true"
+        />
+      ) : null}
       {onResize ? (
         <div className="mt-2 grid grid-cols-4 items-center justify-end gap-1">
           <button
@@ -92,11 +215,8 @@ export const WidgetTile = memo(function WidgetTile({
             title="缩小宽度"
             disabled={!canShrinkX}
             className={resizeButtonClass}
-            onPointerDown={event => event.stopPropagation()}
-            onClick={event => {
-              event.stopPropagation()
-              resizeAxis('x', -1)
-            }}
+            {...resizePointerProps('x', -1)}
+            onClick={event => handleResizeClick(event, 'x', -1)}
           >
             <ArrowLeftToLine className="h-3 w-3" aria-hidden="true" />
           </button>
@@ -106,11 +226,8 @@ export const WidgetTile = memo(function WidgetTile({
             title="放大宽度"
             disabled={!canGrowX}
             className={resizeButtonClass}
-            onPointerDown={event => event.stopPropagation()}
-            onClick={event => {
-              event.stopPropagation()
-              resizeAxis('x', 1)
-            }}
+            {...resizePointerProps('x', 1)}
+            onClick={event => handleResizeClick(event, 'x', 1)}
           >
             <ArrowRightToLine className="h-3 w-3" aria-hidden="true" />
           </button>
@@ -120,11 +237,8 @@ export const WidgetTile = memo(function WidgetTile({
             title="缩小高度"
             disabled={!canShrinkY}
             className={resizeButtonClass}
-            onPointerDown={event => event.stopPropagation()}
-            onClick={event => {
-              event.stopPropagation()
-              resizeAxis('y', -1)
-            }}
+            {...resizePointerProps('y', -1)}
+            onClick={event => handleResizeClick(event, 'y', -1)}
           >
             <ArrowUpToLine className="h-3 w-3" aria-hidden="true" />
           </button>
@@ -134,11 +248,8 @@ export const WidgetTile = memo(function WidgetTile({
             title="放大高度"
             disabled={!canGrowY}
             className={resizeButtonClass}
-            onPointerDown={event => event.stopPropagation()}
-            onClick={event => {
-              event.stopPropagation()
-              resizeAxis('y', 1)
-            }}
+            {...resizePointerProps('y', 1)}
+            onClick={event => handleResizeClick(event, 'y', 1)}
           >
             <ArrowDownToLine className="h-3 w-3" aria-hidden="true" />
           </button>

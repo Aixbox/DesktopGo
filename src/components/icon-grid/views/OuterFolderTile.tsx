@@ -322,6 +322,38 @@ function FolderDropReceiverBackdrop({
   )
 }
 
+function BigFolderDropGrid({ active, childCount }: { active: boolean; childCount: number }) {
+  if (!active) return null
+  const capacity = FOLDER_LAYOUT_PROFILES.big.columns * FOLDER_LAYOUT_PROFILES.big.rows
+  const localCount = Math.min(Math.max(0, childCount), capacity)
+  const nextIndex = localCount < capacity ? localCount : -1
+  return (
+    <div
+      data-big-folder-drop-grid="active"
+      className="pointer-events-none absolute inset-[10%] z-20 grid grid-cols-4 grid-rows-4 gap-1 rounded-[18%] border border-primary/45 bg-primary/10 p-1 shadow-[0_0_0_1px_rgba(59,130,246,0.12),0_8px_18px_rgba(59,130,246,0.16)] dark:border-sky-300/50 dark:bg-sky-300/10"
+      aria-hidden="true"
+    >
+      {Array.from({ length: capacity }, (_, index) => {
+        const occupied = index < localCount
+        const next = index === nextIndex
+        return (
+          <span
+            key={index}
+            data-big-folder-drop-cell={next ? 'next' : occupied ? 'occupied' : 'empty'}
+            className={`rounded-[22%] border transition-colors ${
+              next
+                ? 'border-primary bg-primary/35 shadow-[0_0_8px_rgba(59,130,246,0.5)] dark:border-sky-200 dark:bg-sky-200/45'
+                : occupied
+                  ? 'border-foreground/20 bg-foreground/12 dark:border-white/20 dark:bg-white/12'
+                  : 'border-foreground/12 bg-background/35 dark:border-white/12 dark:bg-black/20'
+            }`}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
 function FolderBody({
   folder,
   bodyWidth,
@@ -423,6 +455,7 @@ function FolderBody({
           shapeHeight={shapeHeight}
           surfaceRadius={surfaceRadius}
         />
+        <BigFolderDropGrid active={folderPreview} childCount={folder.children.length} />
         <motion.div
           layoutId={sharedLayoutActive ? getFolderSharedLayoutId(folder.id) : undefined}
           transition={FOLDER_SHARED_LAYOUT_TRANSITION}

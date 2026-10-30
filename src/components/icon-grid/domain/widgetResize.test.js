@@ -1,4 +1,8 @@
-import { commitWidgetResize, previewWidgetResize } from './widgetResize.ts'
+import {
+  commitWidgetResize,
+  previewWidgetResize,
+  resolveWidgetResizeGestureSpan,
+} from './widgetResize.ts'
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
@@ -21,6 +25,27 @@ const base = {
   ],
 }
 const bounds = { minSpanX: 1, minSpanY: 1, maxSpanX: 2, maxSpanY: 2 }
+
+const gestureGrow = resolveWidgetResizeGestureSpan({
+  baseSpanX: 1,
+  baseSpanY: 1,
+  deltaPixels: 120,
+  cellPixels: 100,
+  axis: 'x',
+  direction: 1,
+  bounds,
+})
+assert(gestureGrow.spanX === 2 && gestureGrow.spanY === 1, '水平 resize frame 应按网格步长增长')
+const gestureShrink = resolveWidgetResizeGestureSpan({
+  baseSpanX: 2,
+  baseSpanY: 2,
+  deltaPixels: 240,
+  cellPixels: 100,
+  axis: 'y',
+  direction: -1,
+  bounds,
+})
+assert(gestureShrink.spanX === 2 && gestureShrink.spanY === 1, '垂直 resize frame 应按方向收缩')
 
 const accepted = previewWidgetResize({
   snapshot: base,

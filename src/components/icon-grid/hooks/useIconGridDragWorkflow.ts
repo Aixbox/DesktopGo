@@ -20,7 +20,7 @@ import {
   isFolderAutoOpenIntentValid,
   isPointOutsideFolderContent,
 } from '../domain/folderPolicy'
-import { usePointerDragController } from './usePointerDragController'
+import { usePagedDragLifecycle } from './usePagedDragLifecycle'
 import { useEdgeAutoPaging } from './useEdgeAutoPaging'
 import { useDragDropCommit } from './useDragDropCommit'
 import { activateDragPointerCapture, releaseDragPointerCapture } from './dragPointerCapture'
@@ -37,6 +37,11 @@ import type { DragState, FolderDropFlight, MultiDropFlightItem, PendingDrag } fr
 import type { DropImpactEvent } from '../state/types'
 import { resolveOuterDropImpactTarget } from '../views/dropImpactMotion'
 import { captureDragOriginFocus, restoreDragOriginFocus } from './dragFocus'
+import { measureDragFrame } from '../domain/layoutPerformance'
+import {
+  usePagedKeyboardDragWorkflow,
+  type PagedKeyboardDragWorkflowResult,
+} from './usePagedKeyboardDragWorkflow'
 
 interface DragWorkflowConfig {
   gridGap: number
@@ -95,6 +100,7 @@ interface UseIconGridDragWorkflowParams {
 }
 
 interface UseIconGridDragWorkflowResult {
+  keyboard: PagedKeyboardDragWorkflowResult
   dragState: DragState | null
   dragRef: MutableRefObject<DragState | null>
   dragPointerRef: MutableRefObject<{ pointerX: number; pointerY: number } | null>
@@ -714,7 +720,12 @@ export function useIconGridDragWorkflow({
       const queued = queuedDragMoveRef.current
       queuedDragMoveRef.current = null
       if (!queued) return
-      processDragMove(queued.pointerId, queued.x, queued.y)
+      const activeDrag = dragRef.current
+      measureDragFrame('paged', () => processDragMove(queued.pointerId, queued.x, queued.y), {
+        draggingItemCount: activeDrag?.draggingIds.length ?? 0,
+        draggingContext: activeDrag?.context ?? null,
+        draggingItemKind: activeDrag?.draggingItem.kind ?? null,
+      })
     })
   }
 
@@ -804,70 +815,50 @@ export function useIconGridDragWorkflow({
     restoreDragOriginFocus(dragOriginFocusRef)
   }
 
-  const armPointerControllerSession = () => {
-    beginDragFnRef.current = beginDrag
-    onDragMoveFnRef.current = scheduleDragMove
-    flushDragMoveFnRef.current = flushDragMove
-    finishDragFnRef.current = finishActiveDrag
-    clearPendingFnRef.current = clearPending
-    abortPendingFnRef.current = abortPendingDrag
-    cancelDragFnRef.current = cancelActiveDrag
-  }
-
-  useEffect(() => {
-    armPointerControllerSession()
+  const keyboardWorkflow = usePagedKeyboardDragWorkflow({
+    selectionMode,
+    columns,
+    rows,
+    itemWidth,
+    itemHeight,
+    gridGap: config.gridGap,
+    gridRef,
+    tileRefs,
+    currentPageRef,
+    pageSizeRef,
+    dragRef,
+    pendingRef,
+    dragOriginFocusRef,
+    pendingPointerCaptureTargetRef,
+    beginDrag,
+    scheduleDragMove,
+    flushDragMove,
+    finishActiveDrag,
+    cancelActiveDrag,
+    dragPointerRef,
   })
 
-  useEffect(() => {
-    const cancelActiveInteractions = () => {
-      const activeDrag = dragRef.current
-      if (activeDrag) {
-        cancelDragFnRef.current(activeDrag.pointerId)
-        return
-      }
-      if (pendingRef.current) {
-        clearPendingFnRef.current()
-      }
-    }
-
-    const handleWindowBlur = () => {
-      cancelActiveInteractions()
-    }
-
-    const handleDocumentVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        cancelActiveInteractions()
-      }
-    }
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      if (!dragRef.current && !pendingRef.current) return
-      event.preventDefault()
-      event.stopPropagation()
-      cancelActiveInteractions()
-    }
-
-    window.addEventListener('blur', handleWindowBlur)
-    document.addEventListener('visibilitychange', handleDocumentVisibilityChange)
-    window.addEventListener('keydown', handleEscape, true)
-    return () => {
-      window.removeEventListener('blur', handleWindowBlur)
-      document.removeEventListener('visibilitychange', handleDocumentVisibilityChange)
-      window.removeEventListener('keydown', handleEscape, true)
-    }
-  }, [])
-
-  usePointerDragController({
+  const { armPointerControllerSession } = usePagedDragLifecycle({
     pendingRef,
     dragRef,
-    beginDragFnRef,
-    onDragMoveFnRef,
-    flushDragMoveFnRef,
-    finishDragFnRef,
-    clearPendingFnRef,
-    abortPendingFnRef,
-    cancelDragFnRef,
+    controllerRefs: {
+      beginDrag: beginDragFnRef,
+      onDragMove: onDragMoveFnRef,
+      flushDragMove: flushDragMoveFnRef,
+      finishDrag: finishDragFnRef,
+      clearPending: clearPendingFnRef,
+      abortPending: abortPendingFnRef,
+      cancelDrag: cancelDragFnRef,
+    },
+    actions: {
+      beginDrag,
+      onDragMove: scheduleDragMove,
+      flushDragMove,
+      finishDrag: finishActiveDrag,
+      clearPending,
+      abortPending: abortPendingDrag,
+      cancelDrag: cancelActiveDrag,
+    },
     pendingMoveTolerance: config.dragPendingMoveTolerance,
   })
 
@@ -972,6 +963,7 @@ export function useIconGridDragWorkflow({
     folderCreateTransitionTargetId,
     hiddenOuterItemIds,
     frozenOuterOrder,
+    keyboard: keyboardWorkflow,
     handleTilePointerDown,
     handleFolderTilePointerDown,
     handleDockItemPointerDown,

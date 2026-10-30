@@ -182,7 +182,6 @@ export function IconGrid({
       folderSharedLayoutTimerRef.current = null
     }, FOLDER_SHARED_LAYOUT_WINDOW_MS)
   }
-
   const openFolderWithAnimation = (folderId: string) => {
     cancelPendingFolderClose()
     resetFolderGridMeasurement()
@@ -212,7 +211,6 @@ export function IconGrid({
     setActiveFolderSharedLayoutId(null)
     setOpenFolderId(null)
   }
-
   const itemById = useMemo(() => {
     const map = new Map<string, GridItem>()
     items.forEach(item => map.set(getId(item), item))
@@ -268,6 +266,7 @@ export function IconGrid({
     folderCreateTransitionTargetId,
     hiddenOuterItemIds,
     frozenOuterOrder,
+    keyboard: keyboardWorkflow,
     handleTilePointerDown,
     handleFolderTilePointerDown,
     handleDockItemPointerDown,
@@ -835,6 +834,7 @@ export function IconGrid({
             folderCreateTransitionTargetId={folderCreateTransitionTargetId}
             hiddenOuterItemIds={mergedHiddenOuterItemIds}
             highlightedOuterItemIds={importHighlightIds}
+            {...keyboardWorkflow}
             previewFootprint={previewFootprint}
             iconConfig={iconConfig}
             selectionMode={selectionMode}

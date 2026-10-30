@@ -38,6 +38,21 @@ export interface WidgetResizeGrid {
   rows: number
 }
 
+export interface WidgetResizeGestureInput {
+  baseSpanX: number
+  baseSpanY: number
+  deltaPixels: number
+  cellPixels: number
+  axis: 'x' | 'y'
+  direction: 1 | -1
+  bounds: WidgetResizeBounds
+}
+
+export interface WidgetResizeGestureResult {
+  spanX: number
+  spanY: number
+}
+
 const isPositiveInteger = (value: number): boolean => Number.isInteger(value) && value > 0
 
 const normalizeBounds = (bounds: WidgetResizeBounds): WidgetResizeBounds => {
@@ -46,6 +61,32 @@ const normalizeBounds = (bounds: WidgetResizeBounds): WidgetResizeBounds => {
   const maxSpanX = Math.max(minSpanX, Math.floor(bounds.maxSpanX))
   const maxSpanY = Math.max(minSpanY, Math.floor(bounds.maxSpanY))
   return { minSpanX, minSpanY, maxSpanX, maxSpanY }
+}
+
+/** Convert a pointer delta into a bounded span without mutating layout state. */
+export const resolveWidgetResizeGestureSpan = ({
+  baseSpanX,
+  baseSpanY,
+  deltaPixels,
+  cellPixels,
+  axis,
+  direction,
+  bounds,
+}: WidgetResizeGestureInput): WidgetResizeGestureResult => {
+  const normalized = normalizeBounds(bounds)
+  const safeCellPixels = Number.isFinite(cellPixels) && cellPixels > 0 ? cellPixels : 1
+  const safeDeltaPixels = Number.isFinite(deltaPixels) ? deltaPixels : 0
+  const steps = Math.round(safeDeltaPixels / safeCellPixels) * direction
+  return {
+    spanX: Math.max(
+      normalized.minSpanX,
+      Math.min(normalized.maxSpanX, Math.floor(baseSpanX) + (axis === 'x' ? steps : 0))
+    ),
+    spanY: Math.max(
+      normalized.minSpanY,
+      Math.min(normalized.maxSpanY, Math.floor(baseSpanY) + (axis === 'y' ? steps : 0))
+    ),
+  }
 }
 
 const cellKey = (page: number, row: number, col: number): string => `${page}:${row}:${col}`

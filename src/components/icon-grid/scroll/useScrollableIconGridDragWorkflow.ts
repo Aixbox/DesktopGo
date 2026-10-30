@@ -38,6 +38,7 @@ import type {
 import { resolveOuterDropImpactTarget } from '../views/dropImpactMotion'
 import { useScrollableMultiDragEdgeAutoScroll } from './useScrollableMultiDragEdgeAutoScroll'
 import { captureDragOriginFocus, restoreDragOriginFocus } from '../hooks/dragFocus'
+import { measureDragFrame } from '../domain/layoutPerformance'
 
 interface DragWorkflowConfig {
   gridGap: number
@@ -609,7 +610,13 @@ export function useScrollableIconGridDragWorkflow({
       const queued = queuedDragMoveRef.current
       queuedDragMoveRef.current = null
       if (!queued) return
-      processDragMove(queued.pointerId, queued.x, queued.y)
+      const activeDrag = dragRef.current
+      measureDragFrame('scrollable', () => processDragMove(queued.pointerId, queued.x, queued.y), {
+        draggingItemCount: activeDrag?.draggingIds.length ?? 0,
+        draggingContext: activeDrag?.context ?? null,
+        draggingItemKind: activeDrag?.draggingItem.kind ?? null,
+        outerDropMode: isCompactOuterDrop ? 'compact-page' : 'scroll-group',
+      })
     })
   }
   const { stop: stopMultiDragEdgeScroll, update: updateMultiDragEdgeScroll } =
