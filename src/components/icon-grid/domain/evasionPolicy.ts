@@ -1,29 +1,141 @@
 import type { EvasionDirection, HoverZone } from '../model'
 import { clampNumber } from './geometry'
-import { DRAG_HOLE_ID, getSlotRowColWithinPage, isVacantSlot } from './slots'
+import { areSlotsEqual, DRAG_HOLE_ID, getSlotRowColWithinPage, isVacantSlot } from './slots'
 
-export const getEvasionIntentSignature = (targetId: string, zone: HoverZone) =>
-  `${targetId}:${zone}`
+export const getEvasionIntentSignature = (
+  targetId: string,
+  zone: HoverZone,
+  targetIndex?: number | null
+) => (targetIndex == null ? `${targetId}:${zone}` : `cell:${targetIndex}`)
 
-export const hasPointerExitedEvasionHold = ({
-  pointerX,
-  pointerY,
-  centerX,
-  centerY,
-  stepX,
-  stepY,
-  exitMargin,
-}: {
+export interface EvasionPreviewState {
+  workingOrder: Array<string | null>
   pointerX: number
   pointerY: number
-  centerX: number
-  centerY: number
-  stepX: number
-  stepY: number
-  exitMargin: number
-}) =>
-  Math.abs(pointerX - centerX) > Math.max(0, stepX) / 2 + Math.max(0, exitMargin) ||
-  Math.abs(pointerY - centerY) > Math.max(0, stepY) / 2 + Math.max(0, exitMargin)
+  lastEvasionSignature: string | null
+  lastEvasionTriggerPointer: { x: number; y: number } | null
+  lastEvasionAt: number | null
+  hoverTargetId: string | null
+  hoverTargetIndex?: number | null
+  hoverZone: HoverZone | null
+  hoverIou: number
+  folderPreviewTargetId: string | null
+  dockPreviewIndex: number | null
+  dwellStartedAt: number | null
+  evasionBaseOrder?: Array<string | null> | null
+  centerStartedAt?: number | null
+}
+
+export interface EvasionPreviewHit {
+  targetId: string
+  targetIndex?: number | null
+  zone: HoverZone
+  iou: number
+}
+
+export interface CellReorderIntent {
+  targetId: string
+  targetIndex: number
+  zone: HoverZone
+}
+
+/**
+ * Finds a committed icon cell which the temporary preview has vacated.
+ * ColorOS still treats that cell as occupied while the reorder is pending.
+ */
+export const resolveVacatedBaseIconCellIntent = (
+  workingOrder: Array<string | null>,
+  baseOrder: Array<string | null> | null | undefined,
+  targetIndex: number | null,
+  lastReorderCellIndex: number | null | undefined,
+  isEligibleIcon: (id: string) => boolean
+): CellReorderIntent | null => {
+  if (
+    !baseOrder ||
+    targetIndex === null ||
+    targetIndex < 0 ||
+    targetIndex >= baseOrder.length ||
+    targetIndex === lastReorderCellIndex ||
+    !isVacantSlot(workingOrder[targetIndex])
+  ) {
+    return null
+  }
+
+  const targetId = baseOrder[targetIndex]
+  if (!targetId || targetId === DRAG_HOLE_ID || !isEligibleIcon(targetId)) return null
+  return { targetId, targetIndex, zone: 'center' }
+}
+
+/** Applies one preview transition to the candidate order selected by the caller. */
+export const applyEvasionPreview = <TState extends EvasionPreviewState>(
+  state: TState,
+  nextOrder: Array<string | null>,
+  hit: EvasionPreviewHit,
+  now: number,
+  dockPreviewIndex: number | null,
+  intentSignature = getEvasionIntentSignature(hit.targetId, hit.zone, hit.targetIndex)
+): TState => {
+  if (
+    state.lastEvasionSignature === intentSignature ||
+    areSlotsEqual(nextOrder, state.workingOrder)
+  ) {
+    return state
+  }
+
+  return {
+    ...state,
+    workingOrder: nextOrder,
+    dockPreviewIndex,
+    hoverTargetId: hit.targetId,
+    hoverTargetIndex: hit.targetIndex ?? null,
+    hoverZone: hit.zone,
+    hoverIou: hit.iou,
+    folderPreviewTargetId: null,
+    lastEvasionSignature: intentSignature,
+    lastEvasionTriggerPointer: { x: state.pointerX, y: state.pointerY },
+    lastEvasionAt: now,
+    dwellStartedAt: now,
+  } as TState
+}
+
+/**
+ * Re-solve a new drag-over intent from the stable layout, matching CellLayout's
+ * mode-1 solver: it builds each new candidate from committed occupancy instead
+ * of accumulating the previous temporary coordinates.
+ */
+export const applyRebasedEvasionPreview = <TState extends EvasionPreviewState>(
+  state: TState,
+  baseOrder: Array<string | null>,
+  hit: EvasionPreviewHit | null,
+  nextOrder: Array<string | null> | null,
+  now: number,
+  dockPreviewIndex: number | null
+): TState => {
+  const rebasedState = {
+    ...state,
+    workingOrder: [...baseOrder],
+    evasionBaseOrder: null,
+    centerStartedAt: null,
+    dwellStartedAt: null,
+    dockPreviewIndex,
+    hoverTargetId: hit?.targetId ?? null,
+    hoverTargetIndex: hit?.targetIndex ?? null,
+    hoverZone: hit?.zone ?? null,
+    hoverIou: hit?.iou ?? 0,
+    folderPreviewTargetId: null,
+    lastEvasionSignature: null,
+    lastEvasionTriggerPointer: null,
+    lastEvasionAt: now,
+  } as TState
+
+  if (!hit || !nextOrder) return rebasedState
+
+  const preview = applyEvasionPreview(rebasedState, nextOrder, hit, now, dockPreviewIndex)
+  return {
+    ...preview,
+    evasionBaseOrder: areSlotsEqual(nextOrder, baseOrder) ? null : [...baseOrder],
+  } as TState
+}
 
 export const getEvasionReadyDelay = ({
   now,

@@ -72,6 +72,7 @@ import {
   FOLDER_SHARED_LAYOUT_WINDOW_MS,
   GRID_GAP,
   LAYOUT_PAGE_STEP_EVENT,
+  OUTER_DRAG_RULES,
   PAGINATION_ACTIVE_WIDTH,
   PAGINATION_DOT_GAP,
   PAGINATION_DOT_SIZE,
@@ -91,7 +92,6 @@ interface IconGridProps {
   interactionLocked?: boolean
 }
 
-const EVASION_DWELL_MS = 250
 const EVASION_COOLDOWN_MS = 200
 
 export function IconGrid({
@@ -296,7 +296,7 @@ export function IconGrid({
       dragPendingMoveTolerance: DRAG_PENDING_MOVE_TOLERANCE,
       evasionRearmDistance: EVASION_REARM_DISTANCE,
       evasionCooldownMs: EVASION_COOLDOWN_MS,
-      evasionDwellMs: EVASION_DWELL_MS,
+      evasionDwellMs: OUTER_DRAG_RULES.evasionDwellMs,
       reorderAnimationMs: REORDER_ANIMATION_MS,
     },
     selectionMode,

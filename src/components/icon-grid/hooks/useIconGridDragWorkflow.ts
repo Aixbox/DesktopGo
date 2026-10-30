@@ -187,7 +187,11 @@ export function useIconGridDragWorkflow({
   const cancelDragFnRef = useRef<(pointerId: number) => void>(() => undefined)
   const timerRef = useRef<number | null>(null)
   const outerDwellTimerRef = useRef<number | null>(null)
-  const outerDwellIntentRef = useRef<{ targetId: string; zone: HoverZone } | null>(null)
+  const outerDwellIntentRef = useRef<{
+    targetId: string
+    targetIndex: number | null
+    zone: HoverZone
+  } | null>(null)
   const folderAutoOpenTimerRef = useRef<number | null>(null)
   const folderAutoOpenTargetIdRef = useRef<string | null>(null)
   const folderExitTimerRef = useRef<number | null>(null)
@@ -350,12 +354,11 @@ export function useIconGridDragWorkflow({
     resolveTopLevelContextAtPoint,
     findHitByContext,
     resolveNearestSlotIndexByContext,
+    resolveRawOuterCellIndex,
     resolveNearestDropOrderByContext,
     resolveCandidateAnchorIndexByContext,
     findTopLevelMaxOverlapHit,
     resolveTopLevelOverlapPreviewIndex,
-    revertTopLevelEvasion,
-    settleTopLevelEvasion,
     tryApplyTopLevelEvasion,
   } = usePagedDragGeometryController({
     gridGap: config.gridGap,
@@ -391,6 +394,7 @@ export function useIconGridDragWorkflow({
     findTopLevelMaxOverlapHit,
     resolveCandidateAnchorIndexByContext,
     resolveNearestSlotIndexByContext,
+    resolveRawOuterCellIndex,
     resolveTopLevelOverlapPreviewIndex,
     tryApplyTopLevelEvasion,
     publishMoveDragState,
@@ -494,6 +498,8 @@ export function useIconGridDragWorkflow({
       previewSlotIndex: null,
       dockPreviewIndex: null,
       hoverTargetId: null,
+      hoverTargetIndex: null,
+      lastReorderCellIndex: null,
       hoverZone: null,
       hoverIou: 0,
       centerStartedAt: null,
@@ -503,7 +509,6 @@ export function useIconGridDragWorkflow({
       lastEvasionTriggerPointer: null,
       lastEvasionAt: null,
       evasionBaseOrder: null,
-      evasionHoldIndex: null,
       initialCenters: {
         ...collectCenters(folderTileRefs.current),
         [latest.draggingId]: { x: latest.pointerX, y: latest.pointerY },
@@ -592,6 +597,8 @@ export function useIconGridDragWorkflow({
       previewSlotIndex: null,
       dockPreviewIndex: null,
       hoverTargetId: null,
+      hoverTargetIndex: null,
+      lastReorderCellIndex: null,
       hoverZone: null,
       hoverIou: 0,
       centerStartedAt: null,
@@ -600,9 +607,8 @@ export function useIconGridDragWorkflow({
       lastEvasionSignature: null,
       lastEvasionTriggerPointer: null,
       lastEvasionAt: null,
-      // 换了容器就是另起一份顺序，之前的避让基线作废。
       evasionBaseOrder: null,
-      evasionHoldIndex: null,
+      // 换容器时以目标容器的 canonical order 建立新的工作顺序。
       initialCenters,
     }
     const previewSlotIndex = resolveNearestSlotIndexByContext(nextState, { allowOutside: true })
@@ -706,6 +712,7 @@ export function useIconGridDragWorkflow({
     maybeHandleOuterEdgeSwitch,
     clearEdgeSwitchTimer,
     resolveNearestSlotIndexByContext,
+    resolveRawOuterCellIndex,
     resolveCandidateAnchorIndexByContext,
     findTopLevelMaxOverlapHit,
     isDraggingFromDock,
@@ -713,8 +720,6 @@ export function useIconGridDragWorkflow({
     scheduleFolderAutoOpen,
     triggerTopLevelDwellEvasion,
     findHitByContext,
-    revertTopLevelEvasion,
-    settleTopLevelEvasion,
     publishMoveDragState,
   })
 
@@ -922,7 +927,7 @@ export function useIconGridDragWorkflow({
     if (!current || current.context !== 'outer') return
     clearOuterDwellTimer()
     const next = {
-      ...resetOuterInteraction(settleTopLevelEvasion(current), null),
+      ...resetOuterInteraction(current, null),
       dockPreviewIndex: null,
     }
     commitDragState(next)

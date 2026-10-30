@@ -18,6 +18,10 @@ interface UseTopLevelDwellEvasionParams {
     state: DragState,
     options?: { allowOutside?: boolean }
   ) => number | null
+  resolveRawOuterCellIndex: (
+    state: DragState,
+    options?: { allowOutside?: boolean }
+  ) => number | null
   resolveTopLevelOverlapPreviewIndex: (
     state: DragState,
     target: GridItem,
@@ -25,7 +29,7 @@ interface UseTopLevelDwellEvasionParams {
     nearestSlotIndex: number | null,
     candidateAnchorIndex: number | null
   ) => number | null
-  tryApplyTopLevelEvasion: (state: DragState, hit: OuterOverlapHit, now: number) => DragState
+  tryApplyTopLevelEvasion: (state: DragState, hit: OuterOverlapHit | null, now: number) => DragState
   publishMoveDragState: (state: DragState | null) => void
 }
 
@@ -37,27 +41,47 @@ export function useTopLevelDwellEvasion({
   findTopLevelMaxOverlapHit,
   resolveCandidateAnchorIndexByContext,
   resolveNearestSlotIndexByContext,
+  resolveRawOuterCellIndex,
   resolveTopLevelOverlapPreviewIndex,
   tryApplyTopLevelEvasion,
   publishMoveDragState,
 }: UseTopLevelDwellEvasionParams) {
-  return (expectedIntent: { targetId: string; zone: HoverZone }) => {
-    const latest = dragRef.current
-    if (!latest || latest.context === 'folder') return
-    if (latest.context === 'dock' && !isDraggingFromDock(latest.draggingId)) return
-    if (
-      latest.hoverTargetId !== expectedIntent.targetId ||
-      latest.hoverZone !== expectedIntent.zone ||
-      latest.folderPreviewTargetId
-    ) {
-      return
+  return (expectedIntent: { targetId: string; targetIndex: number | null; zone: HoverZone }) => {
+    const current = dragRef.current
+    if (!current || current.context === 'folder') return
+    const cellBasedAlarm = expectedIntent.targetIndex !== null
+    let latest = current
+    if (cellBasedAlarm) {
+      if (current.context !== 'outer') return
+      const visibleHit = findTopLevelMaxOverlapHit(current)
+      latest = {
+        ...current,
+        lastReorderCellIndex:
+          visibleHit && !current.draggingIds.includes(visibleHit.targetId)
+            ? visibleHit.targetIndex
+            : resolveRawOuterCellIndex(current, { allowOutside: true }),
+      }
+    } else {
+      if (current.context === 'dock' && !isDraggingFromDock(current.draggingId)) return
+      if (
+        current.hoverTargetId !== expectedIntent.targetId ||
+        current.hoverZone !== expectedIntent.zone
+      ) {
+        return
+      }
     }
+    if (latest.folderPreviewTargetId) return
 
     const overlapHit = findTopLevelMaxOverlapHit(latest)
+    if (!overlapHit) {
+      if (cellBasedAlarm) {
+        publishMoveDragState(tryApplyTopLevelEvasion(latest, null, performance.now()))
+      }
+      return
+    }
     if (
-      !overlapHit ||
-      overlapHit.targetId !== expectedIntent.targetId ||
-      overlapHit.zone !== expectedIntent.zone
+      !cellBasedAlarm &&
+      (overlapHit.targetId !== expectedIntent.targetId || overlapHit.zone !== expectedIntent.zone)
     ) {
       return
     }
@@ -89,6 +113,7 @@ export function useTopLevelDwellEvasion({
         previewSlotIndex,
         dockPreviewIndex: null,
         hoverTargetId: overlapHit.targetId,
+        hoverTargetIndex: overlapHit.targetIndex,
         hoverZone: overlapHit.zone,
         hoverIou: overlapHit.iou,
         folderPreviewTargetId: overlapHit.targetId,
@@ -103,6 +128,7 @@ export function useTopLevelDwellEvasion({
       previewSlotIndex,
       dockPreviewIndex: null,
       hoverTargetId: overlapHit.targetId,
+      hoverTargetIndex: overlapHit.targetIndex,
       hoverZone: overlapHit.zone,
       hoverIou: overlapHit.iou,
       folderPreviewTargetId: null,

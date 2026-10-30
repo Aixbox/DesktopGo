@@ -1,10 +1,12 @@
 import type { MutableRefObject } from 'react'
-import type { GridItem, HoverZone } from '../model'
+import { getGridItemSpan, type GridItem, type HoverZone } from '../model'
 import {
   getEvasionIntentSignature,
   getEvasionReadyDelay,
   moveDragHoleToIndex,
+  resolveVacatedBaseIconCellIntent,
 } from '../domain/evasionPolicy'
+import { armPendingCellReorderAlarm } from '../domain/pendingCellReorderAlarm'
 import { isPointOutsideFolderContent } from '../domain/folderPolicy'
 import { buildDockLinearPreviewOrder } from '../domain/dockDragPolicy'
 import { buildDragItemMap, resolveItemById } from '../domain/dragWorkflowShared'
@@ -21,7 +23,11 @@ interface PagedDragMoveProcessorParams {
   enteredFolderContentRef: MutableRefObject<boolean>
   itemsRef: MutableRefObject<GridItem[]>
   itemById: ReadonlyMap<string, GridItem>
-  outerDwellIntentRef: MutableRefObject<{ targetId: string; zone: HoverZone } | null>
+  outerDwellIntentRef: MutableRefObject<{
+    targetId: string
+    targetIndex: number | null
+    zone: HoverZone
+  } | null>
   outerDwellTimerRef: MutableRefObject<number | null>
   scheduleFolderExit: () => void
   clearFolderExitTimer: () => void
@@ -39,6 +45,10 @@ interface PagedDragMoveProcessorParams {
     state: DragState,
     options?: { allowOutside?: boolean }
   ) => number | null
+  resolveRawOuterCellIndex: (
+    state: DragState,
+    options?: { allowOutside?: boolean }
+  ) => number | null
   resolveCandidateAnchorIndexByContext: (
     state: DragState,
     options?: { allowOutside?: boolean }
@@ -52,10 +62,12 @@ interface PagedDragMoveProcessorParams {
     nearestSlotIndex: number | null,
     candidateAnchorIndex: number | null
   ) => number | null
-  settleTopLevelEvasion: (state: DragState) => DragState
-  revertTopLevelEvasion: (state: DragState) => DragState
   scheduleFolderAutoOpen: (targetFolderId: string) => void
-  triggerTopLevelDwellEvasion: (intent: { targetId: string; zone: HoverZone }) => void
+  triggerTopLevelDwellEvasion: (intent: {
+    targetId: string
+    targetIndex: number | null
+    zone: HoverZone
+  }) => void
   findHitByContext: (state: DragState, x: number, y: number) => DragHit | null
   publishMoveDragState: (state: DragState | null) => void
 }
@@ -109,48 +121,90 @@ function processTopLevelMove(
   x: number,
   y: number
 ) {
-  // 上一次的避让能不能留着，取决于指针这会儿还在不在那个格子上。
-  // 先结算，再算落点，不然落点会按已经挪过的顺序算出来。
-  const settled = runtime.settleTopLevelEvasion(state)
-  if (settled.context === 'outer') runtime.maybeHandleOuterEdgeSwitch(settled, x, y)
+  // Hit-test the visible temporary order; a pending ordinary-icon alarm may later rebase it.
+  let current = state
+  if (current.context === 'outer') runtime.maybeHandleOuterEdgeSwitch(current, x, y)
   else runtime.clearEdgeSwitchTimer()
 
-  const nearestSlotIndex = runtime.resolveNearestSlotIndexByContext(settled, { allowOutside: true })
-  const candidateAnchorIndex = runtime.resolveCandidateAnchorIndexByContext(settled, {
+  const nearestSlotIndex = runtime.resolveNearestSlotIndexByContext(current, { allowOutside: true })
+  const rawCellIndex = runtime.resolveRawOuterCellIndex(current, { allowOutside: true })
+  if (current.lastReorderCellIndex != null && current.lastReorderCellIndex !== rawCellIndex) {
+    current = { ...current, lastReorderCellIndex: null }
+  }
+  const candidateAnchorIndex = runtime.resolveCandidateAnchorIndexByContext(current, {
     allowOutside: true,
   })
-  let overlapHit = runtime.findTopLevelMaxOverlapHit(settled)
-  if (overlapHit && settled.draggingIds.includes(overlapHit.targetId)) overlapHit = null
+  let overlapHit = runtime.findTopLevelMaxOverlapHit(current)
+  if (overlapHit && current.draggingIds.includes(overlapHit.targetId)) overlapHit = null
   if (!overlapHit) {
-    publishTopLevelReset(runtime, settled, nearestSlotIndex)
+    scheduleVacatedBaseCellAlarm(runtime, current, rawCellIndex)
+    publishTopLevelReset(runtime, current, nearestSlotIndex)
     return
   }
 
-  const target = resolveItemById(
-    runtime.itemById,
-    runtime.itemsRef.current,
-    overlapHit.targetId
-  )
+  const target = resolveItemById(runtime.itemById, runtime.itemsRef.current, overlapHit.targetId)
   if (!target) {
-    publishTopLevelReset(runtime, settled, nearestSlotIndex)
+    publishTopLevelReset(runtime, current, nearestSlotIndex)
     return
   }
 
   const context: TopLevelMoveContext = {
     runtime,
-    state: settled,
-    source: settled.draggingItem,
+    state: current,
+    source: current.draggingItem,
     target,
     overlapHit,
     nearestSlotIndex,
     candidateAnchorIndex,
   }
-  if (settled.context === 'dock') {
-    if (runtime.isDraggingFromDock(settled.draggingId)) processDockReorderMove(context)
+  if (current.context === 'dock') {
+    if (runtime.isDraggingFromDock(current.draggingId)) processDockReorderMove(context)
     else processDockExternalMove(context)
     return
   }
   processOuterOverlapMove(context)
+}
+
+function scheduleVacatedBaseCellAlarm(
+  runtime: PagedDragMoveProcessorParams,
+  state: DragState,
+  nearestSlotIndex: number | null
+) {
+  const draggingSpan = getGridItemSpan(state.draggingItem)
+  if (
+    state.context !== 'outer' ||
+    state.draggingIds.length !== 1 ||
+    state.draggingItem.kind !== 'icon' ||
+    draggingSpan.cols !== 1 ||
+    draggingSpan.rows !== 1
+  ) {
+    return
+  }
+
+  const intent = resolveVacatedBaseIconCellIntent(
+    state.workingOrder,
+    state.evasionBaseOrder,
+    nearestSlotIndex,
+    state.lastReorderCellIndex,
+    targetId => {
+      if (state.draggingIds.includes(targetId)) return false
+      const target = resolveItemById(runtime.itemById, runtime.itemsRef.current, targetId)
+      if (!target || target.kind !== 'icon') return false
+      const targetSpan = getGridItemSpan(target)
+      return targetSpan.cols === 1 && targetSpan.rows === 1
+    }
+  )
+  if (!intent) return
+
+  armPendingCellReorderAlarm({
+    timerRef: runtime.outerDwellTimerRef,
+    intentRef: runtime.outerDwellIntentRef,
+    intent,
+    delayMs: runtime.evasionDwellMs,
+    clearPending: runtime.clearOuterDwellTimer,
+    setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
+    onAlarm: runtime.triggerTopLevelDwellEvasion,
+  })
 }
 
 function publishTopLevelReset(
@@ -158,7 +212,11 @@ function publishTopLevelReset(
   state: DragState,
   nearestSlotIndex: number | null
 ) {
-  runtime.clearOuterDwellTimer()
+  // ColorOS keeps an armed reorder alarm when the pointer leaves its original
+  // cell; the alarm resolves the latest pointer when it fires.
+  if (runtime.outerDwellIntentRef.current?.targetIndex == null) {
+    runtime.clearOuterDwellTimer()
+  }
   runtime.publishMoveDragState({
     ...resetOuterInteraction(state, nearestSlotIndex),
     dockPreviewIndex: state.context === 'dock' ? nearestSlotIndex : null,
@@ -193,6 +251,7 @@ function processDockExternalMove({
       previewSlotIndex: overlapHit.targetIndex,
       dockPreviewIndex: stableDockPreviewIndex,
       hoverTargetId: overlapHit.targetId,
+      hoverTargetIndex: overlapHit.targetIndex,
       hoverZone: overlapHit.zone,
       hoverIou: overlapHit.iou,
       centerStartedAt: null,
@@ -206,6 +265,7 @@ function processDockExternalMove({
     ...resetOuterInteraction(state, nearestSlotIndex),
     dockPreviewIndex: nearestSlotIndex,
     hoverTargetId: overlapHit.targetId,
+    hoverTargetIndex: overlapHit.targetIndex,
     hoverZone: overlapHit.zone,
     hoverIou: overlapHit.iou,
   })
@@ -260,12 +320,11 @@ function processOuterOverlapMove(context: TopLevelMoveContext) {
     context
   const now = performance.now()
   const previewFolder = canPreviewFolder(source, target, overlapHit, state.draggingIds.length > 1)
-  // 要合并/新建文件夹了，避让那点位移先退干净，别把挪过的顺序带进落点。
-  const base = previewFolder ? runtime.revertTopLevelEvasion(state) : state
+  // Keep the visible preview for hit-testing; a new ordinary-icon alarm re-solves from its base.
   const next: DragState = {
-    ...base,
+    ...state,
     previewSlotIndex: runtime.resolveTopLevelOverlapPreviewIndex(
-      base,
+      state,
       target,
       overlapHit,
       nearestSlotIndex,
@@ -291,7 +350,7 @@ function processOuterOverlapMove(context: TopLevelMoveContext) {
   }
 
   next.folderPreviewTargetId = null
-  scheduleOuterEvasion(runtime, base, next, overlapHit, now)
+  scheduleOuterEvasion(runtime, state, next, overlapHit, now)
 }
 
 function scheduleOuterEvasion(
@@ -301,9 +360,33 @@ function scheduleOuterEvasion(
   overlapHit: OuterOverlapHit,
   now: number
 ) {
-  const intentSignature = getEvasionIntentSignature(overlapHit.targetId, overlapHit.zone)
+  const targetItem = resolveItemById(
+    runtime.itemById,
+    runtime.itemsRef.current,
+    overlapHit.targetId
+  )
+  const draggingSpan = getGridItemSpan(next.draggingItem)
+  const targetSpan = targetItem ? getGridItemSpan(targetItem) : null
+  const singleIconDrag =
+    next.context === 'outer' &&
+    next.draggingIds.length === 1 &&
+    next.draggingItem.kind === 'icon' &&
+    draggingSpan.cols === 1 &&
+    draggingSpan.rows === 1 &&
+    targetItem?.kind === 'icon' &&
+    targetSpan?.cols === 1 &&
+    targetSpan.rows === 1 &&
+    overlapHit.targetIndex >= 0
+  const intentTargetIndex = singleIconDrag ? overlapHit.targetIndex : null
+  const intentSignature = getEvasionIntentSignature(
+    overlapHit.targetId,
+    overlapHit.zone,
+    intentTargetIndex
+  )
   const sameIntent =
-    previous.hoverTargetId === overlapHit.targetId && previous.hoverZone === overlapHit.zone
+    intentTargetIndex !== null
+      ? previous.hoverTargetIndex === intentTargetIndex
+      : previous.hoverTargetId === overlapHit.targetId && previous.hoverZone === overlapHit.zone
   next.dwellStartedAt =
     sameIntent && previous.dwellStartedAt !== null ? previous.dwellStartedAt : now
   if (!sameIntent) next.lastEvasionSignature = null
@@ -321,12 +404,21 @@ function scheduleOuterEvasion(
     cooldownMs: runtime.evasionCooldownMs,
   })
   const pendingIntent = runtime.outerDwellIntentRef.current
-  if (pendingIntent?.targetId !== overlapHit.targetId || pendingIntent?.zone !== overlapHit.zone) {
+  const hasPendingCellAlarm =
+    runtime.outerDwellTimerRef.current !== null && pendingIntent?.targetIndex != null
+  const pendingIntentChanged =
+    intentTargetIndex === null
+      ? pendingIntent?.targetIndex !== null ||
+        pendingIntent?.targetId !== overlapHit.targetId ||
+        pendingIntent?.zone !== overlapHit.zone
+      : pendingIntent?.targetIndex !== intentTargetIndex
+  if (!hasPendingCellAlarm && runtime.outerDwellTimerRef.current !== null && pendingIntentChanged) {
     runtime.clearOuterDwellTimer()
   }
   if (runtime.outerDwellTimerRef.current === null) {
     runtime.outerDwellIntentRef.current = {
       targetId: overlapHit.targetId,
+      targetIndex: intentTargetIndex,
       zone: overlapHit.zone,
     }
     runtime.outerDwellTimerRef.current = window.setTimeout(() => {

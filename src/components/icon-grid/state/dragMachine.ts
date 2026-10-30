@@ -1,6 +1,8 @@
 interface OuterInteractionFields<TZone> {
   previewSlotIndex: number | null
   hoverTargetId: string | null
+  hoverTargetIndex?: number | null
+  lastReorderCellIndex?: number | null
   hoverZone: TZone | null
   hoverIou: number
   centerStartedAt: number | null
@@ -16,6 +18,7 @@ export const resetOuterInteraction = <TState extends OuterInteractionFields<TZon
   ...state,
   previewSlotIndex,
   hoverTargetId: null,
+  hoverTargetIndex: null,
   hoverZone: null,
   hoverIou: 0,
   centerStartedAt: null,
@@ -33,6 +36,8 @@ export const clearOuterInteractionForPageSwitch = <
   ...state,
   previewSlotIndex: null,
   hoverTargetId: null,
+  hoverTargetIndex: null,
+  lastReorderCellIndex: null,
   hoverZone: null,
   hoverIou: 0,
   centerStartedAt: null,

@@ -1,10 +1,10 @@
 import type { MutableRefObject } from 'react'
 import type { EvasionDirection, GridItem } from '../model'
 import { getGridItemSpan, getId } from '../model'
-import { DRAG_HOLE_ID, areSlotsEqual } from '../domain/slots'
+import { DRAG_HOLE_ID } from '../domain/slots'
 import {
-  getEvasionIntentSignature,
-  hasPointerExitedEvasionHold,
+  applyEvasionPreview,
+  applyRebasedEvasionPreview,
   moveDragHoleToIndex,
 } from '../domain/evasionPolicy'
 import { clampNumber, classifyZone } from '../domain/geometry'
@@ -22,7 +22,7 @@ import {
   normalizeOuterSlots,
 } from '../domain/topLevelLayout'
 import { getDockItemKeys, resolveOuterItemIds } from '../domain/dock'
-import { EVASION_HOLD_EXIT_MARGIN, OUTER_DRAG_RULES } from '../constants'
+import { OUTER_DRAG_RULES } from '../constants'
 import type { DragHit, DragState, OuterOverlapHit } from '../state/types'
 import {
   findDockMaxOverlapHit,
@@ -239,11 +239,6 @@ export function usePagedDragGeometryController({
     return null
   }
 
-  const resolveOuterEvasionGeometryState = (state: DragState): DragState =>
-    state.context === 'outer' && state.evasionBaseOrder
-      ? { ...state, workingOrder: state.evasionBaseOrder }
-      : state
-
   const resolveNearestSlotIndexByContext = (
     state: DragState,
     options?: { allowOutside?: boolean }
@@ -265,23 +260,22 @@ export function usePagedDragGeometryController({
       )
     }
 
-    const geometryState = resolveOuterEvasionGeometryState(state)
     const metrics = resolveGridMetrics('outer')
     if (!metrics.gridElement) return null
     const outerItems = resolveOuterItemsForLayout()
     const occupancy = buildTopLevelOccupancy(
-      geometryState.workingOrder,
+      state.workingOrder,
       outerItems,
       metrics.columns,
       pageSizeRef.current
     )
-    const draggingSpan = getGridItemSpan(geometryState.draggingItem)
+    const draggingSpan = getGridItemSpan(state.draggingItem)
     if (draggingSpan.cols === 1 && draggingSpan.rows === 1) {
-      const rawIndex = resolveNearestSlotIndexByMetrics(geometryState, metrics, gridGap, options)
+      const rawIndex = resolveNearestSlotIndexByMetrics(state, metrics, gridGap, options)
       if (
         rawIndex !== null &&
         canPlaceItemAtAnchorIndex(
-          geometryState.workingOrder,
+          state.workingOrder,
           outerItems,
           rawIndex,
           draggingSpan,
@@ -298,9 +292,9 @@ export function usePagedDragGeometryController({
       pointerX: state.pointerX,
       pointerY: state.pointerY,
       gridRect: metrics.gridElement.getBoundingClientRect(),
-      slots: geometryState.workingOrder,
+      slots: state.workingOrder,
       items: outerItems,
-      draggingItem: geometryState.draggingItem,
+      draggingItem: state.draggingItem,
       columns: metrics.columns,
       rows: metrics.rows,
       itemWidth: metrics.itemWidth,
@@ -311,6 +305,14 @@ export function usePagedDragGeometryController({
       allowOutside: options?.allowOutside,
     })
   }
+
+  const resolveRawOuterCellIndex = (
+    state: DragState,
+    options?: { allowOutside?: boolean }
+  ): number | null =>
+    state.context === 'outer'
+      ? resolveNearestSlotIndexByMetrics(state, resolveGridMetrics('outer'), gridGap, options)
+      : null
 
   const resolveNearestDropOrderByContext = (state: DragState): Array<string | null> => {
     const globalSlotIndex = resolveNearestSlotIndexByContext(state, { allowOutside: true })
@@ -324,12 +326,11 @@ export function usePagedDragGeometryController({
     options?: { allowOutside?: boolean }
   ): number | null => {
     if (state.context !== 'outer') return resolveNearestSlotIndexByContext(state, options)
-    const geometryState = resolveOuterEvasionGeometryState(state)
     const metrics = resolveGridMetrics('outer')
-    const draggingSpan = getGridItemSpan(geometryState.draggingItem)
+    const draggingSpan = getGridItemSpan(state.draggingItem)
     return draggingSpan.cols === 1 && draggingSpan.rows === 1
-      ? resolveNearestSlotIndexByContext(geometryState, options)
-      : resolveNearestAnchorIndexByMetrics(geometryState, metrics, gridGap, draggingSpan, options)
+      ? resolveNearestSlotIndexByContext(state, options)
+      : resolveNearestAnchorIndexByMetrics(state, metrics, gridGap, draggingSpan, options)
   }
 
   const findTopLevelMaxOverlapHit = (state: DragState): OuterOverlapHit | null => {
@@ -354,7 +355,7 @@ export function usePagedDragGeometryController({
         ? draggingSpan.rows * metrics.itemHeight + Math.max(0, draggingSpan.rows - 1) * gridGap
         : iconImageSize
     return findOuterMaxOverlapHitByMetrics({
-      state: resolveOuterEvasionGeometryState(state),
+      state,
       gridElement: metrics.gridElement,
       columns: metrics.columns,
       rows: metrics.rows,
@@ -447,207 +448,74 @@ export function usePagedDragGeometryController({
     )
   }
 
-  const resolveEvasionHoldCenter = (state: DragState, anchorIndex: number) => {
-    const metrics = resolveGridMetrics('outer')
-    const gridElement = metrics.gridElement
-    if (!gridElement) return null
-
-    const safeColumns = Math.max(1, metrics.columns)
-    const localIndex = anchorIndex - metrics.pageOffset
-    if (localIndex < 0) return null
-
-    const row = Math.floor(localIndex / safeColumns)
-    const col = localIndex % safeColumns
-    const span = getGridItemSpan(state.draggingItem)
-    const stepX = metrics.itemWidth + gridGap
-    const stepY = metrics.itemHeight + gridGap
-    const footprintWidth = span.cols * metrics.itemWidth + Math.max(0, span.cols - 1) * gridGap
-    const footprintHeight = span.rows * metrics.itemHeight + Math.max(0, span.rows - 1) * gridGap
-    const gridRect = gridElement.getBoundingClientRect()
-
-    return {
-      centerX: gridRect.left + col * stepX + footprintWidth / 2,
-      centerY: gridRect.top + row * stepY + footprintHeight / 2,
-      stepX,
-      stepY,
-    }
-  }
-
-  /** 以拖动项完整 footprint 的几何锚点判断避让是否仍然有效。 */
-  const resolveEvasionHoldIndex = (state: DragState): number | null => {
-    if (state.context === 'dock') {
-      return resolveNearestSlotIndexByContext(state, { allowOutside: true })
-    }
-    if (state.context !== 'outer') return null
-    const metrics = resolveGridMetrics('outer')
-    if (!metrics.gridElement) return null
-    if (state.draggingIds.length > 1) {
-      return resolveNearestSlotIndexByMetrics(state, metrics, gridGap, { allowOutside: true })
-    }
-    return resolveNearestAnchorIndexByMetrics(
-      state,
-      metrics,
-      gridGap,
-      getGridItemSpan(state.draggingItem),
-      { allowOutside: true }
-    )
-  }
-
-  /** 无条件把顺序退回避让之前：要切到别的交互（比如预览合并文件夹）时用。 */
-  const revertTopLevelEvasion = (state: DragState): DragState => {
-    const baseOrder = state.evasionBaseOrder ?? null
-    if (!baseOrder) return state
-    return {
-      ...state,
-      workingOrder: baseOrder,
-      evasionBaseOrder: null,
-      evasionHoldIndex: null,
-      lastEvasionSignature: null,
-      lastEvasionTriggerPointer: null,
-    }
-  }
-
-  const reflowTopLevelEvasion = (
-    state: DragState,
-    baseOrder: Array<string | null>,
-    nextHoldIndex: number,
-    now: number
-  ): DragState => {
-    const metrics = resolveGridMetrics('outer')
-    if (!metrics.gridElement) return revertTopLevelEvasion(state)
-
-    const baseState: DragState = { ...state, workingOrder: baseOrder }
-    const nearestSlotIndex = resolveNearestSlotIndexByMetrics(baseState, metrics, gridGap, {
-      allowOutside: true,
-    })
-    const candidateAnchorIndex = resolveNearestAnchorIndexByMetrics(
-      baseState,
-      metrics,
-      gridGap,
-      getGridItemSpan(state.draggingItem),
-      { allowOutside: true }
-    )
-    const overlapHit = findTopLevelMaxOverlapHit(baseState)
-    if (!overlapHit || state.draggingIds.includes(overlapHit.targetId)) {
-      return revertTopLevelEvasion(state)
-    }
-
-    const target = resolveItemById(overlapHit.targetId)
-    if (!target) return revertTopLevelEvasion(state)
-
-    const previewSlotIndex = resolveTopLevelOverlapPreviewIndex(
-      baseState,
-      target,
-      overlapHit,
-      nearestSlotIndex,
-      candidateAnchorIndex
-    )
-    const nextState: DragState = {
-      ...baseState,
-      previewSlotIndex,
-      dockPreviewIndex: null,
-      hoverTargetId: overlapHit.targetId,
-      hoverZone: overlapHit.zone,
-      hoverIou: overlapHit.iou,
-      centerStartedAt: null,
-      dwellStartedAt: null,
-      folderPreviewTargetId: null,
-    }
-    const evasionResult = applyTopLevelEvasion(nextState, overlapHit)
-    if (areSlotsEqual(evasionResult.order, baseOrder)) {
-      return revertTopLevelEvasion(state)
-    }
-
-    return {
-      ...nextState,
-      workingOrder: evasionResult.order,
-      lastEvasionSignature: getEvasionIntentSignature(overlapHit.targetId, overlapHit.zone),
-      lastEvasionTriggerPointer: { x: state.pointerX, y: state.pointerY },
-      lastEvasionAt: now,
-      evasionBaseOrder: baseOrder,
-      evasionHoldIndex: nextHoldIndex,
-    }
-  }
-
-  /**
-   * 避让只是预览。越过锚点边界缓冲后，从原始顺序按当前 footprint 重算，
-   * 只让当前仍被覆盖的图标继续避让。
-   */
-  const settleTopLevelEvasion = (state: DragState): DragState => {
-    const baseOrder = state.evasionBaseOrder ?? null
-    if (!baseOrder) return state
-    const holdIndex = state.evasionHoldIndex ?? null
-    if (state.context !== 'outer' || state.draggingIds.length > 1) {
-      if (holdIndex !== null && resolveEvasionHoldIndex(state) === holdIndex) return state
-      return revertTopLevelEvasion(state)
-    }
-    if (holdIndex === null) return revertTopLevelEvasion(state)
-
-    const nextHoldIndex = resolveEvasionHoldIndex({ ...state, workingOrder: baseOrder })
-    if (nextHoldIndex === null || nextHoldIndex === holdIndex) return state
-
-    const holdCenter = resolveEvasionHoldCenter(state, holdIndex)
-    if (!holdCenter) return state
-    const hasExitedHold = hasPointerExitedEvasionHold({
-      pointerX: state.pointerX,
-      pointerY: state.pointerY,
-      ...holdCenter,
-      exitMargin: EVASION_HOLD_EXIT_MARGIN,
-    })
-    if (!hasExitedHold) return state
-
-    const overlapHit = findTopLevelMaxOverlapHit({ ...state, workingOrder: baseOrder })
-    if (!overlapHit || state.draggingIds.includes(overlapHit.targetId)) {
-      return revertTopLevelEvasion(state)
-    }
-
-    // Reset the dwell for this anchor; reflow only after the normal delay expires.
-    return {
-      ...state,
-      evasionHoldIndex: nextHoldIndex,
-      dwellStartedAt: null,
-      lastEvasionSignature: null,
-    }
-  }
-
   const tryApplyTopLevelEvasion = (
     state: DragState,
-    overlapHit: OuterOverlapHit,
+    overlapHit: OuterOverlapHit | null,
     now: number
   ): DragState => {
     const cooledDownSinceLastEvasion =
       state.lastEvasionAt === null || now - state.lastEvasionAt >= evasionCooldownMs
     if (!cooledDownSinceLastEvasion) return state
-    const baseOrder = state.evasionBaseOrder
-    if (state.context === 'outer' && state.draggingIds.length === 1 && baseOrder) {
-      const nextHoldIndex = resolveEvasionHoldIndex({ ...state, workingOrder: baseOrder })
-      if (nextHoldIndex === null) return revertTopLevelEvasion(state)
-      return reflowTopLevelEvasion({ ...state, lastEvasionAt: now }, baseOrder, nextHoldIndex, now)
+
+    const draggingSpan = getGridItemSpan(state.draggingItem)
+    const targetItem = overlapHit ? resolveItemById(overlapHit.targetId) : null
+    const targetSpan = targetItem ? getGridItemSpan(targetItem) : null
+    const isSingleCellIconDrag =
+      state.context === 'outer' &&
+      state.draggingIds.length === 1 &&
+      state.draggingItem.kind === 'icon' &&
+      draggingSpan.cols === 1 &&
+      draggingSpan.rows === 1
+
+    // CellLayout mode 1 rebuilds each new candidate from mOccupied. If a
+    // new alarm fires after the pointer leaves the temporary cell, restore the
+    // prior preview first, then solve the latest pointer against that base.
+    const baseOrder = isSingleCellIconDrag ? state.evasionBaseOrder : null
+    if (baseOrder) {
+      const baseState: DragState = {
+        ...state,
+        workingOrder: baseOrder,
+        evasionBaseOrder: null,
+        centerStartedAt: null,
+        dwellStartedAt: null,
+        folderPreviewTargetId: null,
+        hoverTargetId: null,
+        hoverZone: null,
+        hoverIou: 0,
+        lastEvasionSignature: null,
+        lastEvasionTriggerPointer: null,
+        lastEvasionAt: now,
+      }
+      const baseHit = findTopLevelMaxOverlapHit(baseState)
+      const baseTarget = baseHit ? resolveItemById(baseHit.targetId) : null
+      if (!baseHit || baseTarget?.kind !== 'icon') {
+        return applyRebasedEvasionPreview(state, baseOrder, null, null, now, null)
+      }
+
+      const rebasedResult = applyTopLevelEvasion(baseState, baseHit)
+      return applyRebasedEvasionPreview(state, baseOrder, baseHit, rebasedResult.order, now, null)
     }
+
+    if (!overlapHit) return state
+
+    const usesCommittedIconLayout =
+      isSingleCellIconDrag &&
+      targetItem?.kind === 'icon' &&
+      targetSpan?.cols === 1 &&
+      targetSpan.rows === 1
     const evasionResult = applyTopLevelEvasion(state, overlapHit)
-    const nextEvasionSignature = getEvasionIntentSignature(overlapHit.targetId, overlapHit.zone)
-    if (
-      nextEvasionSignature === state.lastEvasionSignature ||
-      areSlotsEqual(evasionResult.order, state.workingOrder)
-    ) {
-      return state
-    }
+    const preview = applyEvasionPreview(
+      state,
+      evasionResult.order,
+      overlapHit,
+      now,
+      state.context === 'dock' ? overlapHit.targetIndex : null
+    )
+    if (preview === state || !usesCommittedIconLayout) return preview
+
     return {
-      ...state,
-      workingOrder: evasionResult.order,
-      previewSlotIndex: state.previewSlotIndex,
-      dockPreviewIndex: state.context === 'dock' ? overlapHit.targetIndex : null,
-      hoverTargetId: overlapHit.targetId,
-      hoverZone: overlapHit.zone,
-      hoverIou: overlapHit.iou,
-      folderPreviewTargetId: null,
-      lastEvasionSignature: nextEvasionSignature,
-      lastEvasionTriggerPointer: { x: state.pointerX, y: state.pointerY },
-      lastEvasionAt: now,
-      dwellStartedAt: now,
-      // 连着避让时保留最早那份基线，退回才能回到拖动开始时的样子。
-      evasionBaseOrder: state.evasionBaseOrder ?? state.workingOrder,
-      evasionHoldIndex: resolveEvasionHoldIndex(state),
+      ...preview,
+      evasionBaseOrder: [...state.workingOrder],
     }
   }
 
@@ -660,12 +528,11 @@ export function usePagedDragGeometryController({
     resolveTopLevelContextAtPoint,
     findHitByContext,
     resolveNearestSlotIndexByContext,
+    resolveRawOuterCellIndex,
     resolveNearestDropOrderByContext,
     resolveCandidateAnchorIndexByContext,
     findTopLevelMaxOverlapHit,
     resolveTopLevelOverlapPreviewIndex,
-    revertTopLevelEvasion,
-    settleTopLevelEvasion,
     tryApplyTopLevelEvasion,
   }
 }

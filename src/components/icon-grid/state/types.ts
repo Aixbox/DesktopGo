@@ -14,11 +14,17 @@ export interface DragState {
   offsetX: number
   offsetY: number
   workingOrder: Array<string | null>
+  /** Stable layout before the active ordinary-icon reorder preview began. */
+  evasionBaseOrder?: Array<string | null> | null
   scrollGroupOrder?: string[] | null
   sourceSlotIndex: number | null
   previewSlotIndex: number | null
   dockPreviewIndex: number | null
   hoverTargetId: string | null
+  /** Grid cell currently under the drag; ordinary-icon alarms are cell based. */
+  hoverTargetIndex?: number | null
+  /** Last cell whose pending reorder alarm fired; cleared after leaving that cell. */
+  lastReorderCellIndex?: number | null
   hoverZone: HoverZone | null
   hoverIou: number
   centerStartedAt: number | null
@@ -27,13 +33,6 @@ export interface DragState {
   lastEvasionSignature: string | null
   lastEvasionTriggerPointer: { x: number; y: number } | null
   lastEvasionAt: number | null
-  /**
-   * 避让之前的基线顺序。拖动中按当前 footprint 从这份基线重算预览，
-   * 松手时才提交最终顺序。
-   */
-  evasionBaseOrder?: Array<string | null> | null
-  /** 避让预览的锚点；多格拖动项按完整 footprint 定位，并带边界缓冲。 */
-  evasionHoldIndex?: number | null
   initialCenters: Record<string, { x: number; y: number }>
 }
 

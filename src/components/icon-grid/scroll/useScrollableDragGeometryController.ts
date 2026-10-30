@@ -1,8 +1,8 @@
 import type { MutableRefObject } from 'react'
 import type { EvasionDirection, GridItem, HoverZone } from '../model'
 import { getGridItemSpan, getId } from '../model'
-import { DRAG_HOLE_ID, areSlotsEqual } from '../domain/slots'
-import { moveDragHoleToIndex } from '../domain/evasionPolicy'
+import { DRAG_HOLE_ID } from '../domain/slots'
+import { applyEvasionPreview, moveDragHoleToIndex } from '../domain/evasionPolicy'
 import { clampNumber, classifyZone, getRectArea, getRectIntersection } from '../domain/geometry'
 import {
   applyOuterEvasionPolicy,
@@ -811,23 +811,14 @@ export function useScrollableDragGeometryController(
 
     const evasionResult = applyTopLevelEvasion(state, overlapHit)
     const nextEvasionSignature = `${overlapHit.targetId}:${state.previewSlotIndex ?? overlapHit.targetIndex}:${evasionResult.direction ?? 'fallback'}`
-    if (nextEvasionSignature === state.lastEvasionSignature) return state
-    if (areSlotsEqual(evasionResult.order, state.workingOrder)) return state
-
-    return {
-      ...state,
-      workingOrder: evasionResult.order,
-      previewSlotIndex: state.previewSlotIndex,
-      dockPreviewIndex: state.context === 'dock' ? overlapHit.targetIndex : null,
-      hoverTargetId: overlapHit.targetId,
-      hoverZone: overlapHit.zone,
-      hoverIou: overlapHit.iou,
-      folderPreviewTargetId: null,
-      lastEvasionSignature: nextEvasionSignature,
-      lastEvasionTriggerPointer: { x: state.pointerX, y: state.pointerY },
-      lastEvasionAt: now,
-      dwellStartedAt: now,
-    }
+    return applyEvasionPreview(
+      state,
+      evasionResult.order,
+      overlapHit,
+      now,
+      state.context === 'dock' ? overlapHit.targetIndex : null,
+      nextEvasionSignature
+    )
   }
 
   const resolveCompactScrollHoverZone = (
