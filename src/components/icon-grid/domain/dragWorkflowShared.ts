@@ -42,12 +42,37 @@ export const getFolderIconMapById = (folderId: string | null, items: GridItem[])
   return map
 }
 
+const folderDragItemMapCache = new WeakMap<GridItem[], Map<string, Map<string, GridItem>>>()
+
 export const buildDragItemMap = (state: DragState, items: GridItem[]): Map<string, GridItem> => {
   if (state.context === 'folder') {
-    return new Map(getFolderIconMapById(state.sourceFolderId, items))
+    const folderId = state.sourceFolderId
+    if (!folderId) return new Map()
+
+    // GridItem arrays are immutable snapshots; keep a folder child index for each snapshot
+    // so pointermove does not rebuild a Map for every frame in a long scrolling folder.
+    let mapsByFolderId = folderDragItemMapCache.get(items)
+    if (!mapsByFolderId) {
+      mapsByFolderId = new Map()
+      folderDragItemMapCache.set(items, mapsByFolderId)
+    }
+
+    let itemMap = mapsByFolderId.get(folderId)
+    if (!itemMap) {
+      itemMap = new Map(getFolderIconMapById(folderId, items))
+      mapsByFolderId.set(folderId, itemMap)
+    }
+    return itemMap
   }
   return new Map(items.map(item => [getId(item), item]))
 }
+
+export const resolveItemById = (
+  itemById: ReadonlyMap<string, GridItem>,
+  currentItems: readonly GridItem[],
+  id: string
+): GridItem | undefined =>
+  itemById.get(id) ?? currentItems.find(item => getId(item) === id)
 
 export const resolveSelectedIconDragIds = (
   sourceOrder: Array<string | null>,

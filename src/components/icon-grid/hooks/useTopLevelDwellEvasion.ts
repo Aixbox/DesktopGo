@@ -1,12 +1,13 @@
 import type { MutableRefObject } from 'react'
 import type { GridItem, HoverZone } from '../model'
-import { buildDragItemMap } from '../domain/dragWorkflowShared'
+import { resolveItemById } from '../domain/dragWorkflowShared'
 import { OUTER_DRAG_RULES } from '../constants'
 import type { DragState, OuterOverlapHit } from '../state/types'
 
 interface UseTopLevelDwellEvasionParams {
   dragRef: MutableRefObject<DragState | null>
   itemsRef: MutableRefObject<GridItem[]>
+  itemById: ReadonlyMap<string, GridItem>
   isDraggingFromDock: (draggingId: string) => boolean
   findTopLevelMaxOverlapHit: (state: DragState) => OuterOverlapHit | null
   resolveCandidateAnchorIndexByContext: (
@@ -31,6 +32,7 @@ interface UseTopLevelDwellEvasionParams {
 export function useTopLevelDwellEvasion({
   dragRef,
   itemsRef,
+  itemById,
   isDraggingFromDock,
   findTopLevelMaxOverlapHit,
   resolveCandidateAnchorIndexByContext,
@@ -59,7 +61,7 @@ export function useTopLevelDwellEvasion({
     ) {
       return
     }
-    const target = buildDragItemMap(latest, itemsRef.current).get(overlapHit.targetId)
+    const target = resolveItemById(itemById, itemsRef.current, overlapHit.targetId)
     if (!target) return
 
     const candidateAnchorIndex = resolveCandidateAnchorIndexByContext(latest, {

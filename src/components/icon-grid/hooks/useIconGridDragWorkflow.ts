@@ -10,7 +10,6 @@ import {
 } from 'react'
 import type { GridItem, HotseatEntry, HoverZone } from '../model'
 import type { FolderLayoutProfile } from '../domain/folderLayout'
-import { getId } from '../model'
 import { areSlotsEqual } from '../domain/slots'
 import {
   buildFolderAutoOpenOrder,
@@ -32,6 +31,7 @@ import { resetOuterInteraction } from '../state/dragMachine'
 import {
   collectElementCenters as collectCenters,
   hasRenderableDragStateChanged,
+  resolveItemById,
 } from '../domain/dragWorkflowShared'
 import type { DragState, FolderDropFlight, MultiDropFlightItem, PendingDrag } from '../state/types'
 import type { DropImpactEvent } from '../state/types'
@@ -386,6 +386,7 @@ export function useIconGridDragWorkflow({
   const triggerTopLevelDwellEvasion = useTopLevelDwellEvasion({
     dragRef,
     itemsRef,
+    itemById,
     isDraggingFromDock,
     findTopLevelMaxOverlapHit,
     resolveCandidateAnchorIndexByContext,
@@ -444,9 +445,7 @@ export function useIconGridDragWorkflow({
       return
     }
 
-    const target = itemsRef.current.find(
-      item => item.kind === 'folder' && getId(item) === expectedTargetId
-    )
+    const target = resolveItemById(itemById, itemsRef.current, expectedTargetId)
     if (!target || target.kind !== 'folder') return
 
     const pointer = dragPointerRef.current
@@ -514,9 +513,7 @@ export function useIconGridDragWorkflow({
 
   const scheduleFolderAutoOpen = (targetFolderId: string) => {
     const current = dragRef.current
-    const target = itemsRef.current.find(
-      item => item.kind === 'folder' && getId(item) === targetFolderId
-    )
+    const target = resolveItemById(itemById, itemsRef.current, targetFolderId)
     if (
       !current ||
       current.context !== 'outer' ||
@@ -698,6 +695,7 @@ export function useIconGridDragWorkflow({
     folderPanelRef,
     enteredFolderContentRef,
     itemsRef,
+    itemById,
     outerDwellIntentRef,
     outerDwellTimerRef,
     scheduleFolderExit,

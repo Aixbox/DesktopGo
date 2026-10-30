@@ -1,11 +1,10 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { GridItem, HoverZone, IconItem } from '../model'
-import { getId } from '../model'
 import { areSlotsEqual } from '../domain/slots'
 import { getFolderChildrenById } from '../domain/folderPolicy'
 import {
-  buildDragItemMap,
   collectElementCenters as collectCenters,
+  resolveItemById,
 } from '../domain/dragWorkflowShared'
 import { OUTER_DRAG_RULES } from '../constants'
 import type { DragState, OuterOverlapHit } from '../state/types'
@@ -23,6 +22,7 @@ import {
 interface ScrollableFolderDragControllerParams {
   isCompactOuterDrop: boolean
   evasionRearmDistance: number
+  itemById: ReadonlyMap<string, GridItem>
   dragRef: MutableRefObject<DragState | null>
   itemsRef: MutableRefObject<GridItem[]>
   dragPointerRef: MutableRefObject<{ pointerX: number; pointerY: number } | null>
@@ -113,6 +113,7 @@ export function useScrollableFolderDragController(params: ScrollableFolderDragCo
   const {
     isCompactOuterDrop,
     evasionRearmDistance,
+    itemById,
     dragRef,
     itemsRef,
     dragPointerRef,
@@ -166,7 +167,7 @@ export function useScrollableFolderDragController(params: ScrollableFolderDragCo
 
     const overlapHit = findCompactScrollGroupOverlapHit(latest)
     if (!overlapHit || overlapHit.targetId !== expectedTargetId) return
-    const target = buildDragItemMap(latest, itemsRef.current).get(expectedTargetId)
+    const target = resolveItemById(itemById, itemsRef.current, expectedTargetId)
     if (!target) return
     const zone = resolveCompactScrollHoverZone(latest, target, overlapHit)
     if (zone !== 'center') return
@@ -205,9 +206,8 @@ export function useScrollableFolderDragController(params: ScrollableFolderDragCo
     let overlapHit = findTopLevelMaxOverlapHit(latest)
     if (!overlapHit || overlapHit.targetId !== expectedTargetId) return
 
-    const itemMap = buildDragItemMap(latest, itemsRef.current)
     const source = latest.draggingItem
-    const target = itemMap.get(overlapHit.targetId)
+    const target = resolveItemById(itemById, itemsRef.current, overlapHit.targetId)
     if (!target) return
 
     if (isCompactOuterDrop && latest.context === 'outer') {
@@ -346,9 +346,7 @@ export function useScrollableFolderDragController(params: ScrollableFolderDragCo
       return
     }
 
-    const target = itemsRef.current.find(
-      item => item.kind === 'folder' && getId(item) === expectedTargetId
-    )
+    const target = resolveItemById(itemById, itemsRef.current, expectedTargetId)
     if (!target || target.kind !== 'folder') return
 
     const pointer = dragPointerRef.current
@@ -423,9 +421,7 @@ export function useScrollableFolderDragController(params: ScrollableFolderDragCo
 
   const scheduleFolderAutoOpen = (targetFolderId: string) => {
     const current = dragRef.current
-    const target = itemsRef.current.find(
-      item => item.kind === 'folder' && getId(item) === targetFolderId
-    )
+    const target = resolveItemById(itemById, itemsRef.current, targetFolderId)
     if (
       !current ||
       current.context !== 'outer' ||

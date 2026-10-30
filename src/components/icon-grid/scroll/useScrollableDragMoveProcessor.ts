@@ -1,10 +1,9 @@
 import type { MutableRefObject } from 'react'
 import type { GridItem, HoverZone } from '../model'
-import { getId } from '../model'
 import { areSlotsEqual } from '../domain/slots'
 import { moveDragHoleToIndex } from '../domain/evasionPolicy'
 import { buildDockLinearPreviewOrder } from '../domain/dockDragPolicy'
-import { buildDragItemMap } from '../domain/dragWorkflowShared'
+import { buildDragItemMap, resolveItemById } from '../domain/dragWorkflowShared'
 import { OUTER_DRAG_RULES } from '../constants'
 import { resetOuterInteraction } from '../state/dragMachine'
 import type { DragHit, DragState, OuterOverlapHit } from '../state/types'
@@ -30,6 +29,7 @@ interface ScrollableDragMoveProcessorParams {
   folderPanelRef: MutableRefObject<HTMLDivElement | null>
   enteredFolderContentRef: MutableRefObject<boolean>
   itemsRef: MutableRefObject<GridItem[]>
+  itemById: ReadonlyMap<string, GridItem>
   pageSizeRef: MutableRefObject<number>
   compactOuterDragBaseOrderRef: MutableRefObject<Array<string | null> | null>
   outerDwellTargetIdRef: MutableRefObject<string | null>
@@ -118,6 +118,7 @@ export function useScrollableDragMoveProcessor(runtime: ScrollableDragMoveProces
     publishMoveDragState,
     clearOuterDwellTimer,
     itemsRef,
+    itemById,
     isDraggingFromDock,
     resolveCompactScrollHoverZone,
     resolveTopLevelOverlapPreviewIndex,
@@ -194,9 +195,7 @@ export function useScrollableDragMoveProcessor(runtime: ScrollableDragMoveProces
         overlapHit = null
       }
       const compactGapOverlapTarget = overlapHit
-        ? resolveCompactOuterPreviewItems(baseState).find(
-            item => getId(item) === overlapHit?.targetId
-          )
+        ? resolveItemById(itemById, itemsRef.current, overlapHit.targetId)
         : null
       const isCompactFolderBoundaryGap = compactGapOverlapTarget?.kind === 'folder'
       if (compactGridAtPointer && !compactGridHit && !isCompactFolderBoundaryGap) {
@@ -304,9 +303,8 @@ export function useScrollableDragMoveProcessor(runtime: ScrollableDragMoveProces
         return
       }
 
-      const itemMap = buildDragItemMap(baseState, itemsRef.current)
       const source = baseState.draggingItem
-      const target = itemMap.get(overlapHit.targetId)
+      const target = resolveItemById(itemById, itemsRef.current, overlapHit.targetId)
       if (!target) {
         clearOuterDwellTimer()
         const resetState: DragState =

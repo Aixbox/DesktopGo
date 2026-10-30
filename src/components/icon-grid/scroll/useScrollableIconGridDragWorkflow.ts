@@ -27,7 +27,7 @@ import {
 } from './scrollGroupLayout'
 import { releaseDragPointerCapture } from '../hooks/dragPointerCapture'
 import { resetOuterInteraction } from '../state/dragMachine'
-import { hasRenderableDragStateChanged } from '../domain/dragWorkflowShared'
+import { hasRenderableDragStateChanged, resolveItemById } from '../domain/dragWorkflowShared'
 import type {
   DragState,
   DropImpactEvent,
@@ -478,6 +478,7 @@ export function useScrollableIconGridDragWorkflow({
   } = useScrollableFolderDragController({
     isCompactOuterDrop,
     evasionRearmDistance: config.evasionRearmDistance,
+    itemById,
     dragRef,
     itemsRef,
     dragPointerRef,
@@ -567,6 +568,7 @@ export function useScrollableIconGridDragWorkflow({
     columns,
     evasionRearmDistance: config.evasionRearmDistance,
     evasionCooldownMs: config.evasionCooldownMs,
+    itemById,
     dragRef,
     folderPanelRef,
     enteredFolderContentRef,
@@ -679,7 +681,7 @@ export function useScrollableIconGridDragWorkflow({
     }
     const completedFolderTargetId = completedDrag?.folderPreviewTargetId ?? null
     const completedFolderTarget = completedFolderTargetId
-      ? itemsRef.current.find(item => getId(item) === completedFolderTargetId)
+      ? resolveItemById(itemById, itemsRef.current, completedFolderTargetId)
       : null
     const folderCreateTargetId =
       completedFolderTarget?.kind === 'icon' ? completedFolderTargetId : null

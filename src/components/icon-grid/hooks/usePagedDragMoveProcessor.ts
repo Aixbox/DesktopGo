@@ -7,7 +7,7 @@ import {
 } from '../domain/evasionPolicy'
 import { isPointOutsideFolderContent } from '../domain/folderPolicy'
 import { buildDockLinearPreviewOrder } from '../domain/dockDragPolicy'
-import { buildDragItemMap } from '../domain/dragWorkflowShared'
+import { buildDragItemMap, resolveItemById } from '../domain/dragWorkflowShared'
 import { OUTER_DRAG_RULES } from '../constants'
 import { resetOuterInteraction } from '../state/dragMachine'
 import type { DragHit, DragState, OuterOverlapHit } from '../state/types'
@@ -20,6 +20,7 @@ interface PagedDragMoveProcessorParams {
   folderPanelRef: MutableRefObject<HTMLDivElement | null>
   enteredFolderContentRef: MutableRefObject<boolean>
   itemsRef: MutableRefObject<GridItem[]>
+  itemById: ReadonlyMap<string, GridItem>
   outerDwellIntentRef: MutableRefObject<{ targetId: string; zone: HoverZone } | null>
   outerDwellTimerRef: MutableRefObject<number | null>
   scheduleFolderExit: () => void
@@ -125,8 +126,11 @@ function processTopLevelMove(
     return
   }
 
-  const itemMap = buildDragItemMap(settled, runtime.itemsRef.current)
-  const target = itemMap.get(overlapHit.targetId)
+  const target = resolveItemById(
+    runtime.itemById,
+    runtime.itemsRef.current,
+    overlapHit.targetId
+  )
   if (!target) {
     publishTopLevelReset(runtime, settled, nearestSlotIndex)
     return
