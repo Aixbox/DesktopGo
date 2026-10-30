@@ -57,11 +57,7 @@ interface PagedDragGeometryControllerParams {
 const resolveFolderGridRows = (gridElement: HTMLElement | null, columns: number): number => {
   const safeColumns = Math.max(1, columns)
   const childCount = gridElement?.children.length ?? 0
-  const totalRows = Math.max(1, Math.ceil(childCount / safeColumns))
-  const pageCount = Number(gridElement?.dataset.folderPageCount)
-  return Number.isFinite(pageCount) && pageCount > 0
-    ? Math.max(1, Math.ceil(totalRows / pageCount))
-    : totalRows
+  return Math.max(1, Math.ceil(childCount / safeColumns))
 }
 
 export function usePagedDragGeometryController({

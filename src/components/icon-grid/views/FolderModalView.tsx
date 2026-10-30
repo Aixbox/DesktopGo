@@ -8,19 +8,10 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
-  type UIEvent as ReactUIEvent,
 } from 'react'
 import { Icon } from '../../Icon'
 import { DRAG_HOLE_ID } from '../domain/slots'
-import {
-  DEFAULT_FOLDER_LAYOUT_PROFILE,
-  computeFolderPages,
-  getFolderPageCapacity,
-  getFolderPageCount,
-  getFolderPlacement,
-  resolveFolderDropCapacity,
-  type FolderLayoutProfile,
-} from '../domain/folderLayout'
+import { DEFAULT_FOLDER_LAYOUT_PROFILE, type FolderLayoutProfile } from '../domain/folderLayout'
 import type { FolderItem, IconItem } from '../model'
 import {
   FOLDER_MODAL_TRANSITION_EASING,
@@ -111,37 +102,22 @@ export function FolderModalView({
 
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState('')
-  const [folderPage, setFolderPage] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const modalRootRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
   const openFolderIdRef = useRef<string | undefined>(undefined)
   const openFolderId = openFolder?.id
-  const folderPageCapacity = getFolderPageCapacity(folderLayoutProfile)
-  const folderPages = computeFolderPages(folderRenderOrder, folderLayoutProfile)
-  const folderPageEntries = folderPages.flatMap(page => page.entries)
-  const folderPageCount = getFolderPageCount(folderRenderOrder.length, folderLayoutProfile)
+  const folderEntries = folderRenderOrder
   const folderItemCount = folderRenderOrder.filter(
     entry => entry !== null && entry !== DRAG_HOLE_ID
   ).length
-  const folderDropCapacity = resolveFolderDropCapacity(folderItemCount, 0, folderLayoutProfile)
-  const folderPageRef = useRef(0)
 
   useEffect(() => {
     openFolderIdRef.current = openFolderId
   }, [openFolderId])
 
   useEffect(() => {
-    const nextPage = Math.max(0, Math.min(folderPage, folderPageCount - 1))
-    if (nextPage === folderPage) return
-    folderPageRef.current = nextPage
-    setFolderPage(nextPage)
-  }, [folderPage, folderPageCount])
-
-  useEffect(() => {
     if (!openFolderId) return
-    folderPageRef.current = 0
-    setFolderPage(0)
     const frame = window.requestAnimationFrame(() => {
       folderGridContainerRef.current?.scrollTo({ top: 0, behavior: 'auto' })
     })
@@ -220,37 +196,6 @@ export function FolderModalView({
 
   const GRID_GAP = 8 // gap-2
   const PANEL_PADDING = 20 // p-5
-  const pageStride = Math.max(
-    1,
-    folderLayoutProfile.rows * folderItemHeight +
-      Math.max(0, folderLayoutProfile.rows - 1) * GRID_GAP
-  )
-  const scrollToFolderPage = useCallback(
-    (page: number) => {
-      const nextPage = Math.max(0, Math.min(page, folderPageCount - 1))
-      folderPageRef.current = nextPage
-      setFolderPage(nextPage)
-      folderGridContainerRef.current?.scrollTo({
-        top: nextPage * pageStride,
-        behavior: prefersReducedMotion ? 'auto' : 'smooth',
-      })
-    },
-    [folderGridContainerRef, folderPageCount, pageStride, prefersReducedMotion]
-  )
-
-  const handleFolderGridScroll = useCallback(
-    (event: ReactUIEvent<HTMLDivElement>) => {
-      const nextPage = Math.max(
-        0,
-        Math.min(folderPageCount - 1, Math.round(event.currentTarget.scrollTop / pageStride))
-      )
-      if (nextPage === folderPageRef.current) return
-      folderPageRef.current = nextPage
-      setFolderPage(nextPage)
-    },
-    [folderPageCount, pageStride]
-  )
-
   const handleFolderGridKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
       if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
@@ -274,7 +219,7 @@ export function FolderModalView({
               : folderLayoutProfile.columns
       const direction = Math.sign(delta)
       let candidateRank = currentRank + delta
-      const maxRank = Math.max(0, folderPageEntries.length - 1)
+      const maxRank = Math.max(0, folderEntries.length - 1)
       let nextTile: HTMLElement | null = null
       while (candidateRank >= 0 && candidateRank <= maxRank) {
         nextTile = folderGridContainerRef.current.querySelector<HTMLElement>(
@@ -288,13 +233,8 @@ export function FolderModalView({
       event.preventDefault()
       nextTile.focus({ preventScroll: true })
       nextTile.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-      const nextPage = getFolderPlacement(candidateRank, folderLayoutProfile).page
-      if (nextPage !== folderPageRef.current) {
-        folderPageRef.current = nextPage
-        setFolderPage(nextPage)
-      }
     },
-    [folderGridContainerRef, folderLayoutProfile, folderPageEntries.length]
+    [folderEntries.length, folderGridContainerRef, folderLayoutProfile]
   )
 
   const fittedGridWidth = folderColumns * folderItemWidth + (folderColumns - 1) * GRID_GAP
@@ -424,69 +364,33 @@ export function FolderModalView({
               >
                 <div className="mb-2 flex min-h-7 items-center justify-between gap-2 px-1">
                   <span className="text-xs text-foreground/65 dark:text-white/65">
-                    {folderItemCount} 项 · {folderDropCapacity.capacityPerPage} 项/页
+                    {folderItemCount} 项
                   </span>
-                  {folderPageCount > 1 ? (
-                    <div
-                      className="flex items-center gap-1"
-                      role="group"
-                      aria-label={translate('文件夹分页')}
-                    >
-                      <button
-                        type="button"
-                        aria-label={translate('上一页')}
-                        disabled={folderPage === 0}
-                        className="flex h-7 w-7 items-center justify-center rounded-full text-foreground/70 transition hover:bg-background/55 disabled:pointer-events-none disabled:opacity-30 dark:text-white/70 dark:hover:bg-white/10"
-                        onClick={() => scrollToFolderPage(folderPage - 1)}
-                      >
-                        ‹
-                      </button>
-                      <span className="min-w-12 text-center text-xs tabular-nums text-foreground/70 dark:text-white/70">
-                        {folderPage + 1} / {folderPageCount}
-                      </span>
-                      <button
-                        type="button"
-                        aria-label={translate('下一页')}
-                        disabled={folderPage >= folderPageCount - 1}
-                        className="flex h-7 w-7 items-center justify-center rounded-full text-foreground/70 transition hover:bg-background/55 disabled:pointer-events-none disabled:opacity-30 dark:text-white/70 dark:hover:bg-white/10"
-                        onClick={() => scrollToFolderPage(folderPage + 1)}
-                      >
-                        ›
-                      </button>
-                    </div>
-                  ) : null}
                 </div>
                 <p className="sr-only" aria-live="polite">
-                  {translate('文件夹第 {current} / {total} 页，共 {count} 项', {
-                    current: folderPage + 1,
-                    total: folderPageCount,
-                    count: folderItemCount,
-                  })}
+                  {translate('文件夹共 {count} 项，可滚动浏览', { count: folderItemCount })}
                 </p>
                 <NativeScrollArea asChild>
                   <div
                     ref={folderGridContainerRef}
                     className="-mr-5 overflow-auto pr-5"
                     style={{ maxHeight: `calc(min(80vh, ${maxModalHeight}px) - 88px)` }}
-                    onScroll={handleFolderGridScroll}
                     onKeyDown={handleFolderGridKeyDown}
                   >
                     <div
                       ref={folderGridRef}
-                      data-folder-page-count={folderPages.length}
                       className="grid content-start justify-items-center gap-2"
                       style={{
                         gridTemplateColumns: `repeat(${Math.max(1, folderColumns)}, ${folderItemWidth}px)`,
                       }}
                     >
-                      {folderPageEntries.map((entry, index) => {
+                      {folderEntries.map((entry, index) => {
                         if (entry === null || entry === DRAG_HOLE_ID) {
                           const showDropSlot = entry === DRAG_HOLE_ID && dragContext === 'folder'
                           return (
                             <div
                               key={`folder-${showDropSlot ? 'drop' : 'empty'}-${index}`}
                               data-folder-grid-item
-                              data-folder-page={Math.floor(index / folderPageCapacity)}
                               className={`h-full w-full rounded-icon-tile ${
                                 showDropSlot
                                   ? 'border border-border/60 bg-background/35 dark:border-white/20 dark:bg-white/8'
@@ -510,7 +414,6 @@ export function FolderModalView({
                             }}
                             data-folder-grid-item
                             data-folder-rank={index}
-                            data-folder-page={Math.floor(index / folderPageCapacity)}
                             className={`relative touch-none transition-opacity duration-150 ${
                               hiddenItem ? 'pointer-events-none opacity-0' : 'opacity-100'
                             }`}
