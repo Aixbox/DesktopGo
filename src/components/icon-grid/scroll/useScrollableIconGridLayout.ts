@@ -9,7 +9,13 @@ import {
 } from 'react'
 import type { DesktopIcon } from '../../../types'
 import { translate } from '../../../lib/i18n'
-import type { FolderLayoutProfileId, GridItem, PersistedLayout, ScrollGroupMeta } from '../model'
+import type {
+  FolderLayoutProfileId,
+  GridItem,
+  HotseatEntry,
+  PersistedLayout,
+  ScrollGroupMeta,
+} from '../model'
 import { getGridItemSpan, getId } from '../model'
 import { compactEmptyPages, areSlotsEqual } from '../domain/slots'
 import { clampNumber } from '../domain/geometry'
@@ -43,6 +49,7 @@ import { compactOuterSlotsWithinPages } from './scrollTopLevelLayout'
 import { normalizeScrollGroups, placeItemsInScrollGroup } from './scrollGroupLayout'
 import { measureLayoutPerformance } from '../domain/layoutPerformance'
 import { GRID_GAP, IMPORT_HIGHLIGHT_MS } from '../constants'
+import { hydrateHotseatEntries } from '../domain/hotseatLayout'
 import { getFolderLayoutProfile } from '../domain/folderLayout'
 import { useWidgetResizeHandler } from '../hooks/useWidgetResizeHandler'
 
@@ -104,6 +111,7 @@ export function useScrollableIconGridLayout({
   const itemsRef = useRef<GridItem[]>([])
   const outerSlotsRef = useRef<Array<string | null>>([])
   const dockKeysRef = useRef<Array<string | null>>([])
+  const hotseatEntriesRef = useRef<HotseatEntry[] | undefined>(undefined)
   const scrollGroupsRef = useRef<ScrollGroupMeta[]>([])
   const currentPageRef = useRef(0)
   const pageSizeRef = useRef(1)
@@ -122,6 +130,7 @@ export function useScrollableIconGridLayout({
   const [importHighlightIds, setImportHighlightIds] = useState<string[]>([])
   const [outerSlots, setOuterSlots] = useState<Array<string | null>>([])
   const [dockKeys, setDockKeys] = useState<Array<string | null>>([])
+  const [hotseatEntries, setHotseatEntries] = useState<HotseatEntry[] | undefined>(undefined)
   const [hydrationError, setHydrationError] = useState<string | null>(null)
   const [folderLayoutProfileId, setFolderLayoutProfileId] =
     useState<FolderLayoutProfileId>('standard')
@@ -210,6 +219,7 @@ export function useScrollableIconGridLayout({
           scrollGroups: scrollGroupsRef.current,
           scrollGroupItemsExplicit: true,
           folderProfileId: persistedFolderProfileIdRef.current,
+          hotseatEntries: hotseatEntriesRef.current,
         }
       } else {
         if (
@@ -252,6 +262,11 @@ export function useScrollableIconGridLayout({
       const nextDockKeys = hydrationEnvironment.dockEnabled
         ? hydrateDockKeys(nextItemIds, persistedForItems?.dockKeys)
         : []
+      const nextHotseatEntries = hydrateHotseatEntries(
+        persistedForItems?.hotseatEntries,
+        nextDockKeys,
+        nextItemIds
+      )
       const rawSlots = (persistedForItems?.slots ?? []).map(key =>
         key ? key.replace(/^(desktop|customapp):/, '') : null
       )
@@ -294,10 +309,12 @@ export function useScrollableIconGridLayout({
       itemsRef.current = nextItems
       outerSlotsRef.current = rawSlots
       dockKeysRef.current = nextDockKeys
+      hotseatEntriesRef.current = nextHotseatEntries
       scrollGroupsRef.current = nextScrollGroups
       setItems(nextItems)
       setOuterSlots(rawSlots)
       setDockKeys(nextDockKeys)
+      setHotseatEntries(nextHotseatEntries)
       setScrollGroups(nextScrollGroups)
       hydratedRef.current = true
       hydratedLayoutResetTokenRef.current = layoutResetToken
@@ -316,6 +333,7 @@ export function useScrollableIconGridLayout({
     itemsRef.current = items
     outerSlotsRef.current = outerSlots
     dockKeysRef.current = dockKeys
+    hotseatEntriesRef.current = hotseatEntries
     scrollGroupsRef.current = scrollGroups
     if (!hydratedRef.current || !layoutBaselineRef.current || hydrationBlockedRef.current) return
     const layoutDimensions = layoutDimensionsTracker.read()
@@ -335,13 +353,15 @@ export function useScrollableIconGridLayout({
           nextGeometryKey,
           scrollGroups,
           'scroll',
-          persistedFolderProfileIdRef.current
+          persistedFolderProfileIdRef.current,
+          hotseatEntriesRef.current
         )
       )
       .catch(error => console.error('Failed to persist launchpad layout:', error))
   }, [
     dockKeys,
     geometryKey,
+    hotseatEntries,
     items,
     launchpadGridViewMode,
     layoutDimensionsTracker,
@@ -644,6 +664,7 @@ export function useScrollableIconGridLayout({
       return
     }
     const importedIdSet = new Set(importedIds)
+    const outerItemById = new Map(outerItems.map(item => [getId(item), item]))
     if (launchpadGridViewMode === 'scroll') {
       const requestedGroupExists = request.targetGroupId
         ? scrollGroupsRef.current.some(group => group.id === request.targetGroupId)
@@ -684,7 +705,7 @@ export function useScrollableIconGridLayout({
     const displacedIdSet = new Set<string>()
     let tailFillIndex = currentPageEnd - 1
     for (const id of importedIds) {
-      const item = outerItems.find(entry => getId(entry) === id)
+      const item = outerItemById.get(id)
       if (!item) continue
       const span = getGridItemSpan(item)
       let placed = false
@@ -785,6 +806,9 @@ export function useScrollableIconGridLayout({
     currentPageRef,
     dockKeys,
     dockKeysRef,
+    hotseatEntriesRef,
+    hotseatEntries,
+    setHotseatEntries,
     handleResizeWidget,
     gridRef,
     importHighlightIds,

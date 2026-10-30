@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
 import { translate } from '../../../lib/i18n'
 import type { DragState } from '../state/types'
-import type { FolderItem, GridItem, ScrollGroupMeta } from '../model'
+import type { FolderItem, GridItem, HotseatEntry, ScrollGroupMeta } from '../model'
 import { getId, makeFolderId } from '../model'
 import { clampNumber } from '../domain/geometry'
+import { reconcileHotseatEntries } from '../domain/hotseatLayout'
 import {
   commitScrollGroupItemOrder,
   createScrollGroup,
@@ -31,6 +32,8 @@ interface UseScrollGroupControllerParams {
   setItems: (items: GridItem[]) => void
   dockKeysRef: MutableRefObject<Array<string | null>>
   setDockKeys: (keys: Array<string | null>) => void
+  hotseatEntriesRef: MutableRefObject<HotseatEntry[] | undefined>
+  setHotseatEntries: (entries: HotseatEntry[] | undefined) => void
   externalScrollPreviewSnapshotRef: MutableRefObject<ExternalScrollPreviewSnapshot | null>
   retargetOuterDragToScrollGroup: (targetItemIds: string[]) => void
   syncOuterDragPreview: () => void
@@ -50,6 +53,8 @@ export function useScrollGroupController({
   setItems,
   dockKeysRef,
   setDockKeys,
+  hotseatEntriesRef,
+  setHotseatEntries,
   externalScrollPreviewSnapshotRef,
   retargetOuterDragToScrollGroup,
   syncOuterDragPreview,
@@ -206,6 +211,9 @@ export function useScrollGroupController({
     dockKeysRef.current = compactDock
     setScrollGroups(nextGroups)
     setDockKeys(compactDock)
+    const nextHotseatEntries = reconcileHotseatEntries(hotseatEntriesRef.current, compactDock)
+    hotseatEntriesRef.current = nextHotseatEntries
+    setHotseatEntries(nextHotseatEntries)
   }
   const handleMergeScrollGroupItems = (sourceId: string, targetId: string) => {
     if (sourceId === targetId) return

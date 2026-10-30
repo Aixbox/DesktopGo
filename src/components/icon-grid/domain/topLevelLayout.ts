@@ -159,10 +159,13 @@ export const canPlaceItemAtAnchorIndex = (
   anchorIndex: number,
   span: GridSpan,
   columns: number,
-  pageSize: number
+  pageSize: number,
+  occupancy?: TopLevelOccupancy | Array<string | null>
 ): boolean => {
   if (slots[anchorIndex]) return false
-  const occupied = buildTopLevelOccupancy(slots, items, columns, pageSize).cells
+  const occupied = Array.isArray(occupancy)
+    ? occupancy
+    : (occupancy?.cells ?? buildTopLevelOccupancy(slots, items, columns, pageSize).cells)
   return canPlaceAtIndex(occupied, anchorIndex, span, columns, pageSize)
 }
 

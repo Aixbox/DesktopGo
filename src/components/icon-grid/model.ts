@@ -170,6 +170,13 @@ export interface PersistedItemCoordinates {
   cells: PersistedGridCoordinate[]
 }
 
+export type HotseatPlaceholderKind = 'docker' | 'subscribe' | 'divider'
+
+export type HotseatEntry =
+  | { kind: 'item'; id: string }
+  | { kind: 'placeholder'; placeholder: HotseatPlaceholderKind }
+  | null
+
 export type PersistedPlacementContainer = 'workspace' | 'dock' | { folderId: string }
 
 /** Canonical v10 placement record; slots/coordinates remain migration views. */
@@ -188,6 +195,8 @@ export interface PersistedLayout {
   items: PersistedItem[]
   slots: Array<string | null> | null
   dockKeys: Array<string | null>
+  /** Optional ColorOS runtime entries; placeholders stay outside item placement ids. */
+  hotseatEntries?: HotseatEntry[]
   /** 单调递增的提交版本，用于 preview/commit 和恢复诊断。 */
   revision?: number
   /** 对去除 revision/checksum 后的规范 payload 计算的完整性校验值。 */

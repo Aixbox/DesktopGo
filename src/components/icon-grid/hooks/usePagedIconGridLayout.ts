@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import type { DesktopIcon } from '../../../types'
-import type { FolderLayoutProfileId, GridItem, PersistedLayout } from '../model'
+import type { FolderLayoutProfileId, GridItem, HotseatEntry, PersistedLayout } from '../model'
 import { getGridItemSpan, getId } from '../model'
 import { compactEmptyPages, areSlotsEqual } from '../domain/slots'
 import { clampNumber } from '../domain/geometry'
@@ -33,6 +33,7 @@ import { measureLayoutPerformance } from '../domain/layoutPerformance'
 import { createLayoutDimensionsTracker } from '../state/layoutDimensionsTracker'
 import { GRID_GAP, IMPORT_HIGHLIGHT_MS } from '../constants'
 import { getFolderLayoutProfile } from '../domain/folderLayout'
+import { hydrateHotseatEntries } from '../domain/hotseatLayout'
 import { useWidgetResizeHandler } from './useWidgetResizeHandler'
 
 export interface PagedImportPlacementRequest {
@@ -90,6 +91,7 @@ export function usePagedIconGridLayout({
   const itemsRef = useRef<GridItem[]>([])
   const outerSlotsRef = useRef<Array<string | null>>([])
   const dockKeysRef = useRef<Array<string | null>>([])
+  const hotseatEntriesRef = useRef<HotseatEntry[] | undefined>(undefined)
   const currentPageRef = useRef(0)
   const pageSizeRef = useRef(1)
   const layoutReadyRef = useRef(false)
@@ -104,6 +106,7 @@ export function usePagedIconGridLayout({
   const [importHighlightIds, setImportHighlightIds] = useState<string[]>([])
   const [outerSlots, setOuterSlots] = useState<Array<string | null>>([])
   const [dockKeys, setDockKeys] = useState<Array<string | null>>([])
+  const [hotseatEntries, setHotseatEntries] = useState<HotseatEntry[] | undefined>(undefined)
   const [hydrationError, setHydrationError] = useState<string | null>(null)
   const [folderLayoutProfileId, setFolderLayoutProfileId] =
     useState<FolderLayoutProfileId>('standard')
@@ -178,6 +181,7 @@ export function usePagedIconGridLayout({
           ),
           geometryKey: persistedGeometryKeyRef.current ?? undefined,
           folderProfileId: persistedFolderProfileIdRef.current,
+          hotseatEntries: hotseatEntriesRef.current,
         }
       } else {
         if (
@@ -220,6 +224,11 @@ export function usePagedIconGridLayout({
       const nextDockKeys = hydrationEnvironment.dockEnabled
         ? hydrateDockKeys(nextItemIds, persistedForItems?.dockKeys)
         : []
+      const nextHotseatEntries = hydrateHotseatEntries(
+        persistedForItems?.hotseatEntries,
+        nextDockKeys,
+        nextItemIds
+      )
       const rawSlots = (persistedForItems?.slots ?? []).map(key =>
         key ? key.replace(/^(desktop|customapp):/, '') : null
       )
@@ -256,9 +265,11 @@ export function usePagedIconGridLayout({
       itemsRef.current = nextItems
       outerSlotsRef.current = rawSlots
       dockKeysRef.current = nextDockKeys
+      hotseatEntriesRef.current = nextHotseatEntries
       setItems(nextItems)
       setOuterSlots(rawSlots)
       setDockKeys(nextDockKeys)
+      setHotseatEntries(nextHotseatEntries)
       hydratedRef.current = true
       hydratedLayoutResetTokenRef.current = layoutResetToken
       setLayoutHydrationTick(tick => tick + 1)
@@ -276,6 +287,7 @@ export function usePagedIconGridLayout({
     itemsRef.current = items
     outerSlotsRef.current = outerSlots
     dockKeysRef.current = dockKeys
+    hotseatEntriesRef.current = hotseatEntries
     if (!hydratedRef.current || !layoutBaselineRef.current || hydrationBlockedRef.current) return
 
     const layoutDimensions = layoutDimensionsTracker.read()
@@ -293,13 +305,14 @@ export function usePagedIconGridLayout({
           nextGeometryKey,
           persistedScrollGroupsRef.current,
           'paged',
-          persistedFolderProfileIdRef.current
+          persistedFolderProfileIdRef.current,
+          hotseatEntriesRef.current
         )
       )
       .catch(error => {
         console.error('Failed to persist launchpad layout:', error)
       })
-  }, [dockKeys, geometryKey, items, layoutDimensionsTracker, outerSlots])
+  }, [dockKeys, geometryKey, hotseatEntries, items, layoutDimensionsTracker, outerSlots])
 
   useEffect(() => {
     currentPageRef.current = currentPage
@@ -515,6 +528,7 @@ export function usePagedIconGridLayout({
     }
 
     const importedIdSet = new Set(importedIds)
+    const outerItemById = new Map(outerItems.map(item => [getId(item), item]))
     const layoutDimensions = layoutDimensionsTracker.read()
     const safeColumns = Math.max(1, layoutDimensions.columns || columns)
     const safePageSize = Math.max(1, layoutDimensions.pageSize || pageSize)
@@ -529,7 +543,7 @@ export function usePagedIconGridLayout({
     let tailFillIndex = currentPageEnd - 1
 
     for (const id of importedIds) {
-      const item = outerItems.find(entry => getId(entry) === id)
+      const item = outerItemById.get(id)
       if (!item) continue
       const span = getGridItemSpan(item)
       let placed = false
@@ -628,6 +642,7 @@ export function usePagedIconGridLayout({
     itemsRef,
     outerSlotsRef,
     dockKeysRef,
+    hotseatEntriesRef,
     currentPageRef,
     pageSizeRef,
     columns,
@@ -644,6 +659,8 @@ export function usePagedIconGridLayout({
     setOuterSlots,
     dockKeys,
     setDockKeys,
+    hotseatEntries,
+    setHotseatEntries,
     layoutDimensionsTracker,
     activeDockKeys,
     outerItemIds,

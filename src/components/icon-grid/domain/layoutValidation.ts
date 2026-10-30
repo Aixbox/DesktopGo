@@ -215,7 +215,41 @@ const collectReferenceIssues = (layout: PersistedLayout): LayoutValidationIssue[
   })
 
   validateScrollGroups(layout.scrollGroups, topLevelIds, issues)
+  validateHotseatEntries(layout.hotseatEntries, topLevelIds, issues)
   return issues
+}
+
+const validateHotseatEntries = (
+  entries: PersistedLayout['hotseatEntries'],
+  knownIds: Set<string>,
+  issues: LayoutValidationIssue[]
+) => {
+  if (entries === undefined) return
+  if (!Array.isArray(entries)) {
+    issues.push(issue('hotseatEntries', 'Hotseat entries 必须是数组'))
+    return
+  }
+  const seenIds = new Set<string>()
+  entries.forEach((entry, index) => {
+    if (entry === null) return
+    if (entry.kind === 'placeholder') {
+      if (!['docker', 'subscribe', 'divider'].includes(entry.placeholder)) {
+        issues.push(issue(`hotseatEntries[${index}]`, 'Hotseat placeholder 无效'))
+      }
+      return
+    }
+    if (entry.kind !== 'item' || !isNonEmptyString(entry.id)) {
+      issues.push(issue(`hotseatEntries[${index}]`, 'Hotseat entry 必须是项目、占位项或 null'))
+      return
+    }
+    if (seenIds.has(entry.id)) {
+      issues.push(issue(`hotseatEntries[${index}].id`, `Hotseat 中重复引用 ${entry.id}`))
+    }
+    seenIds.add(entry.id)
+    if (!knownIds.has(entry.id)) {
+      issues.push(issue(`hotseatEntries[${index}].id`, `未知 Hotseat 项目 ${entry.id}`, 'warning'))
+    }
+  })
 }
 
 const validateScrollGroups = (

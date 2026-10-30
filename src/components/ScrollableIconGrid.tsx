@@ -48,6 +48,8 @@ import { ScrollableOuterGridView } from './icon-grid/views/ScrollableOuterGridVi
 import { EdgeGlow } from './icon-grid/views/EdgeGlow'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
 import { DockBar } from './icon-grid/views/DockBar'
+import { useDockKeyboardReorder } from './icon-grid/hooks/useDockKeyboardReorder'
+import { reconcileHotseatEntries } from './icon-grid/domain/hotseatLayout'
 import { getFolderChildSelectionsByIds } from './icon-grid/domain/folderPolicy'
 import { DragAnnouncementLiveRegion } from './icon-grid/views/DragAnnouncementLiveRegion'
 import { useGridGeometryKey } from './icon-grid/hooks/useGridGeometryKey'
@@ -137,7 +139,9 @@ export function ScrollableIconGrid({
     containerRef,
     currentPage,
     currentPageRef,
+    dockKeys,
     dockKeysRef,
+    hotseatEntriesRef,
     gridRef,
     importHighlightIds,
     itemHeight,
@@ -156,6 +160,8 @@ export function ScrollableIconGrid({
     scrollGroupsRef,
     setCurrentPage,
     setDockKeys,
+    hotseatEntries,
+    setHotseatEntries,
     setItems,
     setOuterSlots,
     setScrollGroups,
@@ -181,6 +187,12 @@ export function ScrollableIconGrid({
     items.forEach(item => map.set(getId(item), item))
     return map
   }, [items])
+  const dockKeyboard = useDockKeyboardReorder({
+    dockKeys,
+    setDockKeys,
+    hotseatEntries,
+    setHotseatEntries,
+  })
   const {
     closeFolderImmediately,
     closeFolderWithAnimation,
@@ -207,6 +219,8 @@ export function ScrollableIconGrid({
     setOuterSlots,
     dockKeysRef,
     setDockKeys,
+    hotseatEntriesRef,
+    setHotseatEntries,
     dockEnabled,
     columns,
     pageSizeRef,
@@ -651,6 +665,8 @@ export function ScrollableIconGrid({
     setItems,
     dockKeysRef,
     setDockKeys,
+    hotseatEntriesRef,
+    setHotseatEntries,
     externalScrollPreviewSnapshotRef,
     retargetOuterDragToScrollGroup,
     syncOuterDragPreview,
@@ -879,6 +895,7 @@ export function ScrollableIconGrid({
           <DockBar
             alignToContentColumn={launchpadGridViewMode === 'scroll'}
             displaySlots={dockRenderSlots}
+            hotseatEntries={hotseatEntries}
             itemById={outerViewItemById}
             dockPreviewIndex={dragState?.dockPreviewIndex ?? null}
             dragContext={dragState?.context ?? null}
@@ -909,6 +926,8 @@ export function ScrollableIconGrid({
               else dockItemRefs.current.delete(id)
             }}
             onDockItemPointerDown={handleDockItemPointerDown}
+            onDockKeyboardKeyDown={dockKeyboard.handleKeyDown}
+            dockKeyboardActiveId={dockKeyboard.activeId}
             onDockItemClickCapture={handleTileClickCapture}
             onDockAutoScroll={syncDockDragPreview}
             onLaunchIcon={path => {
@@ -916,7 +935,9 @@ export function ScrollableIconGrid({
             }}
             onOpenFolder={openFolderWithAnimation}
             onRemoveItem={key => {
-              setDockKeys(current => current.filter(entry => entry !== key))
+              const nextDockKeys = dockKeys.filter(entry => entry !== key)
+              setDockKeys(nextDockKeys)
+              setHotseatEntries(reconcileHotseatEntries(hotseatEntries, nextDockKeys))
             }}
           />
         ) : null}

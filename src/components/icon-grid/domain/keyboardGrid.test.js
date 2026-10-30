@@ -1,4 +1,8 @@
-import { parseKeyboardGridCellId, resolveKeyboardGridCellCenter } from './keyboardGrid.ts'
+import {
+  parseKeyboardGridCellId,
+  resolveKeyboardGridCellCenter,
+  resolveKeyboardPageTransition,
+} from './keyboardGrid.ts'
 
 const assert = (condition, message) => {
   if (!condition) throw new Error(message)
@@ -66,6 +70,40 @@ assert(
     gridTop: 200,
   }) === null,
   '超出网格容量的空槽不能作为落点'
+)
+const transition = resolveKeyboardPageTransition({
+  key: 'ArrowRight',
+  currentPage: 1,
+  pageCount: 3,
+  currentX: 420,
+  currentY: 304,
+  gridLeft: 100,
+  gridTop: 200,
+  gridRight: 500,
+  itemWidth: 80,
+  itemHeight: 96,
+  columns: 4,
+  rows: 3,
+  gridGap: 8,
+})
+assert(transition?.page === 2 && transition.point.x === 100 && transition.point.y === 304, '键盘拖动到右边缘应切换到下一页并保持行')
+assert(
+  resolveKeyboardPageTransition({
+    key: 'ArrowLeft',
+    currentPage: 0,
+    pageCount: 3,
+    currentX: 100,
+    currentY: 200,
+    gridLeft: 100,
+    gridTop: 200,
+    gridRight: 500,
+    itemWidth: 80,
+    itemHeight: 96,
+    columns: 4,
+    rows: 3,
+    gridGap: 8,
+  }) === null,
+  '第一页向左不能生成越界分页落点'
 )
 
 console.log('keyboardGrid 测试通过')

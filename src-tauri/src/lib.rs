@@ -9,6 +9,7 @@ mod icons;
 mod launcher_catalog;
 mod launchpad_shortcut;
 mod layout_db;
+mod layout_telemetry;
 mod layout_versions;
 mod native_icon;
 mod poll;
@@ -50,6 +51,9 @@ use commands::{
     set_window_mode, show_shell_context_menu, start_search_runtime, sync_window_persistent_state,
     toggle_window, unhide_icons, update_icon_entry, update_launch_on_startup_enabled,
     update_launchpad_shortcut,
+};
+use layout_telemetry::{
+    clear_layout_performance, get_layout_performance_summary, record_layout_performance_samples,
 };
 use std::sync::atomic::Ordering;
 use tauri::{Manager, RunEvent};
@@ -175,6 +179,84 @@ fn with_core_plugins(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<taur
         .plugin(tauri_plugin_store::Builder::default().build())
 }
 
+/// 注册供前端调用的 Tauri 命令。
+fn with_invoke_handler(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    builder.invoke_handler(tauri::generate_handler![
+        toggle_window,
+        activate_main_window,
+        activate_window,
+        create_settings_window,
+        activate_settings_window,
+        get_icons,
+        get_icon_manager_items,
+        get_icon_edit_source,
+        launch_app,
+        show_shell_context_menu,
+        set_window_mode,
+        import_dropped_paths,
+        create_icon_entry,
+        import_app_entries,
+        scan_installed_apps,
+        create_new_file,
+        update_icon_entry,
+        extract_website_icon,
+        hide_icons,
+        unhide_icons,
+        delete_icons,
+        scan_invalid_icons,
+        get_layout_payload,
+        get_layout_payloads,
+        get_layout_performance_summary,
+        set_layout_payload,
+        set_layout_payloads,
+        record_layout_performance_samples,
+        clear_layout_performance,
+        list_layout_versions,
+        get_layout_version,
+        save_layout_version,
+        rename_layout_version,
+        delete_layout_version,
+        start_search_runtime,
+        get_search_runtime_status,
+        get_launcher_catalog,
+        get_default_launcher_folders,
+        search_files,
+        get_complete_search_snapshot,
+        get_search_result_icons,
+        get_search_preview,
+        record_search_result_run,
+        notify_main_window_ready,
+        apply_window_style,
+        get_main_window_always_on_top_enabled,
+        set_main_window_always_on_top_enabled,
+        get_updater_configuration_status,
+        check_persisted_update,
+        check_for_app_update,
+        install_app_update,
+        get_drag_preview_icon,
+        get_custom_icon_source,
+        optimize_icon_image,
+        update_launchpad_shortcut,
+        close_settings_window,
+        sync_window_persistent_state,
+        get_launch_on_startup_enabled,
+        update_launch_on_startup_enabled,
+        ai_classify_icons,
+        ai_chat,
+        get_builtin_icon_categories,
+        ai_cancel,
+        ai_organize_icons_agent,
+        ai_organize_record_apply,
+        fetch_wallpaper_feed,
+        fetch_wallpaper_image,
+        // 宏会为每个命令生成独立分支，保持列表清晰并由函数拆分控制行数。
+        save_background_original,
+        load_background_original,
+        clear_background_original,
+        open_wallpaper_viewer
+    ])
+}
+
 /// 构建应用：插件注册、托盘/主窗口 setup 与全部命令的 invoke_handler。
 /// 独立成函数以保持 `run()` 精简（clippy too_many_lines 上限 80 行）。
 fn build_app() -> tauri::App {
@@ -185,84 +267,10 @@ fn build_app() -> tauri::App {
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
-    let app = builder
+    with_invoke_handler(builder)
         .setup(setup_app)
-        .invoke_handler(tauri::generate_handler![
-            toggle_window,
-            activate_main_window,
-            activate_window,
-            create_settings_window,
-            activate_settings_window,
-            get_icons,
-            get_icon_manager_items,
-            get_icon_edit_source,
-            launch_app,
-            show_shell_context_menu,
-            set_window_mode,
-            import_dropped_paths,
-            create_icon_entry,
-            import_app_entries,
-            scan_installed_apps,
-            create_new_file,
-            update_icon_entry,
-            extract_website_icon,
-            hide_icons,
-            unhide_icons,
-            delete_icons,
-            scan_invalid_icons,
-            get_layout_payload,
-            get_layout_payloads,
-            set_layout_payload,
-            set_layout_payloads,
-            list_layout_versions,
-            get_layout_version,
-            save_layout_version,
-            rename_layout_version,
-            delete_layout_version,
-            start_search_runtime,
-            get_search_runtime_status,
-            get_launcher_catalog,
-            get_default_launcher_folders,
-            search_files,
-            get_complete_search_snapshot,
-            get_search_result_icons,
-            get_search_preview,
-            record_search_result_run,
-            notify_main_window_ready,
-            apply_window_style,
-            get_main_window_always_on_top_enabled,
-            set_main_window_always_on_top_enabled,
-            get_updater_configuration_status,
-            check_persisted_update,
-            check_for_app_update,
-            install_app_update,
-            get_drag_preview_icon,
-            get_custom_icon_source,
-            optimize_icon_image,
-            update_launchpad_shortcut,
-            close_settings_window,
-            sync_window_persistent_state,
-            get_launch_on_startup_enabled,
-            update_launch_on_startup_enabled,
-            ai_classify_icons,
-            ai_chat,
-            get_builtin_icon_categories,
-            ai_cancel,
-            ai_organize_icons_agent,
-            ai_organize_record_apply,
-            fetch_wallpaper_feed,
-            fetch_wallpaper_image,
-            // generate_handler 的参数会被 rustfmt 展开成一行一项，压行数无效；
-            // build_app 再超 too_many_lines(80) 时优先继续拆函数。
-            save_background_original,
-            load_background_original,
-            clear_background_original,
-            open_wallpaper_viewer
-        ])
         .build(tauri::generate_context!())
-        .expect("error while building tauri application");
-
-    app
+        .expect("error while building tauri application")
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

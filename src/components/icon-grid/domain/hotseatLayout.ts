@@ -1,3 +1,7 @@
+import type { HotseatEntry, HotseatPlaceholderKind } from '../model'
+
+export type { HotseatEntry, HotseatPlaceholderKind } from '../model'
+
 /**
  * Hotseat/Dock cell mapping shared by persistence, drag hit-testing and
  * vertical/RTL renderers. The current Dock view is horizontal, but keeping
@@ -5,25 +9,11 @@
  */
 export type HotseatOrientation = 'horizontal' | 'vertical'
 
-export type HotseatPlaceholderKind = 'docker' | 'subscribe' | 'divider'
-
 export interface HotseatProfile {
   count: number
   orientation: HotseatOrientation
   rtl: boolean
 }
-
-export interface HotseatItemEntry {
-  kind: 'item'
-  id: string
-}
-
-export interface HotseatPlaceholderEntry {
-  kind: 'placeholder'
-  placeholder: HotseatPlaceholderKind
-}
-
-export type HotseatEntry = HotseatItemEntry | HotseatPlaceholderEntry | null
 
 export interface HotseatCell {
   order: number
@@ -105,7 +95,7 @@ export const mapHotseatCellsToOrder = (
 
 export const createHotseatPlaceholder = (
   placeholder: HotseatPlaceholderKind
-): HotseatPlaceholderEntry => ({
+): Exclude<HotseatEntry, null | { kind: 'item'; id: string }> => ({
   kind: 'placeholder',
   placeholder,
 })
@@ -131,4 +121,141 @@ export const normalizeHotseatEntries = (
   })
   while (result.length < normalized.count) result.push(null)
   return result
+}
+
+/**
+ * Hydrate runtime entries without allowing placeholders or stale item ids to
+ * leak into the canonical Dock item order. Missing persisted item entries are
+ * appended from dockKeys, so older layouts keep their exact Dock content.
+ */
+export const hydrateHotseatEntries = (
+  source: readonly HotseatEntry[] | undefined,
+  dockKeys: readonly (string | null)[],
+  validItemIds: Iterable<string>
+): HotseatEntry[] | undefined => {
+  if (!source && dockKeys.length === 0) return undefined
+  const validIds = new Set(validItemIds)
+  const seenIds = new Set<string>()
+  const result: HotseatEntry[] = []
+  ;(source ?? []).forEach(entry => {
+    if (entry === null) {
+      result.push(null)
+      return
+    }
+    if (entry.kind === 'placeholder') {
+      result.push(entry)
+      return
+    }
+    if (!validIds.has(entry.id) || seenIds.has(entry.id)) return
+    seenIds.add(entry.id)
+    result.push({ kind: 'item', id: entry.id })
+  })
+  dockKeys.forEach(id => {
+    if (typeof id !== 'string' || !validIds.has(id) || seenIds.has(id)) return
+    seenIds.add(id)
+    result.push({ kind: 'item', id })
+  })
+  return result
+}
+
+/** Insert a temporary item drop slot while keeping runtime placeholders fixed. */
+export const insertHotseatItemPreview = (
+  entries: readonly HotseatEntry[],
+  itemIndex: number
+): HotseatEntry[] => {
+  const next = [...entries]
+  const safeIndex = Math.max(0, Math.floor(itemIndex))
+  let seenItems = 0
+  for (let index = 0; index < next.length; index += 1) {
+    const entry = next[index]
+    if (entry?.kind !== 'item') continue
+    if (seenItems === safeIndex) {
+      next.splice(index, 0, null)
+      return next
+    }
+    seenItems += 1
+  }
+  next.push(null)
+  return next
+}
+
+/**
+ * Apply a canonical item order to a persisted runtime Hotseat sequence.
+ * ColorOS runtime entries can contain non-item slots (Docker/subscribe/divider)
+ * that must keep their relative positions while item moves are committed.
+ */
+export const reconcileHotseatEntries = (
+  source: readonly HotseatEntry[] | undefined,
+  dockKeys: readonly (string | null)[]
+): HotseatEntry[] | undefined => {
+  if (!source) return undefined
+
+  const itemIds = dockKeys.filter((id): id is string => typeof id === 'string' && id.length > 0)
+  const result: HotseatEntry[] = []
+  let itemCursor = 0
+
+  source.forEach(entry => {
+    if (entry?.kind === 'placeholder') {
+      result.push(entry)
+      return
+    }
+    if (itemCursor < itemIds.length) {
+      result.push({ kind: 'item', id: itemIds[itemCursor] })
+      itemCursor += 1
+      return
+    }
+    // Keep an explicit empty slot when the runtime sequence had one. This is
+    // useful for fixed-width profiles and is removed only by normalization.
+    if (entry === null) result.push(null)
+  })
+
+  while (itemCursor < itemIds.length) {
+    result.push({ kind: 'item', id: itemIds[itemCursor] })
+    itemCursor += 1
+  }
+  return result
+}
+
+export const reorderHotseatItemIds = (
+  source: readonly string[],
+  itemId: string,
+  targetIndex: number
+): string[] => {
+  const currentIndex = source.indexOf(itemId)
+  if (currentIndex < 0 || source.length === 0) return [...source]
+  const nextIndex = Math.max(0, Math.min(source.length - 1, Math.floor(targetIndex)))
+  if (currentIndex === nextIndex) return [...source]
+  const next = [...source]
+  next.splice(currentIndex, 1)
+  next.splice(nextIndex, 0, itemId)
+  return next
+}
+
+/** Reconcile transient drag slots with persisted runtime placeholders. */
+export const resolveHotseatDisplayEntries = (
+  runtimeEntries: readonly HotseatEntry[] | undefined,
+  displaySlots: readonly (string | null)[],
+  previewIndex: number | null
+): HotseatEntry[] => {
+  const itemIds = displaySlots.filter((entry): entry is string => typeof entry === 'string')
+  const result: HotseatEntry[] = []
+  let itemCursor = 0
+  ;(runtimeEntries ?? []).forEach(entry => {
+    if (entry?.kind === 'item') {
+      const id = itemIds[itemCursor]
+      if (id) {
+        result.push({ kind: 'item', id })
+        itemCursor += 1
+      }
+      return
+    }
+    result.push(entry)
+  })
+  while (itemCursor < itemIds.length) {
+    result.push({ kind: 'item', id: itemIds[itemCursor] })
+    itemCursor += 1
+  }
+  const withPreview =
+    previewIndex === null ? result : insertHotseatItemPreview(result, previewIndex)
+  return withPreview.length > 0 ? withPreview : [null]
 }

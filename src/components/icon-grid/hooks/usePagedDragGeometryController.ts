@@ -16,6 +16,7 @@ import {
   resolveNearestSlotIndexByMetrics,
 } from '../domain/dragMovePolicy'
 import {
+  buildTopLevelOccupancy,
   canPlaceItemAtAnchorIndex,
   findNearestValidAnchorIndex,
   normalizeOuterSlots,
@@ -47,6 +48,7 @@ interface PagedDragGeometryControllerParams {
   tileRefs: MutableRefObject<Map<string, HTMLDivElement>>
   dockSlotRefs: MutableRefObject<Map<number, HTMLDivElement>>
   dockItemRefs: MutableRefObject<Map<string, HTMLDivElement>>
+  itemById: Map<string, GridItem>
   itemsRef: MutableRefObject<GridItem[]>
   outerSlotsRef: MutableRefObject<Array<string | null>>
   dockKeysRef: MutableRefObject<Array<string | null>>
@@ -78,18 +80,24 @@ export function usePagedDragGeometryController({
   tileRefs,
   dockSlotRefs,
   dockItemRefs,
+  itemById,
   itemsRef,
   outerSlotsRef,
   dockKeysRef,
   currentPageRef,
   pageSizeRef,
 }: PagedDragGeometryControllerParams) {
+  const resolveItemById = (id: string): GridItem | undefined =>
+    itemById.get(id) ?? itemsRef.current.find(item => getId(item) === id)
+
   const resolveOuterItemsForLayout = (
     dockOrder: Array<string | null> = dockKeysRef.current
   ): GridItem[] => {
     const outerItemIds = resolveOuterItemIds(itemsRef.current.map(getId), dockOrder)
-    const outerItemIdSet = new Set(outerItemIds)
-    return itemsRef.current.filter(item => outerItemIdSet.has(getId(item)))
+    return outerItemIds.flatMap(id => {
+      const item = resolveItemById(id)
+      return item ? [item] : []
+    })
   }
 
   const resolveDockItemOrder = (draggingIds: string[] = []): string[] =>
@@ -261,6 +269,12 @@ export function usePagedDragGeometryController({
     const metrics = resolveGridMetrics('outer')
     if (!metrics.gridElement) return null
     const outerItems = resolveOuterItemsForLayout()
+    const occupancy = buildTopLevelOccupancy(
+      geometryState.workingOrder,
+      outerItems,
+      metrics.columns,
+      pageSizeRef.current
+    )
     const draggingSpan = getGridItemSpan(geometryState.draggingItem)
     if (draggingSpan.cols === 1 && draggingSpan.rows === 1) {
       const rawIndex = resolveNearestSlotIndexByMetrics(geometryState, metrics, gridGap, options)
@@ -272,7 +286,8 @@ export function usePagedDragGeometryController({
           rawIndex,
           draggingSpan,
           metrics.columns,
-          pageSizeRef.current
+          pageSizeRef.current,
+          occupancy
         )
       ) {
         return rawIndex
@@ -404,10 +419,7 @@ export function usePagedDragGeometryController({
   ): { order: Array<string | null>; direction: EvasionDirection | null } => {
     const outerItems = state.context === 'outer' ? resolveOuterItemsForLayout() : null
     const draggingSpan = getGridItemSpan(state.draggingItem)
-    const targetItem =
-      state.context === 'outer'
-        ? (outerItems?.find(item => getId(item) === hit.targetId) ?? null)
-        : null
+    const targetItem = state.context === 'outer' ? (resolveItemById(hit.targetId) ?? null) : null
     const targetSpan = targetItem ? getGridItemSpan(targetItem) : null
     const shouldUsePreviewAnchor =
       state.context === 'outer' &&
@@ -520,7 +532,7 @@ export function usePagedDragGeometryController({
       return revertTopLevelEvasion(state)
     }
 
-    const target = resolveOuterItemsForLayout().find(item => getId(item) === overlapHit.targetId)
+    const target = resolveItemById(overlapHit.targetId)
     if (!target) return revertTopLevelEvasion(state)
 
     const previewSlotIndex = resolveTopLevelOverlapPreviewIndex(

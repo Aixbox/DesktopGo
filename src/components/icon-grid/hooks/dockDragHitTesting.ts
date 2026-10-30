@@ -141,7 +141,10 @@ export const findDockMaxOverlapHit = ({
 
     candidates.push({
       targetId: entry.targetId,
-      targetIndex: entry.index,
+      // State.workingOrder contains only canonical item ids. Convert the
+      // display slot (which may include Docker/subscribe/divider entries) to
+      // the compact item index before the preview/commit solver consumes it.
+      targetIndex: entry.targetIndex,
       targetRect,
       overlapRect,
       iou: intersectionArea / dragArea,

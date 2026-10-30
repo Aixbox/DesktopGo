@@ -26,6 +26,7 @@ import {
   applyOuterDropFromSession,
 } from '../domain/dropPolicy'
 import { normalizeDockKeys, resolveOuterItemIds } from '../domain/dock'
+import { reconcileHotseatEntries } from '../domain/hotseatLayout'
 import type { DragState, FolderDropFlight, MultiDropFlightItem } from '../state/types'
 import { DROP_FLIGHT_HANDOFF_MS, OUTER_DRAG_RULES } from '../constants'
 import {
@@ -53,9 +54,11 @@ interface UseDragDropCommitParams {
   itemsRef: MutableRefObject<GridItem[]>
   outerSlotsRef: MutableRefObject<Array<string | null>>
   dockKeysRef: MutableRefObject<Array<string | null>>
+  hotseatEntriesRef: MutableRefObject<import('../model').HotseatEntry[] | undefined>
   setItems: Dispatch<SetStateAction<GridItem[]>>
   setOuterSlots: Dispatch<SetStateAction<Array<string | null>>>
   setDockKeys: Dispatch<SetStateAction<Array<string | null>>>
+  setHotseatEntries: Dispatch<SetStateAction<import('../model').HotseatEntry[] | undefined>>
   dragRef: MutableRefObject<DragState | null>
   setDragState: Dispatch<SetStateAction<DragState | null>>
   clearEdgeSwitchTimer: () => void
@@ -88,9 +91,11 @@ export function useDragDropCommit({
   itemsRef,
   outerSlotsRef,
   dockKeysRef,
+  hotseatEntriesRef,
   setItems,
   setOuterSlots,
   setDockKeys,
+  setHotseatEntries,
   dragRef,
   setDragState,
   clearEdgeSwitchTimer,
@@ -197,9 +202,15 @@ export function useDragDropCommit({
     itemsRef.current = nextItems
     outerSlotsRef.current = compactedOuterSlots
     dockKeysRef.current = normalizedDockKeys
+    const nextHotseatEntries = reconcileHotseatEntries(
+      hotseatEntriesRef.current,
+      normalizedDockKeys
+    )
+    hotseatEntriesRef.current = nextHotseatEntries
     setItems(nextItems)
     setOuterSlots(compactedOuterSlots)
     setDockKeys(normalizedDockKeys)
+    setHotseatEntries(nextHotseatEntries)
   }
 
   const commitTopLevelSessionResult = (

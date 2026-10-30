@@ -129,12 +129,17 @@ export function useScrollableDragGeometryController(
     getActiveScrollGroupItemIds,
   } = params
 
+  const resolveItemById = (id: string): GridItem | undefined =>
+    itemById.get(id) ?? itemsRef.current.find(item => getId(item) === id)
+
   const resolveAllItemIds = () => itemsRef.current.map(getId)
 
   const resolveOuterItemsForLayout = (dockOrder: Array<string | null> = dockKeysRef.current) => {
     const outerItemIds = resolveOuterItemIds(resolveAllItemIds(), dockOrder)
-    const outerItemIdSet = new Set(outerItemIds)
-    return itemsRef.current.filter(item => outerItemIdSet.has(getId(item)))
+    return outerItemIds.flatMap(id => {
+      const item = resolveItemById(id)
+      return item ? [item] : []
+    })
   }
 
   const resolveDockItemOrder = (draggingIds: string[] = []): string[] =>
@@ -760,10 +765,7 @@ export function useScrollableDragGeometryController(
   ): { order: Array<string | null>; direction: EvasionDirection | null } => {
     const outerItems = state.context === 'outer' ? resolveOuterItemsForLayout() : null
     const draggingSpan = getGridItemSpan(state.draggingItem)
-    const targetItem =
-      state.context === 'outer'
-        ? (outerItems?.find(item => getId(item) === hit.targetId) ?? null)
-        : null
+    const targetItem = state.context === 'outer' ? (resolveItemById(hit.targetId) ?? null) : null
     const targetSpan = targetItem ? getGridItemSpan(targetItem) : null
     const shouldUsePreviewAnchor =
       state.context === 'outer' &&

@@ -5,6 +5,9 @@ import {
   mapHotseatCellsToOrder,
   mapHotseatOrderToCells,
   normalizeHotseatEntries,
+  reconcileHotseatEntries,
+  reorderHotseatItemIds,
+  resolveHotseatDisplayEntries,
 } from './hotseatLayout.ts'
 
 function assert(condition, message) {
@@ -57,6 +60,39 @@ assert(normalized.filter(entry => entry?.kind === 'item').length === 1, '重复�
 assert(
   normalized[1]?.kind === 'placeholder' && normalized[1]?.placeholder === 'docker',
   '归一化应保留 Docker 占位项'
+)
+
+const displayEntries = resolveHotseatDisplayEntries(
+  [
+    { kind: 'item', id: 'old-a' },
+    createHotseatPlaceholder('divider'),
+    { kind: 'item', id: 'old-b' },
+  ],
+  ['a', 'b'],
+  1
+)
+assert(
+  displayEntries.map(entry => entry === null ? 'null' : entry.kind === 'item' ? entry.id : entry.placeholder).join('|') ===
+    'a|divider|null|b',
+  'Dock 拖动预览应保留占位项并在项目索引处插入空槽'
+)
+
+const reconciled = reconcileHotseatEntries(
+  [
+    { kind: 'item', id: 'old-a' },
+    createHotseatPlaceholder('divider'),
+    { kind: 'item', id: 'old-b' },
+  ],
+  ['b', 'a']
+)
+assert(
+  reconciled?.map(entry => entry === null ? 'null' : entry.kind === 'item' ? entry.id : entry.placeholder).join('|') ===
+    'b|divider|a',
+  'Dock 提交后应保留占位项并应用新的项目顺序'
+)
+assert(
+  reorderHotseatItemIds(['a', 'b', 'c'], 'c', 0).join('|') === 'c|a|b',
+  '键盘 Dock 重排应把项目移动到目标索引'
 )
 
 console.log('hotseatLayout 测试通过')

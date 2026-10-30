@@ -1,31 +1,26 @@
 import {
   closestCenter,
   DndContext,
-  useDroppable,
   type DragCancelEvent,
   type DragEndEvent,
   type DragMoveEvent,
   type DragStartEvent,
   type SensorDescriptor,
 } from '@dnd-kit/core'
-import { SortableContext, useSortable } from '@dnd-kit/sortable'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
-  type ReactNode,
   type RefObject,
 } from 'react'
 import { useReducedMotion } from 'framer-motion'
-import { Icon } from '../../Icon'
 import type { FolderSize, GridSpan } from '../model'
 import type { PageAnchorEntry } from '../domain/topLevelLayout'
-import { FolderCreatePreview } from './FolderVisuals'
-import { OuterFolderTile } from './OuterFolderTile'
-import { WidgetTile } from './WidgetTile'
+import { OuterGridPageLayer, type OuterGridPageData } from './OuterGridPageLayer'
 import { COLOROS_MOTION, MOTION_SPRING_EASING } from '../constants'
 import { resolveMotionDuration } from '../domain/motionTokens'
 
@@ -96,50 +91,6 @@ interface OuterGridViewProps {
   onSwitchPage?: (page: number) => void
 }
 
-interface KeyboardSortableGridItemBindings {
-  attributes: ReturnType<typeof useSortable>['attributes']
-  listeners: ReturnType<typeof useSortable>['listeners']
-  setNodeRef: ReturnType<typeof useSortable>['setNodeRef']
-}
-
-function KeyboardSortableGridItem({
-  id,
-  disabled,
-  children,
-}: {
-  id: string
-  disabled: boolean
-  children: (bindings: KeyboardSortableGridItemBindings) => ReactNode
-}) {
-  const { attributes, listeners, setNodeRef } = useSortable({
-    id,
-    disabled,
-    animateLayoutChanges: () => false,
-  })
-  return children({ attributes, listeners, setNodeRef })
-}
-
-function KeyboardGridCell({
-  id,
-  disabled,
-  itemHeight,
-}: {
-  id: string
-  disabled: boolean
-  itemHeight: number
-}) {
-  const { setNodeRef } = useDroppable({ id, disabled })
-  return (
-    <div
-      ref={setNodeRef}
-      data-grid-item
-      className="h-full w-full rounded-icon-tile border border-transparent bg-transparent"
-      style={{ minHeight: `${itemHeight}px` }}
-      aria-hidden="true"
-    />
-  )
-}
-
 export function OuterGridView({
   gridRef,
   gridWidth,
@@ -198,107 +149,92 @@ export function OuterGridView({
   const prefersReduced = useReducedMotion() ?? false
   const pageSlideMs = resolveMotionDuration(COLOROS_MOTION.workspacePageSnapMs, prefersReduced)
   const prevPageRef = useRef(currentPage)
+  const previousPageDataRef = useRef<OuterGridPageData | null>(null)
+  const [pageTransition, setPageTransition] = useState<{
+    from: OuterGridPageData
+    direction: 1 | -1
+  } | null>(null)
   const slideTimerRef = useRef<number | null>(null)
   const slideAnimationTokenRef = useRef(0)
   const slideAnimationsRef = useRef<Animation[]>([])
-  const snapshotCloneRef = useRef<HTMLDivElement | null>(null)
-  const prevGridSnapshotRef = useRef<HTMLDivElement | null>(null)
   const gridClipRef = useRef<HTMLDivElement | null>(null)
-  const highlightedOuterItemIdSet = new Set(highlightedOuterItemIds)
-  const occupiedCellIndices = new Set<number>()
-  pageAnchorEntries.forEach(entry => {
-    for (let row = entry.row; row < entry.row + entry.span.rows; row += 1) {
-      for (let col = entry.col; col < entry.col + entry.span.cols; col += 1) {
-        occupiedCellIndices.add(row * columns + col)
-      }
-    }
-  })
-
-  // Capture a detached DOM snapshot after every render for use as the "old page".
-  // Cloning keeps browser-managed attributes and nested nodes intact while
-  // avoiding a second React tree that could receive events during the slide.
-  useLayoutEffect(() => {
-    const grid = gridRef.current
-    if (grid && prevPageRef.current === currentPage) {
-      prevGridSnapshotRef.current = grid.cloneNode(true) as HTMLDivElement
-    }
-  })
+  const oldPageLayerRef = useRef<HTMLDivElement | null>(null)
+  const currentPageLayerRef = useRef<HTMLDivElement | null>(null)
+  const currentPageData: OuterGridPageData = {
+    page: currentPage,
+    entries: pageAnchorEntries,
+    dragContext,
+    dragPreviewSlotIndex,
+    dragFolderPreviewTargetId,
+    folderPreviewFreezeTargetId,
+    folderCreateTransitionTargetId,
+    hiddenOuterItemIds,
+    highlightedOuterItemIds,
+    previewFootprint,
+  }
 
   useLayoutEffect(() => {
-    const prevPage = prevPageRef.current
+    const previousPage = prevPageRef.current
+    const previousData = previousPageDataRef.current
+    if (previousPage !== currentPage && previousData && pageSlideMs > 0) {
+      setPageTransition({
+        from: previousData,
+        direction: currentPage > previousPage ? 1 : -1,
+      })
+    } else if (previousPage !== currentPage) {
+      setPageTransition(null)
+    }
     prevPageRef.current = currentPage
-    if (prevPage === currentPage) return
+    previousPageDataRef.current = currentPageData
+  }, [currentPage, currentPageData, pageSlideMs])
 
-    const grid = gridRef.current
+  useLayoutEffect(() => {
+    if (!pageTransition) return
+    const oldLayer = oldPageLayerRef.current
+    const currentLayer = currentPageLayerRef.current
     const clipContainer = gridClipRef.current
-    if (!grid || !clipContainer) return
+    if (!oldLayer || !currentLayer || !clipContainer) return
 
-    // Clean up any in-flight animation
     slideAnimationsRef.current.forEach(animation => animation.cancel())
     slideAnimationsRef.current = []
     if (slideTimerRef.current !== null) {
       window.clearTimeout(slideTimerRef.current)
       slideTimerRef.current = null
-      grid.style.transition = ''
-      grid.style.transform = ''
-    }
-    if (snapshotCloneRef.current) {
-      snapshotCloneRef.current.remove()
-      snapshotCloneRef.current = null
     }
 
-    const direction = currentPage > prevPage ? 1 : -1
+    const direction = pageTransition.direction
     const animationToken = ++slideAnimationTokenRef.current
-
-    if (pageSlideMs === 0) {
-      grid.style.transition = ''
-      grid.style.transform = ''
-      prevGridSnapshotRef.current = grid.cloneNode(true) as HTMLDivElement
-      return
-    }
-
-    // Only clip while a page slide is in-flight; otherwise let icon/folder
-    // shadows extend beyond the grid edges instead of being cut off.
     clipContainer.style.overflow = 'hidden'
-
-    // Create snapshot clone of the old page
-    const clone = document.createElement('div')
-    clone.className = grid.className
-    clone.style.cssText = grid.style.cssText
-    clone.style.position = 'absolute'
-    clone.style.inset = '0'
-    clone.style.pointerEvents = 'none'
-    const snapshot = prevGridSnapshotRef.current ?? (grid.cloneNode(true) as HTMLDivElement)
-    clone.replaceChildren(...Array.from(snapshot.childNodes, node => node.cloneNode(true)))
-    clipContainer.appendChild(clone)
-    snapshotCloneRef.current = clone
-
-    // Animate: old page slides out, new page slides in from opposite side
     const slideDistance = gridWidth
     const oldTransform = `translate3d(${-direction * slideDistance}px, 0, 0)`
     const newTransform = `translate3d(${direction * slideDistance}px, 0, 0)`
 
     const finishSlide = () => {
       if (slideAnimationTokenRef.current !== animationToken) return
+      if (slideTimerRef.current !== null) {
+        window.clearTimeout(slideTimerRef.current)
+        slideTimerRef.current = null
+      }
       slideAnimationsRef.current.forEach(animation => animation.cancel())
       slideAnimationsRef.current = []
-      grid.style.transition = ''
-      grid.style.transform = ''
-      clone.remove()
-      snapshotCloneRef.current = null
-      slideTimerRef.current = null
+      oldLayer.style.removeProperty('transition')
+      oldLayer.style.removeProperty('transform')
+      oldLayer.style.removeProperty('opacity')
+      currentLayer.style.removeProperty('transition')
+      currentLayer.style.removeProperty('transform')
       clipContainer.style.overflow = ''
+      setPageTransition(null)
     }
 
-    if (typeof clone.animate === 'function' && typeof grid.animate === 'function') {
-      const oldAnimation = clone.animate(
+    if (typeof oldLayer.animate === 'function' && typeof currentLayer.animate === 'function') {
+      const oldAnimation = oldLayer.animate(
         [
           { transform: 'translate3d(0, 0, 0)', opacity: 1 },
           { transform: oldTransform, opacity: 0 },
         ],
         { duration: pageSlideMs, easing: PAGE_SLIDE_EASING, fill: 'forwards' }
       )
-      const newAnimation = grid.animate(
+      const newAnimation = currentLayer.animate(
         [{ transform: newTransform }, { transform: 'translate3d(0, 0, 0)' }],
         { duration: pageSlideMs, easing: PAGE_SLIDE_EASING, fill: 'forwards' }
       )
@@ -306,24 +242,38 @@ export function OuterGridView({
       void Promise.allSettled([oldAnimation.finished, newAnimation.finished]).then(finishSlide)
     } else {
       // WebView fallback for engines without WAAPI support.
-      clone.style.transition = 'none'
-      clone.style.transform = 'translate3d(0, 0, 0)'
-      void clone.offsetWidth
-      clone.style.transition = `transform ${pageSlideMs}ms ${PAGE_SLIDE_EASING}, opacity ${pageSlideMs}ms ${PAGE_SLIDE_EASING}`
-      clone.style.transform = oldTransform
-      clone.style.opacity = '0'
-      grid.style.transition = 'none'
-      grid.style.transform = newTransform
-      void grid.offsetWidth
-      grid.style.transition = `transform ${pageSlideMs}ms ${PAGE_SLIDE_EASING}`
-      grid.style.transform = 'translate3d(0, 0, 0)'
+      oldLayer.style.transition = 'none'
+      oldLayer.style.transform = 'translate3d(0, 0, 0)'
+      void oldLayer.offsetWidth
+      oldLayer.style.transition = `transform ${pageSlideMs}ms ${PAGE_SLIDE_EASING}, opacity ${pageSlideMs}ms ${PAGE_SLIDE_EASING}`
+      oldLayer.style.transform = oldTransform
+      oldLayer.style.opacity = '0'
+      currentLayer.style.transition = 'none'
+      currentLayer.style.transform = newTransform
+      void currentLayer.offsetWidth
+      currentLayer.style.transition = `transform ${pageSlideMs}ms ${PAGE_SLIDE_EASING}`
+      currentLayer.style.transform = 'translate3d(0, 0, 0)'
     }
 
-    // Save new page snapshot after animation content is ready
-    prevGridSnapshotRef.current = grid.cloneNode(true) as HTMLDivElement
-
     slideTimerRef.current = window.setTimeout(finishSlide, pageSlideMs + 40)
-  }, [currentPage, gridRef, gridWidth, pageSlideMs])
+
+    return () => {
+      if (slideAnimationTokenRef.current !== animationToken) return
+      slideAnimationTokenRef.current += 1
+      slideAnimationsRef.current.forEach(animation => animation.cancel())
+      slideAnimationsRef.current = []
+      if (slideTimerRef.current !== null) {
+        window.clearTimeout(slideTimerRef.current)
+        slideTimerRef.current = null
+      }
+      oldLayer.style.removeProperty('transition')
+      oldLayer.style.removeProperty('transform')
+      oldLayer.style.removeProperty('opacity')
+      currentLayer.style.removeProperty('transition')
+      currentLayer.style.removeProperty('transform')
+      clipContainer.style.overflow = ''
+    }
+  }, [gridWidth, pageSlideMs, pageTransition])
 
   useEffect(() => {
     return () => {
@@ -334,17 +284,15 @@ export function OuterGridView({
         window.clearTimeout(slideTimerRef.current)
         slideTimerRef.current = null
       }
-      snapshotCloneRef.current?.remove()
-      snapshotCloneRef.current = null
-      const grid = gridRef.current
-      if (grid) {
-        grid.style.transition = ''
-        grid.style.transform = ''
-      }
+      oldPageLayerRef.current?.style.removeProperty('transition')
+      oldPageLayerRef.current?.style.removeProperty('transform')
+      oldPageLayerRef.current?.style.removeProperty('opacity')
+      currentPageLayerRef.current?.style.removeProperty('transition')
+      currentPageLayerRef.current?.style.removeProperty('transform')
       const clipContainer = gridClipRef.current
       if (clipContainer) clipContainer.style.overflow = ''
     }
-  }, [gridRef])
+  }, [])
 
   return (
     <DndContext
@@ -374,131 +322,70 @@ export function OuterGridView({
           </div>
         ) : null}
         <div ref={gridClipRef} className="relative h-full w-full">
-          <div
-            ref={gridRef}
-            className="grid h-full w-full content-start"
-            style={{
-              gridTemplateColumns: `repeat(${columns}, ${itemWidth}px)`,
-              gridTemplateRows: `repeat(${rows}, ${itemHeight}px)`,
-              gap: `${gridGap}px`,
-            }}
-          >
-            {Array.from({ length: pageCellCount }, (_, index) => {
-              return (
-                <KeyboardGridCell
-                  key={`cell-${currentPage}-${index}`}
-                  id={`cell:${currentPage}:${index}`}
-                  disabled={selectionMode || occupiedCellIndices.has(index)}
-                  itemHeight={itemHeight}
-                />
-              )
-            })}
-
-            {dragContext === 'outer' &&
-            dragPreviewSlotIndex !== null &&
-            previewFootprint !== null ? (
-              <div
-                className="pointer-events-none rounded-icon-tile border border-border/60 bg-background/35 dark:border-white/22 dark:bg-white/8"
-                style={{
-                  gridColumn: `${previewFootprint.col + 1} / span ${previewFootprint.span.cols}`,
-                  gridRow: `${previewFootprint.row + 1} / span ${previewFootprint.span.rows}`,
-                }}
-                aria-hidden="true"
+          {pageTransition ? (
+            <div
+              ref={oldPageLayerRef}
+              key={`page-transition-from-${pageTransition.from.page}`}
+              className="absolute inset-0 z-10 pointer-events-none"
+            >
+              <OuterGridPageLayer
+                data={pageTransition.from}
+                interactive={false}
+                columns={columns}
+                rows={rows}
+                itemWidth={itemWidth}
+                itemHeight={itemHeight}
+                gridGap={gridGap}
+                pageCellCount={pageCellCount}
+                iconConfig={iconConfig}
+                selectionMode={selectionMode}
+                selectedSet={selectedSet}
+                openFolderId={openFolderId}
+                activeFolderSharedLayoutId={activeFolderSharedLayoutId}
+                onToggleSelectIcon={onToggleSelectIcon}
+                onTilePointerDown={onTilePointerDown}
+                onTileClickCapture={onTileClickCapture}
+                onOpenFolder={onOpenFolder}
+                onLaunchIcon={onLaunchIcon}
+                onResizeFolder={onResizeFolder}
+                onResizeWidget={onResizeWidget}
+                onDissolveFolder={onDissolveFolder}
+                bindTileRef={bindTileRef}
+                reorderAnimationMs={reorderAnimationMs}
               />
-            ) : null}
-
-            <SortableContext items={pageAnchorEntries.map(entry => entry.id)}>
-              {pageAnchorEntries.map(entry => {
-                const hideItem = hiddenOuterItemIds.includes(entry.id)
-                const highlightedItem = highlightedOuterItemIdSet.has(entry.id)
-                const folderPreview =
-                  (dragContext === 'outer' && dragFolderPreviewTargetId === entry.id) ||
-                  folderPreviewFreezeTargetId === entry.id ||
-                  folderCreateTransitionTargetId === entry.id
-
-                return (
-                  <KeyboardSortableGridItem key={entry.id} id={entry.id} disabled={selectionMode}>
-                    {sortable => (
-                      <div
-                        ref={node => {
-                          sortable.setNodeRef(node)
-                          bindTileRef(entry.id, node)
-                        }}
-                        {...sortable.attributes}
-                        {...sortable.listeners}
-                        className={`relative justify-self-center self-start ${
-                          hideItem ? 'opacity-0' : 'opacity-100 transition-opacity duration-150'
-                        }`}
-                        style={{
-                          gridColumn: `${entry.col + 1} / span ${entry.span.cols}`,
-                          gridRow: `${entry.row + 1} / span ${entry.span.rows}`,
-                          width: `${entry.span.cols * itemWidth + Math.max(0, entry.span.cols - 1) * gridGap}px`,
-                          height: `${entry.span.rows * itemHeight + Math.max(0, entry.span.rows - 1) * gridGap}px`,
-                        }}
-                      >
-                        {entry.item.kind === 'icon' ? (
-                          <div
-                            className="relative touch-none"
-                            onPointerDown={event => onTilePointerDown(event, entry.id)}
-                            onClickCapture={onTileClickCapture}
-                          >
-                            <div
-                              className={`transition-opacity duration-150 ${
-                                folderPreview ? 'opacity-0' : 'opacity-100'
-                              }`}
-                            >
-                              <Icon
-                                icon={entry.item.icon}
-                                selectionKey={entry.item.key}
-                                selectionMode={selectionMode}
-                                selected={selectedSet.has(entry.item.key)}
-                                onToggleSelect={onToggleSelectIcon}
-                                highlighted={highlightedItem}
-                              />
-                            </div>
-                            <FolderCreatePreview
-                              active={folderPreview}
-                              icon={entry.item.icon}
-                              imgSize={iconConfig.imgSize}
-                              reorderAnimationMs={reorderAnimationMs}
-                              tileWidth={itemWidth}
-                              tileHeight={itemHeight}
-                            />
-                          </div>
-                        ) : entry.item.kind === 'folder' ? (
-                          <OuterFolderTile
-                            folder={entry.item}
-                            span={entry.span}
-                            slotWidth={itemWidth}
-                            slotHeight={itemHeight}
-                            gridGap={gridGap}
-                            folderPreview={folderPreview}
-                            folderOpen={openFolderId === entry.item.id}
-                            sharedLayoutActive={activeFolderSharedLayoutId === entry.item.id}
-                            selectionMode={selectionMode}
-                            onPointerDown={event => onTilePointerDown(event, entry.id)}
-                            onClickCapture={onTileClickCapture}
-                            onOpenFolder={onOpenFolder}
-                            onLaunchIcon={onLaunchIcon}
-                            onResizeFolder={onResizeFolder}
-                            onDissolveFolder={onDissolveFolder}
-                          />
-                        ) : (
-                          <WidgetTile
-                            widget={entry.item}
-                            span={entry.span}
-                            slotWidth={itemWidth}
-                            slotHeight={itemHeight}
-                            gridGap={gridGap}
-                            onResize={onResizeWidget}
-                          />
-                        )}
-                      </div>
-                    )}
-                  </KeyboardSortableGridItem>
-                )
-              })}
-            </SortableContext>
+            </div>
+          ) : null}
+          <div
+            ref={currentPageLayerRef}
+            key={`page-${currentPage}`}
+            className={pageTransition ? 'absolute inset-0 z-20' : 'relative h-full w-full'}
+          >
+            <OuterGridPageLayer
+              data={currentPageData}
+              interactive
+              gridRef={gridRef}
+              columns={columns}
+              rows={rows}
+              itemWidth={itemWidth}
+              itemHeight={itemHeight}
+              gridGap={gridGap}
+              pageCellCount={pageCellCount}
+              iconConfig={iconConfig}
+              selectionMode={selectionMode}
+              selectedSet={selectedSet}
+              openFolderId={openFolderId}
+              activeFolderSharedLayoutId={activeFolderSharedLayoutId}
+              onToggleSelectIcon={onToggleSelectIcon}
+              onTilePointerDown={onTilePointerDown}
+              onTileClickCapture={onTileClickCapture}
+              onOpenFolder={onOpenFolder}
+              onLaunchIcon={onLaunchIcon}
+              onResizeFolder={onResizeFolder}
+              onResizeWidget={onResizeWidget}
+              onDissolveFolder={onDissolveFolder}
+              bindTileRef={bindTileRef}
+              reorderAnimationMs={reorderAnimationMs}
+            />
           </div>
         </div>
 

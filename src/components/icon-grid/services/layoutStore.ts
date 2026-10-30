@@ -20,6 +20,7 @@ import type {
   PersistedPlacementContainer,
   ScrollGroupIcon,
   ScrollGroupMeta,
+  HotseatEntry,
 } from '../model'
 import { makeFolderId, SCROLL_GROUP_ICONS } from '../model'
 import type { DesktopIcon } from '../../../types'
@@ -156,6 +157,36 @@ const normalizePersistedReferences = (value: unknown): Array<string | null> | nu
   if (!Array.isArray(value)) return null
   if (value.some(entry => entry !== null && typeof entry !== 'string')) return null
   return value.map(entry => (typeof entry === 'string' ? entry : null))
+}
+
+const normalizePersistedHotseatEntries = (value: unknown): HotseatEntry[] | undefined | null => {
+  if (value === undefined || value === null) return undefined
+  if (!Array.isArray(value)) return null
+  const result: HotseatEntry[] = []
+  for (const entry of value) {
+    if (entry === null) {
+      result.push(null)
+      continue
+    }
+    if (!entry || typeof entry !== 'object') return null
+    const candidate = entry as { kind?: unknown; id?: unknown; placeholder?: unknown }
+    if (candidate.kind === 'item' && typeof candidate.id === 'string') {
+      if (candidate.id.trim().length === 0) return null
+      result.push({ kind: 'item', id: candidate.id })
+      continue
+    }
+    if (
+      candidate.kind === 'placeholder' &&
+      (candidate.placeholder === 'docker' ||
+        candidate.placeholder === 'subscribe' ||
+        candidate.placeholder === 'divider')
+    ) {
+      result.push({ kind: 'placeholder', placeholder: candidate.placeholder })
+      continue
+    }
+    return null
+  }
+  return result
 }
 
 const normalizePersistedPlacements = (value: unknown): PersistedPlacement[] | undefined | null => {
@@ -340,6 +371,7 @@ type PersistedLayoutPayload =
       checksum?: unknown
       placements?: unknown
       folderProfileId?: unknown
+      hotseatEntries?: unknown
     }
 
 const isFolderLayoutProfileId = (value: unknown): value is FolderLayoutProfileId =>
@@ -366,6 +398,7 @@ const buildIntegrityPayload = (layout: PersistedLayout) => ({
   scrollGroups: layout.scrollGroups,
   placements: layout.placements,
   folderProfileId: layout.folderProfileId,
+  hotseatEntries: layout.hotseatEntries,
 })
 
 export const serializeLayoutForIntegrity = (layout: PersistedLayout): string =>
@@ -474,6 +507,9 @@ export const parsePersistedLayout = (raw: string): PersistedLayout | null => {
       if (!isFolderLayoutProfileId(payload.folderProfileId)) return null
       result.folderProfileId = payload.folderProfileId
     }
+    const hotseatEntries = normalizePersistedHotseatEntries(payload.hotseatEntries)
+    if (hotseatEntries === null) return null
+    result.hotseatEntries = hotseatEntries
   }
   return result
 }
@@ -596,7 +632,8 @@ const buildPersistedLayout = (
   columns?: number,
   geometryKey?: string,
   scrollGroups?: ScrollGroupMeta[],
-  folderProfileId?: FolderLayoutProfileId
+  folderProfileId?: FolderLayoutProfileId,
+  hotseatEntries?: HotseatEntry[]
 ): PersistedLayout => ({
   items: serializeItems(items),
   slots,
@@ -610,6 +647,7 @@ const buildPersistedLayout = (
   geometryKey,
   scrollGroups,
   folderProfileId,
+  hotseatEntries,
 })
 
 const writePersistedLayoutSnapshot = (
@@ -663,7 +701,8 @@ export const writeLayout = async (
   geometryKey?: string,
   scrollGroups?: ScrollGroupMeta[],
   scope: LaunchpadLayoutScope = 'paged',
-  folderProfileId?: FolderLayoutProfileId
+  folderProfileId?: FolderLayoutProfileId,
+  hotseatEntries?: HotseatEntry[]
 ) => {
   const layout = buildPersistedLayout(
     items,
@@ -673,7 +712,8 @@ export const writeLayout = async (
     columns,
     geometryKey,
     scrollGroups,
-    folderProfileId
+    folderProfileId,
+    hotseatEntries
   )
   return writePersistedLayoutSnapshot(layout, scope, true)
 }

@@ -6,13 +6,17 @@ import {
   type DragEndEvent,
   type DragMoveEvent,
   type DragStartEvent,
+  type KeyboardCoordinateGetter,
   type SensorDescriptor,
   type SensorOptions,
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
-import { useState, type MutableRefObject } from 'react'
+import { useRef, useState, type MutableRefObject } from 'react'
 import type { DragState, PendingDrag } from '../state/types'
-import { resolveKeyboardGridCellCenter } from '../domain/keyboardGrid'
+import {
+  resolveKeyboardGridCellCenter,
+  resolveKeyboardPageTransition,
+} from '../domain/keyboardGrid'
 import { captureDragOriginFocus } from './dragFocus'
 
 const KEYBOARD_POINTER_ID = -1
@@ -28,6 +32,8 @@ interface UsePagedKeyboardDragWorkflowParams {
   tileRefs: MutableRefObject<Map<string, HTMLDivElement>>
   currentPageRef: MutableRefObject<number>
   pageSizeRef: MutableRefObject<number>
+  pageCount: number
+  setCurrentPage: (value: number | ((current: number) => number)) => void
   dragRef: MutableRefObject<DragState | null>
   pendingRef: MutableRefObject<PendingDrag | null>
   dragOriginFocusRef: MutableRefObject<HTMLElement | null>
@@ -60,6 +66,8 @@ export function usePagedKeyboardDragWorkflow({
   tileRefs,
   currentPageRef,
   pageSizeRef,
+  pageCount,
+  setCurrentPage,
   dragRef,
   pendingRef,
   dragOriginFocusRef,
@@ -72,8 +80,46 @@ export function usePagedKeyboardDragWorkflow({
   dragPointerRef,
 }: UsePagedKeyboardDragWorkflowParams): PagedKeyboardDragWorkflowResult {
   const [keyboardDragActive, setKeyboardDragActive] = useState(false)
+  const keyboardPointRef = useRef<{ x: number; y: number } | null>(null)
+
+  const pageAwareKeyboardCoordinates: KeyboardCoordinateGetter = (event, args) => {
+    const coordinates = sortableKeyboardCoordinates(event, args)
+    if (!coordinates) return coordinates
+
+    const gridRect = gridRef.current?.getBoundingClientRect()
+    if (!gridRect || (event.code !== 'ArrowLeft' && event.code !== 'ArrowRight')) {
+      keyboardPointRef.current = coordinates
+      return coordinates
+    }
+
+    const transition = resolveKeyboardPageTransition({
+      key: event.code,
+      currentPage: currentPageRef.current,
+      pageCount,
+      currentX: coordinates.x,
+      currentY: coordinates.y,
+      gridLeft: gridRect.left,
+      gridTop: gridRect.top,
+      gridRight: gridRect.right,
+      itemWidth,
+      itemHeight,
+      columns,
+      rows,
+      gridGap,
+    })
+    if (transition) {
+      currentPageRef.current = transition.page
+      setCurrentPage(transition.page)
+      keyboardPointRef.current = transition.point
+      return transition.point
+    }
+
+    keyboardPointRef.current = coordinates
+    return coordinates
+  }
+
   const keyboardSensors = useSensors(
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    useSensor(KeyboardSensor, { coordinateGetter: pageAwareKeyboardCoordinates })
   )
 
   const resolveKeyboardPoint = (itemId: string) => {
@@ -111,6 +157,7 @@ export function usePagedKeyboardDragWorkflow({
     const point = resolveKeyboardPoint(itemId)
     const node = tileRefs.current.get(itemId)
     if (!point || !node) return
+    keyboardPointRef.current = { x: point.x, y: point.y }
 
     dragOriginFocusRef.current = captureDragOriginFocus(node)
     pendingPointerCaptureTargetRef.current = null
@@ -138,7 +185,10 @@ export function usePagedKeyboardDragWorkflow({
     if (dragRef.current?.pointerId !== KEYBOARD_POINTER_ID) return
     const activeId = String(event.active.id)
     const overId = event.over ? String(event.over.id) : activeId
-    const point = resolveKeyboardPoint(overId) ?? resolveKeyboardPoint(activeId)
+    const point =
+      resolveKeyboardPoint(overId) ??
+      resolveKeyboardPoint(activeId) ??
+      keyboardPointRef.current
     if (point) scheduleDragMove(KEYBOARD_POINTER_ID, point.x, point.y)
   }
 
@@ -146,11 +196,15 @@ export function usePagedKeyboardDragWorkflow({
     if (dragRef.current?.pointerId === KEYBOARD_POINTER_ID) {
       const activeId = String(event.active.id)
       const overId = event.over ? String(event.over.id) : activeId
-      const point = resolveKeyboardPoint(overId) ?? resolveKeyboardPoint(activeId)
+      const point =
+        resolveKeyboardPoint(overId) ??
+        resolveKeyboardPoint(activeId) ??
+        keyboardPointRef.current
       if (point) flushDragMove(KEYBOARD_POINTER_ID, point.x, point.y)
       finishActiveDrag(KEYBOARD_POINTER_ID)
     }
     setKeyboardDragActive(false)
+    keyboardPointRef.current = null
   }
 
   const handleKeyboardDragCancel = (_event: DragCancelEvent) => {
@@ -158,6 +212,7 @@ export function usePagedKeyboardDragWorkflow({
       cancelActiveDrag(KEYBOARD_POINTER_ID)
     }
     setKeyboardDragActive(false)
+    keyboardPointRef.current = null
   }
 
   return {

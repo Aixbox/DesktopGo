@@ -1,8 +1,9 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type MutableRefObject } from 'react'
-import type { FolderItem, FolderSize, GridItem, IconItem } from '../model'
+import type { FolderItem, FolderSize, GridItem, HotseatEntry, IconItem } from '../model'
 import type { DragState } from '../state/types'
 import { getGridItemSpan, getId } from '../model'
 import { resolveOuterItemIds } from '../domain/dock'
+import { reconcileHotseatEntries } from '../domain/hotseatLayout'
 import { filterItemsByIds } from '../domain/gridItems'
 import {
   buildPersistedItemCoordinates,
@@ -26,6 +27,8 @@ interface UseScrollableFolderControllerParams {
   setOuterSlots: (slots: Array<string | null>) => void
   dockKeysRef: MutableRefObject<Array<string | null>>
   setDockKeys: (keys: Array<string | null>) => void
+  hotseatEntriesRef: MutableRefObject<HotseatEntry[] | undefined>
+  setHotseatEntries: (entries: HotseatEntry[] | undefined) => void
   dockEnabled: boolean
   columns: number
   pageSizeRef: MutableRefObject<number>
@@ -73,6 +76,8 @@ export function useScrollableFolderController({
   setOuterSlots,
   dockKeysRef,
   setDockKeys,
+  hotseatEntriesRef,
+  setHotseatEntries,
   dockEnabled,
   columns,
   pageSizeRef,
@@ -313,6 +318,9 @@ export function useScrollableFolderController({
     setItems(result.items)
     setOuterSlots(result.outerSlots)
     setDockKeys(result.dockKeys)
+    const nextHotseatEntries = reconcileHotseatEntries(hotseatEntriesRef.current, result.dockKeys)
+    hotseatEntriesRef.current = nextHotseatEntries
+    setHotseatEntries(nextHotseatEntries)
     if (openFolderId === folderId) {
       closeFolderImmediately()
     }

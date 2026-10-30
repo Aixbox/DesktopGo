@@ -36,7 +36,7 @@ import { DockFolderCreatePreview } from './DockFolderCreatePreview'
 import { WidgetTile } from './WidgetTile'
 import {
   getHotseatCell,
-  normalizeHotseatEntries,
+  resolveHotseatDisplayEntries,
   type HotseatEntry,
   type HotseatOrientation,
   type HotseatProfile,
@@ -69,6 +69,8 @@ interface DockBarProps {
   bindDockSlotRef: (index: number, node: HTMLDivElement | null) => void
   bindDockItemRef: (id: string, node: HTMLDivElement | null) => void
   onDockItemPointerDown: (event: ReactPointerEvent<HTMLDivElement>, id: string) => void
+  onDockKeyboardKeyDown: (event: ReactKeyboardEvent<HTMLElement>, id: string) => void
+  dockKeyboardActiveId?: string | null
   onDockItemClickCapture: (event: ReactMouseEvent<HTMLDivElement>) => void
   onDockAutoScroll: () => void
   onLaunchIcon: (path: string) => void
@@ -158,6 +160,8 @@ export function DockBar({
   bindDockSlotRef,
   bindDockItemRef,
   onDockItemPointerDown,
+  onDockKeyboardKeyDown,
+  dockKeyboardActiveId = null,
   onDockItemClickCapture,
   onDockAutoScroll,
   onLaunchIcon,
@@ -184,13 +188,15 @@ export function DockBar({
   const [isIndicatorDragging, setIsIndicatorDragging] = useState(false)
   const dockButtonSize = Math.max(iconImageSize + 12, 52)
   const isVerticalHotseat = hotseatOrientation === 'vertical'
-  const renderEntries = normalizeHotseatEntries(
-    hotseatEntries ?? displaySlots.map(id => (id ? { kind: 'item', id } : null)),
-    {
-      count: Math.max(1, hotseatEntries?.length ?? displaySlots.length),
-      orientation: hotseatOrientation,
-      rtl: documentDirection === 'rtl',
-    }
+  const showInsertionPreview =
+    dragContext === 'dock' &&
+    dockPreviewIndex !== null &&
+    dragFolderPreviewTargetId === null &&
+    folderPreviewFreezeTargetId === null
+  const renderEntries = resolveHotseatDisplayEntries(
+    hotseatEntries,
+    displaySlots,
+    showInsertionPreview ? dockPreviewIndex : null
   )
   const hotseatProfile: HotseatProfile = {
     count: renderEntries.length,
@@ -200,12 +206,6 @@ export function DockBar({
   const singleSlotFolderMetrics = getDesktopSingleSlotFolderMetrics(iconTileWidth, iconTileHeight)
   const dockContentWidth = resolveDockContentWidth(renderEntries.length, dockButtonSize)
   const dockContentHeight = resolveDockContentWidth(renderEntries.length, dockButtonSize)
-  const showInsertionPreview =
-    dragContext === 'dock' &&
-    dockPreviewIndex !== null &&
-    dragFolderPreviewTargetId === null &&
-    folderPreviewFreezeTargetId === null
-
   const hasVisibleItems = displaySlots.some(slot => typeof slot === 'string')
 
   const updateOverflowState = useCallback(() => {
@@ -664,6 +664,15 @@ export function DockBar({
           transitionTimingFunction: DOCK_CONTAINER_EASING,
         }}
       >
+        {dockKeyboardActiveId ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className="pointer-events-none absolute left-1/2 top-1 z-10 -translate-x-1/2 rounded-full border border-primary/35 bg-background/85 px-2.5 py-1 text-[10px] text-foreground/80 shadow-sm backdrop-blur-sm dark:border-sky-200/35 dark:bg-black/55 dark:text-white/85"
+          >
+            方向键移动 Dock 项目，Enter 或 Space 确认，Esc 取消
+          </div>
+        ) : null}
         <div
           ref={scrollerRef}
           id="dock-scroller"
@@ -735,6 +744,8 @@ export function DockBar({
                             onDockItemPointerDown(event, id)
                           }}
                           onClickCapture={onDockItemClickCapture}
+                          onKeyDown={event => onDockKeyboardKeyDown(event, id)}
+                          aria-grabbed={dockKeyboardActiveId === id}
                         >
                           <button
                             type="button"
@@ -812,6 +823,8 @@ export function DockBar({
                               onDockItemPointerDown(event, id)
                             }}
                             onClickCapture={onDockItemClickCapture}
+                            onKeyDown={event => onDockKeyboardKeyDown(event, id)}
+                            aria-grabbed={dockKeyboardActiveId === id}
                             onContextMenu={event => {
                               event.stopPropagation()
                             }}
@@ -899,6 +912,9 @@ export function DockBar({
                           onDockItemPointerDown(event, id)
                         }}
                         onClickCapture={onDockItemClickCapture}
+                        tabIndex={0}
+                        aria-grabbed={dockKeyboardActiveId === id}
+                        onKeyDown={event => onDockKeyboardKeyDown(event, id)}
                       >
                         <WidgetTile
                           widget={item}

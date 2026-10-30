@@ -23,6 +23,75 @@ export interface KeyboardGridPoint {
   y: number
 }
 
+export interface KeyboardPageTransitionInput {
+  key: string
+  currentPage: number
+  pageCount: number
+  currentX: number
+  currentY: number
+  gridLeft: number
+  gridTop: number
+  gridRight: number
+  itemWidth: number
+  itemHeight: number
+  columns: number
+  rows: number
+  gridGap: number
+}
+
+export interface KeyboardPageTransition {
+  page: number
+  point: KeyboardGridPoint
+}
+
+/** Move the keyboard drag to the adjacent paged grid without changing row. */
+export const resolveKeyboardPageTransition = ({
+  key,
+  currentPage,
+  pageCount,
+  currentX,
+  currentY,
+  gridLeft,
+  gridTop,
+  gridRight,
+  itemWidth,
+  itemHeight,
+  columns,
+  rows,
+  gridGap,
+}: KeyboardPageTransitionInput): KeyboardPageTransition | null => {
+  const movingRight = key === 'ArrowRight'
+  const movingLeft = key === 'ArrowLeft'
+  if (!movingRight && !movingLeft) return null
+
+  const safePageCount = Math.max(1, Math.floor(pageCount))
+  const safePage = Math.max(0, Math.min(safePageCount - 1, Math.floor(currentPage)))
+  const safeColumns = Math.max(1, Math.floor(columns))
+  const safeRows = Math.max(1, Math.floor(rows))
+  const edgeThreshold = Math.max(8, gridGap)
+  const atPageEdge = movingRight
+    ? currentX >= gridRight - itemWidth - edgeThreshold
+    : currentX <= gridLeft + edgeThreshold
+  if (!atPageEdge) return null
+
+  const nextPage = movingRight ? safePage + 1 : safePage - 1
+  if (nextPage < 0 || nextPage >= safePageCount) return null
+
+  const safeStrideY = Math.max(1, itemHeight + gridGap)
+  const row = Math.max(
+    0,
+    Math.min(safeRows - 1, Math.floor(Math.max(0, currentY - gridTop) / safeStrideY))
+  )
+  const col = movingRight ? 0 : safeColumns - 1
+  return {
+    page: nextPage,
+    point: {
+      x: gridLeft + col * (itemWidth + gridGap),
+      y: gridTop + row * safeStrideY,
+    },
+  }
+}
+
 /** Parse the ids used by empty paged-grid droppable cells. */
 export const parseKeyboardGridCellId = (id: string): KeyboardGridCellTarget | null => {
   const match = /^cell:(\d+):(\d+)$/.exec(id)

@@ -49,6 +49,8 @@ import { resolveGridPreviewFootprint } from './icon-grid/domain/gridPreviewFootp
 import { EdgeGlow } from './icon-grid/views/EdgeGlow'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
 import { DockBar } from './icon-grid/views/DockBar'
+import { useDockKeyboardReorder } from './icon-grid/hooks/useDockKeyboardReorder'
+import { reconcileHotseatEntries } from './icon-grid/domain/hotseatLayout'
 import {
   dissolveFolderInTopLevelLayout,
   getFolderChildSelectionsByIds,
@@ -132,6 +134,7 @@ export function IconGrid({
     itemsRef,
     outerSlotsRef,
     dockKeysRef,
+    hotseatEntriesRef,
     currentPageRef,
     pageSizeRef,
     columns,
@@ -145,7 +148,10 @@ export function IconGrid({
     importHighlightIds,
     outerSlots,
     setOuterSlots,
+    dockKeys,
     setDockKeys,
+    hotseatEntries,
+    setHotseatEntries,
     layoutDimensionsTracker,
     activeDockKeys,
     outerItemIds,
@@ -216,6 +222,12 @@ export function IconGrid({
     items.forEach(item => map.set(getId(item), item))
     return map
   }, [items])
+  const dockKeyboard = useDockKeyboardReorder({
+    dockKeys,
+    setDockKeys,
+    hotseatEntries,
+    setHotseatEntries,
+  })
 
   const openFolder = useMemo(() => {
     if (!openFolderId) return null
@@ -316,11 +328,14 @@ export function IconGrid({
     setItems,
     outerSlotsRef,
     dockKeysRef,
+    hotseatEntriesRef,
     setOuterSlots,
     setDockKeys,
+    setHotseatEntries,
     currentPageRef,
     setCurrentPage,
     pageSizeRef,
+    pageCount: Math.max(1, Math.ceil(Math.max(pageSize, outerSlots.length) / pageSize)),
     openFolderId: visibleOpenFolderId,
     setOpenFolderId,
   })
@@ -939,6 +954,7 @@ export function IconGrid({
         {dockEnabled ? (
           <DockBar
             displaySlots={dockRenderSlots}
+            hotseatEntries={hotseatEntries}
             itemById={outerViewItemById}
             dockPreviewIndex={dragState?.dockPreviewIndex ?? null}
             dragContext={dragState?.context ?? null}
@@ -969,6 +985,8 @@ export function IconGrid({
               else dockItemRefs.current.delete(id)
             }}
             onDockItemPointerDown={handleDockItemPointerDown}
+            onDockKeyboardKeyDown={dockKeyboard.handleKeyDown}
+            dockKeyboardActiveId={dockKeyboard.activeId}
             onDockItemClickCapture={handleTileClickCapture}
             onDockAutoScroll={syncDockDragPreview}
             onLaunchIcon={path => {
@@ -976,7 +994,9 @@ export function IconGrid({
             }}
             onOpenFolder={openFolderWithAnimation}
             onRemoveItem={key => {
-              setDockKeys(current => current.filter(entry => entry !== key))
+              const nextDockKeys = dockKeys.filter(entry => entry !== key)
+              setDockKeys(nextDockKeys)
+              setHotseatEntries(reconcileHotseatEntries(hotseatEntries, nextDockKeys))
             }}
           />
         ) : null}

@@ -8,7 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type SetStateAction,
 } from 'react'
-import type { GridItem, HoverZone } from '../model'
+import type { GridItem, HotseatEntry, HoverZone } from '../model'
 import type { FolderLayoutProfile } from '../domain/folderLayout'
 import { getId } from '../model'
 import { areSlotsEqual } from '../domain/slots'
@@ -90,11 +90,14 @@ interface UseIconGridDragWorkflowParams {
   setItems: Dispatch<SetStateAction<GridItem[]>>
   outerSlotsRef: MutableRefObject<Array<string | null>>
   dockKeysRef: MutableRefObject<Array<string | null>>
+  hotseatEntriesRef: MutableRefObject<HotseatEntry[] | undefined>
   setOuterSlots: Dispatch<SetStateAction<Array<string | null>>>
   setDockKeys: Dispatch<SetStateAction<Array<string | null>>>
+  setHotseatEntries: Dispatch<SetStateAction<HotseatEntry[] | undefined>>
   currentPageRef: MutableRefObject<number>
   setCurrentPage: Dispatch<SetStateAction<number>>
   pageSizeRef: MutableRefObject<number>
+  pageCount: number
   openFolderId: string | null
   setOpenFolderId: Dispatch<SetStateAction<string | null>>
 }
@@ -156,11 +159,14 @@ export function useIconGridDragWorkflow({
   setItems,
   outerSlotsRef,
   dockKeysRef,
+  hotseatEntriesRef,
   setOuterSlots,
   setDockKeys,
+  setHotseatEntries,
   currentPageRef,
   setCurrentPage,
   pageSizeRef,
+  pageCount,
   openFolderId,
   setOpenFolderId,
 }: UseIconGridDragWorkflowParams): UseIconGridDragWorkflowResult {
@@ -369,6 +375,7 @@ export function useIconGridDragWorkflow({
     tileRefs,
     dockSlotRefs,
     dockItemRefs,
+    itemById,
     itemsRef,
     outerSlotsRef,
     dockKeysRef,
@@ -408,9 +415,11 @@ export function useIconGridDragWorkflow({
     itemsRef,
     outerSlotsRef,
     dockKeysRef,
+    hotseatEntriesRef,
     setItems,
     setOuterSlots,
     setDockKeys,
+    setHotseatEntries,
     dragRef,
     setDragState: commitDragState,
     clearEdgeSwitchTimer,
@@ -826,6 +835,8 @@ export function useIconGridDragWorkflow({
     tileRefs,
     currentPageRef,
     pageSizeRef,
+    pageCount,
+    setCurrentPage,
     dragRef,
     pendingRef,
     dragOriginFocusRef,

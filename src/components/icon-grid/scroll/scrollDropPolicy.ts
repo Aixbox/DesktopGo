@@ -416,6 +416,7 @@ const applyPagedOuterDrop = ({
 const placeIdsIntoSlotsRowMajor = ({
   slots,
   items,
+  itemById,
   ids,
   pageStart,
   pageSize,
@@ -423,6 +424,7 @@ const placeIdsIntoSlotsRowMajor = ({
 }: {
   slots: Array<string | null>
   items: GridItem[]
+  itemById?: ReadonlyMap<string, GridItem>
   ids: string[]
   pageStart: number
   pageSize: number
@@ -437,7 +439,7 @@ const placeIdsIntoSlotsRowMajor = ({
     anchorIndex += 1
   ) {
     const itemId = remainingIds[0]
-    const item = items.find(candidate => getId(candidate) === itemId)
+    const item = itemById?.get(itemId) ?? items.find(candidate => getId(candidate) === itemId)
     if (!item) {
       remainingIds.shift()
       continue
@@ -481,6 +483,7 @@ const placeIdsIntoInsertedPagesRowMajor = ({
 }) => {
   const nextSlots = [...prefixSlots]
   const remainingIds = [...ids]
+  const itemById = new Map(items.map(item => [getId(item), item]))
   let targetPageStart = pageStart
 
   while (remainingIds.length > 0) {
@@ -490,6 +493,7 @@ const placeIdsIntoInsertedPagesRowMajor = ({
     const placement = placeIdsIntoSlotsRowMajor({
       slots: nextSlots,
       items,
+      itemById,
       ids: remainingIds,
       pageStart: targetPageStart,
       pageSize,
@@ -572,8 +576,9 @@ const insertIntoPageFromAnchor = ({
   }
 
   const remainingCarryIds: string[] = []
+  const itemById = new Map(items.map(item => [getId(item), item]))
   carryIds.forEach(id => {
-    const item = items.find(candidate => getId(candidate) === id)
+    const item = itemById.get(id)
     if (!item) return
     const span = getGridItemSpan(item)
     let placed = false
@@ -650,6 +655,7 @@ const stabilizeMultiDropPage = ({
   const nextPagePlacement = placeIdsIntoSlotsRowMajor({
     slots: [...nextSlots, ...nextPageSlots],
     items,
+    itemById: new Map(items.map(item => [getId(item), item])),
     ids: insertedPageQueue,
     pageStart: pageEnd,
     pageSize,

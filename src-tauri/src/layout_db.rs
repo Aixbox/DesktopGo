@@ -11,6 +11,19 @@ CREATE TABLE IF NOT EXISTS kv_store (
   updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 )
 "#;
+const CREATE_LAYOUT_PERFORMANCE_TABLE_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS layout_performance (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  phase TEXT NOT NULL,
+  duration_ms REAL NOT NULL,
+  timestamp_ms INTEGER NOT NULL,
+  metadata TEXT
+)
+"#;
+const CREATE_LAYOUT_PERFORMANCE_INDEX_SQL: &str = r#"
+CREATE INDEX IF NOT EXISTS idx_layout_performance_timestamp
+  ON layout_performance(timestamp_ms DESC)
+"#;
 const UPSERT_KV_SQL: &str = r#"
 INSERT INTO kv_store (key, value, updated_at)
 VALUES (?1, ?2, strftime('%s', 'now'))
@@ -43,6 +56,10 @@ pub(crate) fn open_db(app_handle: &tauri::AppHandle) -> Result<Connection, Strin
         .map_err(|e| format!("Failed to open SQLite database {:?}: {}", db_path, e))?;
     conn.execute(CREATE_KV_TABLE_SQL, [])
         .map_err(|e| format!("Failed to initialize SQLite schema: {}", e))?;
+    conn.execute(CREATE_LAYOUT_PERFORMANCE_TABLE_SQL, [])
+        .map_err(|e| format!("Failed to initialize layout performance schema: {}", e))?;
+    conn.execute(CREATE_LAYOUT_PERFORMANCE_INDEX_SQL, [])
+        .map_err(|e| format!("Failed to initialize layout performance index: {}", e))?;
     crate::layout_versions::ensure_schema(&conn)?;
     Ok(conn)
 }
