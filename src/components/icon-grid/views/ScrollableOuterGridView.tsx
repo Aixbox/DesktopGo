@@ -327,7 +327,7 @@ export function ScrollableOuterGridView({
                               else gridItemRefs.current.delete(entry.id)
                             }}
                             data-scroll-sortable-id={entry.id}
-                            className={`relative touch-pan-y justify-self-center self-start ${
+                            className={`relative touch-pan-y overflow-visible justify-self-center self-start ${
                               activeItem
                                 ? 'pointer-events-none opacity-0'
                                 : `${hideItem ? 'opacity-0' : 'opacity-100 transition-opacity duration-[220ms]'}`

@@ -608,7 +608,7 @@ function OuterFolderTileComponent({
       <ContextMenuTrigger asChild>
         <div
           data-icon
-          className="relative h-full w-full touch-none"
+          className="relative h-full w-full touch-none overflow-visible"
           onPointerDown={onPointerDown}
           onClickCapture={onClickCapture}
         >

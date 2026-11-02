@@ -174,7 +174,7 @@ export function OuterGridPageLayer({
         }}
         {...(interactive ? sortable?.attributes : {})}
         {...(interactive ? sortable?.listeners : {})}
-        className={`relative justify-self-center self-start ${
+        className={`relative overflow-visible justify-self-center self-start ${
           hideItem ? 'opacity-0' : 'opacity-100 transition-opacity duration-150'
         }`}
         style={{

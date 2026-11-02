@@ -4,6 +4,8 @@ import {
   FOLDER_RESIZE_HIGH_SLOPE,
   FOLDER_RESIZE_LOW_SLOPE,
   folderSizeFromSpan,
+  getFolderResizeArcPath,
+  getFolderResizeHandlePlacement,
   getFolderResizeVisualGeometry,
   getFolderResizeThreshold,
   resolveFolderResizeGesture,
@@ -106,4 +108,22 @@ test('resize frame geometry follows the resource-backed 1x1 and expanded branche
   assert.equal(getFolderResizeVisualGeometry({ cols: 2, rows: 2 }, true).hotSize, 46)
   assert.equal(getFolderResizeVisualGeometry({ cols: 2, rows: 2 }, true).handleRadius, 18)
   assert.equal(getFolderResizeVisualGeometry({ cols: 2, rows: 2 }, true).frameStrokeWidth, 4)
+})
+
+test('resize handle placement keeps the arc on the folder corner in both directions', () => {
+  const geometry = getFolderResizeVisualGeometry({ cols: 2, rows: 2 }, false)
+  assert.deepEqual(getFolderResizeHandlePlacement(false, geometry), {
+    side: 'right',
+    horizontalInset: 10,
+    bottomInset: 16,
+  })
+  assert.deepEqual(getFolderResizeHandlePlacement(true, geometry), {
+    side: 'left',
+    horizontalInset: 10,
+    bottomInset: 16,
+  })
+})
+
+test('resize arc uses the inside bottom-corner sweep', () => {
+  assert.equal(getFolderResizeArcPath(46, 18, 6), 'M 28 46 A 18 18 0 0 0 46 28')
 })

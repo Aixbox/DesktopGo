@@ -1,6 +1,10 @@
 import type { FolderSize, GridSpan } from '../model'
 import { useFolderResizeInteraction } from '../hooks/useFolderResizeInteraction'
-import { getFolderResizeVisualGeometry } from '../domain/folderResizePolicy'
+import {
+  getFolderResizeArcPath,
+  getFolderResizeHandlePlacement,
+  getFolderResizeVisualGeometry,
+} from '../domain/folderResizePolicy'
 
 interface FolderResizeHandleProps {
   visible: boolean
@@ -54,18 +58,15 @@ function ResizeArc({
   strokeWidth: number
   rtl: boolean
 }) {
-  const safeRadius = Math.min(radius, Math.max(1, size - strokeWidth))
-  const start = size - safeRadius
-  const end = size
   return (
     <svg
       aria-hidden="true"
-      className="h-full w-full"
+      className="h-full w-full overflow-visible"
       viewBox={`0 0 ${size} ${size}`}
-      style={rtl ? { transform: 'scaleX(-1)' } : undefined}
+      style={rtl ? { transform: 'scaleX(-1)', overflow: 'visible' } : { overflow: 'visible' }}
     >
       <path
-        d={`M ${start} ${end} A ${safeRadius} ${safeRadius} 0 0 1 ${end} ${start}`}
+        d={getFolderResizeArcPath(size, radius, strokeWidth)}
         fill="none"
         stroke="currentColor"
         strokeWidth={strokeWidth}
@@ -107,24 +108,25 @@ export function FolderResizeHandle({
   const paddedFrameHeight = frameHeight + geometry.backgroundPaddingY * 2
   const frameLeft = `calc(50% - ${paddedFrameWidth / 2}px)`
   const frameTopWithPadding = frameTop - geometry.backgroundPaddingY
-  const offsetX = geometry.backgroundPaddingX
-  const offsetY = geometry.backgroundPaddingY
+  const handlePlacement = getFolderResizeHandlePlacement(rtl, geometry)
 
   return (
     <div
       data-folder-resize-frame={interaction.active ? 'active' : 'idle'}
-      className="pointer-events-none absolute z-40"
+      className="pointer-events-none absolute z-40 overflow-visible"
       style={{
         left: frameLeft,
         top: frameTopWithPadding,
         width: paddedFrameWidth,
         height: paddedFrameHeight,
+        overflow: 'visible',
       }}
     >
       <svg
-        className="pointer-events-none absolute inset-0 h-full w-full overflow-visible text-black/20 dark:text-white/60"
+        className="pointer-events-none absolute inset-0 h-full w-full overflow-visible text-white/60 dark:text-black/60"
         viewBox={`0 0 ${Math.max(1, paddedFrameWidth)} ${Math.max(1, paddedFrameHeight)}`}
         preserveAspectRatio="none"
+        style={{ overflow: 'visible' }}
       >
         <ResizeFrameStroke
           active={interaction.active}
@@ -137,12 +139,15 @@ export function FolderResizeHandle({
         type="button"
         aria-label="调整文件夹大小"
         title="拖动调整文件夹大小"
-        className="pointer-events-auto absolute touch-none rounded-full border-0 bg-transparent p-0 text-[#808080] outline-none focus-visible:ring-2 focus-visible:ring-primary/60 dark:text-white"
+        className="pointer-events-auto absolute touch-none overflow-visible rounded-full border-0 bg-transparent p-0 !text-white outline-none focus-visible:ring-2 focus-visible:ring-primary/60 dark:!text-black"
         style={{
           width: interaction.hotSize,
           height: interaction.hotSize,
-          bottom: -offsetY,
-          ...(rtl ? { left: -offsetX } : { right: -offsetX }),
+          bottom: handlePlacement.bottomInset,
+          overflow: 'visible',
+          ...(handlePlacement.side === 'left'
+            ? { left: handlePlacement.horizontalInset }
+            : { right: handlePlacement.horizontalInset }),
         }}
         onPointerDown={interaction.startPointerResize}
         onPointerMove={interaction.movePointerResize}

@@ -39,6 +39,12 @@ export interface FolderResizeVisualGeometry {
   backgroundPaddingY: number
 }
 
+export interface FolderResizeHandlePlacement {
+  side: 'left' | 'right'
+  horizontalInset: number
+  bottomInset: number
+}
+
 /** Resource-backed resize-frame geometry from OplusLauncher 17.3.12. */
 export const getFolderResizeVisualGeometry = (
   span: GridSpan,
@@ -53,6 +59,35 @@ export const getFolderResizeVisualGeometry = (
     backgroundPaddingX: 10,
     backgroundPaddingY: 16,
   }
+}
+
+/**
+ * The resize frame is expanded around the folder background. Place the hot
+ * region back inside that expansion so its arc overlaps the folder corner.
+ */
+export const getFolderResizeHandlePlacement = (
+  rtl: boolean,
+  geometry: Pick<FolderResizeVisualGeometry, 'backgroundPaddingX' | 'backgroundPaddingY'>
+): FolderResizeHandlePlacement => ({
+  side: rtl ? 'left' : 'right',
+  horizontalInset: Math.max(0, geometry.backgroundPaddingX),
+  bottomInset: Math.max(0, geometry.backgroundPaddingY),
+})
+
+/**
+ * Return the LTR bottom-corner arc. Sweep flag 0 keeps the arc inside the
+ * folder corner; sweep flag 1 selects the mirrored outside arc.
+ */
+export const getFolderResizeArcPath = (
+  size: number,
+  radius: number,
+  strokeWidth: number
+): string => {
+  const safeSize = Math.max(1, size)
+  const safeStrokeWidth = Math.max(0, strokeWidth)
+  const safeRadius = Math.min(Math.max(1, radius), Math.max(1, safeSize - safeStrokeWidth))
+  const start = safeSize - safeRadius
+  return `M ${start} ${safeSize} A ${safeRadius} ${safeRadius} 0 0 0 ${safeSize} ${start}`
 }
 
 const safePositive = (value: number): number => (Number.isFinite(value) && value > 0 ? value : 1)
