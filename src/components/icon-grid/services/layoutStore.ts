@@ -77,7 +77,7 @@ export const getLayoutWriteDiagnostic = (
 export const serializeItems = (items: GridItem[]): PersistedItem[] =>
   items.map<PersistedItem>(item =>
     item.kind === 'icon'
-      ? { type: 'icon', key: item.key }
+      ? { type: 'icon', key: item.key, ...(item.size ? { size: item.size } : {}) }
       : item.kind === 'folder'
         ? {
             type: 'folder',
@@ -805,7 +805,7 @@ const hydrateItemsWithFolderAliases = (
         const iconItem = iconMap.get(key)
         if (!iconItem) return
         consumed.add(key)
-        result.push(iconItem)
+        result.push(item.size ? { ...iconItem, size: item.size } : iconItem)
         return
       }
 

@@ -13,7 +13,6 @@ const getPersistedItemId = (item: PersistedItem): string => {
 }
 
 const getPersistedItemSpan = (item: PersistedItem): { spanX: number; spanY: number } => {
-  if (item.type === 'icon') return { spanX: 1, spanY: 1 }
   if (item.type === 'widget') {
     return {
       spanX: Math.max(1, Math.floor(item.spanX)),
@@ -251,7 +250,7 @@ export const buildCanonicalPlacements = (layout: PersistedLayout): PersistedPlac
     if (placedIds.has(id)) return
     const item = itemById.get(id)
     if (!item) return
-    const span = getPersistedItemSpan(item)
+    const span = item.type === 'icon' ? { spanX: 1, spanY: 1 } : getPersistedItemSpan(item)
     placements.push({
       id,
       container: 'dock',

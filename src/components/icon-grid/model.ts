@@ -7,9 +7,12 @@ export type IconItem = {
   kind: 'icon'
   key: string
   icon: DesktopIcon
+  /** Workspace footprint; absent in legacy layouts and folder children means 1x1. */
+  size?: TileSize
 }
 
-export type FolderSize = '1x1' | '1x2' | '2x1' | '2x2'
+export type TileSize = '1x1' | '1x2' | '2x1' | '2x2'
+export type FolderSize = TileSize
 
 /** Persisted folder profile identifiers mirror the ColorOS device modes. */
 export type FolderLayoutProfileId = 'standard' | 'simple' | 'big'
@@ -137,6 +140,7 @@ export type PersistedItem =
   | {
       type: 'icon'
       key: string
+      size?: TileSize
     }
   | {
       type: 'folder'
@@ -218,7 +222,6 @@ export const getId = (item: GridItem): string =>
   item.kind === 'icon' ? item.key : `${item.kind}:${item.id}`
 
 export const getGridItemSpan = (item: GridItem): GridSpan => {
-  if (item.kind === 'icon') return { cols: 1, rows: 1 }
   if (item.kind === 'widget') {
     return {
       cols: Math.max(1, Math.floor(item.spanX)),
@@ -243,4 +246,17 @@ export const makeFolderId = () => {
     return crypto.randomUUID()
   }
   return `folder-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+export const isMultiCellGridItem = (item: GridItem): boolean => {
+  const span = getGridItemSpan(item)
+  return span.cols > 1 || span.rows > 1
+}
+
+/** Folder child grids always use one cell, independent of the old workspace footprint. */
+export const asFolderChild = (item: IconItem): IconItem => {
+  if (!item.size) return item
+  const child = { ...item }
+  delete child.size
+  return child
 }

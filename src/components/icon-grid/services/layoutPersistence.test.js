@@ -157,6 +157,23 @@ function mockDatabase(t, initialEntries = []) {
 }
 
 for (const scope of ['paged', 'scroll']) {
+  for (const size of ['1x1', '1x2', '2x1', '2x2']) {
+    test(`${scope}: ordinary icon ${size} survives saving and a cold restart`, async t => {
+      mockDatabase(t)
+      const store = await import(`./layoutStore.ts?icon-size-${scope}-${size}`)
+      const icons = fixture().icons
+      const app = { kind: 'icon', key: icons[0].path, icon: icons[0], size }
+      const slots = [app.key, ...Array(15).fill(null)]
+      await store.writeLayout([app], slots, [], 16, 4, undefined, undefined, scope)
+      const cold = await import(`./layoutStore.ts?icon-restart-${scope}-${size}`)
+      const restored = cold.hydrateLayout([app.icon], await cold.readLayoutStrict(scope))
+      assert.equal(restored.items[0].size, size)
+      assert.equal(restored.layout.slots[0], app.key)
+      const p = restored.layout.placements.find(p => p.id === app.key)
+      assert.deepEqual([p.spanX, p.spanY], [Number(size[0]), Number(size[2])])
+    })
+  }
+
   test(`${scope}: saving a folder survives a fresh persistence module and hydration`, async t => {
     const db = mockDatabase(t)
     const first = await import(`./layoutStore.ts?save-${scope}`)

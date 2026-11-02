@@ -40,7 +40,7 @@ const clampNumber = (value: number, min: number, max: number) => Math.max(min, M
 export const scaledRadius = (px: number): string =>
   `calc(var(--ui-corner-radius-scale, 1) * ${px}px)`
 
-const getDesktopFolderSurfaceRadius = (panelBase: number) =>
+export const getDesktopFolderSurfaceRadius = (panelBase: number) =>
   Math.round(clampNumber(panelBase * 0.2, 16, 24))
 
 const getDesktopSingleSlotPreviewInset = (panelBase: number) =>

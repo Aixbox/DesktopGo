@@ -1,6 +1,7 @@
 import type { FolderLayoutProfile } from './folderLayout'
 import { resolveFolderDropCapacity } from './folderLayout'
 import type { IconItem } from '../model'
+import { asFolderChild } from '../model'
 
 export type FolderDropRejectionReason = 'ok' | 'capacity-exceeded' | 'invalid-count'
 
@@ -56,7 +57,7 @@ export const planFolderDropTransaction = ({
     capacityPerPage: capacity.capacityPerPage,
     reason: capacity.reason,
     nextChildren: capacity.accepted
-      ? [...currentChildren, ...uniqueIncoming]
+      ? [...currentChildren, ...uniqueIncoming.map(asFolderChild)]
       : [...currentChildren],
   }
 }

@@ -213,7 +213,7 @@ export function useScrollableIconGridViewModel({
       const item = dragItemById.get(id)
       const sourceCenter = dragState.initialCenters[id]
       if (!item || item.kind !== 'icon' || !sourceCenter) return []
-      return [{ id, icon: item.icon, sourceCenter }]
+      return [{ id, icon: item.icon, size: item.size, sourceCenter }]
     })
   }, [dragState, draggedFolderChildSelections, itemById])
 

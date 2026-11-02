@@ -11,6 +11,7 @@ import type { FolderResizeInteraction } from '../hooks/useFolderResizeInteractio
 import { scaledRadius, type DesktopFolderTileMetrics } from './folderVisualPolicy'
 
 interface FolderResizeOutlineProps {
+  label?: string
   display: MotionValue<DesktopFolderTileMetrics>
   geometry: FolderResizeVisualGeometry
   rtl: boolean
@@ -67,10 +68,11 @@ function useOutlinePaths({ display, geometry, rtl }: FolderResizeOutlineProps) {
 }
 
 function ResizeHitTarget({
+  label = '调整文件夹大小',
   hitAreaRef,
   geometry,
   interaction,
-}: Pick<FolderResizeOutlineProps, 'geometry' | 'interaction'> & {
+}: Pick<FolderResizeOutlineProps, 'geometry' | 'interaction' | 'label'> & {
   hitAreaRef: RefObject<HTMLButtonElement | null>
 }) {
   const insets = getFolderResizeHitInsets(geometry)
@@ -79,8 +81,8 @@ function ResizeHitTarget({
       ref={hitAreaRef}
       data-folder-resize-hit-area
       type="button"
-      aria-label="调整文件夹大小"
-      title="拖动调整文件夹大小"
+      aria-label={label}
+      title={`拖动${label}`}
       className="pointer-events-auto absolute touch-none rounded-none border-0 bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
       style={{
         inset: `${-insets.y}px ${-insets.x}px`,
@@ -136,7 +138,12 @@ export function FolderResizeOutline(props: FolderResizeOutlineProps) {
           vectorEffect="non-scaling-stroke"
         />
       </svg>
-      <ResizeHitTarget hitAreaRef={hitAreaRef} geometry={geometry} interaction={interaction} />
+      <ResizeHitTarget
+        label={props.label}
+        hitAreaRef={hitAreaRef}
+        geometry={geometry}
+        interaction={interaction}
+      />
     </motion.span>
   )
 }

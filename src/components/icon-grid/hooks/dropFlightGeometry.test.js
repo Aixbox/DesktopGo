@@ -158,8 +158,14 @@ function dropFixture(items, geometry) {
   const rects = items.map((item, index) => ({
     left: 200 + index * 300,
     top: 180 + index * 100,
-    width: item.kind === 'folder' ? Number(item.size[0]) * 96 - 8 : 64,
-    height: item.kind === 'folder' ? Number(item.size[2]) * 110 - 42 : 64,
+    width:
+      item.kind === 'folder'
+        ? Number(item.size[0]) * 96 - 8
+        : 64 + (Number(item.size?.[0] ?? 1) - 1) * 96,
+    height:
+      item.kind === 'folder'
+        ? Number(item.size[2]) * 110 - 42
+        : 64 + (Number(item.size?.[2] ?? 1) - 1) * 110,
   }))
   const props = {
     reorderAnimationMs: 220,
@@ -195,7 +201,7 @@ function flightRect(flight) {
   }
 }
 
-const icon = key => ({ kind: 'icon', key, icon: { name: key, path: key } })
+const icon = (key, size) => ({ kind: 'icon', key, size, icon: { name: key, path: key } })
 const folder = size => ({ kind: 'folder', id: 'folder', size, name: 'Folder', children: [] })
 
 for (const [mode, createHook] of Object.entries(hooks)) {
@@ -207,6 +213,10 @@ for (const [mode, createHook] of Object.entries(hooks)) {
           [icon('a')],
           [icon('a'), icon('b')],
           ...['1x1', '1x2', '2x1', '2x2'].map(size => [folder(size)]),
+          ...['1x2', '2x1', '2x2'].flatMap(size => [
+            [icon('a', size)],
+            [icon('a', size), icon('b', size)],
+          ]),
         ]) {
           const { props, rects } = dropFixture(items, { editing, measuredScale })
           const react = reactHarness()

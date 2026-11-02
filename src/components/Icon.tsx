@@ -8,7 +8,16 @@ import {
 } from '../types'
 import { useIconStore } from '../stores/iconStore'
 import { IconContextMenu } from './icons/IconContextMenu'
-import { AppWindow, Check } from 'lucide-react'
+import { IconResizeHandle } from './icon-grid/views/IconResizeHandle'
+import { IconArtwork } from './icon-grid/views/IconArtwork'
+import { scaledRadius } from './icon-grid/views/folderVisualPolicy'
+import {
+  ENLARGED_ICON_SURFACE_CLASS,
+  ICON_TILE_RESIZE_TRANSITION,
+  type IconGridTileConfig,
+} from './icon-grid/views/iconTileMetrics'
+import { useReducedMotion } from 'framer-motion'
+import { Check } from 'lucide-react'
 import {
   memo,
   useEffect,
@@ -19,6 +28,7 @@ import {
 } from 'react'
 
 interface IconProps {
+  gridTile?: IconGridTileConfig
   icon: DesktopIcon
   selectionKey: string
   selectionMode: boolean
@@ -30,6 +40,7 @@ interface IconProps {
 }
 
 export const Icon = memo(function Icon({
+  gridTile,
   icon,
   selectionKey,
   selectionMode,
@@ -52,6 +63,12 @@ export const Icon = memo(function Icon({
   const isSingleLineTitle = titleLineCount === 'one'
   const titleMetrics = getIconGridTitleMetrics(titleLineCount)
   const displayName = customName ?? icon.name
+  const reducedMotion = useReducedMotion() ?? false
+  const metrics = gridTile?.metrics
+  const width = metrics?.footprintWidth ?? config.containerWidth
+  const height = metrics?.footprintHeight ?? tileHeight
+  const resizeTransition = reducedMotion ? 'none' : ICON_TILE_RESIZE_TRANSITION
+  const enlarged = !!gridTile && (gridTile.span.cols > 1 || gridTile.span.rows > 1)
 
   const [isRenaming, setIsRenaming] = useState(false)
   const [draftName, setDraftName] = useState(displayName)
@@ -125,7 +142,7 @@ export const Icon = memo(function Icon({
   const layerClass = selectionMode ? (selected ? 'z-30' : 'z-10') : 'z-10 hover:z-20'
   const usesScrollMotion = motionProfile === 'scroll'
   const imageMotionClass =
-    selectionMode || isRenaming
+    selectionMode || isRenaming || enlarged
       ? ''
       : usesScrollMotion
         ? 'scroll-grid-icon-surface'
@@ -133,99 +150,128 @@ export const Icon = memo(function Icon({
 
   return (
     <IconContextMenu icon={icon} disabled={isRenaming}>
-      <button
-        data-icon
-        data-selection-key={selectionKey}
-        data-selection-mode={selectionMode ? 'on' : 'off'}
-        className={`icon-item relative flex flex-col items-center justify-start rounded-icon-tile border-none px-3 shadow-none cursor-pointer group ${
-          usesScrollMotion ? 'scroll-grid-icon-tile' : 'transition-all duration-200'
-        } ${buttonStateClass} ${layerClass} ${
-          highlighted ? 'launchpad-import-highlight-edge' : ''
-        }`}
-        style={{
-          width: config.containerWidth,
-          height: tileHeight,
-          paddingTop: ICON_GRID_TILE_PADDING_Y,
-          paddingBottom: ICON_GRID_TILE_PADDING_Y,
-          rowGap: ICON_GRID_TITLE_GAP,
-        }}
-        onClick={handleClick}
-        title={displayName}
-        aria-label={displayName}
-        aria-pressed={selectionMode ? selected : undefined}
-      >
-        {selectionMode ? (
-          <span
-            className={`absolute right-0.5 top-0.5 z-50 flex h-4 w-4 items-center justify-center rounded-full border text-xs ${
-              selected
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-border/70 bg-background/72 text-transparent shadow-sm dark:border-white/60 dark:bg-black/30'
-            }`}
-          >
-            {selected ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
-          </span>
-        ) : null}
-
-        <div
-          className={`icon-image flex flex-1 items-center justify-center overflow-hidden ${
-            usesScrollMotion ? '' : 'transition-all duration-200'
-          } ${imageMotionClass}`}
-          style={{ width: config.imgSize, height: config.imgSize }}
+      <div data-icon tabIndex={-1} className="relative overflow-visible" style={{ width, height }}>
+        <button
+          data-icon
+          data-selection-key={selectionKey}
+          data-selection-mode={selectionMode ? 'on' : 'off'}
+          className={`icon-item relative flex flex-col items-center justify-start rounded-icon-tile border-none px-3 shadow-none cursor-pointer group ${
+            usesScrollMotion ? 'scroll-grid-icon-tile' : 'transition-all duration-200'
+          } ${buttonStateClass} ${layerClass} ${
+            highlighted ? 'launchpad-import-highlight-edge' : ''
+          }`}
+          style={{
+            width,
+            height,
+            paddingTop: ICON_GRID_TILE_PADDING_Y,
+            paddingBottom: ICON_GRID_TILE_PADDING_Y,
+            rowGap: ICON_GRID_TITLE_GAP,
+            ...(metrics ? { transition: resizeTransition } : {}),
+          }}
+          onClick={handleClick}
+          title={displayName}
+          aria-label={displayName}
+          aria-pressed={selectionMode ? selected : undefined}
         >
-          {icon.icon_base64 ? (
-            <img
-              src={icon.icon_base64}
-              alt={displayName}
-              style={{ width: config.imgSize, height: config.imgSize }}
-              className="launchpad-icon-artwork object-contain"
-              draggable={false}
+          {selectionMode ? (
+            <span
+              className={`absolute right-0.5 top-0.5 z-50 flex h-4 w-4 items-center justify-center rounded-full border text-xs ${
+                selected
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border/70 bg-background/72 text-transparent shadow-sm dark:border-white/60 dark:bg-black/30'
+              }`}
+            >
+              {selected ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+            </span>
+          ) : null}
+
+          <div
+            className={`icon-image flex flex-1 items-center justify-center overflow-hidden ${
+              usesScrollMotion ? '' : 'transition-all duration-200'
+            } ${imageMotionClass} ${enlarged ? ENLARGED_ICON_SURFACE_CLASS : ''}`}
+            style={
+              metrics
+                ? {
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    width: metrics.shapeWidth,
+                    height: metrics.shapeHeight,
+                    translate: `${(metrics.footprintWidth - metrics.shapeWidth) / 2}px ${ICON_GRID_TILE_PADDING_Y + (metrics.bodyHeight - metrics.shapeHeight) / 2}px`,
+                    borderRadius: scaledRadius(metrics.surfaceRadius),
+                    transition: resizeTransition,
+                  }
+                : { width: config.imgSize, height: config.imgSize }
+            }
+          >
+            <IconArtwork
+              icon={icon}
+              name={displayName}
+              enlarged={enlarged}
+              imageSize={metrics ? undefined : config.imgSize}
+              fallbackSize={metrics ? Math.min(metrics.shapeWidth, metrics.shapeHeight) * 0.7 : 32}
+            />
+          </div>
+          {isRenaming ? (
+            <input
+              ref={inputRef}
+              type="text"
+              value={draftName}
+              onChange={handleInputChange}
+              onKeyDown={handleInputKeyDown}
+              onBlur={commitRename}
+              onClick={event => event.stopPropagation()}
+              onPointerDown={event => event.stopPropagation()}
+              onContextMenu={event => event.stopPropagation()}
+              className="icon-label-input rounded-md border border-border/60 bg-background/95 px-1 py-[1px] text-[11px] leading-[13px] text-center text-foreground shadow-sm outline-none focus:border-ring dark:border-white/30 dark:bg-black/60"
+              style={{
+                maxWidth: width - 4,
+                width: width - 4,
+                height: isSingleLineTitle ? 15 : 28,
+                ...(metrics
+                  ? ({
+                      position: 'absolute',
+                      left: 2,
+                      top: ICON_GRID_TILE_PADDING_Y + metrics.bodyHeight + ICON_GRID_TITLE_GAP,
+                    } as const)
+                  : {}),
+              }}
+              maxLength={64}
             />
           ) : (
-            <AppWindow className="launchpad-icon-artwork h-8 w-8 text-foreground/60" />
+            <span
+              className="icon-label text-[11px] text-center leading-[15px] text-foreground drop-shadow-md"
+              style={{
+                // 标题不受磁贴左右 padding 限制，和 hover 背景保持同宽。
+                width,
+                maxWidth: width,
+                marginInline: metrics ? 0 : -12,
+                flexShrink: 0,
+                height: titleMetrics.height,
+                display: isSingleLineTitle ? 'block' : '-webkit-box',
+                WebkitLineClamp: titleMetrics.lineClamp,
+                WebkitBoxOrient: isSingleLineTitle ? undefined : 'vertical',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: isSingleLineTitle ? 'nowrap' : 'normal',
+                overflowWrap: 'anywhere',
+                ...(metrics
+                  ? ({
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      transform: `translateY(${ICON_GRID_TILE_PADDING_Y + metrics.bodyHeight + ICON_GRID_TITLE_GAP}px)`,
+                      transition: resizeTransition,
+                    } as const)
+                  : {}),
+              }}
+            >
+              {displayName}
+            </span>
           )}
-        </div>
-        {isRenaming ? (
-          <input
-            ref={inputRef}
-            type="text"
-            value={draftName}
-            onChange={handleInputChange}
-            onKeyDown={handleInputKeyDown}
-            onBlur={commitRename}
-            onClick={event => event.stopPropagation()}
-            onPointerDown={event => event.stopPropagation()}
-            onContextMenu={event => event.stopPropagation()}
-            className="icon-label-input rounded-md border border-border/60 bg-background/95 px-1 py-[1px] text-[11px] leading-[13px] text-center text-foreground shadow-sm outline-none focus:border-ring dark:border-white/30 dark:bg-black/60"
-            style={{
-              maxWidth: config.containerWidth - 4,
-              width: config.containerWidth - 4,
-              height: isSingleLineTitle ? 15 : 28,
-            }}
-            maxLength={64}
-          />
-        ) : (
-          <span
-            className="icon-label text-[11px] text-center leading-[15px] text-foreground drop-shadow-md"
-            style={{
-              // 标题不受磁贴左右 padding 限制，和 hover 背景保持同宽。
-              width: config.containerWidth,
-              maxWidth: config.containerWidth,
-              marginInline: -12,
-              flexShrink: 0,
-              height: titleMetrics.height,
-              display: isSingleLineTitle ? 'block' : '-webkit-box',
-              WebkitLineClamp: titleMetrics.lineClamp,
-              WebkitBoxOrient: isSingleLineTitle ? undefined : 'vertical',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: isSingleLineTitle ? 'nowrap' : 'normal',
-              overflowWrap: 'anywhere',
-            }}
-          >
-            {displayName}
-          </span>
-        )}
-      </button>
+        </button>
+        {gridTile && !isRenaming ? <IconResizeHandle tile={gridTile} /> : null}
+      </div>
     </IconContextMenu>
   )
 })

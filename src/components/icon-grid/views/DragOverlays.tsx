@@ -1,5 +1,7 @@
+import { getIconTileMetrics } from './iconTileMetrics'
+import { IconGhostArtwork } from './IconGhostArtwork'
 import { AppWindow } from 'lucide-react'
-import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, type MutableRefObject } from 'react'
 import { useReducedMotion } from 'framer-motion'
 import type { DesktopIcon } from '../../../types'
 import { useIconStore } from '../../../stores/iconStore'
@@ -49,6 +51,7 @@ interface DragOverlaysProps {
   stackedIcons: Array<{
     id: string
     icon: DesktopIcon
+    size?: IconItem['size']
     sourceCenter: { x: number; y: number }
   }>
   folderDropFlight: FolderDropFlight | null
@@ -388,6 +391,20 @@ function applyGhostTransform(
   node.style.transform = `translate3d(${left}px, ${top}px, 0) rotate(${motion.rotate}deg) scale(${motion.scaleX}, ${motion.scaleY})`
 }
 
+function applyStackedGhostTransform(
+  node: HTMLDivElement | null,
+  position: StackGhostPosition,
+  size: { width: number; height: number },
+  imageSize: number
+) {
+  // Trail coordinates use the original square; keep differently sized tiles center-aligned.
+  applyGhostTransform(
+    node,
+    position.left + (imageSize - size.width) / 2,
+    position.top + (imageSize - size.height) / 2
+  )
+}
+
 export function DragOverlays({
   dragPointerRef,
   ghostItem,
@@ -398,13 +415,29 @@ export function DragOverlays({
   dragSessionId,
   compactPreview,
   compactPreviewSize = 30,
-  stackedIcons,
+  stackedIcons: stackedIconItems,
   folderDropFlight,
   multiDropFlight,
   reorderAnimationMs,
   folderPreviewEasing,
 }: DragOverlaysProps) {
   const titleLineCount = useIconStore(state => state.titleLineCount)
+  const stackedIcons = useMemo(
+    () =>
+      stackedIconItems.map(entry => {
+        const item: IconItem = { kind: 'icon', key: entry.id, icon: entry.icon, size: entry.size }
+        const metrics = getIconTileMetrics({
+          span: getGridItemSpan(item),
+          slotWidth,
+          slotHeight,
+          gridGap,
+          imageSize: iconImageSize,
+          titleLineCount,
+        })
+        return { ...entry, item, width: metrics.shapeWidth, height: metrics.shapeHeight }
+      }),
+    [stackedIconItems, slotWidth, slotHeight, gridGap, iconImageSize, titleLineCount]
+  )
   const reducedMotion = useReducedMotion()
   const pointerAnimationFrameRef = useRef<number | null>(null)
   const animationFrameRef = useRef<number | null>(null)
@@ -428,15 +461,26 @@ export function DragOverlays({
     stackedIconsRef.current = stackedIcons
   }, [stackedIcons])
 
-  const ghostSpan = ghostItem && ghostItem.kind !== 'icon' ? getGridItemSpan(ghostItem) : null
+  const ghostSpan = ghostItem ? getGridItemSpan(ghostItem) : null
   const ghostFootprintWidth = ghostSpan
     ? ghostSpan.cols * slotWidth + Math.max(0, ghostSpan.cols - 1) * gridGap
     : 0
   const ghostFootprintHeight = ghostSpan
     ? ghostSpan.rows * slotHeight + Math.max(0, ghostSpan.rows - 1) * gridGap
     : 0
-  const ghostWidth = ghostItem?.kind === 'icon' ? iconImageSize : ghostFootprintWidth
-  const ghostHeight = ghostItem?.kind === 'icon' ? iconImageSize : ghostFootprintHeight
+  const iconMetrics =
+    ghostItem?.kind === 'icon' && ghostSpan
+      ? getIconTileMetrics({
+          span: ghostSpan,
+          slotWidth,
+          slotHeight,
+          gridGap,
+          imageSize: iconImageSize,
+          titleLineCount,
+        })
+      : null
+  const ghostWidth = iconMetrics?.shapeWidth ?? ghostFootprintWidth
+  const ghostHeight = iconMetrics?.shapeHeight ?? ghostFootprintHeight
   const compactScale = compactPreview
     ? Math.min(1, compactPreviewSize / Math.max(1, ghostWidth, ghostHeight))
     : 1
@@ -469,18 +513,23 @@ export function DragOverlays({
     stackedIcons.forEach((entry, index) => {
       const position = stackPositionsRef.current[index]
       if (position) {
-        applyGhostTransform(
+        applyStackedGhostTransform(
           stackNodeRefs.current.get(entry.id) ?? null,
-          position.left,
-          position.top
+          position,
+          entry,
+          iconImageSize
         )
         return
       }
 
-      applyGhostTransform(
+      applyStackedGhostTransform(
         stackNodeRefs.current.get(entry.id) ?? null,
-        entry.sourceCenter.x - iconImageSize / 2,
-        entry.sourceCenter.y - iconImageSize / 2
+        {
+          left: entry.sourceCenter.x - iconImageSize / 2,
+          top: entry.sourceCenter.y - iconImageSize / 2,
+        },
+        entry,
+        iconImageSize
       )
     })
   }, [dragSessionId, ghostItem?.kind, iconImageSize, stackedIcons])
@@ -585,7 +634,12 @@ export function DragOverlays({
     initialStackedIcons.forEach((entry, index) => {
       const position = initialPositions[index]
       if (!position) return
-      applyGhostTransform(stackNodeRefs.current.get(entry.id) ?? null, position.left, position.top)
+      applyStackedGhostTransform(
+        stackNodeRefs.current.get(entry.id) ?? null,
+        position,
+        entry,
+        iconImageSize
+      )
     })
     trailSamplesRef.current = [{ left: leaderLeft, top: leaderTop, timestamp: startedAt }]
     stackPositionsRef.current = initialPositions
@@ -663,10 +717,11 @@ export function DragOverlays({
         latestIcons.forEach((entry, index) => {
           const position = nextPositions[index]
           if (!position) return
-          applyGhostTransform(
+          applyStackedGhostTransform(
             stackNodeRefs.current.get(entry.id) ?? null,
-            position.left,
-            position.top
+            position,
+            entry,
+            iconImageSize
           )
         })
       }
@@ -698,8 +753,8 @@ export function DragOverlays({
                     className="launchpad-drag-ghost launchpad-drag-ghost-stack pointer-events-none fixed"
                     style={{
                       zIndex: 48 - index,
-                      width: iconImageSize,
-                      height: iconImageSize,
+                      width: entry.width,
+                      height: entry.height,
                       left: 0,
                       top: 0,
                       willChange: 'transform',
@@ -714,17 +769,12 @@ export function DragOverlays({
                         willChange: compactPreview ? 'transform' : undefined,
                       }}
                     >
-                      {entry.icon.icon_base64 ? (
-                        <img
-                          src={entry.icon.icon_base64}
-                          alt={entry.icon.name}
-                          className="launchpad-icon-artwork object-contain"
-                          style={{ width: iconImageSize, height: iconImageSize }}
-                          draggable={false}
-                        />
-                      ) : (
-                        <AppWindow className="h-8 w-8 text-foreground/70" />
-                      )}
+                      <IconGhostArtwork
+                        item={entry.item}
+                        width={entry.width}
+                        height={entry.height}
+                        imageSize={iconImageSize}
+                      />
                     </div>
                   </div>
                 )
@@ -754,17 +804,12 @@ export function DragOverlays({
               }}
             >
               {ghostItem.kind === 'icon' ? (
-                ghostItem.icon.icon_base64 ? (
-                  <img
-                    src={ghostItem.icon.icon_base64}
-                    alt={ghostItem.icon.name}
-                    className="launchpad-icon-artwork object-contain"
-                    style={{ width: iconImageSize, height: iconImageSize }}
-                    draggable={false}
-                  />
-                ) : (
-                  <AppWindow className="h-8 w-8 text-foreground/70" />
-                )
+                <IconGhostArtwork
+                  item={ghostItem}
+                  width={ghostWidth}
+                  height={ghostHeight}
+                  imageSize={iconImageSize}
+                />
               ) : ghostItem.kind === 'folder' ? (
                 <FolderGhost
                   folder={ghostItem}
@@ -834,16 +879,13 @@ export function DragOverlays({
                     gridGap={gridGap}
                     dragPreview
                   />
-                ) : item.item.icon.icon_base64 ? (
-                  <img
-                    src={item.item.icon.icon_base64}
-                    alt={item.item.icon.name}
-                    className="launchpad-icon-artwork object-contain"
-                    style={{ width: item.width, height: item.height }}
-                    draggable={false}
-                  />
                 ) : (
-                  <AppWindow className="h-8 w-8 text-foreground/70" />
+                  <IconGhostArtwork
+                    item={item.item}
+                    width={item.width}
+                    height={item.height}
+                    imageSize={iconImageSize}
+                  />
                 )}
               </div>
             </div>

@@ -9,6 +9,7 @@ import { ICON_GRID_TILE_PADDING_Y } from '../../../types'
 import { useDismissItemMenu } from '../../icons/focusedItemMenuContext'
 
 interface FolderResizeHandleProps {
+  label?: string
   visible: boolean
   span: GridSpan
   display: MotionValue<DesktopFolderTileMetrics>
@@ -22,6 +23,7 @@ interface FolderResizeHandleProps {
 }
 
 export function FolderResizeHandle({
+  label,
   visible,
   span,
   display,
@@ -34,8 +36,8 @@ export function FolderResizeHandle({
   onCancel,
 }: FolderResizeHandleProps) {
   const dismissMenu = useDismissItemMenu()
-  const focus = useFolderResizeHandleFocus()
-  const handleVisible = visible || focus.retained
+  const { frameRef, retained, retain } = useFolderResizeHandleFocus()
+  const handleVisible = visible || retained
   const interaction = useFolderResizeInteraction({
     visible: handleVisible,
     span,
@@ -47,7 +49,7 @@ export function FolderResizeHandle({
     onCommit,
     onCancel,
     onStart: () => {
-      focus.retain()
+      retain()
       dismissMenu()
     },
   })
@@ -66,7 +68,7 @@ export function FolderResizeHandle({
 
   return (
     <motion.div
-      ref={focus.frameRef}
+      ref={frameRef}
       data-folder-resize-frame={interaction.active ? 'active' : 'idle'}
       className="pointer-events-none absolute left-0 top-0 z-40 overflow-visible"
       style={{
@@ -78,6 +80,7 @@ export function FolderResizeHandle({
       }}
     >
       <FolderResizeOutline
+        label={label}
         display={display}
         geometry={geometry}
         rtl={rtl}

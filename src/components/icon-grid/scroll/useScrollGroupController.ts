@@ -1,3 +1,4 @@
+import { asFolderChild } from '../model'
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
 import { translate } from '../../../lib/i18n'
 import type { DragState } from '../state/types'
@@ -224,14 +225,14 @@ export function useScrollGroupController({
     let replacement: FolderItem
     if (target.kind === 'folder') {
       if (target.children.some(child => child.key === source.key)) return
-      replacement = { ...target, children: [...target.children, source] }
+      replacement = { ...target, children: [...target.children, asFolderChild(source)] }
     } else {
       replacement = {
         kind: 'folder',
         id: makeFolderId(),
         name: translate('New Folder'),
         size: '1x1',
-        children: [target, source],
+        children: [target, source].map(asFolderChild),
       }
     }
     const replacementId = getId(replacement)

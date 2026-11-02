@@ -1,14 +1,10 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type MutableRefObject } from 'react'
-import type { FolderItem, FolderSize, GridItem, HotseatEntry, IconItem } from '../model'
+import type { GridItem, HotseatEntry, IconItem } from '../model'
 import type { DragState } from '../state/types'
-import { getId } from '../model'
-import { resolveOuterItemIds } from '../domain/dock'
 import { reconcileHotseatEntries } from '../domain/hotseatLayout'
-import { filterItemsByIds } from '../domain/gridItems'
-import { buildPersistedItemCoordinates, resizeSlotPages } from '../domain/topLevelLayout'
-import { planFolderResize } from '../domain/folderResizeTransaction'
+import { useGridItemResizeController } from '../hooks/useGridItemResizeController'
 import { dissolveFolderInTopLevelLayout } from '../domain/folderPolicy'
-import { getDefaultFolderColumnCount, getLayoutNormalizationMetrics } from '../domain/gridGeometry'
+import { getDefaultFolderColumnCount } from '../domain/gridGeometry'
 import type { LayoutDimensionsTracker } from '../state/layoutDimensionsTracker'
 import { FOLDER_MODAL_MAX_WIDTH } from '../views/folderVisualPolicy'
 import { FOLDER_SHARED_LAYOUT_WINDOW_MS } from '../constants'
@@ -90,10 +86,6 @@ export function useScrollableFolderController({
   const [folderColumns, setFolderColumns] = useState(() =>
     getDefaultFolderColumnCount(columnWidth, FOLDER_MODAL_MAX_WIDTH)
   )
-  const [folderResizePreview, setFolderResizePreview] = useState<{
-    folderId: string
-    size: FolderSize
-  } | null>(null)
   const openFolder = useMemo(() => {
     if (!openFolderId) return null
     const found = items.find(item => item.kind === 'folder' && item.id === openFolderId)
@@ -191,90 +183,19 @@ export function useScrollableFolderController({
     []
   )
 
-  const handleResizeFolder = (folderId: string, size: FolderSize) => {
-    setFolderResizePreview(null)
-    const previousItems = itemsRef.current
-    const previousFolder = previousItems.find(
-      (item): item is FolderItem => item.kind === 'folder' && item.id === folderId
-    )
-    if (!previousFolder || previousFolder.size === size) return
-    const layoutMetrics = getLayoutNormalizationMetrics(
-      filterItemsByIds(
-        previousItems,
-        resolveOuterItemIds(previousItems.map(getId), dockEnabled ? dockKeysRef.current : [])
-      ),
-      Math.max(1, columns),
-      pageSizeRef.current
-    )
-    const safePageSize = Math.max(1, layoutMetrics.pageSize)
-    const safeColumns = Math.max(1, layoutMetrics.columns)
-    const previousDimensions = layoutDimensionsTracker.read()
-    const baseOuterSlots =
-      previousDimensions.pageSize === safePageSize && previousDimensions.columns === safeColumns
-        ? [...outerSlotsRef.current]
-        : resizeSlotPages(
-            outerSlotsRef.current,
-            filterItemsByIds(
-              previousItems,
-              resolveOuterItemIds(previousItems.map(getId), dockEnabled ? dockKeysRef.current : [])
-            ),
-            previousDimensions.pageSize,
-            safePageSize,
-            previousDimensions.columns,
-            safeColumns,
-            buildPersistedItemCoordinates(
-              outerSlotsRef.current,
-              filterItemsByIds(
-                previousItems,
-                resolveOuterItemIds(
-                  previousItems.map(getId),
-                  dockEnabled ? dockKeysRef.current : []
-                )
-              ),
-              previousDimensions.pageSize,
-              previousDimensions.columns
-            )
-          )
-    const plan = planFolderResize({
-      items: previousItems,
-      slots: baseOuterSlots,
-      folderId,
-      size,
-      columns: safeColumns,
-      pageSize: safePageSize,
-      dockKeys: dockEnabled ? dockKeysRef.current : [],
-    })
-    if (!plan) return
-    itemsRef.current = plan.items
-    outerSlotsRef.current = plan.slots
-    setItems(plan.items)
-    setOuterSlots(plan.slots)
-  }
-
-  const folderResizePreviewPlan = useMemo(() => {
-    if (!folderResizePreview) return null
-    return planFolderResize({
-      items,
-      slots: outerSlotsRef.current,
-      folderId: folderResizePreview.folderId,
-      size: folderResizePreview.size,
-      columns: Math.max(1, columns),
-      pageSize: Math.max(1, pageSizeRef.current),
-      dockKeys: dockEnabled ? dockKeysRef.current : [],
-    })
-  }, [columns, dockEnabled, folderResizePreview, items, pageSizeRef])
-
-  const renderItemById = useMemo(() => {
-    const sourceItems = folderResizePreviewPlan?.items ?? items
-    return new Map(sourceItems.map(item => [getId(item), item]))
-  }, [folderResizePreviewPlan, items])
-  const folderResizeProps = {
-    onResizeFolder: handleResizeFolder,
-    folderResizePreview,
-    onPreviewFolderResize: (folderId: string, size: FolderSize) =>
-      setFolderResizePreview({ folderId, size }),
-    onCancelFolderResize: () => setFolderResizePreview(null),
-  }
+  const itemResize = useGridItemResizeController({
+    items,
+    itemsRef,
+    setItems,
+    outerSlotsRef,
+    setOuterSlots,
+    dockKeysRef,
+    dockEnabled,
+    columns,
+    pageSizeRef,
+    layoutDimensionsTracker,
+  })
+  const { plan: folderResizePreviewPlan, renderItemById, folderResizeProps } = itemResize
 
   const handleDissolveFolder = (folderId: string) => {
     const result = dissolveFolderInTopLevelLayout(
@@ -312,7 +233,6 @@ export function useScrollableFolderController({
     folderOrder,
     folderPanelRef,
     handleDissolveFolder,
-    handleResizeFolder,
     folderResizePreviewPlan,
     folderResizeProps,
     renderItemById,

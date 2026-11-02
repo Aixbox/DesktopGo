@@ -350,11 +350,11 @@ export function usePagedDragGeometryController({
     const metrics = resolveGridMetrics('outer')
     const draggingSpan = getGridItemSpan(state.draggingItem)
     const dragWidth =
-      state.draggingItem.kind === 'folder'
+      state.draggingItem.kind === 'folder' || draggingSpan.cols > 1 || draggingSpan.rows > 1
         ? draggingSpan.cols * metrics.itemWidth + Math.max(0, draggingSpan.cols - 1) * gridGap
         : iconImageSize
     const dragHeight =
-      state.draggingItem.kind === 'folder'
+      state.draggingItem.kind === 'folder' || draggingSpan.cols > 1 || draggingSpan.rows > 1
         ? draggingSpan.rows * metrics.itemHeight + Math.max(0, draggingSpan.rows - 1) * gridGap
         : iconImageSize
     return findOuterMaxOverlapHitByMetrics({

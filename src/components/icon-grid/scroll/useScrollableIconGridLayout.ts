@@ -151,7 +151,7 @@ export function useScrollableIconGridLayout({
             ? `${item.id}:${item.size}`
             : item.kind === 'widget'
               ? `${item.id}:${item.spanX}x${item.spanY}`
-              : item.key
+              : `${item.key}:${item.size ?? '1x1'}`
         )
         .join('|'),
     [items]

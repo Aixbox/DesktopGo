@@ -1,4 +1,5 @@
 import type { GridItem } from '../model'
+import { isMultiCellGridItem } from '../model'
 import { resolveUntransformedGridRect } from './gridMotionGeometry'
 
 /** Resolve the overlay's unscaled box and its scale at the final, post-drop grid position. */
@@ -13,8 +14,9 @@ export function resolveDropFlightTarget(
       ? (tileNode.querySelector<HTMLElement>('[data-folder-visual-body]') ?? tileNode)
       : (tileNode.querySelector<HTMLElement>('.icon-image') ?? tileNode)
   const rect = resolveUntransformedGridRect(targetNode, tileNode)
-  const width = item.kind === 'folder' ? rect.width : iconImageSize
-  const height = item.kind === 'folder' ? rect.height : iconImageSize
+  const measuredSize = item.kind === 'folder' || isMultiCellGridItem(item)
+  const width = measuredSize ? rect.width : iconImageSize
+  const height = measuredSize ? rect.height : iconImageSize
   const motionGrid = targetNode.closest<HTMLElement>('.launchpad-edit-grid-motion')
   const editing = motionGrid?.closest('.launchpad-bg[data-edit-mode="true"]')
   // Single-item drag zoom returns to 1; selection mode keeps its CSS target scale.

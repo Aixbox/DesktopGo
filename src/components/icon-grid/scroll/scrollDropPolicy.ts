@@ -1,3 +1,4 @@
+import { asFolderChild } from '../model'
 import type { FolderItem, GridItem } from '../model'
 import { getGridItemSpan, getId, makeFolderId } from '../model'
 import { translate } from '../../../lib/i18n'
@@ -32,7 +33,7 @@ export const applyFolderCreateFromSession = (
     id: makeFolderId(),
     name: translate('New Folder'),
     size: '1x1',
-    children: [targetItem, sourceItem],
+    children: [targetItem, sourceItem].map(asFolderChild),
   }
   const folderId = getId(folder)
   map.delete(session.draggingId)

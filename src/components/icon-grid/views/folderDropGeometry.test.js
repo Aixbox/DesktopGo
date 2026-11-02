@@ -10,6 +10,7 @@ import * as visualPolicy from './folderVisualPolicy.ts'
 import * as previewPolicy from './folderPreviewPolicy.ts'
 import * as ghostMotion from './dragGhostMotion.ts'
 import * as stackMotion from './stackedIconMotion.ts'
+import * as iconTileMetrics from './iconTileMetrics.ts'
 import {
   removeElementTranslateFromRect,
   resolveRectAtUnitScale,
@@ -37,6 +38,13 @@ const sharedModules = {
   'framer-motion': motion,
   '../../../types': gridTypes,
   './folderVisualPolicy': visualPolicy,
+  './iconTileMetrics': iconTileMetrics,
+  '../model': gridModel,
+  './IconArtwork': loadModule('./IconArtwork.tsx', {
+    '../hooks/useIconDominantColor': {
+      useIconDominantColor: source => (source ? '#336699' : null),
+    },
+  }),
 }
 const { FolderTileContents } = loadModule('./FolderTileContents.tsx', {
   ...sharedModules,
@@ -67,10 +75,16 @@ function rectFromStyle(node) {
 function loadOverlays(titleLineCount) {
   return loadModule('./DragOverlays.tsx', {
     ...sharedModules,
-    react: { useRef: value => ({ current: value }), useEffect() {}, useLayoutEffect() {} },
+    react: {
+      useRef: value => ({ current: value }),
+      useMemo: callback => callback(),
+      useEffect() {},
+      useLayoutEffect() {},
+    },
     '../../../stores/iconStore': { useIconStore: select => select({ titleLineCount }) },
     '../model': gridModel,
     './FolderVisuals': { FolderIconVisual: 'FolderIconVisual' },
+    './IconGhostArtwork': loadModule('./IconGhostArtwork.tsx', sharedModules),
     './WidgetTile': { WidgetTile: 'WidgetTile' },
     './folderPreviewPolicy': previewPolicy,
     './dragGhostMotion': ghostMotion,
@@ -135,6 +149,87 @@ function centeredSurface(outer, shape) {
 }
 
 for (const size of ['1x1', '1x2', '2x1', '2x2']) {
+  if (size !== '1x1')
+    test(`${size}: enlarged icons match folder geometry for every icon and title setting`, () => {
+      for (const titleLineCount of ['one', 'two'])
+        for (const [iconSize, config] of Object.entries(gridTypes.ICON_SIZE_CONFIG)) {
+          for (const slotHeight of [
+            gridTypes.getIconGridRowHeight(iconSize),
+            gridTypes.getIconGridLayoutRowHeight(iconSize),
+          ]) {
+            const input = {
+              span: { cols: Number(size[0]), rows: Number(size[2]) },
+              slotWidth: config.columnWidth,
+              slotHeight,
+              gridGap: 12,
+              titleLineCount,
+            }
+            const icon = iconTileMetrics.getIconTileMetrics({ ...input, imageSize: config.imgSize })
+            const folder = visualPolicy.getDesktopFolderTileMetrics({
+              ...input,
+              folderSize: size,
+              surfaceTitleLineCount: 'two',
+            })
+            assert.deepEqual(icon, folder)
+            assert.equal(
+              iconTileMetrics.ENLARGED_ICON_SURFACE_CLASS,
+              visualPolicy.DESKTOP_FOLDER_SURFACE_CLASS
+            )
+          }
+        }
+    })
+
+  test(`${size}: icon drag leader, multi-selection followers and landing flights keep workspace dimensions`, () => {
+    const grid = {
+      slotWidth: 76,
+      slotHeight: 93,
+      gridGap: 12,
+      imageSize: 48,
+      titleLineCount: 'two',
+    }
+    const item = { kind: 'icon', key: 'app', size, icon: { name: 'App', icon_base64: 'image' } }
+    const metrics = iconTileMetrics.getIconTileMetrics({
+      ...grid,
+      span: gridModel.getGridItemSpan(item),
+    })
+    const { shapeWidth: width, shapeHeight: height } = metrics
+    const overlay = loadOverlays('two')({
+      ...grid,
+      iconImageSize: grid.imageSize,
+      dragPointerRef: { current: { pointerX: 420, pointerY: 310 } },
+      ghostItem: item,
+      dragSessionId: 1,
+      stackedIcons: [{ id: 'other', icon: item.icon, size, sourceCenter: { x: 50, y: 60 } }],
+      multiDropFlight: [{ id: 'app', item, width, height }],
+    })
+    const all = nodes(overlay)
+    for (const classPart of [
+      'launchpad-drag-ghost-stack',
+      'launchpad-drop-flight pointer-events-none',
+      'launchpad-drag-ghost pointer-events-none',
+    ]) {
+      const rect = rectFromStyle(all.find(node => node.props.className?.includes(classPart)))
+      assert.equal(rect.width, width)
+      assert.equal(rect.height, height)
+    }
+    for (const img of all.filter(node => node.type === 'img'))
+      assert.ok(img.props.className.includes('object-contain'))
+    const surfaces = all.filter(node =>
+      node.props.className?.includes(iconTileMetrics.ENLARGED_ICON_SURFACE_CLASS)
+    )
+    const fills = all.filter(node => 'data-icon-color-fill' in node.props)
+    if (size !== '1x1') {
+      assert.equal(surfaces.length, 3, 'leader, follower and landing use the same glass material')
+      assert.equal(fills.length, 3)
+      for (const surface of surfaces)
+        assert.equal(
+          surface.props.style.borderRadius,
+          visualPolicy.scaledRadius(metrics.surfaceRadius)
+        )
+      for (const fill of fills) assert.equal(fill.props.style.backgroundColor, '#336699')
+    } else assert.equal(fills.length, 0)
+  })
+
   test(`${size}: releasing a folder keeps its surface aligned through drag, flight and tile handoff`, () => {
     for (const title of ['one', 'two']) {
       for (const iconSize of Object.keys(gridTypes.ICON_SIZE_CONFIG)) {

@@ -1,4 +1,5 @@
 import type { DragContext, EvasionDirection, GridItem, HoverZone } from '../model'
+import { isMultiCellGridItem } from '../model'
 import { clampNumber } from './geometry'
 import { areSlotsEqual, DRAG_HOLE_ID, getSlotRowColWithinPage, isVacantSlot } from './slots'
 
@@ -39,6 +40,7 @@ export interface CellReorderIntent {
   zone: HoverZone
 }
 
+/** Folders and enlarged icons share the footprint-based evasion/return workflow. */
 export const isSingleOuterFolderDrag = (state: {
   context: DragContext
   draggingIds: string[]
@@ -46,7 +48,7 @@ export const isSingleOuterFolderDrag = (state: {
 }): boolean =>
   state.context === 'outer' &&
   state.draggingIds.length === 1 &&
-  state.draggingItem.kind === 'folder'
+  (state.draggingItem.kind === 'folder' || isMultiCellGridItem(state.draggingItem))
 
 /** A folder's alarm follows its footprint anchor, including moves into empty space. */
 export const resolveFolderEvasionReturnIntent = (

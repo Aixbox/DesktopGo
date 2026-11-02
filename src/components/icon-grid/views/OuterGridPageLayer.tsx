@@ -8,7 +8,7 @@ import {
   type ReactNode,
   type Ref,
 } from 'react'
-import { Icon } from '../../Icon'
+import { ResizableIcon } from './ResizableIcon'
 import type { FolderSize, GridSpan } from '../model'
 import type { PageAnchorEntry } from '../domain/topLevelLayout'
 import { FolderCreatePreview } from './FolderVisuals'
@@ -195,9 +195,13 @@ export function OuterGridPageLayer({
                 folderPreview ? 'opacity-0' : 'opacity-100'
               }`}
             >
-              <Icon
-                icon={entry.item.icon}
-                selectionKey={entry.item.key}
+              <ResizableIcon
+                item={entry.item}
+                span={entry.span}
+                slotWidth={itemWidth}
+                slotHeight={itemHeight}
+                gridGap={gridGap}
+                interactive={interactive && !folderPreview}
                 selectionMode={selectionMode}
                 selected={selectedSet.has(entry.item.key)}
                 onToggleSelect={interactive ? onToggleSelectIcon : noop}

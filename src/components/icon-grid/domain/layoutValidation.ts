@@ -46,7 +46,10 @@ const validateItemShape = (item: PersistedItem, index: number): LayoutValidation
     return [issue(`items[${index}]`, '项目必须是对象')]
   }
   if (item.type === 'icon') {
-    return isNonEmptyString(item.key) ? [] : [issue(`items[${index}].key`, '图标 key 不能为空')]
+    const issues: LayoutValidationIssue[] = []
+    if (!isNonEmptyString(item.key)) issues.push(issue(`items[${index}].key`, '图标 key 不能为空'))
+    if (!isFolderSize(item.size)) issues.push(issue(`items[${index}].size`, '图标 size 无效'))
+    return issues
   }
   if (item.type !== 'folder') {
     if (item.type !== 'widget') {

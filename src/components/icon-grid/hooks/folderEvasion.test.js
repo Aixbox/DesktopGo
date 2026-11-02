@@ -57,8 +57,11 @@ function installTestEnvironment(t) {
   }
 }
 
-function createGridFixture(size, neighbors) {
-  const folder = { kind: 'folder', id: 'source', name: 'Folder', size, children: [] }
+function createGridFixture(size, neighbors, sourceKind = 'folder') {
+  const folder =
+    sourceKind === 'icon'
+      ? { kind: 'icon', key: 'source', size, icon: {} }
+      : { kind: 'folder', id: 'source', name: 'Folder', size, children: [] }
   const items = [folder, ...neighbors.map(([, item]) => item)]
   const baseOrder = Array(36).fill(null)
   neighbors.forEach(([index, item]) => {
@@ -125,9 +128,18 @@ function createDragSession(folder, baseOrder) {
 }
 
 // Exercise the production hit-testing, alarms and placement solver without a browser.
-function createHarness(t, size, neighbors = [[8, { kind: 'icon', key: 'b', icon: {} }]]) {
+function createHarness(
+  t,
+  size,
+  neighbors = [[8, { kind: 'icon', key: 'b', icon: {} }]],
+  sourceKind = 'folder'
+) {
   const clock = installTestEnvironment(t)
-  const { folder, items, baseOrder, storedOrder, params } = createGridFixture(size, neighbors)
+  const { folder, items, baseOrder, storedOrder, params } = createGridFixture(
+    size,
+    neighbors,
+    sourceKind
+  )
   const dragRef = createDragSession(folder, baseOrder)
   const outerDwellTimerRef = ref(null)
   const outerDwellIntentRef = ref(null)
@@ -228,6 +240,30 @@ for (const size of ['1x1', '1x2', '2x1', '2x2']) {
       )
     })
   }
+}
+
+for (const size of ['1x2', '2x1', '2x2']) {
+  test(`${size} icon: footprint evasion stays while covered, then restores on leaving`, t => {
+    const h = createHarness(
+      t,
+      size,
+      [[8, { kind: 'widget', id: 'neighbor', spanX: 1, spanY: 1 }]],
+      'icon'
+    )
+    h.moveTo(8)
+    h.advance(OUTER_DRAG_RULES.evasionDwellMs - 1)
+    assert.deepEqual(h.dragRef.current.workingOrder, h.baseOrder)
+    h.advance(1)
+    assert.notEqual(h.dragRef.current.workingOrder.indexOf('widget:neighbor'), 8)
+    const displaced = [...h.dragRef.current.workingOrder]
+    h.moveTo(8)
+    h.advance()
+    assert.deepEqual(h.dragRef.current.workingOrder, displaced)
+    h.moveTo(24)
+    h.advance()
+    assert.deepEqual(h.dragRef.current.workingOrder, h.baseOrder)
+    assert.deepEqual(h.commit().slots, h.storedOrder)
+  })
 }
 
 test('2x2: leaving the anchor cell while still covering a neighbor must keep it displaced', t => {

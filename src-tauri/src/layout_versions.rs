@@ -394,9 +394,12 @@ fn item_cell_key(item: &serde_json::Value) -> Option<String> {
         .map(|id| format!("folder:{id}"))
 }
 
-/// 文件夹的排版跨度和前端 `getGridItemSpan` 保持一致。
+/// 图标和文件夹的排版跨度和前端 `getGridItemSpan` 保持一致。
 fn item_span(item: &serde_json::Value) -> (i64, i64) {
-    if item.get("type").and_then(|value| value.as_str()) != Some("folder") {
+    if !matches!(
+        item.get("type").and_then(|value| value.as_str()),
+        Some("folder" | "icon")
+    ) {
         return (1, 1);
     }
     match item.get("size").and_then(|value| value.as_str()) {
@@ -776,6 +779,30 @@ mod tests {
             ]
         );
         assert_eq!(thumbnail.page_total, 1);
+    }
+
+    #[test]
+    fn thumbnail_keeps_icon_sizes_and_legacy_defaults() {
+        for (size, expected) in [
+            (None, (1, 1)),
+            (Some("1x1"), (1, 1)),
+            (Some("1x2"), (1, 2)),
+            (Some("2x1"), (2, 1)),
+            (Some("2x2"), (2, 2)),
+        ] {
+            let mut item = serde_json::json!({ "type": "icon", "key": "app" });
+            if let Some(size) = size {
+                item["size"] = serde_json::json!(size);
+            }
+            let thumbnail = build_thumbnail(&serde_json::json!({
+                "items": [item], "slots": [null, "app"], "columns": 4, "pageSize": 16,
+            }))
+            .expect("thumbnail");
+            assert_eq!(thumbnail.entries.len(), 1);
+            let entry = &thumbnail.entries[0];
+            assert_eq!((entry.col, entry.row), (1, 0));
+            assert_eq!((entry.cols, entry.rows), expected);
+        }
     }
 
     #[test]
