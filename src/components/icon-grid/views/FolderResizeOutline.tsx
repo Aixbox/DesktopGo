@@ -119,7 +119,7 @@ export function FolderResizeOutline(props: FolderResizeOutlineProps) {
         <path
           ref={frameRef}
           data-folder-resize-stroke
-          className="text-white/60 dark:text-black/60"
+          className="text-white dark:text-black"
           fill="none"
           stroke="currentColor"
           strokeWidth={geometry.frameStrokeWidth}

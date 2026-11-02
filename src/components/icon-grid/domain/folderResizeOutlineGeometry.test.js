@@ -46,8 +46,8 @@ for (const span of [
         assert.ok(nearest < 0.00001, 'every handle point must lie on the frame centerline')
       }
       for (const point of frame) {
-        assert.ok(point.x >= 1 && point.x <= input.width - 1)
-        assert.ok(point.y >= 1 && point.y <= input.height - 1)
+        assert.ok(point.x >= 0 && point.x <= input.width)
+        assert.ok(point.y >= 0 && point.y <= input.height)
       }
       const mirrored = pointsOf(
         getFolderResizeOutlinePaths({ ...input, rtl: true }).handle
@@ -72,5 +72,37 @@ test('handle length stays fixed when the folder radius grows or is clamped by a 
     }
     const { handle } = getFolderResizeOutlinePaths(input)
     assert.ok(Math.abs(lengthOf(pointsOf(handle)) - 8 * Math.PI) < 0.0001)
+  }
+})
+
+test('the frame overlaps the artwork edge by 1px, including fractional sizes and rounded corners', () => {
+  for (const width of [32, 63.5, 64, 127.25, 256]) {
+    for (const exponent of [2, 4]) {
+      const input = {
+        width,
+        height: width * 2,
+        radius: 24 * (exponent === 4 ? 1.773 : 1),
+        exponent,
+        ...getFolderResizeVisualGeometry({ cols: 1, rows: 2 }),
+        rtl: false,
+      }
+      const frame = pointsOf(getFolderResizeOutlinePaths(input).frame)
+      const radius = Math.min(input.radius, width / 2)
+      for (let sample = 0; sample <= 512; sample++) {
+        const angle = (sample / 512) * (Math.PI / 2)
+        const outer = {
+          x: width - radius + radius * Math.cos(angle) ** (2 / exponent),
+          y: input.height - radius + radius * Math.sin(angle) ** (2 / exponent),
+        }
+        const nearest = Math.min(
+          ...frame.slice(1).map((end, i) => distanceToSegment(outer, frame[i], end))
+        )
+        const opaqueCoverage = input.frameStrokeWidth / 2 - nearest
+        assert.ok(
+          opaqueCoverage >= 0.995,
+          `width=${width}, exponent=${exponent}, sample=${sample}: coverage ${opaqueCoverage}`
+        )
+      }
+    }
   }
 })

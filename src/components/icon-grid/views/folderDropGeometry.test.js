@@ -171,9 +171,10 @@ for (const size of ['1x1', '1x2', '2x1', '2x2']) {
               surfaceTitleLineCount: 'two',
             })
             assert.deepEqual(icon, folder)
-            assert.equal(
-              iconTileMetrics.ENLARGED_ICON_SURFACE_CLASS,
-              visualPolicy.DESKTOP_FOLDER_SURFACE_CLASS
+            assert.ok(
+              iconTileMetrics.ENLARGED_ICON_SURFACE_CLASS.includes(
+                visualPolicy.DESKTOP_TILE_SURFACE_CLASS
+              )
             )
           }
         }

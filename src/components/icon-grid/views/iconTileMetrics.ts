@@ -6,7 +6,7 @@ import {
 } from '../../../types/index'
 import type { GridSpan, TileSize } from '../model'
 import {
-  DESKTOP_FOLDER_SURFACE_CLASS,
+  DESKTOP_TILE_SURFACE_CLASS,
   getDesktopFolderTileMetrics,
   type DesktopFolderTileMetrics,
 } from './folderVisualPolicy'
@@ -76,4 +76,4 @@ export function getIconTileMetrics({
 
 export const ICON_TILE_RESIZE_TRANSITION =
   'width 280ms cubic-bezier(0.22,1,0.36,1), height 280ms cubic-bezier(0.22,1,0.36,1), border-radius 280ms cubic-bezier(0.22,1,0.36,1), translate 280ms cubic-bezier(0.22,1,0.36,1), transform 280ms cubic-bezier(0.22,1,0.36,1)'
-export const ENLARGED_ICON_SURFACE_CLASS = DESKTOP_FOLDER_SURFACE_CLASS
+export const ENLARGED_ICON_SURFACE_CLASS = `${DESKTOP_TILE_SURFACE_CLASS} border-0`

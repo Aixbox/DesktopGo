@@ -170,7 +170,7 @@ test('workspace icon wires size actions and renders its handle outside the activ
     assert.ok(artwork[1].props.className.includes('object-contain'))
     if (size !== '1x1') {
       assert.equal(artwork[0].props.style.backgroundColor, '#336699')
-      assert.ok(image.props.className.includes(visuals.DESKTOP_FOLDER_SURFACE_CLASS))
+      assert.ok(image.props.className.includes(visuals.DESKTOP_TILE_SURFACE_CLASS))
       const folderMetrics = visuals.getDesktopFolderTileMetrics({
         ...props,
         folderSize: size,

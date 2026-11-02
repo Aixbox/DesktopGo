@@ -23,8 +23,9 @@ export const FOLDER_SHARED_LAYOUT_TRANSITION = {
 } as const
 export const FOLDER_SURFACE_CLASS =
   'relative h-full w-full overflow-hidden rounded-[var(--radius-folder-surface)] border border-border/35 bg-background/42 shadow-[0_4px_12px_rgba(15,23,42,0.1)] backdrop-blur-lg dark:border-white/14 dark:bg-black/24 dark:shadow-[0_4px_12px_rgba(0,0,0,0.18)]'
-export const DESKTOP_FOLDER_SURFACE_CLASS =
-  'relative h-full w-full overflow-hidden border border-border/45 bg-background/48 shadow-[0_6px_18px_rgba(15,23,42,0.12)] backdrop-blur-lg dark:border-white/16 dark:bg-black/30 dark:shadow-[0_6px_18px_rgba(0,0,0,0.18)]'
+export const DESKTOP_TILE_SURFACE_CLASS =
+  'relative h-full w-full overflow-hidden bg-background/48 shadow-[0_6px_18px_rgba(15,23,42,0.12)] backdrop-blur-lg dark:bg-black/30 dark:shadow-[0_6px_18px_rgba(0,0,0,0.18)]'
+export const DESKTOP_FOLDER_SURFACE_CLASS = `${DESKTOP_TILE_SURFACE_CLASS} border border-border/45 dark:border-white/16`
 export const DOCK_FOLDER_SURFACE_CLASS =
   'relative h-full w-full overflow-hidden border border-foreground/[0.12] bg-background/46 shadow-[inset_0_1px_0_rgba(255,255,255,0.34),inset_0_0_0_1px_rgba(15,23,42,0.03)] backdrop-blur-xl dark:border-white/14 dark:bg-black/24 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
 export const DOCK_FOLDER_SURFACE_ACTIVE_CLASS =

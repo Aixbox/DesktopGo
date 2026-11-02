@@ -22,6 +22,10 @@ export interface FolderResizeOutlineInput {
 
 const distance = (a: Point, b: Point) => Math.hypot(b.x - a.x, b.y - a.y)
 
+// CSS artwork clipping and SVG strokes are antialiased separately. Keep the
+// artwork edge inside the opaque stroke, not at its antialiased outer edge.
+const FRAME_EDGE_OVERLAP = 1
+
 /** Slice by distance along the shared contour, including straight edges if needed. */
 function sliceContour(points: Point[], start: number, end: number): Point[] {
   const result: Point[] = []
@@ -51,7 +55,10 @@ const toPath = (points: Point[]) =>
 
 /** Both strokes share one centerline; SVG supplies a uniform width and round caps. */
 export function getFolderResizeOutlinePaths(input: FolderResizeOutlineInput) {
-  const points = getRoundedRectContour({ ...input, inset: input.frameStrokeWidth / 2 })
+  const points = getRoundedRectContour({
+    ...input,
+    inset: Math.max(0, input.frameStrokeWidth / 2 - FRAME_EDGE_OVERLAP),
+  })
   const cornerIndex = input.rtl ? 2 : 1
   const midpointIndex = cornerIndex * (CORNER_STEPS + 1) + CORNER_STEPS / 2
   let midpointDistance = 0
