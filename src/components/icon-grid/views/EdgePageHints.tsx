@@ -1,4 +1,12 @@
-import { useLayoutEffect, useMemo, useRef, useState, type SVGProps, type RefObject } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type SVGProps,
+  type RefObject,
+} from 'react'
 import { useReducedMotion } from 'framer-motion'
 import { getRoundedRectContour } from '../../../lib/roundedRectContour'
 import { EDGE_PAGING, getEdgePageTarget } from '../domain/edgePagingPolicy'
@@ -25,7 +33,9 @@ export function EdgePageHints({
 }: EdgePageHintsProps) {
   const reduced = useReducedMotion() ?? false
   const [geometry, setGeometry] = useState({ width: 0, height: 0, top: 0, rtl: false })
-  useLayoutEffect(() => {
+  // The measured container is a later sibling. Its ref is only guaranteed to be
+  // attached after all layout effects have run, so measure in a passive effect.
+  useEffect(() => {
     const content = containerRef.current
     const viewport = content?.closest<HTMLElement>('[data-edge-paging-viewport]')
     if (!content || !viewport) return
@@ -148,7 +158,7 @@ function HintSurface({
     return () => motion.cancel()
   }, [direction, exposure, reduced, entering, visible])
   return (
-    <div ref={ref} style={{ opacity: 0 }}>
+    <div ref={ref} className="absolute inset-0" style={{ opacity: 0 }}>
       <svg {...props}>{children}</svg>
     </div>
   )

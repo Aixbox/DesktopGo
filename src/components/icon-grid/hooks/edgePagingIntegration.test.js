@@ -191,7 +191,6 @@ test('page animation continues from peek, locks duration across drop, and acknow
   const nodes = {
     oldPageLayerRef: node(),
     currentPageLayerRef: node(),
-    gridClipRef: node(),
     peekLayerRef: node(),
   }
   let data = { page: 0, dragContext: 'outer' }
@@ -257,6 +256,8 @@ test('page animation continues from peek, locks duration across drop, and acknow
   data = { page: 1, dragContext: 'outer' }
   edge.state = { phase: 'paging', target: { direction: 'right' } }
   render()
+  // Both incoming/outgoing pages must remain visible beyond the padded grid bounds.
+  for (const node of Object.values(nodes)) assert.notEqual(node.style.overflow, 'hidden')
   const pageMotions = motions.slice(-3)
   assert.equal(pageMotions[0].to, -1000)
   assert.equal(pageMotions[1].from, 1000)
@@ -272,7 +273,7 @@ test('page animation continues from peek, locks duration across drop, and acknow
   frames.splice(0).forEach(fn => fn())
   render()
   assert.deepEqual(completed, [1])
-  assert.equal(nodes.gridClipRef.style.overflow, '')
+  for (const node of Object.values(nodes)) assert.notEqual(node.style.overflow, 'hidden')
   assert.equal(nodes.peekLayerRef.x, 0)
   hooks.unmount()
 })

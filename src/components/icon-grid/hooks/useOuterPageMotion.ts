@@ -25,7 +25,6 @@ export function useOuterPageMotion(
   const [pageTransition, setPageTransition] = useState<PageTransition | null>(null)
   const oldPageLayerRef = useRef<HTMLDivElement>(null)
   const currentPageLayerRef = useRef<HTMLDivElement>(null)
-  const gridClipRef = useRef<HTMLDivElement>(null)
   const peekLayerRef = useRef<HTMLDivElement>(null)
   const peekMotion = useRef<Motion | null>(null)
   const start = edge?.onTransitionStart
@@ -73,15 +72,13 @@ export function useOuterPageMotion(
     const old = oldPageLayerRef.current
     const current = currentPageLayerRef.current
     const peek = peekLayerRef.current
-    const clip = gridClipRef.current
-    if (!old || !current || !peek || !clip) return
+    if (!old || !current || !peek) return
     let cancelled = false
     let completionFrame: number | null = null
     peekMotion.current?.cancel()
     const duration = reduced ? 0 : pageTransition.duration
     const viewport = peek.closest('[data-edge-paging-viewport]')
     const distance = pageTransition.direction * (viewport?.getBoundingClientRect().width || width)
-    clip.style.overflow = 'hidden'
     const motions = [
       animatePageTranslation(old, 0, -distance, duration),
       animatePageTranslation(
@@ -95,7 +92,6 @@ export function useOuterPageMotion(
     ]
     void Promise.all(motions.map(motion => motion.finished)).then(() => {
       if (cancelled) return
-      clip.style.overflow = ''
       completionFrame = window.requestAnimationFrame(() => {
         if (cancelled) return
         end?.(pageTransition.toPage)
@@ -106,9 +102,8 @@ export function useOuterPageMotion(
       cancelled = true
       if (completionFrame !== null) window.cancelAnimationFrame(completionFrame)
       motions.forEach(motion => motion.cancel())
-      clip.style.overflow = ''
     }
   }, [pageTransition, width, reduced, end])
 
-  return { pageTransition, oldPageLayerRef, currentPageLayerRef, gridClipRef, peekLayerRef }
+  return { pageTransition, oldPageLayerRef, currentPageLayerRef, peekLayerRef }
 }

@@ -163,8 +163,11 @@ export function OuterGridView({
     previewFootprint,
   }
 
-  const { pageTransition, oldPageLayerRef, currentPageLayerRef, gridClipRef, peekLayerRef } =
-    useOuterPageMotion(currentPageData, gridWidth, edgePaging)
+  const { pageTransition, oldPageLayerRef, currentPageLayerRef, peekLayerRef } = useOuterPageMotion(
+    currentPageData,
+    gridWidth,
+    edgePaging
+  )
 
   return (
     <GridItemResizeContext.Provider value={resizeActions ?? null}>
@@ -195,52 +198,15 @@ export function OuterGridView({
             </div>
           ) : null}
           <div ref={peekLayerRef} className="relative h-full w-full">
-            <div ref={gridClipRef} className="relative h-full w-full">
-              {pageTransition ? (
-                <div
-                  ref={oldPageLayerRef}
-                  key={`page-transition-from-${pageTransition.from.page}`}
-                  className="absolute inset-0 z-10 pointer-events-none"
-                >
-                  <OuterGridPageLayer
-                    data={pageTransition.from}
-                    interactive={false}
-                    columns={columns}
-                    rows={rows}
-                    itemWidth={itemWidth}
-                    itemHeight={itemHeight}
-                    gridGap={gridGap}
-                    pageCellCount={pageCellCount}
-                    iconConfig={iconConfig}
-                    selectionMode={selectionMode}
-                    selectedSet={selectedSet}
-                    openFolderId={openFolderId}
-                    activeFolderSharedLayoutId={activeFolderSharedLayoutId}
-                    onToggleSelectIcon={onToggleSelectIcon}
-                    onTilePointerDown={onTilePointerDown}
-                    onTileClickCapture={onTileClickCapture}
-                    onOpenFolder={onOpenFolder}
-                    onLaunchIcon={onLaunchIcon}
-                    onResizeFolder={onResizeFolder}
-                    folderResizePreview={folderResizePreview}
-                    onPreviewFolderResize={onPreviewFolderResize}
-                    onCancelFolderResize={onCancelFolderResize}
-                    onResizeWidget={onResizeWidget}
-                    onDissolveFolder={onDissolveFolder}
-                    bindTileRef={bindTileRef}
-                    reorderAnimationMs={reorderAnimationMs}
-                  />
-                </div>
-              ) : null}
+            {pageTransition ? (
               <div
-                ref={currentPageLayerRef}
-                key={`page-${currentPage}`}
-                className={pageTransition ? 'absolute inset-0 z-20' : 'relative h-full w-full'}
+                ref={oldPageLayerRef}
+                key={`page-transition-from-${pageTransition.from.page}`}
+                className="absolute inset-0 z-10 pointer-events-none"
               >
                 <OuterGridPageLayer
-                  data={currentPageData}
-                  interactive
-                  gridRef={gridRef}
+                  data={pageTransition.from}
+                  interactive={false}
                   columns={columns}
                   rows={rows}
                   itemWidth={itemWidth}
@@ -267,6 +233,41 @@ export function OuterGridView({
                   reorderAnimationMs={reorderAnimationMs}
                 />
               </div>
+            ) : null}
+            <div
+              ref={currentPageLayerRef}
+              key={`page-${currentPage}`}
+              className={pageTransition ? 'absolute inset-0 z-20' : 'relative h-full w-full'}
+            >
+              <OuterGridPageLayer
+                data={currentPageData}
+                interactive
+                gridRef={gridRef}
+                columns={columns}
+                rows={rows}
+                itemWidth={itemWidth}
+                itemHeight={itemHeight}
+                gridGap={gridGap}
+                pageCellCount={pageCellCount}
+                iconConfig={iconConfig}
+                selectionMode={selectionMode}
+                selectedSet={selectedSet}
+                openFolderId={openFolderId}
+                activeFolderSharedLayoutId={activeFolderSharedLayoutId}
+                onToggleSelectIcon={onToggleSelectIcon}
+                onTilePointerDown={onTilePointerDown}
+                onTileClickCapture={onTileClickCapture}
+                onOpenFolder={onOpenFolder}
+                onLaunchIcon={onLaunchIcon}
+                onResizeFolder={onResizeFolder}
+                folderResizePreview={folderResizePreview}
+                onPreviewFolderResize={onPreviewFolderResize}
+                onCancelFolderResize={onCancelFolderResize}
+                onResizeWidget={onResizeWidget}
+                onDissolveFolder={onDissolveFolder}
+                bindTileRef={bindTileRef}
+                reorderAnimationMs={reorderAnimationMs}
+              />
             </div>
           </div>
           {canGoLeft ? (

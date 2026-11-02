@@ -670,7 +670,7 @@ export function IconGrid({
            不再被垂直居中推到窗口中部。 */
         data-edge-paging-viewport
         data-single-item-dragging={isSingleDragActive ? 'true' : 'false'}
-        className={`relative h-full w-full px-16 pt-28 ${dockEnabled ? 'pb-32' : 'pb-12'}`}
+        className={`relative h-full w-full overflow-x-clip px-16 pt-28 ${dockEnabled ? 'pb-32' : 'pb-12'}`}
         onWheel={handleWheelPageSwitch}
       >
         <DragAnnouncementLiveRegion
