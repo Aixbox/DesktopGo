@@ -59,8 +59,13 @@ for (const size of sizes) {
     }
     if (size !== '1x2') assert.ok(ltr.icons[0].left < rtl.icons[0].left)
     const firstMini = ltr.icons.findIndex(slot => slot.stacked && slot.visible)
-    assert.ok(ltr.icons[firstMini].left < ltr.icons[firstMini + 1].left)
-    assert.ok(rtl.icons[firstMini].left > rtl.icons[firstMini + 1].left)
+    if (size === '1x1') {
+      assert.equal(firstMini, -1)
+      assert.equal(ltr.icons.filter(slot => slot.visible).length, 4)
+    } else {
+      assert.ok(ltr.icons[firstMini].left < ltr.icons[firstMini + 1].left)
+      assert.ok(rtl.icons[firstMini].left > rtl.icons[firstMini + 1].left)
+    }
   })
 }
 

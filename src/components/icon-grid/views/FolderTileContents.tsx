@@ -16,6 +16,7 @@ import {
 } from './folderVisualPolicy'
 import { FolderTilePreview } from './FolderTilePreview'
 import { FolderResizeHandle } from './FolderResizeHandle'
+import { FolderDropReceiver } from './FolderDropReceiver'
 
 interface FolderTileContentsProps {
   folder: FolderItem
@@ -52,7 +53,6 @@ export function FolderTileContents(props: FolderTileContentsProps) {
   const borderRadius = useTransform(display, m => scaledRadius(m.surfaceRadius))
   return (
     <div
-      data-folder-visual-body
       className="folder-tile-body absolute left-0 top-0 cursor-pointer"
       style={{ width: metrics.footprintWidth, height: metrics.footprintHeight }}
       onClick={event => {
@@ -61,21 +61,7 @@ export function FolderTileContents(props: FolderTileContentsProps) {
       }}
     >
       <div className="absolute inset-0 isolate">
-        <motion.div
-          className="pointer-events-none absolute left-0 top-0"
-          style={{ x, y, width, height }}
-        >
-          <div
-            className="folder-drop-receiver-backdrop"
-            data-folder-drop-receiver={folderPreview ? 'active' : 'idle'}
-            aria-hidden="true"
-            style={{
-              width: 'calc(100% + 8px)',
-              height: 'calc(100% + 8px)',
-              borderRadius: scaledRadius(metrics.surfaceRadius + 4),
-            }}
-          />
-        </motion.div>
+        <FolderDropReceiver display={display} active={folderPreview} />
         <motion.div
           data-folder-body-hitbox
           layoutId={sharedLayoutActive ? getFolderSharedLayoutId(folder.id) : undefined}

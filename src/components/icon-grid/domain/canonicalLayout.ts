@@ -189,12 +189,11 @@ export const buildCanonicalPlacements = (layout: PersistedLayout): PersistedPlac
     },
     { cols: 1, rows: 1 }
   )
-  const safeColumns = Math.max(1, layout.columns ?? 1, maximumSpan.cols)
+  const safeColumns = Math.max(1, layout.columns ?? maximumSpan.cols)
+  // slots contains every page. Only infer capacity from it for dimensionless legacy layouts.
   const safePageSize = Math.max(
     1,
-    layout.pageSize ?? 0,
-    layout.slots?.length ?? 0,
-    safeColumns * maximumSpan.rows
+    layout.pageSize ?? Math.max(layout.slots?.length ?? 0, safeColumns * maximumSpan.rows)
   )
   const itemById = new Map(layout.items.map(item => [getPersistedItemId(item), item]))
   const occupiedWorkspaceCells = new Set<string>()

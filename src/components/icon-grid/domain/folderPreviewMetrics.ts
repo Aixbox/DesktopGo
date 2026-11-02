@@ -13,7 +13,11 @@ export const getFolderPreviewArtworkSize = (
   size: number,
   scale = FOLDER_PREVIEW_ICON_SCALE,
   minimum = 5
-): number => Math.max(minimum, Math.floor(Math.max(0, size) * scale))
+): number => {
+  const slotSize = Math.max(0, size)
+  // Minimum artwork sizes must not overflow compact preview slots and erase their gaps.
+  return Math.min(slotSize, Math.max(minimum, Math.floor(slotSize * scale)))
+}
 
 export interface FolderStackedPreviewMetrics {
   padding: number

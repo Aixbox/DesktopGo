@@ -47,7 +47,8 @@ export const getClosedFolderPreviewLayout = (
   const exactFillCount = highlight ? ordinarySlotCount + 1 : slotCount
   const overflowCount = Math.max(0, count - ordinarySlotCount)
   const stackedIconCount = count > exactFillCount ? Math.min(4, overflowCount) : 0
-  const usesStacked = stackedIconCount >= 2
+  // A compact desktop folder always previews four ordinary icons, never a stacked last slot.
+  const usesStacked = folderSize !== '1x1' && stackedIconCount >= 2
   const standardIconCount = usesStacked ? ordinarySlotCount : Math.min(count, exactFillCount)
 
   return {

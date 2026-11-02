@@ -165,10 +165,8 @@ function OuterFolderTileComponent({
             rtl={direction === 'rtl'}
             onOpenFolder={onOpenFolder}
             onLaunchIcon={onLaunchIcon}
-            onCommit={nextSize => {
-              onCancelFolderResize?.()
-              if (nextSize !== folder.size) onResizeFolder(folder.id, nextSize)
-            }}
+            // folder can already be the preview item; the controller owns the committed size.
+            onCommit={nextSize => onResizeFolder(folder.id, nextSize)}
             onPreview={nextSize => onPreviewFolderResize?.(folder.id, nextSize)}
             onCancel={() => onCancelFolderResize?.()}
           />

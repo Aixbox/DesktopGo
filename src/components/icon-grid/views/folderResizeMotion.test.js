@@ -9,10 +9,17 @@ import * as motionPolicy from './folderResizeMotion.ts'
 import * as visualPolicy from './folderVisualPolicy.ts'
 import * as previewPolicy from './folderTilePreviewGeometry.ts'
 import * as previewMetrics from '../domain/folderPreviewMetrics.ts'
-import { ICON_GRID_TILE_PADDING_Y } from '../../../types/index.ts'
+import {
+  ICON_GRID_TILE_PADDING_Y,
+  ICON_SIZE_CONFIG,
+  getIconGridRowHeight,
+} from '../../../types/index.ts'
 import * as outlineGeometry from '../domain/folderResizeOutlineGeometry.ts'
 import * as hitArea from '../domain/folderResizeHitArea.ts'
 import { getFolderResizeVisualGeometry } from '../domain/folderResizePolicy.ts'
+import * as resizePolicy from '../domain/folderResizePolicy.ts'
+import * as gridModel from '../model.ts'
+import { planFolderResize } from '../domain/folderResizeTransaction.ts'
 
 const require = createRequire(import.meta.url)
 // Execute production hooks/components against a controlled animation clock; no browser or screenshots.
@@ -36,6 +43,155 @@ function metrics(size) {
     folderSize: size,
   })
 }
+
+function loadResizeComponents(rtl) {
+  let active = false
+  const session = { current: null }
+  const { useFolderResizeInteraction } = loadModule('../hooks/useFolderResizeInteraction.ts', {
+    react: {
+      useRef: () => session,
+      useState: () => [
+        active,
+        value => {
+          active = value
+        },
+      ],
+    },
+    '../domain/folderResizePolicy': resizePolicy,
+  })
+  const { OuterFolderTile } = loadModule('./OuterFolderTile.tsx', {
+    react: { memo: component => component },
+    '../../../lib/i18n': { translate: value => value },
+    '../../../stores/iconStore': { useIconStore: selector => selector({ titleLineCount: 'two' }) },
+    '../../ui/context-menu': new Proxy({}, { get: (_, name) => `context.${name}` }),
+    '../model': gridModel,
+    './folderVisualPolicy': visualPolicy,
+    './FolderTileContents': { FolderTileContents: 'FolderTileContents' },
+    '../hooks/useDocumentDirection': { useDocumentDirection: () => (rtl ? 'rtl' : 'ltr') },
+  })
+  return { useFolderResizeInteraction, OuterFolderTile }
+}
+
+function resizeCommitHarness(size, rtl = false) {
+  let items = [{ kind: 'folder', id: 'folder', name: 'Folder', size, children: [] }]
+  let slots = ['folder:folder', ...Array(15).fill(null)]
+  let preview = null
+  const commits = [],
+    cancellations = []
+  const { useFolderResizeInteraction, OuterFolderTile } = loadResizeComponents(rtl)
+  const plan = targetSize =>
+    planFolderResize({
+      items,
+      slots,
+      folderId: 'folder',
+      size: targetSize,
+      columns: 4,
+      pageSize: 16,
+    })
+  const render = () => {
+    const renderedFolder = (preview ? plan(preview)?.items : null)?.[0] ?? items[0]
+    const tree = OuterFolderTile({
+      folder: renderedFolder,
+      span: gridModel.getGridItemSpan(renderedFolder),
+      slotWidth: 96,
+      slotHeight: 110,
+      gridGap: 8,
+      selectionMode: true,
+      resizePreviewSize: preview,
+      onPreviewFolderResize: (_id, nextSize) => {
+        preview = nextSize
+      },
+      onCancelFolderResize: () => {
+        preview = null
+        cancellations.push(true)
+      },
+      onResizeFolder: (id, nextSize) => {
+        const result = plan(nextSize)
+        if (result) {
+          items = result.items
+          slots = result.slots
+        }
+        commits.push({ id, size: nextSize })
+        preview = null
+      },
+    })
+    const contents = tree.props.children[0].props.children.props.children.props
+    return useFolderResizeInteraction({
+      visible: true,
+      span: contents.span,
+      cellWidth: 96,
+      cellHeight: 110,
+      gridGap: 8,
+      rtl,
+      onPreview: contents.onPreview,
+      onCommit: contents.onCommit,
+      onCancel: contents.onCancel,
+    })
+  }
+  const captured = new Set()
+  const target = {
+    setPointerCapture: id => captured.add(id),
+    hasPointerCapture: id => captured.has(id),
+    releasePointerCapture: id => captured.delete(id),
+  }
+  const event = (x = 0, y = 0) => ({
+    clientX: x,
+    clientY: y,
+    pointerId: 1,
+    isPrimary: true,
+    currentTarget: target,
+    preventDefault() {},
+    stopPropagation() {},
+  })
+  return {
+    render,
+    event,
+    commits,
+    cancellations,
+    captured,
+    read: () => ({ size: items[0].size, preview }),
+  }
+}
+
+test('pointerup commits the preview size even when the rendered folder already has that size', () => {
+  const sizes = ['1x1', '1x2', '2x1', '2x2']
+  for (const rtl of [false, true])
+    for (const from of sizes)
+      for (const to of sizes) {
+        if (from === to) continue
+        const h = resizeCommitHarness(from, rtl)
+        const [fromX, fromY] = from.split('x').map(Number),
+          [toX, toY] = to.split('x').map(Number)
+        const moved = h.event((toX - fromX) * 100 * (rtl ? -1 : 1), (toY - fromY) * 100)
+        h.render().startPointerResize(h.event())
+        h.render().movePointerResize(moved)
+        assert.equal(h.read().preview, to)
+        assert.equal(h.read().size, from)
+        // A real preview re-render supplies the changed FolderItem before pointerup.
+        h.render().finishPointerResize(moved)
+        assert.equal(h.read().size, to, `${from} -> ${to}, RTL=${rtl}`)
+        assert.equal(h.read().preview, null)
+        assert.equal(h.commits.length, 1)
+        assert.equal(h.cancellations.length, 0)
+        assert.equal(h.captured.size, 0)
+        h.render().finishPointerResize(moved)
+        assert.equal(h.commits.length, 1)
+      }
+})
+
+test('cancelling or returning to the original size discards the preview without committing', () => {
+  for (const cancel of [false, true]) {
+    const h = resizeCommitHarness('1x1')
+    h.render().startPointerResize(h.event())
+    h.render().movePointerResize(h.event(100, 100))
+    if (!cancel) h.render().movePointerResize(h.event())
+    h.render().finishPointerResize(h.event(), cancel)
+    assert.deepEqual(h.read(), { size: '1x1', preview: null })
+    assert.equal(h.commits.length, 0)
+    assert.equal(h.cancellations.length, 1)
+    assert.equal(h.captured.size, 0)
+  }
+})
 
 function animationHarness() {
   let value, previousDeps, cleanup
@@ -176,6 +332,48 @@ const { FolderTilePreview } = loadModule('./FolderTilePreview.tsx', {
   './folderTilePreviewGeometry': previewPolicy,
   '../domain/folderPreviewMetrics': previewMetrics,
   '../../../types': { ICON_GRID_TILE_PADDING_Y },
+})
+
+test('compact preview renders four separated ordinary artworks at every desktop icon size', () => {
+  for (const [iconSize, config] of Object.entries(ICON_SIZE_CONFIG)) {
+    for (const withImage of [true, false]) {
+      const children = Array.from({ length: 12 }, (_, index) => ({
+        key: `child-${index}`,
+        icon: { name: `App ${index}`, icon_base64: withImage ? 'image' : '' },
+      }))
+      const compactMetrics = visualPolicy.getDesktopFolderTileMetrics({
+        span: { cols: 1, rows: 1 },
+        slotWidth: config.columnWidth,
+        slotHeight: getIconGridRowHeight(iconSize),
+        gridGap: 8,
+        folderSize: '1x1',
+      })
+      const preview = FolderTilePreview({
+        folder: { id: 'compact', name: 'Folder', size: '1x1', children },
+        metrics: compactMetrics,
+        rtl: false,
+        reducedMotion: true,
+      })
+      const visible = preview.props.children
+        .flat()
+        .filter(node => node.type === 'motion.button' && !node.props.disabled)
+      assert.equal(visible.length, 4)
+      const bounds = visible.map(node => {
+        assert.equal(node.props['data-folder-preview-slot'], 'standard')
+        const artwork = node.props.children[1]
+        const wrapper = artwork.type(artwork.props)
+        const size = wrapper.props.animate.scale * 40
+        return { x: node.props.animate.x, y: node.props.animate.y, size }
+      })
+      const horizontalGap = bounds[1].x - bounds[0].x - (bounds[0].size + bounds[1].size) / 2
+      const verticalGap = bounds[2].y - bounds[0].y - (bounds[0].size + bounds[2].size) / 2
+      assert.ok(
+        horizontalGap >= 2,
+        `${iconSize}, image=${withImage}: horizontal gap=${horizontalGap}`
+      )
+      assert.ok(verticalGap >= 2, `${iconSize}, image=${withImage}: vertical gap=${verticalGap}`)
+    }
+  }
 })
 
 test('preview preserves icon keys across all sizes, disables hidden children and retains click behavior', () => {

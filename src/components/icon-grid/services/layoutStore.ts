@@ -3,6 +3,7 @@ import { translate } from '../../../lib/i18n'
 import { normalizeDockKeys } from '../domain/dock'
 import { buildPersistedItemCoordinates } from '../domain/topLevelLayout'
 import { formatLayoutValidationIssues, validatePersistedLayout } from '../domain/layoutValidation'
+import { repairLegacyCanonicalPages } from '../domain/legacyCanonicalPageMigration'
 import {
   createCanonicalLayoutSnapshot,
   materializeLayoutFromCanonicalPlacements,
@@ -79,11 +80,11 @@ export const serializeItems = (items: GridItem[]): PersistedItem[] =>
       ? { type: 'icon', key: item.key }
       : item.kind === 'folder'
         ? {
-          type: 'folder',
-          id: item.id,
-          name: item.name,
-          size: item.size,
-          children: item.children.map(child => child.key),
+            type: 'folder',
+            id: item.id,
+            name: item.name,
+            size: item.size,
+            children: item.children.map(child => child.key),
           }
         : {
             type: 'widget',
@@ -547,17 +548,25 @@ export const parsePersistedLayoutStrict = (
   if (!layout) {
     throw new Error(`Invalid persisted layout payload for scope "${scope}" (key "${key}").`)
   }
-  const validation = validatePersistedLayout(layout)
+  // Verify the bytes' normalized content before attempting any known-format recovery.
+  if (layout.checksum && layout.checksum !== calculateLayoutChecksum(layout)) {
+    throw new Error(
+      `Persisted layout checksum mismatch for scope "${scope}" (key "${key}") at revision ${layout.revision ?? 0}.`
+    )
+  }
+  let validation = validatePersistedLayout(layout)
+  if (!validation.valid && rawRecord.version === 10 && layout.checksum) {
+    const repaired = repairLegacyCanonicalPages(layout)
+    if (repaired !== layout) {
+      layout = { ...repaired, checksum: calculateLayoutChecksum(repaired) }
+      validation = validatePersistedLayout(layout)
+    }
+  }
   if (!validation.valid) {
     throw new Error(
       `Invalid persisted layout payload for scope "${scope}" (key "${key}"): ${formatLayoutValidationIssues(
         validation.issues
       )}`
-    )
-  }
-  if (layout.checksum && layout.checksum !== calculateLayoutChecksum(layout)) {
-    throw new Error(
-      `Persisted layout checksum mismatch for scope "${scope}" (key "${key}") at revision ${layout.revision ?? 0}.`
     )
   }
   return layout
@@ -587,7 +596,8 @@ export const readLayoutStrict = async (
       return null
     }
     const layout = parsePersistedLayoutStrict(raw, scope)
-    rememberSuccessfulLayout(key, raw, layout)
+    // Cache what is actually on disk so a recovered layout isn't deduplicated away on save.
+    rememberSuccessfulLayout(key, raw, parsePersistedLayout(raw) ?? undefined)
     hydrationDiagnosticsByKey.delete(key)
     return layout
   } catch (error) {
@@ -673,6 +683,12 @@ const writePersistedLayoutSnapshot = (
       checksum: calculateLayoutChecksum(nextLayout),
     })
     try {
+      const validation = validatePersistedLayout(nextLayout)
+      if (!validation.valid) {
+        throw new Error(
+          `Refusing to persist invalid layout: ${formatLayoutValidationIssues(validation.issues)}`
+        )
+      }
       await invoke('set_layout_payload', { key, payload: serialized })
     } catch (error) {
       lastWrittenPayloadByKey.delete(key)
