@@ -360,7 +360,7 @@ test('compact preview renders four separated ordinary artworks at every desktop 
       assert.equal(visible.length, 4)
       const bounds = visible.map(node => {
         assert.equal(node.props['data-folder-preview-slot'], 'standard')
-        const artwork = node.props.children[1]
+        const artwork = node.props.children
         const wrapper = artwork.type(artwork.props)
         const size = wrapper.props.animate.scale * 40
         return { x: node.props.animate.x, y: node.props.animate.y, size }

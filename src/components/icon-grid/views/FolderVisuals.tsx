@@ -206,7 +206,7 @@ function StackedFolderPreview({
             key={icon ? `${icon.id}-${index}` : `holder-${index}`}
             data-folder-stacked-slot={icon ? 'icon' : 'holder'}
             className={`flex items-center justify-center overflow-hidden rounded-icon-tile ${
-              icon || showHolders ? 'bg-foreground/[0.04] dark:bg-white/[0.06]' : 'bg-transparent'
+              !icon && showHolders ? 'bg-foreground/[0.04] dark:bg-white/[0.06]' : 'bg-transparent'
             }`}
             style={{ width: miniSize, height: miniSize }}
           >

@@ -92,7 +92,9 @@ function GhostSplitPreviewIcon({ icons, size }: { icons: IconItem[]; size: numbe
         return (
           <div
             key={index}
-            className="flex items-center justify-center overflow-hidden rounded-icon-tile bg-foreground/[0.04] dark:bg-white/[0.06]"
+            className={`flex items-center justify-center overflow-hidden rounded-icon-tile ${
+              icon ? 'bg-transparent' : 'bg-foreground/[0.04] dark:bg-white/[0.06]'
+            }`}
             style={{ width: miniIconSize, height: miniIconSize }}
           >
             {icon ? (

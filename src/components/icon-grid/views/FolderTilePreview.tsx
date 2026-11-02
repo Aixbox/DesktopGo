@@ -130,12 +130,6 @@ export function FolderTilePreview(props: FolderTilePreviewProps) {
               else onOpenFolder(folder.id)
             }}
           >
-            <motion.span
-              className="pointer-events-none absolute left-1/2 top-1/2 -ml-5 -mt-5 h-10 w-10 rounded-icon-tile bg-foreground/[0.04] dark:bg-white/[0.06]"
-              initial={false}
-              animate={{ scale: slot.size / 40, opacity: slot.stacked ? 1 : 0 }}
-              transition={transition}
-            />
             <PreviewArtwork child={child} slot={slot} reducedMotion={reducedMotion} />
           </motion.button>
         )
