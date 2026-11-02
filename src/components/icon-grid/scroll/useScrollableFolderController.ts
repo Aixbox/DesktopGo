@@ -1,18 +1,12 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import type { FolderItem, FolderSize, GridItem, HotseatEntry, IconItem } from '../model'
 import type { DragState } from '../state/types'
-import { getGridItemSpan, getId } from '../model'
+import { getId } from '../model'
 import { resolveOuterItemIds } from '../domain/dock'
 import { reconcileHotseatEntries } from '../domain/hotseatLayout'
 import { filterItemsByIds } from '../domain/gridItems'
-import {
-  buildPersistedItemCoordinates,
-  findBestResizeAnchorIndex,
-  getFootprintIndices,
-  normalizeOuterSlots,
-  resizeSlotPages,
-} from '../domain/topLevelLayout'
-import { compactEmptyPages } from '../domain/slots'
+import { buildPersistedItemCoordinates, resizeSlotPages } from '../domain/topLevelLayout'
+import { planFolderResize } from '../domain/folderResizeTransaction'
 import { dissolveFolderInTopLevelLayout } from '../domain/folderPolicy'
 import { getLayoutNormalizationMetrics } from '../domain/gridGeometry'
 import { DEFAULT_FOLDER_LAYOUT_PROFILE, type FolderLayoutProfile } from '../domain/folderLayout'
@@ -96,6 +90,10 @@ export function useScrollableFolderController({
   const [folderItemWidth, setFolderItemWidth] = useState(columnWidth)
   const [folderItemHeight, setFolderItemHeight] = useState(rowHeight)
   const [folderColumns, setFolderColumns] = useState(() => Math.max(1, folderLayoutProfile.columns))
+  const [folderResizePreview, setFolderResizePreview] = useState<{
+    folderId: string
+    size: FolderSize
+  } | null>(null)
   const openFolder = useMemo(() => {
     if (!openFolderId) return null
     const found = items.find(item => item.kind === 'folder' && item.id === openFolderId)
@@ -193,27 +191,17 @@ export function useScrollableFolderController({
   )
 
   const handleResizeFolder = (folderId: string, size: FolderSize) => {
-    const resizedFolderEntryId = `folder:${folderId}`
+    setFolderResizePreview(null)
     const previousItems = itemsRef.current
-    const previousOuterItemIds = resolveOuterItemIds(
-      previousItems.map(getId),
-      dockEnabled ? dockKeysRef.current : []
-    )
-    const previousOuterItems = filterItemsByIds(previousItems, previousOuterItemIds)
     const previousFolder = previousItems.find(
       (item): item is FolderItem => item.kind === 'folder' && item.id === folderId
     )
     if (!previousFolder || previousFolder.size === size) return
-    const nextItems = previousItems.map(item =>
-      item.kind === 'folder' && item.id === folderId ? { ...item, size } : item
-    )
-    const nextOuterItemIds = resolveOuterItemIds(
-      nextItems.map(getId),
-      dockEnabled ? dockKeysRef.current : []
-    )
-    const outerItems = filterItemsByIds(nextItems, nextOuterItemIds)
     const layoutMetrics = getLayoutNormalizationMetrics(
-      outerItems,
+      filterItemsByIds(
+        previousItems,
+        resolveOuterItemIds(previousItems.map(getId), dockEnabled ? dockKeysRef.current : [])
+      ),
       Math.max(1, columns),
       pageSizeRef.current
     )
@@ -225,81 +213,66 @@ export function useScrollableFolderController({
         ? [...outerSlotsRef.current]
         : resizeSlotPages(
             outerSlotsRef.current,
-            previousOuterItems,
+            filterItemsByIds(
+              previousItems,
+              resolveOuterItemIds(previousItems.map(getId), dockEnabled ? dockKeysRef.current : [])
+            ),
             previousDimensions.pageSize,
             safePageSize,
             previousDimensions.columns,
             safeColumns,
             buildPersistedItemCoordinates(
               outerSlotsRef.current,
-              previousOuterItems,
+              filterItemsByIds(
+                previousItems,
+                resolveOuterItemIds(
+                  previousItems.map(getId),
+                  dockEnabled ? dockKeysRef.current : []
+                )
+              ),
               previousDimensions.pageSize,
               previousDimensions.columns
             )
           )
-    const originalAnchorIndex = baseOuterSlots.indexOf(resizedFolderEntryId)
-    const preferredAnchorIndex =
-      originalAnchorIndex >= 0
-        ? findBestResizeAnchorIndex({
-            slots: baseOuterSlots,
-            items: previousOuterItems,
-            itemId: resizedFolderEntryId,
-            currentAnchorIndex: originalAnchorIndex,
-            currentSpan: getGridItemSpan(previousFolder),
-            nextSpan: getGridItemSpan({ ...previousFolder, size }),
-            columns: safeColumns,
-            pageSize: safePageSize,
-          })
-        : null
-    const preferredAnchorById =
-      preferredAnchorIndex !== null &&
-      preferredAnchorIndex < Math.max(safePageSize, baseOuterSlots.length)
-        ? new Map([[resizedFolderEntryId, preferredAnchorIndex]])
-        : undefined
-    let effectiveBaseOuterSlots = baseOuterSlots
-    const finalAnchorIndex = preferredAnchorIndex ?? originalAnchorIndex
-    if (finalAnchorIndex >= 0) {
-      const footprint = getFootprintIndices(
-        finalAnchorIndex,
-        getGridItemSpan({ ...previousFolder, size }),
-        safeColumns,
-        safePageSize
-      )
-      if (footprint) {
-        const footprintSet = new Set(footprint)
-        const folderPageStart = Math.floor(finalAnchorIndex / safePageSize) * safePageSize
-        const folderPageEnd = folderPageStart + safePageSize
-        let displacedCount = 0
-        for (let index = folderPageStart; index < folderPageEnd; index += 1) {
-          if (!footprintSet.has(index)) continue
-          const slot = effectiveBaseOuterSlots[index]
-          if (slot && slot !== resizedFolderEntryId) displacedCount += 1
-        }
-        let nextPageVacant = 0
-        for (let index = folderPageEnd; index < folderPageEnd + safePageSize; index += 1) {
-          const slot = effectiveBaseOuterSlots[index]
-          if (slot === undefined || slot === null) nextPageVacant += 1
-        }
-        if (displacedCount > nextPageVacant) {
-          effectiveBaseOuterSlots = [
-            ...effectiveBaseOuterSlots.slice(0, folderPageEnd),
-            ...Array.from({ length: safePageSize }, () => null as string | null),
-            ...effectiveBaseOuterSlots.slice(folderPageEnd),
-          ]
-        }
-      }
-    }
-    const nextOuterSlots = compactEmptyPages(
-      normalizeOuterSlots(effectiveBaseOuterSlots, outerItems, safePageSize, safeColumns, {
-        preferredAnchorById,
-        spillStrategy: 'row-major-forward',
-      }),
-      safePageSize
-    )
-    itemsRef.current = nextItems
-    outerSlotsRef.current = nextOuterSlots
-    setItems(nextItems)
-    setOuterSlots(nextOuterSlots)
+    const plan = planFolderResize({
+      items: previousItems,
+      slots: baseOuterSlots,
+      folderId,
+      size,
+      columns: safeColumns,
+      pageSize: safePageSize,
+      dockKeys: dockEnabled ? dockKeysRef.current : [],
+    })
+    if (!plan) return
+    itemsRef.current = plan.items
+    outerSlotsRef.current = plan.slots
+    setItems(plan.items)
+    setOuterSlots(plan.slots)
+  }
+
+  const folderResizePreviewPlan = useMemo(() => {
+    if (!folderResizePreview) return null
+    return planFolderResize({
+      items,
+      slots: outerSlotsRef.current,
+      folderId: folderResizePreview.folderId,
+      size: folderResizePreview.size,
+      columns: Math.max(1, columns),
+      pageSize: Math.max(1, pageSizeRef.current),
+      dockKeys: dockEnabled ? dockKeysRef.current : [],
+    })
+  }, [columns, dockEnabled, folderResizePreview, items, pageSizeRef])
+
+  const renderItemById = useMemo(() => {
+    const sourceItems = folderResizePreviewPlan?.items ?? items
+    return new Map(sourceItems.map(item => [getId(item), item]))
+  }, [folderResizePreviewPlan, items])
+  const folderResizeProps = {
+    onResizeFolder: handleResizeFolder,
+    folderResizePreview,
+    onPreviewFolderResize: (folderId: string, size: FolderSize) =>
+      setFolderResizePreview({ folderId, size }),
+    onCancelFolderResize: () => setFolderResizePreview(null),
   }
 
   const handleDissolveFolder = (folderId: string) => {
@@ -339,6 +312,9 @@ export function useScrollableFolderController({
     folderPanelRef,
     handleDissolveFolder,
     handleResizeFolder,
+    folderResizePreviewPlan,
+    folderResizeProps,
+    renderItemById,
     openFolder,
     openFolderId,
     openFolderWithAnimation,

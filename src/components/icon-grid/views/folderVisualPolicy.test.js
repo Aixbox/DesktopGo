@@ -1,6 +1,19 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { getDesktopLargeFolderPreviewLayout } from './folderPreviewPolicy.ts'
+import {
+  getClosedFolderDropPreview,
+  getClosedFolderPreviewItems,
+  getClosedFolderPreviewLayout,
+  getDesktopLargeFolderPreviewLayout,
+} from './folderPreviewPolicy.ts'
+import {
+  FOLDER_PREVIEW_ICON_FALLBACK_SCALE,
+  FOLDER_PREVIEW_ICON_SCALE,
+  FOLDER_STACKED_PREVIEW_GAP,
+  FOLDER_STACKED_PREVIEW_PADDING,
+  getFolderPreviewArtworkSize,
+  getFolderStackedPreviewMetrics,
+} from '../domain/folderPreviewMetrics.ts'
 
 const cases = [
   {
@@ -53,3 +66,90 @@ for (const { folderSize, childCount, expected } of cases) {
     }
   )
 }
+
+const closedCases = [
+  [1, { standardIconCount: 1, stackedIconCount: 0, stackedSlotIndex: null }],
+  [8, { standardIconCount: 8, stackedIconCount: 0, stackedSlotIndex: null }],
+  [9, { standardIconCount: 9, stackedIconCount: 0, stackedSlotIndex: null }],
+  [10, { standardIconCount: 8, stackedIconCount: 2, stackedSlotIndex: 8 }],
+  [11, { standardIconCount: 8, stackedIconCount: 3, stackedSlotIndex: 8 }],
+  [12, { standardIconCount: 8, stackedIconCount: 4, stackedSlotIndex: 8 }],
+  [20, { standardIconCount: 8, stackedIconCount: 4, stackedSlotIndex: 8 }],
+]
+
+for (const [childCount, expected] of closedCases) {
+  test(`ColorOS 2x2 closed preview uses the ninth slot correctly for ${childCount} items`, () => {
+    const layout = getClosedFolderPreviewLayout('2x2', childCount)
+    assert.equal(layout.columns, 3)
+    assert.equal(layout.rows, 3)
+    assert.deepEqual(
+      {
+        standardIconCount: layout.standardIconCount,
+        stackedIconCount: layout.stackedIconCount,
+        stackedSlotIndex: layout.stackedSlotIndex,
+      },
+      expected
+    )
+  })
+}
+
+test('closed preview keeps the shared item split deterministic', () => {
+  const entries = Array.from({ length: 12 }, (_, index) => index)
+  const preview = getClosedFolderPreviewItems(entries, '2x2')
+  assert.deepEqual(preview.standardItems, entries.slice(0, 8))
+  assert.deepEqual(preview.stackedItems, entries.slice(8, 12))
+})
+
+test('closed folder drop preview shares the 3x3 grid and targets the ninth slot', () => {
+  const beforeNine = getClosedFolderDropPreview('2x2', 8)
+  assert.deepEqual(beforeNine.cells.slice(0, 9), [
+    'occupied',
+    'occupied',
+    'occupied',
+    'occupied',
+    'occupied',
+    'occupied',
+    'occupied',
+    'occupied',
+    'next',
+  ])
+  assert.equal(beforeNine.nextSlotIndex, 8)
+
+  const afterNine = getClosedFolderDropPreview('2x2', 9)
+  assert.equal(afterNine.columns, 3)
+  assert.equal(afterNine.rows, 3)
+  assert.equal(afterNine.cells[8], 'next')
+})
+
+test('four-grid and highlight branches remain explicit policy variants', () => {
+  const fourGrid = getClosedFolderPreviewLayout('2x2', 5, 'four-grid')
+  assert.deepEqual(
+    {
+      columns: fourGrid.columns,
+      rows: fourGrid.rows,
+      standardIconCount: fourGrid.standardIconCount,
+      stackedIconCount: fourGrid.stackedIconCount,
+    },
+    { columns: 2, rows: 2, standardIconCount: 3, stackedIconCount: 2 }
+  )
+  const highlightExactFill = getClosedFolderPreviewLayout('2x2', 6, 'highlight')
+  assert.equal(highlightExactFill.standardIconCount, 6)
+  assert.equal(highlightExactFill.stackedIconCount, 0)
+})
+
+test('large and narrow folder previews share artwork scale', () => {
+  assert.equal(FOLDER_PREVIEW_ICON_SCALE, 0.84)
+  assert.equal(FOLDER_PREVIEW_ICON_FALLBACK_SCALE, 0.68)
+  assert.equal(getFolderPreviewArtworkSize(50, FOLDER_PREVIEW_ICON_SCALE), 42)
+  assert.equal(getFolderPreviewArtworkSize(50, FOLDER_PREVIEW_ICON_FALLBACK_SCALE), 34)
+})
+
+test('stacked preview uses the same fixed 1px geometry as the 1x3 split preview', () => {
+  assert.equal(FOLDER_STACKED_PREVIEW_PADDING, 1)
+  assert.equal(FOLDER_STACKED_PREVIEW_GAP, 1)
+  assert.deepEqual(getFolderStackedPreviewMetrics(41), {
+    padding: 1,
+    gap: 1,
+    miniSize: 19,
+  })
+})

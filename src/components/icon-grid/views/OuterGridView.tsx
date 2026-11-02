@@ -68,6 +68,9 @@ interface OuterGridViewProps {
   onOpenFolder: (folderId: string) => void
   onLaunchIcon: (path: string) => void
   onResizeFolder: (folderId: string, size: FolderSize) => void
+  folderResizePreview?: { folderId: string; size: FolderSize } | null
+  onPreviewFolderResize?: (folderId: string, size: FolderSize) => void
+  onCancelFolderResize?: () => void
   onResizeWidget?: (widgetId: string, spanX: number, spanY: number) => void
   onDissolveFolder: (folderId: string) => void
   bindTileRef: (id: string, node: HTMLDivElement | null) => void
@@ -128,6 +131,9 @@ export function OuterGridView({
   onOpenFolder,
   onLaunchIcon,
   onResizeFolder,
+  folderResizePreview = null,
+  onPreviewFolderResize,
+  onCancelFolderResize,
   onResizeWidget,
   onDissolveFolder,
   bindTileRef,
@@ -348,6 +354,9 @@ export function OuterGridView({
                 onOpenFolder={onOpenFolder}
                 onLaunchIcon={onLaunchIcon}
                 onResizeFolder={onResizeFolder}
+                folderResizePreview={folderResizePreview}
+                onPreviewFolderResize={onPreviewFolderResize}
+                onCancelFolderResize={onCancelFolderResize}
                 onResizeWidget={onResizeWidget}
                 onDissolveFolder={onDissolveFolder}
                 bindTileRef={bindTileRef}
@@ -381,6 +390,9 @@ export function OuterGridView({
               onOpenFolder={onOpenFolder}
               onLaunchIcon={onLaunchIcon}
               onResizeFolder={onResizeFolder}
+              folderResizePreview={folderResizePreview}
+              onPreviewFolderResize={onPreviewFolderResize}
+              onCancelFolderResize={onCancelFolderResize}
               onResizeWidget={onResizeWidget}
               onDissolveFolder={onDissolveFolder}
               bindTileRef={bindTileRef}

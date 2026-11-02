@@ -8,10 +8,17 @@ import { getGridItemSpan } from '../model'
 import type { FolderDropFlight, MultiDropFlightItem } from '../state/types'
 import { FolderIconVisual } from './FolderVisuals'
 import { WidgetTile } from './WidgetTile'
-import { getDesktopLargeFolderPreviewLayout } from './folderPreviewPolicy'
+import {
+  getClosedFolderPreviewItems,
+  getDesktopLargeFolderPreviewLayout,
+} from './folderPreviewPolicy'
 import {
   DESKTOP_FOLDER_SURFACE_CLASS,
+  FOLDER_PREVIEW_ICON_FALLBACK_SCALE,
+  FOLDER_PREVIEW_ICON_SCALE,
   getDesktopFolderTileMetrics,
+  getFolderPreviewArtworkSize,
+  getFolderStackedPreviewMetrics,
   scaledRadius,
 } from './folderVisualPolicy'
 import {
@@ -22,6 +29,7 @@ import {
   type DragGhostMotion,
 } from './dragGhostMotion'
 import { getStackedIconMotionKey } from './stackedIconMotion'
+import { useDocumentDirection } from '../hooks/useDocumentDirection'
 
 interface DragGhostPointer {
   pointerX: number
@@ -51,8 +59,6 @@ interface DragOverlaysProps {
 
 const GHOST_FOLDER_INNER_PADDING = 8
 const GHOST_FOLDER_INNER_GAP = 6
-const GHOST_PREVIEW_ICON_SCALE = 0.84
-const GHOST_PREVIEW_ICON_FALLBACK_SCALE = 0.68
 const GHOST_SCALE_TRANSITION = 'transform 200ms cubic-bezier(0.22, 1, 0.36, 1)'
 
 const clampNumber = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
@@ -64,9 +70,11 @@ const getSingleSlotGhostPreviewInset = (panelBase: number) =>
   Math.round(clampNumber(panelBase * 0.06, 3, 5))
 
 function GhostSplitPreviewIcon({ icons, size }: { icons: IconItem[]; size: number }) {
-  const miniGap = 1
-  const miniPadding = 1
-  const miniIconSize = Math.max(5, Math.floor((size - miniPadding * 2 - miniGap) / 2))
+  const {
+    padding: miniPadding,
+    gap: miniGap,
+    miniSize: miniIconSize,
+  } = getFolderStackedPreviewMetrics(size)
 
   return (
     <div
@@ -76,10 +84,10 @@ function GhostSplitPreviewIcon({ icons, size }: { icons: IconItem[]; size: numbe
     >
       {Array.from({ length: 4 }, (_, index) => {
         const icon = icons[index]
-        const artworkSize = Math.max(5, Math.floor(miniIconSize * GHOST_PREVIEW_ICON_SCALE))
-        const fallbackSize = Math.max(
-          5,
-          Math.floor(miniIconSize * GHOST_PREVIEW_ICON_FALLBACK_SCALE)
+        const artworkSize = getFolderPreviewArtworkSize(miniIconSize, FOLDER_PREVIEW_ICON_SCALE)
+        const fallbackSize = getFolderPreviewArtworkSize(
+          miniIconSize,
+          FOLDER_PREVIEW_ICON_FALLBACK_SCALE
         )
         return (
           <div
@@ -195,8 +203,8 @@ function GhostPreviewIcon({ iconBase64, name, size }: GhostPreviewIconProps) {
           alt={name}
           className="launchpad-icon-artwork object-contain"
           style={{
-            width: `${Math.max(20, Math.floor(size * GHOST_PREVIEW_ICON_SCALE))}px`,
-            height: `${Math.max(20, Math.floor(size * GHOST_PREVIEW_ICON_SCALE))}px`,
+            width: `${getFolderPreviewArtworkSize(size, FOLDER_PREVIEW_ICON_SCALE, 20)}px`,
+            height: `${getFolderPreviewArtworkSize(size, FOLDER_PREVIEW_ICON_SCALE, 20)}px`,
           }}
           draggable={false}
         />
@@ -204,8 +212,8 @@ function GhostPreviewIcon({ iconBase64, name, size }: GhostPreviewIconProps) {
         <AppWindow
           className="text-foreground/55 dark:text-white/70"
           style={{
-            width: `${Math.max(16, Math.floor(size * GHOST_PREVIEW_ICON_FALLBACK_SCALE))}px`,
-            height: `${Math.max(16, Math.floor(size * GHOST_PREVIEW_ICON_FALLBACK_SCALE))}px`,
+            width: `${getFolderPreviewArtworkSize(size, FOLDER_PREVIEW_ICON_FALLBACK_SCALE, 16)}px`,
+            height: `${getFolderPreviewArtworkSize(size, FOLDER_PREVIEW_ICON_FALLBACK_SCALE, 16)}px`,
           }}
         />
       )}
@@ -226,6 +234,7 @@ function FolderGhost({
   gridGap: number
   titleLineCount: 'one' | 'two'
 }) {
+  const direction = useDocumentDirection()
   const span = getGridItemSpan(folder)
   const { bodyWidth, bodyHeight, shapeWidth, shapeHeight, panelBase } = getDesktopFolderTileMetrics(
     {
@@ -245,6 +254,7 @@ function FolderGhost({
   if (folder.size === '1x1') {
     const previewInset = getSingleSlotGhostPreviewInset(panelBase)
     const previewSize = Math.max(24, shapeWidth - previewInset * 2)
+    const preview = getClosedFolderPreviewItems(folder.children, folder.size)
 
     return (
       <div
@@ -260,7 +270,39 @@ function FolderGhost({
           }}
         >
           <FolderIconVisual
-            icons={folder.children.map(child => child.icon)}
+            icons={preview.standardItems.map(child => child.icon)}
+            stackedIcons={preview.stackedItems.map(child => child.icon)}
+            previewLayout={preview.layout}
+            rtl={direction === 'rtl'}
+            imgSize={previewSize}
+            withSurface={false}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  if (folder.size === '2x2') {
+    const preview = getClosedFolderPreviewItems(folder.children, folder.size)
+    const previewSize = Math.max(28, Math.min(shapeWidth, shapeHeight) - innerPadding * 2)
+    return (
+      <div
+        className="flex items-center justify-center"
+        style={{ width: `${bodyWidth}px`, height: `${bodyHeight}px` }}
+      >
+        <div
+          className={`${DESKTOP_FOLDER_SURFACE_CLASS} flex items-center justify-center`}
+          style={{
+            width: `${shapeWidth}px`,
+            height: `${shapeHeight}px`,
+            borderRadius: scaledRadius(surfaceRadius),
+          }}
+        >
+          <FolderIconVisual
+            icons={preview.standardItems.map(child => child.icon)}
+            stackedIcons={preview.stackedItems.map(child => child.icon)}
+            previewLayout={preview.layout}
+            rtl={direction === 'rtl'}
             imgSize={previewSize}
             withSurface={false}
           />
@@ -273,8 +315,8 @@ function FolderGhost({
   const previewIcons = folder.children.slice(0, previewLayout.visibleIconCount)
   const standardPreviewIcons = previewIcons.slice(0, previewLayout.standardIconCount)
   const splitPreviewIcons = previewIcons.slice(previewLayout.standardIconCount)
-  const rows = folder.size === '2x2' ? 3 : folder.size === '1x2' ? 3 : 1
-  const cols = folder.size === '2x2' ? 3 : folder.size === '2x1' ? 3 : 1
+  const rows = folder.size === '1x2' ? 3 : 1
+  const cols = folder.size === '2x1' ? 3 : 1
   const iconSize = Math.max(
     14,
     Math.floor(

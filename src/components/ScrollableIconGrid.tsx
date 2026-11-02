@@ -205,7 +205,9 @@ export function ScrollableIconGrid({
     folderOrder,
     folderPanelRef,
     handleDissolveFolder,
-    handleResizeFolder,
+    folderResizeProps,
+    folderResizePreviewPlan,
+    renderItemById,
     openFolder,
     openFolderWithAnimation,
     setOpenFolderId,
@@ -229,7 +231,6 @@ export function ScrollableIconGrid({
     rowHeight,
     folderLayoutProfile,
   })
-
   const selectedSet = useMemo(() => new Set(selectedIconKeys), [selectedIconKeys])
   const iconConfig = ICON_SIZE_CONFIG[iconSize]
   const captureFinishedScrollDrag = useCallback(
@@ -251,7 +252,6 @@ export function ScrollableIconGrid({
       if (!targetGroupId) return
       const targetGroup = currentGroups.find(group => group.id === targetGroupId)
       if (!targetGroup) return
-
       const availableItemIds = resolveOuterItemIds(
         itemsRef.current.map(getId),
         dockEnabled ? dockKeysRef.current : []
@@ -484,11 +484,11 @@ export function ScrollableIconGrid({
   )
   const outerViewItemById = useMemo(() => {
     if (!dragState || draggedFolderChildSelections.size === 0) {
-      return itemById
+      return renderItemById
     }
     const draggingIconIdSet = new Set(dragState.draggingIds)
-    if (draggingIconIdSet.size === 0) return itemById
-    const next = new Map(itemById)
+    if (draggingIconIdSet.size === 0) return renderItemById
+    const next = new Map(renderItemById)
     draggedFolderChildSelections.forEach((children, folderId) => {
       children.forEach(child => {
         next.set(child.key, child)
@@ -504,7 +504,7 @@ export function ScrollableIconGrid({
       next.set(folderEntryId, { ...folder, children: nextChildren })
     })
     return next
-  }, [dragState, draggedFolderChildSelections, itemById])
+  }, [dragState, draggedFolderChildSelections, renderItemById])
   const outerPreviewSpillOrder = useMemo(() => {
     if (!dragState || dragState.context !== 'outer') return null
     if (launchpadGridViewMode === 'scroll') {
@@ -576,13 +576,13 @@ export function ScrollableIconGrid({
     if (dragState?.context === 'outer') {
       return outerPreviewSpillOrder ?? dragState.workingOrder
     }
-    const baseOrder = frozenOuterOrder ?? outerSlots
+    const baseOrder = frozenOuterOrder ?? folderResizePreviewPlan?.slots ?? outerSlots
     if (dragState?.context === 'dock' && dragState.draggingIds.length > 0) {
       const dragIdSet = new Set(dragState.draggingIds)
       return baseOrder.map(slot => (slot && dragIdSet.has(slot) ? null : slot))
     }
     return baseOrder
-  }, [dragState, frozenOuterOrder, outerPreviewSpillOrder, outerSlots])
+  }, [dragState, folderResizePreviewPlan, frozenOuterOrder, outerPreviewSpillOrder, outerSlots])
 
   useEffect(() => {
     scrollGridPageRefs.current.clear()
@@ -790,7 +790,7 @@ export function ScrollableIconGrid({
             onLaunchIcon={path => {
               void launchApp(path)
             }}
-            onResizeFolder={handleResizeFolder}
+            {...folderResizeProps}
             onResizeWidget={handleResizeWidget}
             onDissolveFolder={handleDissolveFolder}
             bindTileRef={(id, node) => {
@@ -854,7 +854,7 @@ export function ScrollableIconGrid({
                 onLaunchIcon={path => {
                   void launchApp(path)
                 }}
-                onResizeFolder={handleResizeFolder}
+                {...folderResizeProps}
                 onResizeWidget={handleResizeWidget}
                 onDissolveFolder={handleDissolveFolder}
                 bindTileRef={(id, node) => {

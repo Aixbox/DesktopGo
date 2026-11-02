@@ -22,22 +22,31 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '../../ui/context-menu'
-import type { FolderItem, FolderSize, GridSpan, IconItem } from '../model'
 import {
-  DEFAULT_FOLDER_LAYOUT_PROFILE,
-  FOLDER_LAYOUT_PROFILES,
-  getFolderPreviewItems,
-  getFolderStackedItems,
-} from '../domain/folderLayout'
+  getGridItemSpan,
+  type FolderItem,
+  type FolderSize,
+  type GridSpan,
+  type IconItem,
+} from '../model'
 import {
   DESKTOP_FOLDER_SURFACE_CLASS,
+  FOLDER_PREVIEW_ICON_FALLBACK_SCALE,
+  FOLDER_PREVIEW_ICON_SCALE,
   FOLDER_SHARED_LAYOUT_TRANSITION,
+  getFolderPreviewArtworkSize,
+  getFolderStackedPreviewMetrics,
   getDesktopFolderTileMetrics,
   getFolderSharedLayoutId,
   scaledRadius,
 } from './folderVisualPolicy'
 import { FolderIconVisual } from './FolderVisuals'
-import { getDesktopLargeFolderPreviewLayout } from './folderPreviewPolicy'
+import { FolderResizeHandle } from './FolderResizeHandle'
+import { useDocumentDirection } from '../hooks/useDocumentDirection'
+import {
+  getClosedFolderPreviewItems,
+  getDesktopLargeFolderPreviewLayout,
+} from './folderPreviewPolicy'
 
 interface OuterFolderTileProps {
   folder: FolderItem
@@ -54,6 +63,9 @@ interface OuterFolderTileProps {
   onOpenFolder: (folderId: string) => void
   onLaunchIcon: (path: string) => void
   onResizeFolder: (folderId: string, size: FolderSize) => void
+  resizePreviewSize?: FolderSize | null
+  onPreviewFolderResize?: (folderId: string, size: FolderSize) => void
+  onCancelFolderResize?: () => void
   onDissolveFolder: (folderId: string) => void
 }
 
@@ -71,8 +83,6 @@ const TILE_PADDING = ICON_GRID_TILE_PADDING_Y
 const BODY_TITLE_GAP = ICON_GRID_TITLE_GAP
 const INNER_PADDING = 8
 const INNER_GAP = 6
-const PREVIEW_ICON_SCALE = 0.84
-const PREVIEW_ICON_FALLBACK_SCALE = 0.68
 
 const clampNumber = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
@@ -179,8 +189,8 @@ function PreviewIconButton({
           alt={name}
           className="launchpad-icon-artwork object-contain transition-transform group-hover:scale-[1.04]"
           style={{
-            width: `${Math.max(20, Math.floor(size * PREVIEW_ICON_SCALE))}px`,
-            height: `${Math.max(20, Math.floor(size * PREVIEW_ICON_SCALE))}px`,
+            width: `${getFolderPreviewArtworkSize(size, FOLDER_PREVIEW_ICON_SCALE, 20)}px`,
+            height: `${getFolderPreviewArtworkSize(size, FOLDER_PREVIEW_ICON_SCALE, 20)}px`,
           }}
           draggable={false}
         />
@@ -188,8 +198,8 @@ function PreviewIconButton({
         <AppWindow
           className="text-foreground/55 dark:text-white/70"
           style={{
-            width: `${Math.max(16, Math.floor(size * PREVIEW_ICON_FALLBACK_SCALE))}px`,
-            height: `${Math.max(16, Math.floor(size * PREVIEW_ICON_FALLBACK_SCALE))}px`,
+            width: `${getFolderPreviewArtworkSize(size, FOLDER_PREVIEW_ICON_FALLBACK_SCALE, 16)}px`,
+            height: `${getFolderPreviewArtworkSize(size, FOLDER_PREVIEW_ICON_FALLBACK_SCALE, 16)}px`,
           }}
         />
       )}
@@ -209,8 +219,8 @@ function MiniPreviewArtwork({ iconBase64, size }: MiniPreviewArtworkProps) {
       alt=""
       className="launchpad-icon-artwork object-contain"
       style={{
-        width: Math.max(5, Math.floor(size * PREVIEW_ICON_SCALE)),
-        height: Math.max(5, Math.floor(size * PREVIEW_ICON_SCALE)),
+        width: getFolderPreviewArtworkSize(size, FOLDER_PREVIEW_ICON_SCALE),
+        height: getFolderPreviewArtworkSize(size, FOLDER_PREVIEW_ICON_SCALE),
       }}
       draggable={false}
     />
@@ -218,8 +228,8 @@ function MiniPreviewArtwork({ iconBase64, size }: MiniPreviewArtworkProps) {
     <AppWindow
       className="text-foreground/55 dark:text-white/70"
       style={{
-        width: Math.max(5, Math.floor(size * PREVIEW_ICON_FALLBACK_SCALE)),
-        height: Math.max(5, Math.floor(size * PREVIEW_ICON_FALLBACK_SCALE)),
+        width: getFolderPreviewArtworkSize(size, FOLDER_PREVIEW_ICON_FALLBACK_SCALE),
+        height: getFolderPreviewArtworkSize(size, FOLDER_PREVIEW_ICON_FALLBACK_SCALE),
       }}
     />
   )
@@ -238,9 +248,11 @@ function SplitPreviewIconButton({
   size,
   onOpenFolder,
 }: SplitPreviewIconButtonProps) {
-  const miniGap = 1
-  const miniPadding = 1
-  const miniIconSize = Math.max(5, Math.floor((size - miniPadding * 2 - miniGap) / 2))
+  const {
+    padding: miniPadding,
+    gap: miniGap,
+    miniSize: miniIconSize,
+  } = getFolderStackedPreviewMetrics(size)
 
   return (
     <button
@@ -291,6 +303,7 @@ interface FolderBodyProps {
   folderOpen: boolean
   sharedLayoutActive: boolean
   selectionMode: boolean
+  rtl: boolean
   onOpenFolder: (folderId: string) => void
   onLaunchIcon: (path: string) => void
 }
@@ -322,38 +335,6 @@ function FolderDropReceiverBackdrop({
   )
 }
 
-function BigFolderDropGrid({ active, childCount }: { active: boolean; childCount: number }) {
-  if (!active) return null
-  const capacity = FOLDER_LAYOUT_PROFILES.big.columns * FOLDER_LAYOUT_PROFILES.big.rows
-  const localCount = Math.min(Math.max(0, childCount), capacity)
-  const nextIndex = localCount < capacity ? localCount : -1
-  return (
-    <div
-      data-big-folder-drop-grid="active"
-      className="pointer-events-none absolute inset-[10%] z-20 grid grid-cols-4 grid-rows-4 gap-1 rounded-[18%] border border-primary/45 bg-primary/10 p-1 shadow-[0_0_0_1px_rgba(59,130,246,0.12),0_8px_18px_rgba(59,130,246,0.16)] dark:border-sky-300/50 dark:bg-sky-300/10"
-      aria-hidden="true"
-    >
-      {Array.from({ length: capacity }, (_, index) => {
-        const occupied = index < localCount
-        const next = index === nextIndex
-        return (
-          <span
-            key={index}
-            data-big-folder-drop-cell={next ? 'next' : occupied ? 'occupied' : 'empty'}
-            className={`rounded-[22%] border transition-colors ${
-              next
-                ? 'border-primary bg-primary/35 shadow-[0_0_8px_rgba(59,130,246,0.5)] dark:border-sky-200 dark:bg-sky-200/45'
-                : occupied
-                  ? 'border-foreground/20 bg-foreground/12 dark:border-white/20 dark:bg-white/12'
-                  : 'border-foreground/12 bg-background/35 dark:border-white/12 dark:bg-black/20'
-            }`}
-          />
-        )
-      })}
-    </div>
-  )
-}
-
 function FolderBody({
   folder,
   bodyWidth,
@@ -366,6 +347,7 @@ function FolderBody({
   folderOpen,
   sharedLayoutActive,
   selectionMode,
+  rtl,
   onOpenFolder,
   onLaunchIcon,
 }: FolderBodyProps) {
@@ -376,11 +358,7 @@ function FolderBody({
   if (folder.size === '1x1') {
     const previewInset = getSingleSlotPreviewInset(panelBase)
     const previewSize = Math.max(24, shapeWidth - previewInset * 2)
-    const previewIcons = getFolderPreviewItems(folder.children, DEFAULT_FOLDER_LAYOUT_PROFILE)
-    const stackedPreviewIcons = getFolderStackedItems(
-      folder.children,
-      DEFAULT_FOLDER_LAYOUT_PROFILE
-    )
+    const preview = getClosedFolderPreviewItems(folder.children, folder.size)
 
     return (
       <div
@@ -419,8 +397,10 @@ function FolderBody({
           }}
         >
           <FolderIconVisual
-            icons={previewIcons.map(child => child.icon)}
-            stackedIcons={stackedPreviewIcons.map(child => child.icon)}
+            icons={preview.standardItems.map(child => child.icon)}
+            stackedIcons={preview.stackedItems.map(child => child.icon)}
+            previewLayout={preview.layout}
+            rtl={rtl}
             imgSize={previewSize}
             withSurface={false}
           />
@@ -430,8 +410,7 @@ function FolderBody({
   }
 
   if (folder.size === '2x2') {
-    const previewIcons = getFolderPreviewItems(folder.children, FOLDER_LAYOUT_PROFILES.big)
-    const stackedPreviewIcons = getFolderStackedItems(folder.children, FOLDER_LAYOUT_PROFILES.big)
+    const preview = getClosedFolderPreviewItems(folder.children, folder.size)
     const previewSize = Math.max(28, Math.min(shapeWidth, shapeHeight) - innerPadding * 2)
 
     return (
@@ -455,7 +434,6 @@ function FolderBody({
           shapeHeight={shapeHeight}
           surfaceRadius={surfaceRadius}
         />
-        <BigFolderDropGrid active={folderPreview} childCount={folder.children.length} />
         <motion.div
           layoutId={sharedLayoutActive ? getFolderSharedLayoutId(folder.id) : undefined}
           transition={FOLDER_SHARED_LAYOUT_TRANSITION}
@@ -472,8 +450,10 @@ function FolderBody({
           }}
         >
           <FolderIconVisual
-            icons={previewIcons.map(child => child.icon)}
-            stackedIcons={stackedPreviewIcons.map(child => child.icon)}
+            icons={preview.standardItems.map(child => child.icon)}
+            stackedIcons={preview.stackedItems.map(child => child.icon)}
+            previewLayout={preview.layout}
+            rtl={rtl}
             imgSize={previewSize}
             withSurface={false}
           />
@@ -594,9 +574,16 @@ function OuterFolderTileComponent({
   onOpenFolder,
   onLaunchIcon,
   onResizeFolder,
+  resizePreviewSize = null,
+  onPreviewFolderResize,
+  onCancelFolderResize,
   onDissolveFolder,
 }: OuterFolderTileProps) {
   const titleLineCount = useIconStore(state => state.titleLineCount)
+  const direction = useDocumentDirection()
+  const effectiveSize = resizePreviewSize ?? folder.size
+  const effectiveFolder = resizePreviewSize ? { ...folder, size: resizePreviewSize } : folder
+  const effectiveSpan = resizePreviewSize ? getGridItemSpan(effectiveFolder) : span
   const titleMetrics = getIconGridTitleMetrics(titleLineCount)
   const {
     footprintWidth,
@@ -607,11 +594,11 @@ function OuterFolderTileComponent({
     panelBase,
     surfaceRadius,
   } = getDesktopFolderTileMetrics({
-    span,
+    span: effectiveSpan,
     slotWidth,
     slotHeight,
     gridGap,
-    folderSize: folder.size,
+    folderSize: effectiveSize,
     titleLineCount,
     surfaceTitleLineCount: 'two',
   })
@@ -630,7 +617,7 @@ function OuterFolderTileComponent({
             style={{ padding: `${TILE_PADDING}px 0`, rowGap: `${BODY_TITLE_GAP}px` }}
           >
             <FolderBody
-              folder={folder}
+              folder={effectiveFolder}
               bodyWidth={bodyWidth}
               bodyHeight={bodyHeight}
               shapeWidth={shapeWidth}
@@ -641,6 +628,7 @@ function OuterFolderTileComponent({
               folderOpen={folderOpen}
               sharedLayoutActive={sharedLayoutActive}
               selectionMode={selectionMode}
+              rtl={direction === 'rtl'}
               onOpenFolder={onOpenFolder}
               onLaunchIcon={onLaunchIcon}
             />
@@ -676,6 +664,23 @@ function OuterFolderTileComponent({
               </span>
             </button>
           </div>
+          <FolderResizeHandle
+            visible={selectionMode && !folderPreview && !folderOpen}
+            span={effectiveSpan}
+            frameWidth={shapeWidth}
+            frameHeight={shapeHeight}
+            frameTop={TILE_PADDING + Math.max(0, (bodyHeight - shapeHeight) / 2)}
+            cellWidth={slotWidth}
+            cellHeight={slotHeight}
+            gridGap={gridGap}
+            rtl={direction === 'rtl'}
+            onCommit={nextSize => {
+              onCancelFolderResize?.()
+              if (nextSize !== folder.size) onResizeFolder(folder.id, nextSize)
+            }}
+            onPreview={nextSize => onPreviewFolderResize?.(folder.id, nextSize)}
+            onCancel={() => onCancelFolderResize?.()}
+          />
         </div>
       </ContextMenuTrigger>
 
@@ -745,5 +750,8 @@ export const OuterFolderTile = memo(
     previous.onOpenFolder === next.onOpenFolder &&
     previous.onLaunchIcon === next.onLaunchIcon &&
     previous.onResizeFolder === next.onResizeFolder &&
+    previous.resizePreviewSize === next.resizePreviewSize &&
+    previous.onPreviewFolderResize === next.onPreviewFolderResize &&
+    previous.onCancelFolderResize === next.onCancelFolderResize &&
     previous.onDissolveFolder === next.onDissolveFolder
 )

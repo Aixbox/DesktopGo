@@ -167,5 +167,28 @@ export const getDesktopSingleSlotFolderMetrics = (
 export const getFolderPreviewSlotSize = (imgSize: number): number =>
   Math.max(8, Math.floor((imgSize - FOLDER_PREVIEW_PADDING * 2 - FOLDER_PREVIEW_GAP) / 2))
 
+export const getFolderPreviewSlotSizeForGrid = (
+  imgSize: number,
+  columns: number,
+  rows: number
+): number => {
+  const safeColumns = Math.max(1, Math.floor(columns))
+  const safeRows = Math.max(1, Math.floor(rows))
+  const availableWidth =
+    imgSize - FOLDER_PREVIEW_PADDING * 2 - FOLDER_PREVIEW_GAP * Math.max(0, safeColumns - 1)
+  const availableHeight =
+    imgSize - FOLDER_PREVIEW_PADDING * 2 - FOLDER_PREVIEW_GAP * Math.max(0, safeRows - 1)
+  return Math.max(6, Math.floor(Math.min(availableWidth / safeColumns, availableHeight / safeRows)))
+}
+
 export const getFolderPreviewFrameSize = (imgSize: number): number =>
   imgSize + FOLDER_PREVIEW_OUTER_EXPAND * 2
+
+export {
+  FOLDER_PREVIEW_ICON_FALLBACK_SCALE,
+  FOLDER_PREVIEW_ICON_SCALE,
+  FOLDER_STACKED_PREVIEW_GAP,
+  FOLDER_STACKED_PREVIEW_PADDING,
+  getFolderPreviewArtworkSize,
+  getFolderStackedPreviewMetrics,
+} from '../domain/folderPreviewMetrics'

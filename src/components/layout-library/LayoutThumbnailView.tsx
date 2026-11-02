@@ -3,7 +3,7 @@ import { translate } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { GRID_GAP } from '@/components/icon-grid/constants'
 import type { FolderSize } from '@/components/icon-grid/model'
-import { getDesktopLargeFolderPreviewLayout } from '@/components/icon-grid/views/folderPreviewPolicy'
+import { getClosedFolderPreviewItems } from '@/components/icon-grid/views/folderPreviewPolicy'
 import {
   FOLDER_PREVIEW_GAP,
   FOLDER_PREVIEW_PADDING,
@@ -150,6 +150,7 @@ function FolderGlyph({ entry, metrics, titleLineCount, iconImages }: FolderGlyph
     const previewX = surfaceX + (single.surfaceSize - single.previewSize) / 2
     const previewY = surfaceY + (single.surfaceSize - single.previewSize) / 2
     const slotSize = getFolderPreviewSlotSize(single.previewSize)
+    const preview = getClosedFolderPreviewItems(children, folderSize)
 
     return (
       <g>
@@ -160,7 +161,7 @@ function FolderGlyph({ entry, metrics, titleLineCount, iconImages }: FolderGlyph
           height={single.surfaceSize}
           radius={single.surfaceRadius}
         />
-        {children.slice(0, MINI_PREVIEW_LIMIT).map((childKey, index) => (
+        {preview.standardItems.map((childKey, index) => (
           <IconGlyph
             key={childKey}
             iconKey={childKey}
@@ -174,6 +175,23 @@ function FolderGlyph({ entry, metrics, titleLineCount, iconImages }: FolderGlyph
             iconImages={iconImages}
           />
         ))}
+        {preview.layout.stackedSlotIndex !== null ? (
+          <MiniPreview
+            icons={preview.stackedItems}
+            x={
+              previewX +
+              FOLDER_PREVIEW_PADDING +
+              (preview.layout.stackedSlotIndex % 2) * (slotSize + FOLDER_PREVIEW_GAP)
+            }
+            y={
+              previewY +
+              FOLDER_PREVIEW_PADDING +
+              Math.floor(preview.layout.stackedSlotIndex / 2) * (slotSize + FOLDER_PREVIEW_GAP)
+            }
+            size={slotSize}
+            iconImages={iconImages}
+          />
+        ) : null}
       </g>
     )
   }
@@ -193,10 +211,9 @@ function FolderGlyph({ entry, metrics, titleLineCount, iconImages }: FolderGlyph
   const surfaceY =
     originY + ICON_GRID_TILE_PADDING_Y + Math.max(0, (tile.bodyHeight - tile.shapeHeight) / 2)
 
-  const layout = getDesktopLargeFolderPreviewLayout(folderSize, children.length)
-  const visibleChildren = children.slice(0, layout.visibleIconCount)
-  const standardChildren = visibleChildren.slice(0, layout.standardIconCount)
-  const splitChildren = visibleChildren.slice(layout.standardIconCount)
+  const preview = getClosedFolderPreviewItems(children, folderSize)
+  const standardChildren = preview.standardItems
+  const splitChildren = preview.stackedItems
 
   const cols = folderSize === '2x2' || folderSize === '2x1' ? 3 : 1
   const rows = folderSize === '2x2' || folderSize === '1x2' ? 3 : 1
@@ -239,11 +256,11 @@ function FolderGlyph({ entry, metrics, titleLineCount, iconImages }: FolderGlyph
           iconImages={iconImages}
         />
       ))}
-      {layout.splitLastSlot ? (
+      {preview.layout.stackedSlotIndex !== null ? (
         <MiniPreview
           icons={splitChildren}
-          x={cellX(layout.standardIconCount)}
-          y={cellY(layout.standardIconCount)}
+          x={cellX(preview.layout.stackedSlotIndex)}
+          y={cellY(preview.layout.stackedSlotIndex)}
           size={cellSize}
           iconImages={iconImages}
         />

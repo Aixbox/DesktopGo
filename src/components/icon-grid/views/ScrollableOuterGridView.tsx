@@ -78,6 +78,9 @@ interface ScrollableOuterGridViewProps {
   onOpenFolder: (folderId: string) => void
   onLaunchIcon: (path: string) => void
   onResizeFolder: (folderId: string, size: FolderSize) => void
+  folderResizePreview?: { folderId: string; size: FolderSize } | null
+  onPreviewFolderResize?: (folderId: string, size: FolderSize) => void
+  onCancelFolderResize?: () => void
   onResizeWidget?: (widgetId: string, spanX: number, spanY: number) => void
   onDissolveFolder: (folderId: string) => void
   bindTileRef: (id: string, node: HTMLDivElement | null) => void
@@ -152,6 +155,9 @@ export function ScrollableOuterGridView({
   onOpenFolder,
   onLaunchIcon,
   onResizeFolder,
+  folderResizePreview = null,
+  onPreviewFolderResize,
+  onCancelFolderResize,
   onResizeWidget,
   onDissolveFolder,
   bindTileRef,
@@ -382,6 +388,13 @@ export function ScrollableOuterGridView({
                                 onOpenFolder={onOpenFolder}
                                 onLaunchIcon={onLaunchIcon}
                                 onResizeFolder={onResizeFolder}
+                                resizePreviewSize={
+                                  folderResizePreview?.folderId === entry.item.id
+                                    ? folderResizePreview.size
+                                    : null
+                                }
+                                onPreviewFolderResize={onPreviewFolderResize}
+                                onCancelFolderResize={onCancelFolderResize}
                                 onDissolveFolder={onDissolveFolder}
                               />
                             ) : (

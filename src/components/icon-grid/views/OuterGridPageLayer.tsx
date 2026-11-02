@@ -98,6 +98,9 @@ interface OuterGridPageLayerProps {
   onOpenFolder: (folderId: string) => void
   onLaunchIcon: (path: string) => void
   onResizeFolder: (folderId: string, size: FolderSize) => void
+  folderResizePreview?: { folderId: string; size: FolderSize } | null
+  onPreviewFolderResize?: (folderId: string, size: FolderSize) => void
+  onCancelFolderResize?: () => void
   onResizeWidget?: (widgetId: string, spanX: number, spanY: number) => void
   onDissolveFolder: (folderId: string) => void
   bindTileRef: (id: string, node: HTMLDivElement | null) => void
@@ -127,6 +130,9 @@ export function OuterGridPageLayer({
   onOpenFolder,
   onLaunchIcon,
   onResizeFolder,
+  folderResizePreview = null,
+  onPreviewFolderResize,
+  onCancelFolderResize,
   onResizeWidget,
   onDissolveFolder,
   bindTileRef,
@@ -223,6 +229,13 @@ export function OuterGridPageLayer({
             onOpenFolder={interactive ? onOpenFolder : noop}
             onLaunchIcon={interactive ? onLaunchIcon : noop}
             onResizeFolder={interactive ? onResizeFolder : noop}
+            resizePreviewSize={
+              interactive && folderResizePreview?.folderId === entry.item.id
+                ? folderResizePreview.size
+                : null
+            }
+            onPreviewFolderResize={interactive ? onPreviewFolderResize : undefined}
+            onCancelFolderResize={interactive ? onCancelFolderResize : undefined}
             onDissolveFolder={interactive ? onDissolveFolder : noop}
           />
         ) : (

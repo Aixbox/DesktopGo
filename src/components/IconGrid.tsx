@@ -12,8 +12,8 @@ import type { DesktopIcon } from '../types'
 import { getIconGridLayoutRowHeight, getIconGridRowHeight, ICON_SIZE_CONFIG } from '../types'
 import { useIconStore } from '../stores/iconStore'
 import type { FolderItem, FolderSize, GridItem, IconItem } from './icon-grid/model'
-import { getGridItemSpan, getId } from './icon-grid/model'
-import { compactEmptyPages, DRAG_HOLE_ID } from './icon-grid/domain/slots'
+import { getId } from './icon-grid/model'
+import { DRAG_HOLE_ID } from './icon-grid/domain/slots'
 import { clampNumber } from './icon-grid/domain/geometry'
 import { useIconGridDragWorkflow } from './icon-grid/hooks/useIconGridDragWorkflow'
 import {
@@ -33,12 +33,10 @@ import {
 import { resolveDockDisplaySlots, resolveOuterItemIds } from './icon-grid/domain/dock'
 import {
   buildPersistedItemCoordinates,
-  findBestResizeAnchorIndex,
-  getFootprintIndices,
   getPageAnchorEntries,
-  normalizeOuterSlots,
   resizeSlotPages,
 } from './icon-grid/domain/topLevelLayout'
+import { planFolderResize } from './icon-grid/domain/folderResizeTransaction'
 import {
   applyMultiOuterDropFromSession,
   applyOuterDropFromSession,
@@ -128,6 +126,10 @@ export function IconGrid({
   const [hoverPage, setHoverPage] = useState<number | null>(null)
   const [openFolderId, setOpenFolderId] = useState<string | null>(null)
   const [activeFolderSharedLayoutId, setActiveFolderSharedLayoutId] = useState<string | null>(null)
+  const [folderResizePreview, setFolderResizePreview] = useState<{
+    folderId: string
+    size: FolderSize
+  } | null>(null)
   const {
     containerRef,
     gridRef,
@@ -222,6 +224,22 @@ export function IconGrid({
     items.forEach(item => map.set(getId(item), item))
     return map
   }, [items])
+  const folderResizePreviewPlan = useMemo(() => {
+    if (!folderResizePreview) return null
+    return planFolderResize({
+      items,
+      slots: outerSlots,
+      folderId: folderResizePreview.folderId,
+      size: folderResizePreview.size,
+      columns,
+      pageSize,
+      dockKeys: dockEnabled ? dockKeys : [],
+    })
+  }, [columns, dockEnabled, dockKeys, folderResizePreview, items, outerSlots, pageSize])
+  const renderItemById = useMemo(() => {
+    const sourceItems = folderResizePreviewPlan?.items ?? items
+    return new Map(sourceItems.map(item => [getId(item), item]))
+  }, [folderResizePreviewPlan, items])
   const dockKeyboard = useDockKeyboardReorder({
     dockKeys,
     setDockKeys,
@@ -380,11 +398,11 @@ export function IconGrid({
   )
   const outerViewItemById = useMemo(() => {
     if (!dragState || draggedFolderChildSelections.size === 0) {
-      return itemById
+      return renderItemById
     }
     const draggingIconIdSet = new Set(dragState.draggingIds)
-    if (draggingIconIdSet.size === 0) return itemById
-    const next = new Map(itemById)
+    if (draggingIconIdSet.size === 0) return renderItemById
+    const next = new Map(renderItemById)
     draggedFolderChildSelections.forEach((_children, folderId) => {
       const folderEntryId = `folder:${folderId}`
       const folder = next.get(folderEntryId)
@@ -397,7 +415,7 @@ export function IconGrid({
       next.set(folderEntryId, { ...folder, children: nextChildren })
     })
     return next
-  }, [dragState, draggedFolderChildSelections, itemById])
+  }, [dragState, draggedFolderChildSelections, renderItemById])
   const outerPreviewSpillOrder = useMemo(() => {
     if (!dragState || dragState.context !== 'outer') return null
     if (dragState.folderPreviewTargetId !== null) return null
@@ -468,13 +486,13 @@ export function IconGrid({
     if (dragState?.context === 'outer') {
       return outerPreviewSpillOrder ?? dragState.workingOrder
     }
-    const baseOrder = frozenOuterOrder ?? outerSlots
+    const baseOrder = frozenOuterOrder ?? folderResizePreviewPlan?.slots ?? outerSlots
     if (dragState?.context === 'dock' && dragState.draggingIds.length > 0) {
       const dragIdSet = new Set(dragState.draggingIds)
       return baseOrder.map(slot => (slot && dragIdSet.has(slot) ? null : slot))
     }
     return baseOrder
-  }, [dragState, frozenOuterOrder, outerPreviewSpillOrder, outerSlots])
+  }, [dragState, folderResizePreviewPlan, frozenOuterOrder, outerPreviewSpillOrder, outerSlots])
 
   useEffect(() => {
     if (!visibleOpenFolderId) return
@@ -564,29 +582,16 @@ export function IconGrid({
   }, [])
 
   const handleResizeFolder = (folderId: string, size: FolderSize) => {
-    const resizedFolderEntryId = `folder:${folderId}`
     const prevItems = itemsRef.current
-    const prevOuterItemIds = resolveOuterItemIds(
-      prevItems.map(getId),
-      dockEnabled ? dockKeysRef.current : []
-    )
-    const prevOuterItems = filterItemsByIds(prevItems, prevOuterItemIds)
     const prevFolder = prevItems.find(
       (item): item is FolderItem => item.kind === 'folder' && item.id === folderId
     )
     if (!prevFolder || prevFolder.size === size) return
-
-    const nextItems = itemsRef.current.map(item =>
-      item.kind === 'folder' && item.id === folderId ? { ...item, size } : item
-    )
-    const nextDockKeys = dockKeysRef.current
-    const nextOuterItemIds = resolveOuterItemIds(
-      nextItems.map(getId),
-      dockEnabled ? nextDockKeys : []
-    )
-    const outerItems = filterItemsByIds(nextItems, nextOuterItemIds)
     const layoutMetrics = getLayoutNormalizationMetrics(
-      outerItems,
+      filterItemsByIds(
+        prevItems,
+        resolveOuterItemIds(prevItems.map(getId), dockEnabled ? dockKeysRef.current : [])
+      ),
       Math.max(1, columns),
       pageSizeRef.current
     )
@@ -599,90 +604,50 @@ export function IconGrid({
         ? [...outerSlotsRef.current]
         : resizeSlotPages(
             outerSlotsRef.current,
-            prevOuterItems,
+            filterItemsByIds(
+              prevItems,
+              resolveOuterItemIds(prevItems.map(getId), dockEnabled ? dockKeysRef.current : [])
+            ),
             layoutDimensions.pageSize,
             safePS,
             layoutDimensions.columns,
             safeCols,
             buildPersistedItemCoordinates(
               outerSlotsRef.current,
-              prevOuterItems,
+              filterItemsByIds(
+                prevItems,
+                resolveOuterItemIds(prevItems.map(getId), dockEnabled ? dockKeysRef.current : [])
+              ),
               layoutDimensions.pageSize,
               layoutDimensions.columns
             )
           )
-
-    const originalAnchorIndex = baseOuterSlots.indexOf(resizedFolderEntryId)
-    const preferredAnchorIndex =
-      originalAnchorIndex >= 0
-        ? findBestResizeAnchorIndex({
-            slots: baseOuterSlots,
-            items: prevOuterItems,
-            itemId: resizedFolderEntryId,
-            currentAnchorIndex: originalAnchorIndex,
-            currentSpan: getGridItemSpan(prevFolder),
-            nextSpan: getGridItemSpan({ ...prevFolder, size }),
-            columns: safeCols,
-            pageSize: safePS,
-          })
-        : null
-    const preferredAnchorById =
-      preferredAnchorIndex !== null &&
-      preferredAnchorIndex < Math.max(safePS, baseOuterSlots.length)
-        ? new Map([[resizedFolderEntryId, preferredAnchorIndex]])
-        : undefined
-
-    let effectiveBaseOuterSlots: Array<string | null> = baseOuterSlots
-    const finalAnchorIndex = preferredAnchorIndex ?? originalAnchorIndex
-    if (finalAnchorIndex >= 0) {
-      const newSpan = getGridItemSpan({ ...prevFolder, size })
-      const footprint = getFootprintIndices(finalAnchorIndex, newSpan, safeCols, safePS)
-      if (footprint) {
-        const footprintSet = new Set(footprint)
-        const folderPageStart = Math.floor(finalAnchorIndex / safePS) * safePS
-        const folderPageEnd = folderPageStart + safePS
-
-        let displacedCount = 0
-        for (let i = folderPageStart; i < folderPageEnd; i += 1) {
-          if (!footprintSet.has(i)) continue
-          const slot = effectiveBaseOuterSlots[i]
-          if (slot && slot !== resizedFolderEntryId) displacedCount += 1
-        }
-
-        let nextPageVacant = 0
-        for (let i = folderPageEnd; i < folderPageEnd + safePS; i += 1) {
-          const slot = effectiveBaseOuterSlots[i]
-          if (slot === undefined || slot === null) nextPageVacant += 1
-        }
-
-        if (displacedCount > nextPageVacant) {
-          effectiveBaseOuterSlots = [
-            ...effectiveBaseOuterSlots.slice(0, folderPageEnd),
-            ...Array.from({ length: safePS }, () => null as string | null),
-            ...effectiveBaseOuterSlots.slice(folderPageEnd),
-          ]
-        }
-      }
-    }
-
-    const nextOuterSlots = normalizeOuterSlots(
-      effectiveBaseOuterSlots,
-      outerItems,
-      safePS,
-      safeCols,
-      {
-        preferredAnchorById,
-        spillStrategy: 'row-major-forward',
-      }
-    )
-
-    const compactedOuterSlots = compactEmptyPages(nextOuterSlots, safePS)
-
-    itemsRef.current = nextItems
-    outerSlotsRef.current = compactedOuterSlots
-    setItems(nextItems)
-    setOuterSlots(compactedOuterSlots)
+    const plan = planFolderResize({
+      items: prevItems,
+      slots: baseOuterSlots,
+      folderId,
+      size,
+      columns: safeCols,
+      pageSize: safePS,
+      dockKeys: dockEnabled ? dockKeysRef.current : [],
+    })
+    if (!plan) return
+    itemsRef.current = plan.items
+    outerSlotsRef.current = plan.slots
+    setItems(plan.items)
+    setOuterSlots(plan.slots)
   }
+
+  const commitFolderResize = (folderId: string, size: FolderSize) => {
+    setFolderResizePreview(null)
+    handleResizeFolder(folderId, size)
+  }
+
+  useEffect(() => {
+    if (!selectionMode || openFolderId !== null) {
+      setFolderResizePreview(null)
+    }
+  }, [openFolderId, selectionMode])
 
   const handleDissolveFolder = (folderId: string) => {
     const result = dissolveFolderInTopLevelLayout(
@@ -863,7 +828,10 @@ export function IconGrid({
             onLaunchIcon={path => {
               void launchApp(path)
             }}
-            onResizeFolder={handleResizeFolder}
+            onResizeFolder={commitFolderResize}
+            folderResizePreview={folderResizePreview}
+            onPreviewFolderResize={(folderId, size) => setFolderResizePreview({ folderId, size })}
+            onCancelFolderResize={() => setFolderResizePreview(null)}
             onResizeWidget={handleResizeWidget}
             onDissolveFolder={handleDissolveFolder}
             bindTileRef={(id, node) => {

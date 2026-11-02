@@ -10,11 +10,22 @@ import {
   FOLDER_PREVIEW_PADDING,
   FOLDER_PREVIEW_TOP_OFFSET,
   FOLDER_SURFACE_CLASS,
+  FOLDER_PREVIEW_ICON_FALLBACK_SCALE,
+  FOLDER_PREVIEW_ICON_SCALE,
   getDesktopSingleSlotFolderMetrics,
+  getFolderPreviewArtworkSize,
   getFolderPreviewFrameSize,
   getFolderPreviewSlotSize,
+  getFolderPreviewSlotSizeForGrid,
+  getFolderStackedPreviewMetrics,
   scaledRadius,
 } from './folderVisualPolicy'
+import type { ClosedFolderPreviewLayout } from './folderPreviewPolicy'
+import {
+  DEFAULT_FOLDER_PREVIEW_THEME,
+  shouldRenderFolderPreviewHolders,
+  type FolderPreviewThemeState,
+} from '../domain/folderPreviewThemePolicy'
 
 interface FolderCreatePreviewProps {
   active: boolean
@@ -124,21 +135,86 @@ interface FolderIconVisualProps {
   imgSize: number
   /** Extra children kept outside the active preview page, shown as a stack. */
   stackedIcons?: DesktopIcon[]
+  /** Closed-folder grid and the slot occupied by the ColorOS stacked drawable. */
+  previewLayout?: ClosedFolderPreviewLayout
+  rtl?: boolean
+  previewTheme?: FolderPreviewThemeState
   expanded?: boolean
   withSurface?: boolean
 }
 
-function FolderPreviewArtwork({ icon, size }: { icon: DesktopIcon; size: number }) {
+function FolderPreviewArtwork({
+  icon,
+  size,
+  minimumSize = 5,
+  fallbackMinimumSize = minimumSize,
+}: {
+  icon: DesktopIcon
+  size: number
+  minimumSize?: number
+  fallbackMinimumSize?: number
+}) {
+  const artworkSize = getFolderPreviewArtworkSize(
+    size,
+    icon.icon_base64 ? FOLDER_PREVIEW_ICON_SCALE : FOLDER_PREVIEW_ICON_FALLBACK_SCALE,
+    icon.icon_base64 ? minimumSize : fallbackMinimumSize
+  )
+
   return icon.icon_base64 ? (
     <img
       src={icon.icon_base64}
       alt=""
-      className="h-full w-full object-contain"
-      style={{ width: size, height: size }}
+      className="launchpad-icon-artwork object-contain"
+      style={{ width: artworkSize, height: artworkSize }}
       draggable={false}
     />
   ) : (
-    <AppWindow className="h-full w-full text-foreground/70" style={{ width: size, height: size }} />
+    <AppWindow className="text-foreground/70" style={{ width: artworkSize, height: artworkSize }} />
+  )
+}
+
+function StackedFolderPreview({
+  icons,
+  size,
+  position,
+  showHolders,
+}: {
+  icons: DesktopIcon[]
+  size: number
+  position: { left: number; top: number }
+  showHolders: boolean
+}) {
+  const { padding, gap, miniSize } = getFolderStackedPreviewMetrics(size)
+  return (
+    <div
+      data-folder-stacked-preview="true"
+      className="pointer-events-none absolute grid grid-cols-2 grid-rows-2 place-items-center overflow-hidden rounded-icon-tile"
+      style={{
+        left: position.left,
+        top: position.top,
+        width: size,
+        height: size,
+        gap,
+        padding,
+        zIndex: 3,
+      }}
+    >
+      {Array.from({ length: 4 }, (_, index) => {
+        const icon = icons[index]
+        return (
+          <span
+            key={icon ? `${icon.id}-${index}` : `holder-${index}`}
+            data-folder-stacked-slot={icon ? 'icon' : 'holder'}
+            className={`flex items-center justify-center overflow-hidden rounded-icon-tile ${
+              icon || showHolders ? 'bg-foreground/[0.04] dark:bg-white/[0.06]' : 'bg-transparent'
+            }`}
+            style={{ width: miniSize, height: miniSize }}
+          >
+            {icon ? <FolderPreviewArtwork icon={icon} size={miniSize} /> : null}
+          </span>
+        )
+      })}
+    </div>
   )
 }
 
@@ -146,11 +222,18 @@ export function FolderIconVisual({
   icons,
   imgSize,
   stackedIcons = [],
+  previewLayout,
+  rtl = false,
+  previewTheme = DEFAULT_FOLDER_PREVIEW_THEME,
   expanded = false,
   withSurface = true,
 }: FolderIconVisualProps) {
   const visualSize = expanded ? getFolderPreviewFrameSize(imgSize) : imgSize
-  const slotSize = getFolderPreviewSlotSize(imgSize)
+  const columns = previewLayout?.columns ?? 2
+  const rows = previewLayout?.rows ?? 2
+  const slotSize = previewLayout
+    ? getFolderPreviewSlotSizeForGrid(imgSize, columns, rows)
+    : getFolderPreviewSlotSize(imgSize)
   const outerExpand = expanded ? FOLDER_PREVIEW_OUTER_EXPAND : 0
   const frameStyle = {
     width: `${imgSize}px`,
@@ -170,7 +253,18 @@ export function FolderIconVisual({
     width: `${imgSize}px`,
     height: `${imgSize}px`,
   } as const
-  const visibleStack = stackedIcons.slice(0, 2)
+  const stackIndex = previewLayout?.stackedSlotIndex ?? null
+  const visibleStack = stackedIcons.slice(0, previewLayout?.stackedIconCount ?? 0)
+  const showStackedHolders = shouldRenderFolderPreviewHolders(previewTheme)
+  const getSlotPosition = (index: number) => {
+    const row = Math.floor(index / columns)
+    const logicalColumn = index % columns
+    const col = rtl ? columns - logicalColumn - 1 : logicalColumn
+    return {
+      left: outerExpand + FOLDER_PREVIEW_PADDING + col * (slotSize + FOLDER_PREVIEW_GAP),
+      top: outerExpand + FOLDER_PREVIEW_PADDING + row * (slotSize + FOLDER_PREVIEW_GAP),
+    }
+  }
 
   return (
     <div className="relative" style={frameStyle} aria-hidden="true" data-folder-icon-visual>
@@ -180,49 +274,37 @@ export function FolderIconVisual({
         style={surfaceStyle}
       >
         <div className="relative h-full w-full">
-          {visibleStack.map((icon, index) => {
-            const offset = (index + 1) * Math.max(2, Math.floor(slotSize * 0.08))
-            const stackSize = Math.max(6, Math.floor(slotSize * (0.9 - index * 0.06)))
-            return (
-              <div
-                key={`stack-${icon.id}-${index}`}
-                data-folder-stacked-preview="true"
-                className="pointer-events-none absolute overflow-hidden rounded-[22%] border border-foreground/[0.12] bg-background/42 opacity-80 shadow-[0_2px_6px_rgba(15,23,42,0.14)] dark:border-white/16 dark:bg-black/28"
-                style={{
-                  left: `${outerExpand + FOLDER_PREVIEW_PADDING + offset}px`,
-                  top: `${outerExpand + FOLDER_PREVIEW_PADDING + offset}px`,
-                  width: `${stackSize}px`,
-                  height: `${stackSize}px`,
-                  transform: `rotate(${index === 0 ? -3 : 4}deg)`,
-                  zIndex: index,
-                }}
-              >
-                <FolderPreviewArtwork icon={icon} size={stackSize} />
-              </div>
-            )
-          })}
-          {icons.slice(0, 4).map((icon, idx) => {
-            const row = Math.floor(idx / 2)
-            const col = idx % 2
-            const left =
-              outerExpand + FOLDER_PREVIEW_PADDING + col * (slotSize + FOLDER_PREVIEW_GAP)
-            const top = outerExpand + FOLDER_PREVIEW_PADDING + row * (slotSize + FOLDER_PREVIEW_GAP)
+          {icons.slice(0, previewLayout?.standardIconCount ?? 4).map((icon, idx) => {
+            const position = getSlotPosition(idx)
             return (
               <div
                 key={`${icon.id}-${idx}`}
-                className="launchpad-icon-artwork absolute overflow-hidden transition-[left,top] duration-200 ease-out"
+                className="launchpad-icon-artwork absolute flex items-center justify-center overflow-hidden transition-[left,top] duration-200 ease-out"
                 style={{
-                  left: `${left}px`,
-                  top: `${top}px`,
+                  left: `${position.left}px`,
+                  top: `${position.top}px`,
                   width: `${slotSize}px`,
                   height: `${slotSize}px`,
                   zIndex: 2,
                 }}
               >
-                <FolderPreviewArtwork icon={icon} size={slotSize} />
+                <FolderPreviewArtwork
+                  icon={icon}
+                  size={slotSize}
+                  minimumSize={20}
+                  fallbackMinimumSize={16}
+                />
               </div>
             )
           })}
+          {stackIndex !== null && visibleStack.length > 0 ? (
+            <StackedFolderPreview
+              icons={visibleStack}
+              size={slotSize}
+              position={getSlotPosition(stackIndex)}
+              showHolders={showStackedHolders}
+            />
+          ) : null}
         </div>
       </div>
     </div>
