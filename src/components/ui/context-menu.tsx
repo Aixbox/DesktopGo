@@ -4,6 +4,13 @@ import { Check, ChevronRight } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { NativeScrollArea } from './native-scroll-area'
+import {
+  menuItemClass,
+  menuRadioItemClass,
+  menuLabelClass,
+  menuSeparatorClass,
+  menuShortcutClass,
+} from './menu-styles'
 
 const ContextMenu = ContextMenuPrimitive.Root
 
@@ -90,11 +97,7 @@ const ContextMenuItem = React.forwardRef<
 >(({ className, inset, ...props }, ref) => (
   <ContextMenuPrimitive.Item
     ref={ref}
-    className={cn(
-      'relative flex cursor-default select-none items-center rounded-menu-item px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
-      inset && 'pl-8',
-      className
-    )}
+    className={cn(menuItemClass, inset && 'pl-8', className)}
     {...props}
   />
 ))
@@ -106,10 +109,7 @@ const ContextMenuCheckboxItem = React.forwardRef<
 >(({ className, children, checked, ...props }, ref) => (
   <ContextMenuPrimitive.CheckboxItem
     ref={ref}
-    className={cn(
-      'relative flex cursor-default select-none items-center rounded-menu-item py-1.5 pl-2 pr-8 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
-      className
-    )}
+    className={cn(menuRadioItemClass, className)}
     checked={checked}
     {...props}
   >
@@ -129,10 +129,7 @@ const ContextMenuRadioItem = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <ContextMenuPrimitive.RadioItem
     ref={ref}
-    className={cn(
-      'relative flex cursor-default select-none items-center rounded-menu-item py-1.5 pl-2 pr-8 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
-      className
-    )}
+    className={cn(menuRadioItemClass, className)}
     {...props}
   >
     <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
@@ -153,7 +150,7 @@ const ContextMenuLabel = React.forwardRef<
 >(({ className, inset, ...props }, ref) => (
   <ContextMenuPrimitive.Label
     ref={ref}
-    className={cn('px-2 py-1.5 text-sm font-semibold text-foreground', inset && 'pl-8', className)}
+    className={cn(menuLabelClass, inset && 'pl-8', className)}
     {...props}
   />
 ))
@@ -165,19 +162,14 @@ const ContextMenuSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <ContextMenuPrimitive.Separator
     ref={ref}
-    className={cn('-mx-1 my-1 h-px bg-border', className)}
+    className={cn(menuSeparatorClass, className)}
     {...props}
   />
 ))
 ContextMenuSeparator.displayName = ContextMenuPrimitive.Separator.displayName
 
 const ContextMenuShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
-  return (
-    <span
-      className={cn('ml-auto text-xs tracking-widest text-muted-foreground', className)}
-      {...props}
-    />
-  )
+  return <span className={cn(menuShortcutClass, className)} {...props} />
 }
 ContextMenuShortcut.displayName = 'ContextMenuShortcut'
 

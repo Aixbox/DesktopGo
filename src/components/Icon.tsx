@@ -132,7 +132,7 @@ export const Icon = memo(function Icon({
         : 'launchpad-icon-motion'
 
   return (
-    <IconContextMenu icon={icon} disabled={selectionMode || isRenaming}>
+    <IconContextMenu icon={icon} disabled={isRenaming}>
       <button
         data-icon
         data-selection-key={selectionKey}

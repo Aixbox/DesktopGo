@@ -25,6 +25,7 @@ export interface FolderResizeInteractionParams {
   onPreview: (size: FolderSize) => void
   onCommit: (size: FolderSize) => void
   onCancel: () => void
+  onStart?: () => void
 }
 
 export interface FolderResizeInteraction {
@@ -45,6 +46,7 @@ export function useFolderResizeInteraction({
   onPreview,
   onCommit,
   onCancel,
+  onStart,
 }: FolderResizeInteractionParams): FolderResizeInteraction {
   const sessionRef = useRef<ResizeSession | null>(null)
   const [active, setActive] = useState(false)
@@ -52,7 +54,7 @@ export function useFolderResizeInteraction({
 
   const startPointerResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (!visible && !active) return
-    if (!event.isPrimary || sessionRef.current) return
+    if (event.button !== 0 || !event.isPrimary || sessionRef.current) return
     event.preventDefault()
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -65,6 +67,8 @@ export function useFolderResizeInteraction({
       moved: false,
     }
     setActive(true)
+    // Menu dismissal may flush a render immediately; capture and active state must exist first.
+    onStart?.()
   }
 
   const movePointerResize = (event: ReactPointerEvent<HTMLButtonElement>) => {

@@ -63,7 +63,8 @@ function loadResizeComponents(rtl) {
     react: { memo: component => component },
     '../../../lib/i18n': { translate: value => value },
     '../../../stores/iconStore': { useIconStore: selector => selector({ titleLineCount: 'two' }) },
-    '../../ui/context-menu': new Proxy({}, { get: (_, name) => `context.${name}` }),
+    '../../ui/menu': new Proxy({}, { get: (_, name) => `menu.${name}` }),
+    '../../icons/FocusedItemMenu': { FocusedItemMenu: 'FocusedItemMenu' },
     '../model': gridModel,
     './folderVisualPolicy': visualPolicy,
     './FolderTileContents': { FolderTileContents: 'FolderTileContents' },
@@ -88,7 +89,7 @@ function resizeCommitHarness(size, rtl = false) {
       columns: 4,
       pageSize: 16,
     })
-  const render = () => {
+  const render = (visible = true) => {
     const renderedFolder = (preview ? plan(preview)?.items : null)?.[0] ?? items[0]
     const tree = OuterFolderTile({
       folder: renderedFolder,
@@ -115,9 +116,9 @@ function resizeCommitHarness(size, rtl = false) {
         preview = null
       },
     })
-    const contents = tree.props.children[0].props.children.props.children.props
+    const contents = tree.props.trigger.props.children.props
     return useFolderResizeInteraction({
-      visible: true,
+      visible,
       span: contents.span,
       cellWidth: 96,
       cellHeight: 110,
@@ -138,6 +139,7 @@ function resizeCommitHarness(size, rtl = false) {
     clientX: x,
     clientY: y,
     pointerId: 1,
+    button: 0,
     isPrimary: true,
     currentTarget: target,
     preventDefault() {},
@@ -191,6 +193,27 @@ test('cancelling or returning to the original size discards the preview without 
     assert.equal(h.cancellations.length, 1)
     assert.equal(h.captured.size, 0)
   }
+})
+
+test('closing the focus menu after handle press preserves capture and the resize until release', () => {
+  const h = resizeCommitHarness('1x1')
+  h.render().startPointerResize(h.event())
+  assert.equal(h.captured.has(1), true)
+  // The same pointerdown closes the menu. Visibility goes false without cancelling the gesture.
+  assert.equal(h.render(false).active, true)
+  h.render(false).movePointerResize(h.event(100, 100))
+  assert.equal(h.read().preview, '2x2')
+  h.render(false).finishPointerResize(h.event(100, 100))
+  assert.equal(h.read().size, '2x2')
+  assert.equal(h.render(false).active, false)
+  assert.equal(h.captured.size, 0)
+})
+
+test('right click on a visible handle does not capture or begin resizing', () => {
+  const h = resizeCommitHarness('1x1')
+  h.render().startPointerResize({ ...h.event(), button: 2 })
+  assert.equal(h.render().active, false)
+  assert.equal(h.captured.size, 0)
 })
 
 function animationHarness() {
@@ -303,6 +326,11 @@ test('outline and hit area follow intermediate geometry without scaling the hand
     .reduce((sum, p, i) => sum + Math.hypot(p.x - points[i].x, p.y - points[i].y), 0)
   assert.ok(Math.abs(length - geometry.handleArcLength) < 0.001)
   const strokes = tree.props.children[0].props.children
+  assert.equal(
+    tree.props.children[0].props['data-item-focus-part'],
+    true,
+    'the complete SVG must be lifted above focus glass'
+  )
   assert.equal(strokes[0].props.strokeWidth, 2)
   assert.equal(strokes[1].props.strokeWidth, 6)
   assert.equal(strokes[1].props.vectorEffect, 'non-scaling-stroke')

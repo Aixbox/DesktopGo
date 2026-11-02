@@ -6,16 +6,8 @@ import {
 } from 'react'
 import { translate } from '../../../lib/i18n'
 import { useIconStore } from '../../../stores/iconStore'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuLabel,
-  ContextMenuRadioGroup,
-  ContextMenuRadioItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from '../../ui/context-menu'
+import { MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator } from '../../ui/menu'
+import { FocusedItemMenu } from '../../icons/FocusedItemMenu'
 import { getGridItemSpan, type FolderItem, type FolderSize, type GridSpan } from '../model'
 import { getDesktopFolderTileMetrics, scaledRadius } from './folderVisualPolicy'
 import { FolderTileContents } from './FolderTileContents'
@@ -142,10 +134,14 @@ function OuterFolderTileComponent({
   })
 
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
+    <FocusedItemMenu
+      width={176}
+      label={folder.name}
+      disabled={folderPreview || folderOpen}
+      trigger={
         <div
           data-icon
+          tabIndex={-1}
           className="relative h-full w-full touch-none overflow-visible"
           onPointerDown={onPointerDown}
           onClickCapture={onClickCapture}
@@ -171,53 +167,49 @@ function OuterFolderTileComponent({
             onCancel={() => onCancelFolderResize?.()}
           />
         </div>
-      </ContextMenuTrigger>
-
-      {!selectionMode ? (
-        <ContextMenuContent className="w-44 p-1.5 shadow-xl backdrop-blur-xl">
-          <ContextMenuItem
-            className="px-3 py-2 text-foreground/85 focus:bg-accent focus:text-foreground"
-            onSelect={() => {
-              onOpenFolder(folder.id)
-            }}
+      }
+    >
+      <MenuItem
+        className="px-3 py-2 text-foreground/85 focus:bg-accent focus:text-foreground"
+        onSelect={() => {
+          onOpenFolder(folder.id)
+        }}
+      >
+        {translate(MENU_OPEN_LABEL)}
+      </MenuItem>
+      <MenuItem
+        className="gap-2 px-3 py-2 text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/25 dark:focus:text-red-100"
+        onSelect={() => {
+          onDissolveFolder(folder.id)
+        }}
+      >
+        <Ungroup className="h-4 w-4" aria-hidden="true" />
+        <span>{translate(MENU_DISSOLVE_LABEL)}</span>
+      </MenuItem>
+      <MenuSeparator className="mx-1 my-1 bg-border/70" />
+      <MenuLabel className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+        {translate(MENU_SIZE_LABEL)}
+      </MenuLabel>
+      <MenuRadioGroup
+        value={folder.size}
+        onValueChange={value => {
+          onResizeFolder(folder.id, value as FolderSize)
+        }}
+      >
+        {FOLDER_SIZES.map(option => (
+          <MenuRadioItem
+            key={option.value}
+            value={option.value}
+            className="px-3 py-1.5 text-foreground/85 focus:bg-accent focus:text-foreground data-[state=checked]:bg-accent/80 data-[state=checked]:text-foreground"
           >
-            {translate(MENU_OPEN_LABEL)}
-          </ContextMenuItem>
-          <ContextMenuItem
-            className="gap-2 px-3 py-2 text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/25 dark:focus:text-red-100"
-            onSelect={() => {
-              onDissolveFolder(folder.id)
-            }}
-          >
-            <Ungroup className="h-4 w-4" aria-hidden="true" />
-            <span>{translate(MENU_DISSOLVE_LABEL)}</span>
-          </ContextMenuItem>
-          <ContextMenuSeparator className="mx-1 my-1 bg-border/70" />
-          <ContextMenuLabel className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-            {translate(MENU_SIZE_LABEL)}
-          </ContextMenuLabel>
-          <ContextMenuRadioGroup
-            value={folder.size}
-            onValueChange={value => {
-              onResizeFolder(folder.id, value as FolderSize)
-            }}
-          >
-            {FOLDER_SIZES.map(option => (
-              <ContextMenuRadioItem
-                key={option.value}
-                value={option.value}
-                className="px-3 py-1.5 text-foreground/85 focus:bg-accent focus:text-foreground data-[state=checked]:bg-accent/80 data-[state=checked]:text-foreground"
-              >
-                <div className="flex items-center gap-3 pr-4">
-                  <FolderSizePreview span={option.span} active={folder.size === option.value} />
-                  <span className="text-sm font-medium leading-none">{option.label}</span>
-                </div>
-              </ContextMenuRadioItem>
-            ))}
-          </ContextMenuRadioGroup>
-        </ContextMenuContent>
-      ) : null}
-    </ContextMenu>
+            <div className="flex items-center gap-3 pr-4">
+              <FolderSizePreview span={option.span} active={folder.size === option.value} />
+              <span className="text-sm font-medium leading-none">{option.label}</span>
+            </div>
+          </MenuRadioItem>
+        ))}
+      </MenuRadioGroup>
+    </FocusedItemMenu>
   )
 }
 

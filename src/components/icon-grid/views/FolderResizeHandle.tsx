@@ -5,6 +5,7 @@ import { getFolderResizeVisualGeometry } from '../domain/folderResizePolicy'
 import { FolderResizeOutline } from './FolderResizeOutline'
 import type { DesktopFolderTileMetrics } from './folderVisualPolicy'
 import { ICON_GRID_TILE_PADDING_Y } from '../../../types'
+import { useDismissItemMenu } from '../../icons/focusedItemMenuContext'
 
 interface FolderResizeHandleProps {
   visible: boolean
@@ -31,6 +32,7 @@ export function FolderResizeHandle({
   onCommit,
   onCancel,
 }: FolderResizeHandleProps) {
+  const dismissMenu = useDismissItemMenu()
   const interaction = useFolderResizeInteraction({
     visible,
     span,
@@ -41,6 +43,7 @@ export function FolderResizeHandle({
     onPreview,
     onCommit,
     onCancel,
+    onStart: dismissMenu,
   })
   const geometry = getFolderResizeVisualGeometry(span)
   const x = useTransform(

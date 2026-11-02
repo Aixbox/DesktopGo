@@ -9,6 +9,7 @@ import type { WindowMode } from '@/types'
 
 const LONG_PRESS_MS = 420
 const SEARCH_FLOATING_MENU_SELECTOR = '[data-search-floating-menu="true"]'
+const FOCUSED_ITEM_MENU_SELECTOR = '[data-focused-item-menu], [data-item-focus-backdrop]'
 
 interface MarqueeState {
   startX: number
@@ -75,6 +76,7 @@ export function useLaunchpadSurfaceInteractions({
     !target.closest('[data-dock-menu="true"]') &&
     !target.closest('[data-search-placeholder]') &&
     !target.closest(SEARCH_FLOATING_MENU_SELECTOR) &&
+    !target.closest(FOCUSED_ITEM_MENU_SELECTOR) &&
     !target.closest('[data-pagination]') &&
     !target.closest('[data-grid-mode-nav]') &&
     !target.closest('[data-selection-toolbar]') &&
@@ -195,6 +197,7 @@ export function useLaunchpadSurfaceInteractions({
     const clickedOutsideSearch =
       !target.closest('[data-search-placeholder]') &&
       !target.closest(SEARCH_FLOATING_MENU_SELECTOR) &&
+      !target.closest(FOCUSED_ITEM_MENU_SELECTOR) &&
       !target.closest('[data-dock-menu="true"]')
     if (isSearchPanelOpen && clickedOutsideSearch && isTrueBackgroundClick) {
       closeSearchPanel()
@@ -222,6 +225,7 @@ export function useLaunchpadSurfaceInteractions({
     const isSearchInteraction =
       !!target?.closest('[data-search-placeholder]') ||
       !!target?.closest(SEARCH_FLOATING_MENU_SELECTOR) ||
+      !!target?.closest(FOCUSED_ITEM_MENU_SELECTOR) ||
       !!target?.closest('[data-dock-menu="true"]')
     if (!isSearchInteraction) closeSearchPanel()
   }

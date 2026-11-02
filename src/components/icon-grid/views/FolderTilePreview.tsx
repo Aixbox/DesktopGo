@@ -82,6 +82,7 @@ export function FolderTilePreview(props: FolderTilePreviewProps) {
   })
   return (
     <motion.div
+      data-item-focus-part
       className="pointer-events-none absolute inset-0 z-20"
       initial={false}
       transition={transition}

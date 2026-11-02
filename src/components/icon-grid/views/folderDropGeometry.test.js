@@ -44,6 +44,7 @@ const { FolderTileContents } = loadModule('./FolderTileContents.tsx', {
   '../hooks/useFolderResizeMotion': { useFolderResizeMotion: value => ({ get: () => value }) },
   './FolderTilePreview': { FolderTilePreview: 'FolderTilePreview' },
   './FolderResizeHandle': { FolderResizeHandle: 'FolderResizeHandle' },
+  '../../icons/focusedItemMenuContext': { useItemMenuFocused: () => false },
 })
 
 function nodes(tree) {

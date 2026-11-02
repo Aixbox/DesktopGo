@@ -1,3 +1,8 @@
+import {
+  getRoundedRectContour,
+  ROUNDED_RECT_CORNER_STEPS as CORNER_STEPS,
+} from '../../../lib/roundedRectContour'
+
 export interface FolderResizeOutlinePoint {
   x: number
   y: number
@@ -13,33 +18,6 @@ export interface FolderResizeOutlineInput {
   frameStrokeWidth: number
   handleArcLength: number
   rtl: boolean
-}
-
-const CORNER_STEPS = 64
-
-function createOutlinePoints({
-  width,
-  height,
-  radius,
-  exponent,
-  frameStrokeWidth,
-}: FolderResizeOutlineInput): Point[] {
-  const inset = frameStrokeWidth / 2
-  const outerRadius = Math.min(Math.max(inset, radius), width / 2, height / 2)
-  const centerRadius = Math.max(0, outerRadius - inset)
-  const points: Point[] = []
-  for (let corner = 0; corner < 4; corner += 1) {
-    for (let step = 0; step <= CORNER_STEPS; step += 1) {
-      const angle = (step / CORNER_STEPS) * (Math.PI / 2)
-      const c = centerRadius * Math.pow(Math.max(0, Math.cos(angle)), 2 / exponent)
-      const s = centerRadius * Math.pow(Math.max(0, Math.sin(angle)), 2 / exponent)
-      if (corner === 0) points.push({ x: width - outerRadius + s, y: outerRadius - c })
-      if (corner === 1) points.push({ x: width - outerRadius + c, y: height - outerRadius + s })
-      if (corner === 2) points.push({ x: outerRadius - s, y: height - outerRadius + c })
-      if (corner === 3) points.push({ x: outerRadius - c, y: outerRadius - s })
-    }
-  }
-  return [...points, points[0]]
 }
 
 const distance = (a: Point, b: Point) => Math.hypot(b.x - a.x, b.y - a.y)
@@ -73,7 +51,7 @@ const toPath = (points: Point[]) =>
 
 /** Both strokes share one centerline; SVG supplies a uniform width and round caps. */
 export function getFolderResizeOutlinePaths(input: FolderResizeOutlineInput) {
-  const points = createOutlinePoints(input)
+  const points = getRoundedRectContour({ ...input, inset: input.frameStrokeWidth / 2 })
   const cornerIndex = input.rtl ? 2 : 1
   const midpointIndex = cornerIndex * (CORNER_STEPS + 1) + CORNER_STEPS / 2
   let midpointDistance = 0

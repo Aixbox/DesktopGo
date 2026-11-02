@@ -109,6 +109,7 @@ export function FolderResizeOutline(props: FolderResizeOutlineProps) {
       }}
     >
       <svg
+        data-item-focus-part
         ref={svgRef}
         aria-hidden="true"
         className="absolute inset-0 h-full w-full overflow-visible"

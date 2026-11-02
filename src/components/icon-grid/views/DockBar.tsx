@@ -16,12 +16,7 @@ import { translate, useI18n } from '@/lib/i18n'
 import { useIconStore } from '@/stores/iconStore'
 import { IconContextMenu } from '@/components/icons/IconContextMenu'
 import type { GridItem } from '../model'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from '../../ui/context-menu'
+import { DockFolderContextMenu } from './DockFolderContextMenu'
 import { DOCK_GAP } from '../domain/dock'
 import {
   DOCK_FOLDER_SURFACE_ACTIVE_CLASS,
@@ -78,8 +73,6 @@ interface DockBarProps {
   onRemoveItem: (id: string) => void
 }
 
-const MENU_OPEN_LABEL = '打开'
-const MENU_REMOVE_LABEL = '移出 Dock'
 const DOCK_CONTAINER_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
 const DOCK_CONTAINER_TRANSITION_MS = 220
 const DOCK_PANEL_VIEWPORT_MARGIN = 32
@@ -729,7 +722,6 @@ export function DockBar({
                     item.kind === 'icon' ? (
                       <IconContextMenu
                         icon={item.icon}
-                        disabled={selectionMode}
                         onOpen={() => onLaunchIcon(item.icon.path)}
                       >
                         <div
@@ -809,96 +801,74 @@ export function DockBar({
                         </div>
                       </IconContextMenu>
                     ) : item.kind === 'folder' ? (
-                      <ContextMenu>
-                        <ContextMenuTrigger asChild>
-                          <div
-                            ref={node => {
-                              bindDockItemRef(id, node)
-                            }}
-                            data-dock-item
-                            data-dock-key={id}
-                            className="group relative flex items-center justify-center"
+                      <DockFolderContextMenu
+                        name={item.name}
+                        onOpen={() => onOpenFolder(item.id)}
+                        onRemove={() => onRemoveItem(id)}
+                      >
+                        <div
+                          ref={node => {
+                            bindDockItemRef(id, node)
+                          }}
+                          data-dock-item
+                          data-dock-key={id}
+                          className="group relative flex items-center justify-center"
+                          style={{ width: dockButtonSize, height: dockButtonSize }}
+                          onPointerDown={event => {
+                            onDockItemPointerDown(event, id)
+                          }}
+                          onClickCapture={onDockItemClickCapture}
+                          onKeyDown={event => onDockKeyboardKeyDown(event, id)}
+                          aria-grabbed={dockKeyboardActiveId === id}
+                          onContextMenu={event => {
+                            event.stopPropagation()
+                          }}
+                        >
+                          <button
+                            type="button"
+                            title={item.name}
+                            aria-label={item.name}
+                            className={`relative flex cursor-pointer items-center justify-center rounded-icon-tile border-none bg-transparent p-0 shadow-none ${
+                              selectionMode ? '' : 'launchpad-dock-motion'
+                            }`}
                             style={{ width: dockButtonSize, height: dockButtonSize }}
-                            onPointerDown={event => {
-                              onDockItemPointerDown(event, id)
-                            }}
-                            onClickCapture={onDockItemClickCapture}
-                            onKeyDown={event => onDockKeyboardKeyDown(event, id)}
-                            aria-grabbed={dockKeyboardActiveId === id}
-                            onContextMenu={event => {
+                            onClick={event => {
                               event.stopPropagation()
+                              onOpenFolder(item.id)
                             }}
                           >
-                            <button
-                              type="button"
-                              title={item.name}
-                              aria-label={item.name}
-                              className={`relative flex cursor-pointer items-center justify-center rounded-icon-tile border-none bg-transparent p-0 shadow-none ${
-                                selectionMode ? '' : 'launchpad-dock-motion'
-                              }`}
+                            <div
+                              className="flex items-center justify-center transition-opacity duration-150"
                               style={{ width: dockButtonSize, height: dockButtonSize }}
-                              onClick={event => {
-                                event.stopPropagation()
-                                onOpenFolder(item.id)
-                              }}
                             >
-                              <div
-                                className="flex items-center justify-center transition-opacity duration-150"
-                                style={{ width: dockButtonSize, height: dockButtonSize }}
+                              <motion.div data-item-focus-visual
+                                layoutId={
+                                  sharedLayoutActive
+                                    ? getFolderSharedLayoutId(item.id)
+                                    : undefined
+                                }
+                                transition={FOLDER_SHARED_LAYOUT_TRANSITION}
+                                className={`${DOCK_FOLDER_SURFACE_CLASS} flex items-center justify-center transition-all duration-150 ${
+                                  folderPreview || folderOpen
+                                    ? DOCK_FOLDER_SURFACE_ACTIVE_CLASS
+                                    : ''
+                                }`}
+                                style={{
+                                  width: `${singleSlotFolderMetrics.surfaceSize}px`,
+                                  height: `${singleSlotFolderMetrics.surfaceSize}px`,
+                                  borderRadius: scaledRadius(singleSlotFolderMetrics.surfaceRadius),
+                                }}
                               >
-                                <motion.div
-                                  layoutId={
-                                    sharedLayoutActive
-                                      ? getFolderSharedLayoutId(item.id)
-                                      : undefined
-                                  }
-                                  transition={FOLDER_SHARED_LAYOUT_TRANSITION}
-                                  className={`${DOCK_FOLDER_SURFACE_CLASS} flex items-center justify-center transition-all duration-150 ${
-                                    folderPreview || folderOpen
-                                      ? DOCK_FOLDER_SURFACE_ACTIVE_CLASS
-                                      : ''
-                                  }`}
-                                  style={{
-                                    width: `${singleSlotFolderMetrics.surfaceSize}px`,
-                                    height: `${singleSlotFolderMetrics.surfaceSize}px`,
-                                    borderRadius: scaledRadius(singleSlotFolderMetrics.surfaceRadius),
-                                  }}
-                                >
-                                  <FolderIconVisual
-                                    icons={item.children.map(child => child.icon)}
-                                    imgSize={singleSlotFolderMetrics.previewSize}
-                                    withSurface={false}
-                                  />
-                                </motion.div>
-                              </div>
-                            </button>
-                          </div>
-                        </ContextMenuTrigger>
-
-                        {!selectionMode ? (
-                          <ContextMenuContent
-                            data-dock-menu="true"
-                            className="w-44 p-1.5 shadow-xl backdrop-blur-xl"
-                          >
-                            <ContextMenuItem
-                              className="px-3 py-2 text-foreground/85 focus:bg-accent focus:text-foreground"
-                              onSelect={() => {
-                                onOpenFolder(item.id)
-                              }}
-                            >
-                              {translate(MENU_OPEN_LABEL)}
-                            </ContextMenuItem>
-                            <ContextMenuItem
-                              className="px-3 py-2 text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/20 dark:focus:text-red-100"
-                              onSelect={() => {
-                                onRemoveItem(id)
-                              }}
-                            >
-                              {translate(MENU_REMOVE_LABEL)}
-                            </ContextMenuItem>
-                          </ContextMenuContent>
-                        ) : null}
-                      </ContextMenu>
+                                <FolderIconVisual
+                                  icons={item.children.map(child => child.icon)}
+                                  imgSize={singleSlotFolderMetrics.previewSize}
+                                  withSurface={false}
+                                />
+                              </motion.div>
+                            </div>
+                          </button>
+                        </div>
+                      </DockFolderContextMenu>
                     ) : (
                       <div
                         ref={node => {

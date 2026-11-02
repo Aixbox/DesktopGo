@@ -17,6 +17,7 @@ import {
 import { FolderTilePreview } from './FolderTilePreview'
 import { FolderResizeHandle } from './FolderResizeHandle'
 import { FolderDropReceiver } from './FolderDropReceiver'
+import { useItemMenuFocused } from '../../icons/focusedItemMenuContext'
 
 interface FolderTileContentsProps {
   folder: FolderItem
@@ -41,6 +42,7 @@ interface FolderTileContentsProps {
 export function FolderTileContents(props: FolderTileContentsProps) {
   const { folder, metrics, folderPreview, folderOpen, sharedLayoutActive, selectionMode, rtl } =
     props
+  const menuFocused = useItemMenuFocused()
   const reducedMotion = useReducedMotion() ?? false
   const display = useFolderResizeMotion(metrics, reducedMotion)
   const x = useTransform(display, m => (m.footprintWidth - m.shapeWidth) / 2)
@@ -89,7 +91,7 @@ export function FolderTileContents(props: FolderTileContentsProps) {
         />
       </div>
       <FolderResizeHandle
-        visible={selectionMode && !folderPreview && !folderOpen}
+        visible={menuFocused && !folderPreview && !folderOpen}
         span={props.span}
         display={display}
         cellWidth={props.slotWidth}

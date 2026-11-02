@@ -5,14 +5,8 @@ import { shouldOpenCustomIconContextMenu } from '@/lib/iconContextMenu'
 import { getSetting } from '@/lib/settingsStore'
 import { useIconStore } from '@/stores/iconStore'
 import type { DesktopIcon } from '@/types'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuShortcut,
-  ContextMenuTrigger,
-} from '@/components/ui/context-menu'
+import { MenuItem, MenuSeparator, MenuShortcut } from '@/components/ui/menu'
+import { FocusedItemMenu } from './FocusedItemMenu'
 
 interface IconContextMenuProps {
   icon: DesktopIcon
@@ -41,10 +35,7 @@ export function IconContextMenu({
   const [deleteSourceNew, setDeleteSourceNew] = useState(false)
 
   const refreshDeleteSourceSettings = () => {
-    void Promise.all([
-      getSetting('deleteIconSourceFile'),
-      getSetting('deleteNewFileSource'),
-    ])
+    void Promise.all([getSetting('deleteIconSourceFile'), getSetting('deleteNewFileSource')])
       .then(([all, newOnly]) => {
         setDeleteSourceAll(all)
         setDeleteSourceNew(newOnly)
@@ -61,8 +52,7 @@ export function IconContextMenu({
   }
 
   // 该图标删除时是否会连同源文件：全局开关开启，或（仅新建开关开启且图标为新建创建）。
-  const deleteSourceApplies =
-    deleteSourceAll || (deleteSourceNew && icon.origin === 'new')
+  const deleteSourceApplies = deleteSourceAll || (deleteSourceNew && icon.origin === 'new')
 
   const handleDelete = () => {
     const confirmed = window.confirm(
@@ -102,53 +92,50 @@ export function IconContextMenu({
   }
 
   return (
-    <ContextMenu onOpenChange={open => open && refreshDeleteSourceSettings()}>
-      <ContextMenuTrigger asChild onContextMenuCapture={handleContextMenuCapture}>
-        {children}
-      </ContextMenuTrigger>
-      <ContextMenuContent className="w-56 p-1 shadow-xl">
-        <ContextMenuItem className="gap-2 px-2.5 py-2" onSelect={handleOpen}>
-          <Play className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <span>{translate('打开')}</span>
-        </ContextMenuItem>
-        <ContextMenuItem className="gap-2 px-2.5 py-2" onSelect={() => requestIconEdit(icon)}>
-          <Pencil className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <span>{translate('编辑图标信息')}</span>
-        </ContextMenuItem>
-        <ContextMenuItem
-          className="gap-2 px-2.5 py-2"
-          onSelect={() => {
-            void hideIcon(icon)
-          }}
-        >
-          <EyeOff className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <span>{translate('从启动台隐藏')}</span>
-        </ContextMenuItem>
-        <ContextMenuItem
-          className="gap-2 px-2.5 py-2 text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/25 dark:focus:text-red-100"
-          onSelect={handleDelete}
-        >
-          <Trash2 className="h-4 w-4" aria-hidden="true" />
-          <span>
-            {deleteSourceApplies
-              ? translate('删除（同时删除源文件）')
-              : translate('删除')}
-          </span>
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          className="gap-2 px-2.5 py-2"
-          onSelect={() => {
-            window.setTimeout(openSystemMenu, 0)
-          }}
-        >
-          <FolderCog className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <span>{translate('Windows 原生菜单')}</span>
-          <ContextMenuShortcut>
-            {translate(iconContextMenuMode === 'custom' ? 'Shift + 右键' : '右键')}
-          </ContextMenuShortcut>
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+    <FocusedItemMenu
+      trigger={children}
+      disabled={disabled}
+      label={icon.name}
+      onOpen={refreshDeleteSourceSettings}
+      onContextMenuCapture={handleContextMenuCapture}
+    >
+      <MenuItem className="gap-2 px-2.5 py-2" onSelect={handleOpen}>
+        <Play className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        <span>{translate('打开')}</span>
+      </MenuItem>
+      <MenuItem className="gap-2 px-2.5 py-2" onSelect={() => requestIconEdit(icon)}>
+        <Pencil className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        <span>{translate('编辑图标信息')}</span>
+      </MenuItem>
+      <MenuItem
+        className="gap-2 px-2.5 py-2"
+        onSelect={() => {
+          void hideIcon(icon)
+        }}
+      >
+        <EyeOff className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        <span>{translate('从启动台隐藏')}</span>
+      </MenuItem>
+      <MenuItem
+        className="gap-2 px-2.5 py-2 text-red-700 focus:bg-red-500/12 focus:text-red-800 dark:text-red-200 dark:focus:bg-red-500/25 dark:focus:text-red-100"
+        onSelect={handleDelete}
+      >
+        <Trash2 className="h-4 w-4" aria-hidden="true" />
+        <span>{deleteSourceApplies ? translate('删除（同时删除源文件）') : translate('删除')}</span>
+      </MenuItem>
+      <MenuSeparator />
+      <MenuItem
+        className="gap-2 px-2.5 py-2"
+        onSelect={() => {
+          window.setTimeout(openSystemMenu, 0)
+        }}
+      >
+        <FolderCog className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        <span>{translate('Windows 原生菜单')}</span>
+        <MenuShortcut>
+          {translate(iconContextMenuMode === 'custom' ? 'Shift + 右键' : '右键')}
+        </MenuShortcut>
+      </MenuItem>
+    </FocusedItemMenu>
   )
 }
