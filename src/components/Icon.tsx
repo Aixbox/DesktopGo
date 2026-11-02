@@ -13,6 +13,7 @@ import { IconArtwork } from './icon-grid/views/IconArtwork'
 import { scaledRadius } from './icon-grid/views/folderVisualPolicy'
 import {
   ENLARGED_ICON_SURFACE_CLASS,
+  getIconForegroundSize,
   ICON_TILE_RESIZE_TRANSITION,
   type IconGridTileConfig,
 } from './icon-grid/views/iconTileMetrics'
@@ -69,6 +70,9 @@ export const Icon = memo(function Icon({
   const height = metrics?.footprintHeight ?? tileHeight
   const resizeTransition = reducedMotion ? 'none' : ICON_TILE_RESIZE_TRANSITION
   const enlarged = !!gridTile && (gridTile.span.cols > 1 || gridTile.span.rows > 1)
+  const foregroundSize = gridTile
+    ? getIconForegroundSize(gridTile.span, gridTile.metrics.shapeWidth)
+    : config.imgSize
 
   const [isRenaming, setIsRenaming] = useState(false)
   const [draftName, setDraftName] = useState(displayName)
@@ -208,8 +212,12 @@ export const Icon = memo(function Icon({
               icon={icon}
               name={displayName}
               enlarged={enlarged}
-              imageSize={metrics ? undefined : config.imgSize}
-              fallbackSize={metrics ? Math.min(metrics.shapeWidth, metrics.shapeHeight) * 0.7 : 32}
+              imageSize={foregroundSize}
+              fallbackSize={
+                metrics
+                  ? (foregroundSize ?? Math.min(metrics.shapeWidth, metrics.shapeHeight) * 0.7)
+                  : 32
+              }
             />
           </div>
           {isRenaming ? (

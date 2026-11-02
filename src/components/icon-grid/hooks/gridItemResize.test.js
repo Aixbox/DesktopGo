@@ -126,6 +126,7 @@ test('workspace icon wires size actions and renders its handle outside the activ
     './icon-grid/views/folderVisualPolicy': visuals,
     './icon-grid/views/iconTileMetrics': metrics,
     './icon-grid/views/IconArtwork': load('../views/IconArtwork.tsx', {
+      '../hooks/useRoundedIcon': { useRoundedIcon: source => (source ? 'rounded-image' : null) },
       '../hooks/useIconDominantColor': {
         useIconDominantColor: source => (source ? '#336699' : null),
       },
@@ -168,8 +169,21 @@ test('workspace icon wires size actions and renders its handle outside the activ
     assert.equal(image.props.style.height, entry.props.gridTile.metrics.shapeHeight)
     const artwork = image.props.children.type(image.props.children.props).props.children
     assert.ok(artwork[1].props.className.includes('object-contain'))
+    if (size === '2x2') {
+      const expectedSize = entry.props.gridTile.metrics.shapeWidth / 2
+      assert.equal(artwork[1].props.style.width, expectedSize)
+      assert.equal(artwork[1].props.style.height, expectedSize)
+      assert.equal(artwork[1].props.style.flexShrink, 0)
+    } else if (size === '1x1') assert.equal(artwork[1].props.style, undefined)
     if (size !== '1x1') {
+      assert.equal(artwork[1].props.src, 'rounded-image')
+      assert.equal(artwork[1].props.style.borderRadius, 0)
+      assert.equal(artwork[1].props.style.clipPath, 'none')
       assert.equal(artwork[0].props.style.backgroundColor, '#336699')
+      assert.ok(artwork[0].props.style.backgroundImage.includes('radial-gradient('))
+      assert.ok(artwork[0].props.style.backgroundImage.includes('linear-gradient('))
+      assert.ok(!artwork[0].props.style.backgroundImage.includes('url('))
+      assert.equal(artwork[0].props.style.backgroundRepeat, 'no-repeat')
       assert.ok(image.props.className.includes(visuals.DESKTOP_TILE_SURFACE_CLASS))
       const folderMetrics = visuals.getDesktopFolderTileMetrics({
         ...props,
@@ -191,46 +205,51 @@ test('workspace icon wires size actions and renders its handle outside the activ
   ])
 })
 
-test('icon color updates discard old decode results and retain cached colors in drag clones', async () => {
-  let state,
-    effect,
-    writes = 0
-  const pending = new Map(),
-    cache = new Map([['cached', '#336699']])
-  const { useIconDominantColor } = load('./useIconDominantColor.ts', {
-    react: {
-      useState: initial => {
-        state ??= initial()
-        return [
-          state,
-          next => {
-            state = next
-            writes += 1
-          },
-        ]
+for (const [hook, service, read, loadValue] of [
+  ['useIconDominantColor', 'iconColor', 'readCachedIconColor', 'loadIconColor'],
+  ['useRoundedIcon', 'roundedIcon', 'readCachedRoundedIcon', 'loadRoundedIcon'],
+]) {
+  test(`${hook} discards stale results and retains cached results in drag clones`, async () => {
+    let state,
+      effect,
+      writes = 0
+    const pending = new Map(),
+      cache = new Map([['cached', '#336699']])
+    const { [hook]: useValue } = load(`./${hook}.ts`, {
+      react: {
+        useState: initial => {
+          state ??= initial()
+          return [
+            state,
+            next => {
+              state = next
+              writes += 1
+            },
+          ]
+        },
+        useEffect: callback => {
+          effect = callback
+        },
       },
-      useEffect: callback => {
-        effect = callback
+      [`../services/${service}`]: {
+        [read]: source => cache.get(source) ?? null,
+        [loadValue]: source => new Promise(resolve => pending.set(source, resolve)),
       },
-    },
-    '../services/iconColor': {
-      readCachedIconColor: source => cache.get(source) ?? null,
-      loadIconColor: source => new Promise(resolve => pending.set(source, resolve)),
-    },
+    })
+    assert.equal(useValue('cached'), '#336699')
+    const cleanupCached = effect()
+    cleanupCached()
+    assert.equal(useValue('new'), null)
+    const cleanupNew = effect()
+    pending.get('cached')('#ff0000')
+    await Promise.resolve()
+    assert.equal(writes, 0)
+    pending.get('new')('#00ff00')
+    await Promise.resolve()
+    assert.equal(useValue('new'), '#00ff00')
+    cleanupNew()
+    assert.equal(useValue(undefined), null)
+    assert.equal(effect(), undefined)
+    assert.equal(pending.size, 2, 'compact icons request no color decoding')
   })
-  assert.equal(useIconDominantColor('cached'), '#336699')
-  const cleanupCached = effect()
-  cleanupCached()
-  assert.equal(useIconDominantColor('new'), null)
-  const cleanupNew = effect()
-  pending.get('cached')('#ff0000')
-  await Promise.resolve()
-  assert.equal(writes, 0)
-  pending.get('new')('#00ff00')
-  await Promise.resolve()
-  assert.equal(useIconDominantColor('new'), '#00ff00')
-  cleanupNew()
-  assert.equal(useIconDominantColor(undefined), null)
-  assert.equal(effect(), undefined)
-  assert.equal(pending.size, 2, 'compact icons request no color decoding')
-})
+}

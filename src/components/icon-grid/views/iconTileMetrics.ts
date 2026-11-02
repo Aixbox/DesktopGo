@@ -23,6 +23,11 @@ export interface IconGridTileConfig {
   onCancel?: () => void
 }
 
+/** The square foreground of a 2x2 tile occupies half the visible surface width. */
+export function getIconForegroundSize(span: GridSpan, surfaceWidth: number): number | undefined {
+  return span.cols === 2 && span.rows === 2 ? surfaceWidth / 2 : undefined
+}
+
 /** Artwork retains its aspect ratio inside the resized workspace surface. */
 export function getIconTileMetrics({
   span,

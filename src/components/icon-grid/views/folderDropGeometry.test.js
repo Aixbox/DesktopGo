@@ -41,6 +41,7 @@ const sharedModules = {
   './iconTileMetrics': iconTileMetrics,
   '../model': gridModel,
   './IconArtwork': loadModule('./IconArtwork.tsx', {
+    '../hooks/useRoundedIcon': { useRoundedIcon: source => (source ? 'rounded-image' : null) },
     '../hooks/useIconDominantColor': {
       useIconDominantColor: source => (source ? '#336699' : null),
     },
@@ -213,8 +214,18 @@ for (const size of ['1x1', '1x2', '2x1', '2x2']) {
       assert.equal(rect.width, width)
       assert.equal(rect.height, height)
     }
-    for (const img of all.filter(node => node.type === 'img'))
+    for (const img of all.filter(node => node.type === 'img')) {
       assert.ok(img.props.className.includes('object-contain'))
+      if (size === '2x2') {
+        assert.equal(img.props.style.width, width / 2)
+        assert.equal(img.props.style.height, width / 2)
+      } else if (size === '1x1') assert.equal(img.props.style, undefined)
+      if (size !== '1x1') {
+        assert.equal(img.props.src, 'rounded-image')
+        assert.equal(img.props.style.borderRadius, 0)
+        assert.equal(img.props.style.clipPath, 'none')
+      }
+    }
     const surfaces = all.filter(node =>
       node.props.className?.includes(iconTileMetrics.ENLARGED_ICON_SURFACE_CLASS)
     )
@@ -227,7 +238,12 @@ for (const size of ['1x1', '1x2', '2x1', '2x2']) {
           surface.props.style.borderRadius,
           visualPolicy.scaledRadius(metrics.surfaceRadius)
         )
-      for (const fill of fills) assert.equal(fill.props.style.backgroundColor, '#336699')
+      for (const fill of fills) {
+        assert.equal(fill.props.style.backgroundColor, '#336699')
+        assert.equal(fill.props.style.backgroundImage, fills[0].props.style.backgroundImage)
+        assert.ok(fill.props.style.backgroundImage.includes('radial-gradient('))
+        assert.ok(!fill.props.style.backgroundImage.includes('url('))
+      }
     } else assert.equal(fills.length, 0)
   })
 
