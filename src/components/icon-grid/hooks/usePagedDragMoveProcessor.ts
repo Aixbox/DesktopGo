@@ -3,7 +3,9 @@ import { getGridItemSpan, type GridItem, type HoverZone } from '../model'
 import {
   getEvasionIntentSignature,
   getEvasionReadyDelay,
+  isSingleOuterFolderDrag,
   moveDragHoleToIndex,
+  resolveFolderEvasionReturnIntent,
   resolveVacatedBaseIconCellIntent,
 } from '../domain/evasionPolicy'
 import { armPendingCellReorderAlarm } from '../domain/pendingCellReorderAlarm'
@@ -121,23 +123,24 @@ function processTopLevelMove(
   x: number,
   y: number
 ) {
-  // Hit-test the visible temporary order; a pending ordinary-icon alarm may later rebase it.
+  // Hit-test the visible temporary order; a pending reorder alarm may later rebase it.
   let current = state
   if (current.context === 'outer') runtime.maybeHandleOuterEdgeSwitch(current, x, y)
   else runtime.clearEdgeSwitchTimer()
 
   const nearestSlotIndex = runtime.resolveNearestSlotIndexByContext(current, { allowOutside: true })
   const rawCellIndex = runtime.resolveRawOuterCellIndex(current, { allowOutside: true })
-  if (current.lastReorderCellIndex != null && current.lastReorderCellIndex !== rawCellIndex) {
-    current = { ...current, lastReorderCellIndex: null }
-  }
   const candidateAnchorIndex = runtime.resolveCandidateAnchorIndexByContext(current, {
     allowOutside: true,
   })
+  const reorderCellIndex = isSingleOuterFolderDrag(current) ? candidateAnchorIndex : rawCellIndex
+  if (current.lastReorderCellIndex != null && current.lastReorderCellIndex !== reorderCellIndex) {
+    current = { ...current, lastReorderCellIndex: null }
+  }
   let overlapHit = runtime.findTopLevelMaxOverlapHit(current)
   if (overlapHit && current.draggingIds.includes(overlapHit.targetId)) overlapHit = null
   if (!overlapHit) {
-    scheduleVacatedBaseCellAlarm(runtime, current, rawCellIndex)
+    scheduleBaseLayoutReorderAlarm(runtime, current, reorderCellIndex)
     publishTopLevelReset(runtime, current, nearestSlotIndex)
     return
   }
@@ -165,35 +168,37 @@ function processTopLevelMove(
   processOuterOverlapMove(context)
 }
 
-function scheduleVacatedBaseCellAlarm(
+function scheduleBaseLayoutReorderAlarm(
   runtime: PagedDragMoveProcessorParams,
   state: DragState,
-  nearestSlotIndex: number | null
+  reorderCellIndex: number | null
 ) {
   const draggingSpan = getGridItemSpan(state.draggingItem)
+  const folderDrag = isSingleOuterFolderDrag(state)
   if (
     state.context !== 'outer' ||
     state.draggingIds.length !== 1 ||
-    state.draggingItem.kind !== 'icon' ||
-    draggingSpan.cols !== 1 ||
-    draggingSpan.rows !== 1
+    (!folderDrag &&
+      (state.draggingItem.kind !== 'icon' || draggingSpan.cols !== 1 || draggingSpan.rows !== 1))
   ) {
     return
   }
 
-  const intent = resolveVacatedBaseIconCellIntent(
-    state.workingOrder,
-    state.evasionBaseOrder,
-    nearestSlotIndex,
-    state.lastReorderCellIndex,
-    targetId => {
-      if (state.draggingIds.includes(targetId)) return false
-      const target = resolveItemById(runtime.itemById, runtime.itemsRef.current, targetId)
-      if (!target || target.kind !== 'icon') return false
-      const targetSpan = getGridItemSpan(target)
-      return targetSpan.cols === 1 && targetSpan.rows === 1
-    }
-  )
+  const intent = folderDrag
+    ? resolveFolderEvasionReturnIntent(state, reorderCellIndex)
+    : resolveVacatedBaseIconCellIntent(
+        state.workingOrder,
+        state.evasionBaseOrder,
+        reorderCellIndex,
+        state.lastReorderCellIndex,
+        targetId => {
+          if (state.draggingIds.includes(targetId)) return false
+          const target = resolveItemById(runtime.itemById, runtime.itemsRef.current, targetId)
+          if (!target || target.kind !== 'icon') return false
+          const targetSpan = getGridItemSpan(target)
+          return targetSpan.cols === 1 && targetSpan.rows === 1
+        }
+      )
   if (!intent) return
 
   armPendingCellReorderAlarm({
@@ -320,7 +325,7 @@ function processOuterOverlapMove(context: TopLevelMoveContext) {
     context
   const now = performance.now()
   const previewFolder = canPreviewFolder(source, target, overlapHit, state.draggingIds.length > 1)
-  // Keep the visible preview for hit-testing; a new ordinary-icon alarm re-solves from its base.
+  // Keep the visible preview for hit-testing; a new reorder alarm re-solves from its base.
   const next: DragState = {
     ...state,
     previewSlotIndex: runtime.resolveTopLevelOverlapPreviewIndex(
@@ -377,7 +382,12 @@ function scheduleOuterEvasion(
     targetSpan?.cols === 1 &&
     targetSpan.rows === 1 &&
     overlapHit.targetIndex >= 0
-  const intentTargetIndex = singleIconDrag ? overlapHit.targetIndex : null
+  const intentTargetIndex = isSingleOuterFolderDrag(next)
+    ? next.previewSlotIndex
+    : singleIconDrag
+      ? overlapHit.targetIndex
+      : null
+  next.hoverTargetIndex = intentTargetIndex
   const intentSignature = getEvasionIntentSignature(
     overlapHit.targetId,
     overlapHit.zone,

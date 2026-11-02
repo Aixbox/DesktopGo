@@ -14,14 +14,14 @@ export interface DragState {
   offsetX: number
   offsetY: number
   workingOrder: Array<string | null>
-  /** Stable layout before the active ordinary-icon reorder preview began. */
+  /** Stable layout before the active icon or folder reorder preview began. */
   evasionBaseOrder?: Array<string | null> | null
   scrollGroupOrder?: string[] | null
   sourceSlotIndex: number | null
   previewSlotIndex: number | null
   dockPreviewIndex: number | null
   hoverTargetId: string | null
-  /** Grid cell currently under the drag; ordinary-icon alarms are cell based. */
+  /** Reorder cell, or the footprint anchor when dragging a folder. */
   hoverTargetIndex?: number | null
   /** Last cell whose pending reorder alarm fired; cleared after leaving that cell. */
   lastReorderCellIndex?: number | null

@@ -1,6 +1,7 @@
 import type { MutableRefObject } from 'react'
 import type { GridItem, HoverZone } from '../model'
 import { resolveItemById } from '../domain/dragWorkflowShared'
+import { isSingleOuterFolderDrag } from '../domain/evasionPolicy'
 import { OUTER_DRAG_RULES } from '../constants'
 import type { DragState, OuterOverlapHit } from '../state/types'
 
@@ -56,8 +57,9 @@ export function useTopLevelDwellEvasion({
       const visibleHit = findTopLevelMaxOverlapHit(current)
       latest = {
         ...current,
-        lastReorderCellIndex:
-          visibleHit && !current.draggingIds.includes(visibleHit.targetId)
+        lastReorderCellIndex: isSingleOuterFolderDrag(current)
+          ? resolveCandidateAnchorIndexByContext(current, { allowOutside: true })
+          : visibleHit && !current.draggingIds.includes(visibleHit.targetId)
             ? visibleHit.targetIndex
             : resolveRawOuterCellIndex(current, { allowOutside: true }),
       }

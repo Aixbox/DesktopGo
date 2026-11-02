@@ -878,6 +878,7 @@ export const applyOuterEvasionPolicy = (
       return anchorIndex >= pageStart && anchorIndex < pageStart + safePageSize
     }) ?? false
   const needsFootprintEvasion =
+    options?.draggingItem?.kind === 'folder' ||
     pageHasFootprintItem ||
     Boolean(draggingSpan && (draggingSpan.cols > 1 || draggingSpan.rows > 1)) ||
     Boolean(targetSpan && (targetSpan.cols > 1 || targetSpan.rows > 1))

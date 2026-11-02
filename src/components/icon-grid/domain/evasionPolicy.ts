@@ -1,4 +1,4 @@
-import type { EvasionDirection, HoverZone } from '../model'
+import type { DragContext, EvasionDirection, GridItem, HoverZone } from '../model'
 import { clampNumber } from './geometry'
 import { areSlotsEqual, DRAG_HOLE_ID, getSlotRowColWithinPage, isVacantSlot } from './slots'
 
@@ -38,6 +38,24 @@ export interface CellReorderIntent {
   targetIndex: number
   zone: HoverZone
 }
+
+export const isSingleOuterFolderDrag = (state: {
+  context: DragContext
+  draggingIds: string[]
+  draggingItem: GridItem
+}): boolean =>
+  state.context === 'outer' &&
+  state.draggingIds.length === 1 &&
+  state.draggingItem.kind === 'folder'
+
+/** A folder's alarm follows its footprint anchor, including moves into empty space. */
+export const resolveFolderEvasionReturnIntent = (
+  state: EvasionPreviewState & { draggingId: string; lastReorderCellIndex?: number | null },
+  anchorIndex: number | null
+): CellReorderIntent | null =>
+  state.evasionBaseOrder && anchorIndex !== null && anchorIndex !== state.lastReorderCellIndex
+    ? { targetId: state.draggingId, targetIndex: anchorIndex, zone: 'center' }
+    : null
 
 /**
  * Finds a committed icon cell which the temporary preview has vacated.

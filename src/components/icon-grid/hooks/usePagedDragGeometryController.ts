@@ -5,6 +5,7 @@ import { DRAG_HOLE_ID } from '../domain/slots'
 import {
   applyEvasionPreview,
   applyRebasedEvasionPreview,
+  isSingleOuterFolderDrag,
   moveDragHoleToIndex,
 } from '../domain/evasionPolicy'
 import { clampNumber, classifyZone } from '../domain/geometry'
@@ -328,7 +329,9 @@ export function usePagedDragGeometryController({
     if (state.context !== 'outer') return resolveNearestSlotIndexByContext(state, options)
     const metrics = resolveGridMetrics('outer')
     const draggingSpan = getGridItemSpan(state.draggingItem)
-    return draggingSpan.cols === 1 && draggingSpan.rows === 1
+    return state.draggingItem.kind !== 'folder' &&
+      draggingSpan.cols === 1 &&
+      draggingSpan.rows === 1
       ? resolveNearestSlotIndexByContext(state, options)
       : resolveNearestAnchorIndexByMetrics(state, metrics, gridGap, draggingSpan, options)
   }
@@ -407,7 +410,9 @@ export function usePagedDragGeometryController({
   ) => {
     if (state.context !== 'outer') return overlapHit.targetIndex
     const draggingSpan = getGridItemSpan(state.draggingItem)
-    if (draggingSpan.cols > 1 || draggingSpan.rows > 1) return candidateAnchorIndex
+    if (state.draggingItem.kind === 'folder' || draggingSpan.cols > 1 || draggingSpan.rows > 1) {
+      return candidateAnchorIndex
+    }
     const targetSpan = getGridItemSpan(target)
     return targetSpan.cols === 1 && targetSpan.rows === 1
       ? overlapHit.targetIndex
@@ -425,6 +430,7 @@ export function usePagedDragGeometryController({
     const shouldUsePreviewAnchor =
       state.context === 'outer' &&
       (state.draggingIds.length > 1 ||
+        state.draggingItem.kind === 'folder' ||
         draggingSpan.cols > 1 ||
         draggingSpan.rows > 1 ||
         Boolean(targetSpan && (targetSpan.cols > 1 || targetSpan.rows > 1)))
@@ -445,6 +451,40 @@ export function usePagedDragGeometryController({
             targetAnchorIndex,
           }
         : undefined
+    )
+  }
+
+  const rebaseTopLevelEvasion = (
+    state: DragState,
+    baseOrder: Array<string | null>,
+    now: number
+  ): DragState => {
+    const folderDrag = isSingleOuterFolderDrag(state)
+    // The baseline may predate a page created by edge paging during this drag.
+    const restoredOrder = [...baseOrder]
+    const activePageEnd = (currentPageRef.current + 1) * Math.max(1, pageSizeRef.current)
+    while (restoredOrder.length < activePageEnd) restoredOrder.push(null)
+    const baseState = applyRebasedEvasionPreview(state, restoredOrder, null, null, now, null)
+    if (folderDrag) {
+      baseState.previewSlotIndex = resolveCandidateAnchorIndexByContext(baseState, {
+        allowOutside: true,
+      })
+    }
+    const baseHit = findTopLevelMaxOverlapHit(baseState)
+    const baseTarget = baseHit ? resolveItemById(baseHit.targetId) : null
+    if (!baseHit || (!folderDrag && baseTarget?.kind !== 'icon')) return baseState
+
+    const rebasedResult = applyTopLevelEvasion(baseState, baseHit)
+    const intentHit = folderDrag
+      ? { ...baseHit, targetIndex: baseState.previewSlotIndex ?? baseHit.targetIndex }
+      : baseHit
+    return applyRebasedEvasionPreview(
+      baseState,
+      restoredOrder,
+      intentHit,
+      rebasedResult.order,
+      now,
+      null
     )
   }
 
@@ -470,31 +510,9 @@ export function usePagedDragGeometryController({
     // CellLayout mode 1 rebuilds each new candidate from mOccupied. If a
     // new alarm fires after the pointer leaves the temporary cell, restore the
     // prior preview first, then solve the latest pointer against that base.
-    const baseOrder = isSingleCellIconDrag ? state.evasionBaseOrder : null
-    if (baseOrder) {
-      const baseState: DragState = {
-        ...state,
-        workingOrder: baseOrder,
-        evasionBaseOrder: null,
-        centerStartedAt: null,
-        dwellStartedAt: null,
-        folderPreviewTargetId: null,
-        hoverTargetId: null,
-        hoverZone: null,
-        hoverIou: 0,
-        lastEvasionSignature: null,
-        lastEvasionTriggerPointer: null,
-        lastEvasionAt: now,
-      }
-      const baseHit = findTopLevelMaxOverlapHit(baseState)
-      const baseTarget = baseHit ? resolveItemById(baseHit.targetId) : null
-      if (!baseHit || baseTarget?.kind !== 'icon') {
-        return applyRebasedEvasionPreview(state, baseOrder, null, null, now, null)
-      }
-
-      const rebasedResult = applyTopLevelEvasion(baseState, baseHit)
-      return applyRebasedEvasionPreview(state, baseOrder, baseHit, rebasedResult.order, now, null)
-    }
+    const folderDrag = isSingleOuterFolderDrag(state)
+    const baseOrder = isSingleCellIconDrag || folderDrag ? state.evasionBaseOrder : null
+    if (baseOrder) return rebaseTopLevelEvasion(state, baseOrder, now)
 
     if (!overlapHit) return state
 
@@ -507,11 +525,13 @@ export function usePagedDragGeometryController({
     const preview = applyEvasionPreview(
       state,
       evasionResult.order,
-      overlapHit,
+      folderDrag
+        ? { ...overlapHit, targetIndex: state.previewSlotIndex ?? overlapHit.targetIndex }
+        : overlapHit,
       now,
       state.context === 'dock' ? overlapHit.targetIndex : null
     )
-    if (preview === state || !usesCommittedIconLayout) return preview
+    if (preview === state || (!usesCommittedIconLayout && !folderDrag)) return preview
 
     return {
       ...preview,
