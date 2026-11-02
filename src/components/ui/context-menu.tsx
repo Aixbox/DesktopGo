@@ -69,7 +69,7 @@ ContextMenuSubContent.displayName = ContextMenuPrimitive.SubContent.displayName
 const ContextMenuContent = React.forwardRef<
   React.ElementRef<typeof ContextMenuPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, onCloseAutoFocus, ...props }, ref) => (
   <ContextMenuPrimitive.Portal>
     <ContextMenuPrimitive.Content
       ref={ref}
@@ -78,6 +78,16 @@ const ContextMenuContent = React.forwardRef<
         className
       )}
       {...props}
+      onCloseAutoFocus={event => {
+        onCloseAutoFocus?.(event)
+        if (event.defaultPrevented) return
+        const closingMenu = event.target as HTMLElement | null
+        const focusedMenu = closingMenu?.ownerDocument.activeElement?.closest(
+          '[data-radix-menu-content][data-state="open"]'
+        )
+        // Radix restores focus asynchronously after exit. A successor menu already owns it.
+        if (focusedMenu && focusedMenu !== closingMenu) event.preventDefault()
+      }}
     >
       <NativeScrollArea asChild gutter="auto">
         <div className="max-h-[var(--radix-context-menu-content-available-height)] overflow-y-auto overflow-x-hidden">

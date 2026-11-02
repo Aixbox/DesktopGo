@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { pathToFileURL } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
 import * as geometry from './focusedItemMenuGeometry.ts'
@@ -135,6 +136,74 @@ const element = rect => ({
   },
 })
 
+// Run Radix's actual deferred FocusScope cleanup against a controlled focus/event boundary.
+function backgroundMenuFocus(doc, onCloseAutoFocus) {
+  const { ContextMenuContent } = loadModule('../ui/context-menu.tsx', {
+    react: { forwardRef: render => render },
+    '@radix-ui/react-context-menu': new Proxy({}, { get: (_, name) => name }),
+    '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
+    './native-scroll-area': { NativeScrollArea: 'NativeScrollArea' },
+    './menu-styles': {},
+  })
+  const content = ContextMenuContent({ onCloseAutoFocus }, null).props.children
+  const runtime = hookRuntime(),
+    timers = []
+  const noop = () => {}
+  const radixRequire = createRequire(require.resolve('@radix-ui/react-menu'))
+  const scopeUrl = pathToFileURL(
+    radixRequire.resolve('@radix-ui/react-focus-scope').replace(/\.js$/, '.mjs')
+  )
+  const { FocusScope } = loadModule(
+    scopeUrl.href,
+    {
+      react: { ...runtime.react, forwardRef: render => render },
+      '@radix-ui/react-compose-refs': { useComposedRefs: (_, setNode) => setNode },
+      '@radix-ui/react-primitive': { Primitive: { div: 'div' } },
+      '@radix-ui/react-use-callback-ref': { useCallbackRef: callback => callback ?? noop },
+    },
+    {
+      document: doc,
+      HTMLInputElement: class {},
+      setTimeout: callback => timers.push(callback),
+      CustomEvent: class {
+        defaultPrevented = false
+        constructor(type) {
+          this.type = type
+        }
+        preventDefault() {
+          this.defaultPrevented = true
+        }
+      },
+    }
+  )
+  const node = {
+    ...element({}),
+    ...eventHub(),
+    ownerDocument: doc,
+    dispatchEvent(event) {
+      event.target = this
+      this.dispatch(event.type, event)
+    },
+    focus() {
+      doc.activeElement = this
+    },
+  }
+  const props = {
+    onMountAutoFocus: event => {
+      event.preventDefault()
+      node.focus()
+    },
+    onUnmountAutoFocus: content.props.onCloseAutoFocus,
+  }
+  runtime.render(() => FocusScope(props)).props.ref(node)
+  runtime.render(() => FocusScope(props))
+  return {
+    node,
+    close: () => runtime.unmount(),
+    flushClose: () => timers.splice(0).forEach(callback => callback()),
+  }
+}
+
 function menuFixture({
   direction = 'ltr',
   item = { left: 100, top: 100, width: 176, height: 208 },
@@ -230,6 +299,7 @@ function menuFixture({
   const runtime = hookRuntime(),
     contentRuntime = hookRuntime(),
     presentationRuntime = hookRuntime()
+  const resizeRuntimes = []
   const trigger = { type: 'button', props: { onPointerDown: () => 'original drag handler' } }
   let tree
   const render = () => {
@@ -259,6 +329,7 @@ function menuFixture({
   }
   const resizeHandle = () => {
     const resizeRuntime = hookRuntime()
+    resizeRuntimes.push(resizeRuntime)
     const { useFolderResizeInteraction } = loadModule(
       '../icon-grid/hooks/useFolderResizeInteraction.ts',
       {
@@ -266,9 +337,15 @@ function menuFixture({
         '../domain/folderResizePolicy': resizePolicy,
       }
     )
+    const { useFolderResizeHandleFocus } = loadModule(
+      '../icon-grid/hooks/useFolderResizeHandleFocus.ts',
+      { react },
+      globals
+    )
     const { FolderResizeHandle } = loadModule('../icon-grid/views/FolderResizeHandle.tsx', {
       'framer-motion': { motion: { div: 'motion.div' }, useTransform: () => 0 },
       '../hooks/useFolderResizeInteraction': { useFolderResizeInteraction },
+      '../hooks/useFolderResizeHandleFocus': { useFolderResizeHandleFocus },
       '../domain/folderResizePolicy': resizePolicy,
       './FolderResizeOutline': { FolderResizeOutline: 'Outline' },
       '../../../types': gridTypes,
@@ -303,7 +380,7 @@ function menuFixture({
         }),
       render() {
         currentRuntime = resizeRuntime
-        return resizeRuntime.render(() =>
+        const result = resizeRuntime.render(() =>
           FolderResizeHandle({
             visible: tree.props.open,
             span: { cols: 1, rows: 1 },
@@ -316,6 +393,8 @@ function menuFixture({
             onCancel: () => cancellations.push(true),
           })
         )
+        if (result) result.props.ref.current = { contains: target => target === node }
+        return result
       },
     }
   }
@@ -355,6 +434,7 @@ function menuFixture({
       runtime.unmount()
       contentRuntime.unmount()
       presentationRuntime.unmount()
+      for (const resizeRuntime of resizeRuntimes) resizeRuntime.unmount()
     },
   }
 }
@@ -378,6 +458,52 @@ test('right click focuses the original tile; a primary press leaves its existing
   assert.equal(h.trigger.props.onPointerDown(), 'original drag handler')
   assert.equal(h.render().props.open, false)
   h.unmount()
+})
+
+test('closing the background menu cannot restore stale focus and dismiss a newly opened folder menu', () => {
+  const h = menuFixture()
+  let oldFocusRestores = 0
+  h.doc.activeElement = {
+    ...element({}),
+    focus() {
+      oldFocusRestores++
+      h.doc.activeElement = this
+      const outside = pointer({ target: this })
+      h.renderContent().props.onInteractOutside(outside)
+      if (!outside.defaultPrevented) h.render().props.onOpenChange(false)
+    },
+  }
+  const background = backgroundMenuFocus(h.doc)
+  background.close()
+  h.open()
+  h.doc.activeElement = {
+    closest: selector =>
+      selector === '[data-radix-menu-content][data-state="open"]' ? h.menuNode : null,
+  }
+  background.flushClose()
+  assert.equal(oldFocusRestores, 0, 'the previous menu must not take focus back from its successor')
+  assert.equal(h.render().props.open, true)
+  assert.equal(h.hasPresentation(), true)
+  // The new menu still supports normal dismissal after the handoff.
+  h.doc.dispatch('click', pointer({ target: {} }))
+  assert.equal(h.render().props.open, false)
+  h.unmount()
+})
+
+test('ordinary background-menu closing still restores focus and respects an explicit autofocus override', () => {
+  for (const override of [false, true]) {
+    let restores = 0,
+      callbacks = 0
+    const doc = { activeElement: { focus: () => restores++ } }
+    const background = backgroundMenuFocus(doc, event => {
+      callbacks++
+      if (override) event.preventDefault()
+    })
+    background.close()
+    background.flushClose()
+    assert.equal(callbacks, 1)
+    assert.equal(restores, override ? 0 : 1)
+  }
 })
 
 test('outside presses and clicks are consumed, including the clear margin around the focused tile', () => {
@@ -488,8 +614,62 @@ test('capture-phase rerender cannot remove the handle before resize starts; rele
     assert.deepEqual(handle.commits, cancelled ? [] : ['2x2'])
     assert.equal(handle.cancellations.length, cancelled ? 1 : 0)
     assert.equal(handle.captured.size, 0)
-    assert.equal(handle.render(), null)
+    assert.equal(handle.render().props['data-folder-resize-frame'], 'idle')
+    assert.equal(h.hasPresentation(), false)
+    h.doc.dispatch('pointerdown', pointer({ target: {} }))
+    assert.equal(handle.render(), null, 'the next outside press dismisses the retained handle')
     h.unmount()
+    assert.equal(h.doc.listenerCount(), 0)
+  }
+})
+
+test('a released handle stays reusable without reopening the menu or glass, even after a click without movement', () => {
+  const h = menuFixture()
+  h.open()
+  const handle = h.resizeHandle()
+  for (const moved of [true, false, true]) {
+    const down = handle.event()
+    h.doc.dispatch('pointerdown', down)
+    h.slot().props.onPointerDownCapture(down)
+    h.render()
+    const ready = handle.render()
+    assert.ok(ready, 'pressing the retained handle must not dismiss it')
+    ready.props.children.props.interaction.startPointerResize(down)
+    assert.equal(h.render().props.open, false)
+    assert.equal(h.hasPresentation(), false)
+    const drag = handle.render().props.children.props.interaction
+    if (moved) drag.movePointerResize(handle.event(260, 260))
+    drag.finishPointerResize(handle.event(260, 260))
+    // Resizing can move the folder away from the release point. Its resulting click is not a new press.
+    h.doc.dispatch('pointerup', pointer({ target: {} }))
+    h.doc.dispatch('click', pointer({ target: {} }))
+    assert.equal(handle.render().props['data-folder-resize-frame'], 'idle')
+    assert.equal(handle.captured.size, 0)
+  }
+  assert.deepEqual(handle.commits, ['2x2', '2x2'])
+  assert.equal(handle.cancellations.length, 1)
+  h.unmount()
+  assert.equal(h.doc.listenerCount(), 0)
+})
+
+test('pressing the folder body, title, desktop or another handle clears retention without consuming the press', () => {
+  for (const location of ['body', 'title', 'desktop', 'other handle']) {
+    const h = menuFixture()
+    h.open()
+    const handle = h.resizeHandle()
+    handle.render().props.children.props.interaction.startPointerResize(handle.event())
+    h.render()
+    handle.render().props.children.props.interaction.finishPointerResize(handle.event())
+    assert.ok(handle.render())
+    const target = location === 'desktop' ? {} : { owner: h.target }
+    if (location === 'other handle') target.closest = () => target
+    const down = pointer({ target, button: location === 'other handle' ? 2 : 0 })
+    h.doc.dispatch('pointerdown', down)
+    assert.equal(handle.render(), null, location)
+    assert.equal(down.defaultPrevented, false, 'the newly clicked control should still work')
+    assert.equal(down.stopped, false)
+    h.unmount()
+    assert.equal(h.doc.listenerCount(), 0)
   }
 })
 

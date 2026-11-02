@@ -1,6 +1,7 @@
 import type { FolderSize, GridSpan } from '../model'
 import { motion, useTransform, type MotionValue } from 'framer-motion'
 import { useFolderResizeInteraction } from '../hooks/useFolderResizeInteraction'
+import { useFolderResizeHandleFocus } from '../hooks/useFolderResizeHandleFocus'
 import { getFolderResizeVisualGeometry } from '../domain/folderResizePolicy'
 import { FolderResizeOutline } from './FolderResizeOutline'
 import type { DesktopFolderTileMetrics } from './folderVisualPolicy'
@@ -33,8 +34,10 @@ export function FolderResizeHandle({
   onCancel,
 }: FolderResizeHandleProps) {
   const dismissMenu = useDismissItemMenu()
+  const focus = useFolderResizeHandleFocus()
+  const handleVisible = visible || focus.retained
   const interaction = useFolderResizeInteraction({
-    visible,
+    visible: handleVisible,
     span,
     cellWidth,
     cellHeight,
@@ -43,7 +46,10 @@ export function FolderResizeHandle({
     onPreview,
     onCommit,
     onCancel,
-    onStart: dismissMenu,
+    onStart: () => {
+      focus.retain()
+      dismissMenu()
+    },
   })
   const geometry = getFolderResizeVisualGeometry(span)
   const x = useTransform(
@@ -56,10 +62,11 @@ export function FolderResizeHandle({
   )
   const width = useTransform(display, m => m.shapeWidth + geometry.backgroundPaddingX * 2)
   const height = useTransform(display, m => m.shapeHeight + geometry.backgroundPaddingY * 2)
-  if (!visible && !interaction.active) return null
+  if (!handleVisible && !interaction.active) return null
 
   return (
     <motion.div
+      ref={focus.frameRef}
       data-folder-resize-frame={interaction.active ? 'active' : 'idle'}
       className="pointer-events-none absolute left-0 top-0 z-40 overflow-visible"
       style={{
