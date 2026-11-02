@@ -4,7 +4,6 @@ import {
   FOLDER_RESIZE_HIGH_SLOPE,
   FOLDER_RESIZE_LOW_SLOPE,
   folderSizeFromSpan,
-  getFolderResizeArcPath,
   getFolderResizeHandlePlacement,
   getFolderResizeVisualGeometry,
   getFolderResizeThreshold,
@@ -97,21 +96,30 @@ test('rtl mirrors horizontal intent without changing vertical intent', () => {
 })
 
 test('resize frame geometry follows the resource-backed 1x1 and expanded branches', () => {
-  assert.deepEqual(getFolderResizeVisualGeometry({ cols: 1, rows: 1 }, false), {
+  assert.deepEqual(getFolderResizeVisualGeometry({ cols: 1, rows: 1 }), {
     hotSize: 32,
-    handleRadius: 16,
+    handleArcLength: 8 * Math.PI,
     frameStrokeWidth: 2,
     handleStrokeWidth: 6,
     backgroundPaddingX: 10,
     backgroundPaddingY: 16,
   })
-  assert.equal(getFolderResizeVisualGeometry({ cols: 2, rows: 2 }, true).hotSize, 46)
-  assert.equal(getFolderResizeVisualGeometry({ cols: 2, rows: 2 }, true).handleRadius, 18)
-  assert.equal(getFolderResizeVisualGeometry({ cols: 2, rows: 2 }, true).frameStrokeWidth, 4)
+  for (const span of [
+    { cols: 1, rows: 1 },
+    { cols: 1, rows: 2 },
+    { cols: 2, rows: 1 },
+    { cols: 2, rows: 2 },
+  ]) {
+    const visual = getFolderResizeVisualGeometry(span)
+    assert.equal(visual.frameStrokeWidth, 2)
+    assert.equal(visual.handleStrokeWidth, 6)
+  }
+  assert.equal(getFolderResizeVisualGeometry({ cols: 2, rows: 2 }).hotSize, 46)
+  assert.equal(getFolderResizeVisualGeometry({ cols: 2, rows: 2 }).handleArcLength, 9 * Math.PI)
 })
 
 test('resize handle placement keeps the arc on the folder corner in both directions', () => {
-  const geometry = getFolderResizeVisualGeometry({ cols: 2, rows: 2 }, false)
+  const geometry = getFolderResizeVisualGeometry({ cols: 2, rows: 2 })
   assert.deepEqual(getFolderResizeHandlePlacement(false, geometry), {
     side: 'right',
     horizontalInset: 10,
@@ -122,8 +130,4 @@ test('resize handle placement keeps the arc on the folder corner in both directi
     horizontalInset: 10,
     bottomInset: 16,
   })
-})
-
-test('resize arc uses the inside bottom-corner sweep', () => {
-  assert.equal(getFolderResizeArcPath(46, 18, 6), 'M 28 46 A 18 18 0 0 0 46 28')
 })

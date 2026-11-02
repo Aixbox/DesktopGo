@@ -32,7 +32,7 @@ export interface FolderResizeGestureResult {
 
 export interface FolderResizeVisualGeometry {
   hotSize: number
-  handleRadius: number
+  handleArcLength: number
   frameStrokeWidth: number
   handleStrokeWidth: number
   backgroundPaddingX: number
@@ -45,17 +45,14 @@ export interface FolderResizeHandlePlacement {
   bottomInset: number
 }
 
-/** Resource-backed resize-frame geometry from OplusLauncher 17.3.12. */
-export const getFolderResizeVisualGeometry = (
-  span: GridSpan,
-  active: boolean
-): FolderResizeVisualGeometry => {
+/** Keep the original handle length and idle line widths throughout resizing. */
+export const getFolderResizeVisualGeometry = (span: GridSpan): FolderResizeVisualGeometry => {
   const singleSlot = span.cols === 1 && span.rows === 1
   return {
     hotSize: singleSlot ? 32 : 46,
-    handleRadius: singleSlot ? 16 : 18,
-    frameStrokeWidth: active ? 4 : 2,
-    handleStrokeWidth: active ? 8 : 6,
+    handleArcLength: ((singleSlot ? 16 : 18) * Math.PI) / 2,
+    frameStrokeWidth: 2,
+    handleStrokeWidth: 6,
     backgroundPaddingX: 10,
     backgroundPaddingY: 16,
   }
@@ -73,22 +70,6 @@ export const getFolderResizeHandlePlacement = (
   horizontalInset: Math.max(0, geometry.backgroundPaddingX),
   bottomInset: Math.max(0, geometry.backgroundPaddingY),
 })
-
-/**
- * Return the LTR bottom-corner arc. Sweep flag 0 keeps the arc inside the
- * folder corner; sweep flag 1 selects the mirrored outside arc.
- */
-export const getFolderResizeArcPath = (
-  size: number,
-  radius: number,
-  strokeWidth: number
-): string => {
-  const safeSize = Math.max(1, size)
-  const safeStrokeWidth = Math.max(0, strokeWidth)
-  const safeRadius = Math.min(Math.max(1, radius), Math.max(1, safeSize - safeStrokeWidth))
-  const start = safeSize - safeRadius
-  return `M ${start} ${safeSize} A ${safeRadius} ${safeRadius} 0 0 0 ${safeSize} ${start}`
-}
 
 const safePositive = (value: number): number => (Number.isFinite(value) && value > 0 ? value : 1)
 

@@ -150,7 +150,7 @@ ItemResizeFrame 的 ACTION_DOWN 先验证热区、可调整方向和 popup；多
 
 1. **闭合预览与打开文件夹分页分离。** 普通 2×2 文件夹闭合时是 3×3；打开后的页面容量仍由 `OplusFolderPagedView` / `DeviceProfile` 决定，不能把 modal 的 4×4 内容网格直接当作闭合预览。
 2. **预览组织器统一。** `folderPreviewPolicy.ts`、`OuterFolderTile.tsx` 和 `DragOverlays.tsx` 已使用同一套闭合预览与 RTL-aware 几何策略；普通 3×3 的第九位只有在剩余项目至少 2 个时才替换成最多 4 个的 2×2 `StackedDrawable`。
-3. **手柄是状态化的 resize frame。** `FolderResizeHandle.tsx` 只在编辑态且文件夹未打开/未作为拖入目标时显示，LTR/RTL 分别落在右下/左下，并使用 APK 取证的 32/46dp 热区、16/18dp 半径、10/16dp 外扩和 2/4dp、6/8dp 描边；页面可见性等 Android 专属条件仍由宿主状态边界负责。
+3. **手柄是状态化的 resize frame。** `FolderResizeHandle.tsx` 只在编辑态且文件夹未打开/未作为拖入目标时显示，LTR/RTL 分别落在右下/左下，保留 10/16 容器外扩。点击热区改为沿可见手柄四周额外扩展 10px 的透明 HTML 按钮（按钮边界随热区扩展，避免裁掉外侧范围），使用同一条弧线生成窄带 clip-path，不再使用整块 32/46 矩形或 SVG 透明描线命中；文件夹中心和其他边角不参与缩放命中。按照用户要求，DesktopGo 的边框与手柄同时出现，静止和拖动时均固定为 2px 边框、6px 手柄。`FolderResizeOutline.tsx` 读取文件夹圆角的实际 CSS 值，由 `folderResizeOutlineGeometry.ts` 生成共用中心线，使用 SVG 等宽描线；手柄居中截取原 16/18 半径四分之一圆对应的弧长（约 25.13/28.27px，不含圆头），不随背景圆角变大而加长。圆头使用 `strokeLinecap="round"`，替代 CSS 边界与遮罩拼接，避免端点与中段粗细不一致。边框位于背景内侧，容器外扩不作为描边边界。APK 的状态线宽与半径仍保留在上文取证数据中，这里的固定线宽及定长共线描线是 DesktopGo 的交互适配。页面可见性等 Android 专属条件仍由宿主状态边界负责。
 4. **拖动使用临时布局。** `folderResizePolicy.ts` 在 pointermove 生成候选尺寸，`folderResizeTransaction.ts` 基于 source snapshot 生成临时邻居迁移和占用结果；pointerup 才调用布局提交，pointercancel/无变化丢弃临时方案并恢复原快照。完整 Android 的原生 CellLayout 动画仍属于平台适配边界。
 5. **主题 holder 由显式策略控制。** `folderPreviewThemePolicy.ts` 复现默认主题、night icon、themed icon 三个条件；默认主题补齐 holder，night/themed 分支保留空槽。
 

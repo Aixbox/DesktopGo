@@ -48,7 +48,7 @@ export function useFolderResizeInteraction({
 }: FolderResizeInteractionParams): FolderResizeInteraction {
   const sessionRef = useRef<ResizeSession | null>(null)
   const [active, setActive] = useState(false)
-  const hotSize = getFolderResizeVisualGeometry(span, active).hotSize
+  const hotSize = getFolderResizeVisualGeometry(span).hotSize
 
   const startPointerResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (!visible && !active) return

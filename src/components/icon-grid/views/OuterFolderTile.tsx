@@ -669,6 +669,7 @@ function OuterFolderTileComponent({
             span={effectiveSpan}
             frameWidth={shapeWidth}
             frameHeight={shapeHeight}
+            frameRadius={surfaceRadius}
             frameTop={TILE_PADDING + Math.max(0, (bodyHeight - shapeHeight) / 2)}
             cellWidth={slotWidth}
             cellHeight={slotHeight}
