@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { DEFAULT_FOLDER_LAYOUT_PROFILE, type FolderLayoutProfile } from '../domain/folderLayout'
+import { getDefaultFolderColumnCount } from '../domain/gridGeometry'
+import { FOLDER_MODAL_MAX_WIDTH } from '../views/folderVisualPolicy'
 
 interface UseFolderGridMeasurementParams {
   open: boolean
   renderOrderLength: number
   columnWidth: number
   rowHeight: number
-  profile?: FolderLayoutProfile
 }
 
 export function useFolderGridMeasurement({
@@ -14,18 +14,19 @@ export function useFolderGridMeasurement({
   renderOrderLength,
   columnWidth,
   rowHeight,
-  profile = DEFAULT_FOLDER_LAYOUT_PROFILE,
 }: UseFolderGridMeasurementParams) {
   const folderGridContainerRef = useRef<HTMLDivElement>(null)
   const folderGridRef = useRef<HTMLDivElement>(null)
   const [folderItemWidth, setFolderItemWidth] = useState(columnWidth)
   const [folderItemHeight, setFolderItemHeight] = useState(rowHeight)
-  const [folderColumns, setFolderColumns] = useState(() => Math.max(1, profile.columns))
+  const [folderColumns, setFolderColumns] = useState(() =>
+    getDefaultFolderColumnCount(columnWidth, FOLDER_MODAL_MAX_WIDTH)
+  )
 
   const resetFolderGridMeasurement = () => {
     setFolderItemWidth(columnWidth)
     setFolderItemHeight(rowHeight)
-    setFolderColumns(Math.max(1, profile.columns))
+    setFolderColumns(getDefaultFolderColumnCount(columnWidth, FOLDER_MODAL_MAX_WIDTH))
   }
 
   useEffect(() => {
@@ -35,9 +36,10 @@ export function useFolderGridMeasurement({
     let animationFrame = 0
     const recalculate = () => {
       const firstItem = folderGridRef.current?.querySelector<HTMLElement>('[data-folder-grid-item]')
-      setFolderItemWidth(firstItem?.offsetWidth ?? columnWidth)
+      const tileWidth = firstItem?.offsetWidth ?? columnWidth
+      setFolderItemWidth(tileWidth)
       setFolderItemHeight(firstItem?.offsetHeight ?? rowHeight)
-      setFolderColumns(Math.max(1, profile.columns))
+      setFolderColumns(getDefaultFolderColumnCount(tileWidth, FOLDER_MODAL_MAX_WIDTH))
     }
     const schedule = () => {
       cancelAnimationFrame(animationFrame)
@@ -54,7 +56,7 @@ export function useFolderGridMeasurement({
       observer.disconnect()
       window.removeEventListener('resize', schedule)
     }
-  }, [columnWidth, open, profile.columns, renderOrderLength, rowHeight])
+  }, [columnWidth, open, renderOrderLength, rowHeight])
 
   return {
     folderGridContainerRef,

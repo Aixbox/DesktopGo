@@ -278,7 +278,6 @@ export function IconGrid({
     renderOrderLength: folderOrder.length,
     columnWidth,
     rowHeight,
-    profile: folderLayoutProfile,
   })
   const selectedSet = useMemo(() => new Set(selectedIconKeys), [selectedIconKeys])
   const iconConfig = ICON_SIZE_CONFIG[iconSize]
@@ -999,7 +998,6 @@ export function IconGrid({
           folderColumns={folderColumns}
           folderItemWidth={folderItemWidth}
           folderItemHeight={folderItemHeight}
-          folderLayoutProfile={folderLayoutProfile}
           folderRenderOrder={folderRenderOrder}
           folderItemById={folderItemById}
           bindFolderTileRef={(id, node) => {

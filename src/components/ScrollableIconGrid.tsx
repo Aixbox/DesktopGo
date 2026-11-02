@@ -229,7 +229,6 @@ export function ScrollableIconGrid({
     layoutDimensionsTracker,
     columnWidth,
     rowHeight,
-    folderLayoutProfile,
   })
   const selectedSet = useMemo(() => new Set(selectedIconKeys), [selectedIconKeys])
   const iconConfig = ICON_SIZE_CONFIG[iconSize]
@@ -956,7 +955,6 @@ export function ScrollableIconGrid({
           folderColumns={folderColumns}
           folderItemWidth={folderItemWidth}
           folderItemHeight={folderItemHeight}
-          folderLayoutProfile={folderLayoutProfile}
           folderRenderOrder={folderRenderOrder}
           folderItemById={folderItemById}
           bindFolderTileRef={(id, node) => {

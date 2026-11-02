@@ -11,7 +11,6 @@ import {
 } from 'react'
 import { Icon } from '../../Icon'
 import { DRAG_HOLE_ID } from '../domain/slots'
-import { DEFAULT_FOLDER_LAYOUT_PROFILE, type FolderLayoutProfile } from '../domain/folderLayout'
 import type { FolderItem, IconItem } from '../model'
 import {
   FOLDER_MODAL_TRANSITION_EASING,
@@ -37,7 +36,6 @@ interface FolderModalViewProps {
   folderColumns: number
   folderItemWidth: number
   folderItemHeight: number
-  folderLayoutProfile?: FolderLayoutProfile
   folderRenderOrder: Array<string | null>
   folderItemById: Map<string, IconItem>
   bindFolderTileRef: (id: string, node: HTMLDivElement | null) => void
@@ -71,7 +69,6 @@ export function FolderModalView({
   folderColumns,
   folderItemWidth,
   folderItemHeight,
-  folderLayoutProfile = DEFAULT_FOLDER_LAYOUT_PROFILE,
   folderRenderOrder,
   folderItemById,
   bindFolderTileRef,
@@ -215,8 +212,8 @@ export function FolderModalView({
           : event.key === 'ArrowRight'
             ? 1
             : event.key === 'ArrowUp'
-              ? -folderLayoutProfile.columns
-              : folderLayoutProfile.columns
+              ? -folderColumns
+              : folderColumns
       const direction = Math.sign(delta)
       let candidateRank = currentRank + delta
       const maxRank = Math.max(0, folderEntries.length - 1)
@@ -234,7 +231,7 @@ export function FolderModalView({
       nextTile.focus({ preventScroll: true })
       nextTile.scrollIntoView({ block: 'nearest', inline: 'nearest' })
     },
-    [folderEntries.length, folderGridContainerRef, folderLayoutProfile]
+    [folderColumns, folderEntries.length, folderGridContainerRef]
   )
 
   const fittedGridWidth = folderColumns * folderItemWidth + (folderColumns - 1) * GRID_GAP
@@ -362,11 +359,6 @@ export function FolderModalView({
                 transition={contentTransition}
                 className="flex max-h-full flex-col"
               >
-                <div className="mb-2 flex min-h-7 items-center justify-between gap-2 px-1">
-                  <span className="text-xs text-foreground/65 dark:text-white/65">
-                    {folderItemCount} 项
-                  </span>
-                </div>
                 <p className="sr-only" aria-live="polite">
                   {translate('文件夹共 {count} 项，可滚动浏览', { count: folderItemCount })}
                 </p>
@@ -374,7 +366,7 @@ export function FolderModalView({
                   <div
                     ref={folderGridContainerRef}
                     className="-mr-5 overflow-auto pr-5"
-                    style={{ maxHeight: `calc(min(80vh, ${maxModalHeight}px) - 88px)` }}
+                    style={{ maxHeight: `calc(min(80vh, ${maxModalHeight}px) - 48px)` }}
                     onKeyDown={handleFolderGridKeyDown}
                   >
                     <div

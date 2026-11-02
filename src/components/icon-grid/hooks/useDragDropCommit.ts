@@ -38,7 +38,8 @@ import {
   getFolderPreviewSlotSize,
 } from '../views/folderVisualPolicy'
 import { normalizeOuterSlots } from '../domain/topLevelLayout'
-import { resolveUnscaledGridRect, resolveUntransformedGridRect } from './gridMotionGeometry'
+import { resolveUnscaledGridRect } from './gridMotionGeometry'
+import { resolveDropFlightTarget } from './dropFlightGeometry'
 
 interface IconConfigLike {
   imgSize: number
@@ -348,28 +349,6 @@ export function useDragDropCommit({
     return Math.max(0.38, 0.8 - (index - 1) * 0.12)
   }
 
-  const resolveDropFlightTarget = (
-    id: string,
-    item: GridItem
-  ): { left: number; top: number; width: number; height: number } | null => {
-    const tileNode = tileRefs.current.get(id)
-    if (!tileNode) return null
-
-    const targetNode =
-      item.kind === 'folder'
-        ? (tileNode.querySelector<HTMLElement>('[data-folder-visual-body]') ?? tileNode)
-        : (tileNode.querySelector<HTMLElement>('.icon-image') ?? tileNode)
-    const rect = resolveUntransformedGridRect(targetNode, tileNode)
-    const width = item.kind === 'folder' ? rect.width : iconConfig.imgSize
-    const height = item.kind === 'folder' ? rect.height : iconConfig.imgSize
-    return {
-      left: rect.left + (rect.width - width) / 2,
-      top: rect.top + (rect.height - height) / 2,
-      width,
-      height,
-    }
-  }
-
   const scheduleMultiDropFlight = (session: DragState) => {
     if (multiDropFlightTimerRef.current !== null) {
       window.clearTimeout(multiDropFlightTimerRef.current)
@@ -394,7 +373,7 @@ export function useDragDropCommit({
         const item = id === session.draggingId ? session.draggingItem : itemMap.get(id)
         if (!item) return []
 
-        const target = resolveDropFlightTarget(id, item)
+        const target = resolveDropFlightTarget(tileRefs.current.get(id), item, iconConfig.imgSize)
         if (!target) {
           return []
         }
@@ -411,7 +390,7 @@ export function useDragDropCommit({
             width: target.width,
             height: target.height,
             startScale: getMultiDragStackScale(index),
-            endScale: 1,
+            endScale: target.scale,
             startOpacity: getMultiDragStackOpacity(index),
             endOpacity: 1,
             animate: false,

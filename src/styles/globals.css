@@ -1041,6 +1041,7 @@ body:focus-visible {
 }
 
 .launchpad-edit-grid-motion {
+  --launchpad-edit-grid-scale: 0.97;
   transform: scale(1);
   transform-origin: center;
   transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -1052,7 +1053,7 @@ body:focus-visible {
 
 .launchpad-bg[data-edit-mode='true'] .launchpad-edit-grid-motion,
 .launchpad-bg:has([data-single-item-dragging='true']) .launchpad-edit-grid-motion {
-  transform: scale(0.97);
+  transform: scale(var(--launchpad-edit-grid-scale));
 }
 
 @media (prefers-reduced-motion: reduce) {
