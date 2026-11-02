@@ -169,8 +169,9 @@ test('workspace icon wires size actions and renders its handle outside the activ
     assert.equal(image.props.style.height, entry.props.gridTile.metrics.shapeHeight)
     const artwork = image.props.children.type(image.props.children.props).props.children
     assert.ok(artwork[1].props.className.includes('object-contain'))
-    if (size === '2x2') {
-      const expectedSize = entry.props.gridTile.metrics.shapeWidth / 2
+    if (size !== '1x1') {
+      const { shapeWidth, shapeHeight } = entry.props.gridTile.metrics
+      const expectedSize = size === '2x2' ? shapeWidth / 2 : Math.min(shapeWidth, shapeHeight) * 0.8
       assert.equal(artwork[1].props.style.width, expectedSize)
       assert.equal(artwork[1].props.style.height, expectedSize)
       assert.equal(artwork[1].props.style.flexShrink, 0)

@@ -71,7 +71,11 @@ export const Icon = memo(function Icon({
   const resizeTransition = reducedMotion ? 'none' : ICON_TILE_RESIZE_TRANSITION
   const enlarged = !!gridTile && (gridTile.span.cols > 1 || gridTile.span.rows > 1)
   const foregroundSize = gridTile
-    ? getIconForegroundSize(gridTile.span, gridTile.metrics.shapeWidth)
+    ? getIconForegroundSize(
+        gridTile.span,
+        gridTile.metrics.shapeWidth,
+        gridTile.metrics.shapeHeight
+      )
     : config.imgSize
 
   const [isRenaming, setIsRenaming] = useState(false)

@@ -216,9 +216,10 @@ for (const size of ['1x1', '1x2', '2x1', '2x2']) {
     }
     for (const img of all.filter(node => node.type === 'img')) {
       assert.ok(img.props.className.includes('object-contain'))
-      if (size === '2x2') {
-        assert.equal(img.props.style.width, width / 2)
-        assert.equal(img.props.style.height, width / 2)
+      if (size !== '1x1') {
+        const expectedSize = size === '2x2' ? width / 2 : Math.min(width, height) * 0.8
+        assert.equal(img.props.style.width, expectedSize)
+        assert.equal(img.props.style.height, expectedSize)
       } else if (size === '1x1') assert.equal(img.props.style, undefined)
       if (size !== '1x1') {
         assert.equal(img.props.src, 'rounded-image')

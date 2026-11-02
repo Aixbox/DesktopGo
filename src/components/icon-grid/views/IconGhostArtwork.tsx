@@ -16,7 +16,7 @@ export function IconGhostArtwork({
   imageSize: number
 }) {
   const enlarged = isMultiCellGridItem(item)
-  const foregroundSize = getIconForegroundSize(getGridItemSpan(item), width)
+  const foregroundSize = getIconForegroundSize(getGridItemSpan(item), width, height)
   const radius = enlarged
     ? getDesktopFolderSurfaceRadius(Math.max(32, Math.min(width, height)))
     : Math.min(16, imageSize / 4)
