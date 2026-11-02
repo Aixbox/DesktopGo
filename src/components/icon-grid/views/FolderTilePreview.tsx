@@ -121,7 +121,8 @@ export function FolderTilePreview(props: FolderTilePreviewProps) {
             animate={position(slot)}
             transition={transition}
             onPointerDown={event => {
-              if (launchable) event.stopPropagation()
+              // Stacked miniatures open/drag the folder; only direct app shortcuts own the press.
+              if (launchable && !slot.stacked) event.stopPropagation()
             }}
             onClick={event => {
               event.stopPropagation()

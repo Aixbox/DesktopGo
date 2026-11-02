@@ -417,3 +417,63 @@ test('preview preserves icon keys across all sizes, disables hidden children and
   assert.deepEqual(launched, ['path-0'])
   assert.deepEqual(opened, ['folder', 'folder', 'folder'])
 })
+
+test('stacked preview buttons forward presses to folder dragging while retaining folder clicks', () => {
+  for (const size of ['1x2', '2x1'])
+    for (const selectionMode of [false, true])
+      for (const rtl of [false, true])
+        for (const count of [4, 5, 6, 12]) {
+          const opened = [],
+            launched = []
+          const preview = FolderTilePreview({
+            folder: {
+              id: 'folder',
+              name: 'Folder',
+              size,
+              children: Array.from({ length: count }, (_, index) => ({
+                key: `child-${index}`,
+                icon: { name: `App ${index}`, path: `path-${index}` },
+              })),
+            },
+            metrics: metrics(size),
+            rtl,
+            selectionMode,
+            reducedMotion: true,
+            onOpenFolder: id => opened.push(id),
+            onLaunchIcon: path => launched.push(path),
+          })
+          const buttons = preview.props.children
+            .flat()
+            .filter(node => node.type === 'motion.button' && !node.props.disabled)
+          const stacked = buttons.filter(
+            node => node.props['data-folder-preview-slot'] === 'stacked'
+          )
+          assert.equal(stacked.length, Math.min(4, count - 2))
+          for (const button of stacked) {
+            let stopped = false
+            const event = {
+              stopPropagation() {
+                stopped = true
+              },
+            }
+            button.props.onPointerDown(event)
+            assert.equal(
+              stopped,
+              false,
+              `${size}/${count}/RTL=${rtl}/edit=${selectionMode}: folder must receive the press`
+            )
+            button.props.onClick(event)
+            assert.equal(stopped, true, 'click must open the folder only once')
+          }
+          assert.deepEqual(opened, Array(stacked.length).fill('folder'))
+          assert.deepEqual(launched, [])
+          // The first two slots keep their existing direct-launch pointer behavior.
+          let stopped = false
+          buttons[0].props.onPointerDown({
+            stopPropagation() {
+              stopped = true
+            },
+          })
+          assert.equal(stopped, true)
+        }
+})
