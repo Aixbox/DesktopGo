@@ -1,194 +1,144 @@
 import {
   useCallback,
+  useLayoutEffect,
   useRef,
   useState,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
 } from 'react'
-import { clampNumber } from '../domain/geometry'
-import { getPageCountBySlots, hasTrailingEmptyPage } from '../domain/slots'
+import { getGridItemSpan } from '../model'
+import { getPageCountBySlots } from '../domain/slots'
+import {
+  getEdgePageTarget,
+  resolveEdgeDirection,
+  IDLE_EDGE_STATE,
+} from '../domain/edgePagingPolicy'
+import type { EdgePagingState, EdgeTarget } from '../domain/edgePagingPolicy'
+import { createEdgePagingSession } from '../domain/edgePagingSession'
 import type { DragState } from '../state/types'
 
 interface UseEdgeAutoPagingParams {
-  dragEdgeSwitchZone: number
-  dragEdgeSwitchMs: number
   containerRef: MutableRefObject<HTMLDivElement | null>
   dragRef: MutableRefObject<DragState | null>
   setDragState: Dispatch<SetStateAction<DragState | null>>
   currentPageRef: MutableRefObject<number>
   setCurrentPage: Dispatch<SetStateAction<number>>
   pageSizeRef: MutableRefObject<number>
+  itemWidth: number
+  gridGap: number
+  disabled: boolean
+  prepare: () => void
+  recheck: (drag: DragState) => void
+}
+export interface EdgePagingControl {
+  state: EdgePagingState
+  onTransitionStart: (page: number) => void
+  onTransitionEnd: (page: number) => void
 }
 
-export type DragEdgeDirection = 'left' | 'right' | null
-
-interface UseEdgeAutoPagingResult {
-  clearEdgeSwitchTimer: () => void
-  maybeHandleOuterEdgeSwitch: (state: DragState, x: number, y: number) => void
-  dragEdgeDirection: DragEdgeDirection
+function resolveTarget(
+  params: UseEdgeAutoPagingParams,
+  previous: EdgePagingState
+): EdgeTarget | null {
+  const drag = params.dragRef.current
+  const viewport = params.containerRef.current?.closest<HTMLElement>('[data-edge-paging-viewport]')
+  if (params.disabled || !drag || drag.context !== 'outer' || !viewport) return null
+  const span = getGridItemSpan(drag.draggingItem)
+  const width = span.cols * params.itemWidth + (span.cols - 1) * params.gridGap
+  const outer = viewport.getBoundingClientRect()
+  const inner = params.containerRef.current!.getBoundingClientRect()
+  const direction = resolveEdgeDirection({
+    rect: { left: outer.left, right: outer.right, top: inner.top, bottom: inner.bottom },
+    pointer: { x: drag.pointerX, y: drag.pointerY },
+    centerX: drag.pointerX - drag.offsetX + width / 2,
+    previous: previous.target?.direction,
+  })
+  if (!direction) return null
+  const fromPage = params.currentPageRef.current
+  const target = getEdgePageTarget({
+    direction,
+    rtl: getComputedStyle(viewport).direction === 'rtl',
+    page: fromPage,
+    order: drag.workingOrder,
+    pageSize: params.pageSizeRef.current,
+  })
+  return target
+    ? {
+        ...target,
+        fromPage,
+        direction,
+        session: [drag.pointerId, drag.dragStartedAt, drag.draggingId].join(':'),
+      }
+    : null
 }
 
-export function useEdgeAutoPaging({
-  dragEdgeSwitchZone,
-  dragEdgeSwitchMs,
-  containerRef,
-  dragRef,
-  setDragState,
-  currentPageRef,
-  setCurrentPage,
-  pageSizeRef,
-}: UseEdgeAutoPagingParams): UseEdgeAutoPagingResult {
-  const edgeSwitchTimerRef = useRef<number | null>(null)
-  const edgeSwitchSignatureRef = useRef<string | null>(null)
-  const [dragEdgeDirection, setDragEdgeDirection] = useState<DragEdgeDirection>(null)
-
-  const clearEdgeSwitchTimer = useCallback(() => {
-    if (edgeSwitchTimerRef.current !== null) {
-      window.clearTimeout(edgeSwitchTimerRef.current)
-      edgeSwitchTimerRef.current = null
+function flipPage(params: UseEdgeAutoPagingParams, target: EdgeTarget) {
+  params.prepare()
+  const drag = params.dragRef.current
+  if (!drag || drag.context !== 'outer') return
+  if (target.createPage) {
+    const size = Math.max(1, params.pageSizeRef.current)
+    const length = (getPageCountBySlots(drag.workingOrder, size) + 1) * size
+    const next = {
+      ...drag,
+      workingOrder: [
+        ...drag.workingOrder,
+        ...Array<string | null>(length - drag.workingOrder.length).fill(null),
+      ],
     }
-    edgeSwitchSignatureRef.current = null
-    setDragEdgeDirection(null)
+    params.dragRef.current = next
+    params.setDragState(next)
+  }
+  params.currentPageRef.current = target.toPage
+  params.setCurrentPage(target.toPage)
+}
+
+export function useEdgeAutoPaging(params: UseEdgeAutoPagingParams) {
+  const runtime = useRef(params)
+  useLayoutEffect(() => {
+    runtime.current = params
+  })
+  const [state, setState] = useState(IDLE_EDGE_STATE)
+  const sessionRef = useRef<ReturnType<typeof createEdgePagingSession> | null>(null)
+  useLayoutEffect(() => {
+    const session = createEdgePagingSession({
+      later: (callback, delay) => window.setTimeout(callback, delay),
+      cancel: timer => window.clearTimeout(timer),
+      resolve: previous => resolveTarget(runtime.current, previous),
+      publish: setState,
+      prepare: () => runtime.current.prepare(),
+      flip: target => flipPage(runtime.current, target),
+      recheck: () => {
+        const drag = runtime.current.dragRef.current
+        if (drag) runtime.current.recheck(drag)
+      },
+    })
+    sessionRef.current = session
+    return () => {
+      session.dispose()
+      sessionRef.current = null
+    }
   }, [])
-
-  const scheduleEdgeSwitch = useCallback(
-    (signature: string, action: () => void) => {
-      if (edgeSwitchSignatureRef.current === signature && edgeSwitchTimerRef.current !== null)
-        return
-      clearEdgeSwitchTimer()
-      edgeSwitchSignatureRef.current = signature
-      edgeSwitchTimerRef.current = window.setTimeout(() => {
-        edgeSwitchTimerRef.current = null
-        edgeSwitchSignatureRef.current = null
-        action()
-      }, dragEdgeSwitchMs)
-    },
-    [clearEdgeSwitchTimer, dragEdgeSwitchMs]
+  useLayoutEffect(() => {
+    if (params.disabled) sessionRef.current?.clear()
+  }, [params.disabled])
+  const clearEdgeSwitchTimer = useCallback(() => sessionRef.current?.clear(), [])
+  const maybeHandleOuterEdgeSwitch = useCallback((drag: DragState, x: number, y: number) => {
+    runtime.current.dragRef.current = { ...drag, pointerX: x, pointerY: y }
+    return sessionRef.current?.update() ?? false
+  }, [])
+  const onTransitionStart = useCallback(
+    (page: number) => sessionRef.current?.startTransition(page),
+    []
   )
-
-  const maybeHandleOuterEdgeSwitch = useCallback(
-    (state: DragState, x: number, y: number) => {
-      if (state.context !== 'outer') {
-        clearEdgeSwitchTimer()
-        return
-      }
-
-      const container = containerRef.current
-      if (!container) {
-        clearEdgeSwitchTimer()
-        return
-      }
-      const rect = container.getBoundingClientRect()
-      if (y < rect.top || y > rect.bottom) {
-        clearEdgeSwitchTimer()
-        return
-      }
-
-      const nearLeft = x <= rect.left + dragEdgeSwitchZone
-      const nearRight = x >= rect.right - dragEdgeSwitchZone
-      if (!nearLeft && !nearRight) {
-        clearEdgeSwitchTimer()
-        return
-      }
-
-      setDragEdgeDirection(nearLeft ? 'left' : 'right')
-
-      const safePageSize = Math.max(1, pageSizeRef.current)
-      const currentPageValue = currentPageRef.current
-      const dragPageCount = getPageCountBySlots(state.workingOrder, safePageSize)
-
-      if (nearLeft) {
-        if (currentPageValue <= 0) {
-          clearEdgeSwitchTimer()
-          return
-        }
-        const targetPage = currentPageValue - 1
-        scheduleEdgeSwitch(`left:${targetPage}`, () => {
-          const latest = dragRef.current
-          if (!latest || latest.context !== 'outer') return
-          const maxPage =
-            getPageCountBySlots(latest.workingOrder, Math.max(1, pageSizeRef.current)) - 1
-          const nextPage = clampNumber(currentPageRef.current - 1, 0, Math.max(0, maxPage))
-          if (nextPage === currentPageRef.current) return
-          currentPageRef.current = nextPage
-          setCurrentPage(nextPage)
-        })
-        return
-      }
-
-      if (currentPageValue < dragPageCount - 1) {
-        const targetPage = currentPageValue + 1
-        scheduleEdgeSwitch(`right:${targetPage}`, () => {
-          const latest = dragRef.current
-          if (!latest || latest.context !== 'outer') return
-          const maxPage =
-            getPageCountBySlots(latest.workingOrder, Math.max(1, pageSizeRef.current)) - 1
-          const nextPage = clampNumber(currentPageRef.current + 1, 0, Math.max(0, maxPage))
-          if (nextPage === currentPageRef.current) return
-          currentPageRef.current = nextPage
-          setCurrentPage(nextPage)
-        })
-        return
-      }
-
-      const trailingEmpty = hasTrailingEmptyPage(state.workingOrder, safePageSize)
-      const lastContentPage = trailingEmpty ? dragPageCount - 2 : dragPageCount - 1
-      if (currentPageValue !== lastContentPage || trailingEmpty) {
-        clearEdgeSwitchTimer()
-        return
-      }
-
-      scheduleEdgeSwitch(`right:create:${dragPageCount}`, () => {
-        const latest = dragRef.current
-        if (!latest || latest.context !== 'outer') return
-        const latestPageSize = Math.max(1, pageSizeRef.current)
-        const latestPageCount = getPageCountBySlots(latest.workingOrder, latestPageSize)
-        if (hasTrailingEmptyPage(latest.workingOrder, latestPageSize)) {
-          const nextPage = clampNumber(
-            currentPageRef.current + 1,
-            0,
-            Math.max(0, latestPageCount - 1)
-          )
-          if (nextPage !== currentPageRef.current) {
-            currentPageRef.current = nextPage
-            setCurrentPage(nextPage)
-          }
-          return
-        }
-
-        const expandedOrder = [
-          ...latest.workingOrder,
-          ...Array.from({ length: latestPageSize }, () => null),
-        ]
-        const nextState: DragState = { ...latest, workingOrder: expandedOrder }
-        dragRef.current = nextState
-        setDragState(nextState)
-        const nextPage = clampNumber(
-          currentPageRef.current + 1,
-          0,
-          Math.max(0, getPageCountBySlots(expandedOrder, latestPageSize) - 1)
-        )
-        currentPageRef.current = nextPage
-        setCurrentPage(nextPage)
-      })
-    },
-    [
-      clearEdgeSwitchTimer,
-      containerRef,
-      currentPageRef,
-      dragEdgeSwitchZone,
-      dragRef,
-      pageSizeRef,
-      scheduleEdgeSwitch,
-      setCurrentPage,
-      setDragState,
-    ]
+  const onTransitionEnd = useCallback(
+    (page: number) => sessionRef.current?.finishTransition(page),
+    []
   )
-
   return {
     clearEdgeSwitchTimer,
     maybeHandleOuterEdgeSwitch,
-    dragEdgeDirection,
+    edgePaging: { state, onTransitionStart, onTransitionEnd } satisfies EdgePagingControl,
   }
 }

@@ -6,26 +6,19 @@ import {
   type DragEndEvent,
   type DragMoveEvent,
   type DragStartEvent,
-  type SensorDescriptor,
 } from '@dnd-kit/core'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
+  type ComponentProps,
 } from 'react'
-import { useReducedMotion } from 'framer-motion'
 import type { FolderSize, GridSpan } from '../model'
 import type { PageAnchorEntry } from '../domain/topLevelLayout'
 import { OuterGridPageLayer, type OuterGridPageData } from './OuterGridPageLayer'
-import { COLOROS_MOTION, MOTION_SPRING_EASING } from '../constants'
-import { resolveMotionDuration } from '../domain/motionTokens'
-
-const PAGE_SLIDE_EASING = MOTION_SPRING_EASING
+import { useOuterPageMotion } from '../hooks/useOuterPageMotion'
+import type { EdgePagingControl } from '../hooks/useEdgeAutoPaging'
 
 interface IconConfigLike {
   imgSize: number
@@ -33,6 +26,7 @@ interface IconConfigLike {
 }
 
 interface OuterGridViewProps {
+  edgePaging?: EdgePagingControl
   resizeActions?: GridItemResizeActions
   gridRef: RefObject<HTMLDivElement | null>
   gridWidth: number
@@ -52,7 +46,7 @@ interface OuterGridViewProps {
   folderCreateTransitionTargetId: string | null
   hiddenOuterItemIds: string[]
   highlightedOuterItemIds: string[]
-  keyboardSensors?: SensorDescriptor<any>[]
+  keyboardSensors?: ComponentProps<typeof DndContext>['sensors']
   keyboardDragActive?: boolean
   onKeyboardDragStart?: (event: DragStartEvent) => void
   onKeyboardDragMove?: (event: DragMoveEvent) => void
@@ -97,6 +91,7 @@ interface OuterGridViewProps {
 }
 
 export function OuterGridView({
+  edgePaging,
   resizeActions,
   gridRef,
   gridWidth,
@@ -155,20 +150,6 @@ export function OuterGridView({
   onHoverPage,
   onSwitchPage,
 }: OuterGridViewProps) {
-  const prefersReduced = useReducedMotion() ?? false
-  const pageSlideMs = resolveMotionDuration(COLOROS_MOTION.workspacePageSnapMs, prefersReduced)
-  const prevPageRef = useRef(currentPage)
-  const previousPageDataRef = useRef<OuterGridPageData | null>(null)
-  const [pageTransition, setPageTransition] = useState<{
-    from: OuterGridPageData
-    direction: 1 | -1
-  } | null>(null)
-  const slideTimerRef = useRef<number | null>(null)
-  const slideAnimationTokenRef = useRef(0)
-  const slideAnimationsRef = useRef<Animation[]>([])
-  const gridClipRef = useRef<HTMLDivElement | null>(null)
-  const oldPageLayerRef = useRef<HTMLDivElement | null>(null)
-  const currentPageLayerRef = useRef<HTMLDivElement | null>(null)
   const currentPageData: OuterGridPageData = {
     page: currentPage,
     entries: pageAnchorEntries,
@@ -182,126 +163,8 @@ export function OuterGridView({
     previewFootprint,
   }
 
-  useLayoutEffect(() => {
-    const previousPage = prevPageRef.current
-    const previousData = previousPageDataRef.current
-    if (previousPage !== currentPage && previousData && pageSlideMs > 0) {
-      setPageTransition({
-        from: previousData,
-        direction: currentPage > previousPage ? 1 : -1,
-      })
-    } else if (previousPage !== currentPage) {
-      setPageTransition(null)
-    }
-    prevPageRef.current = currentPage
-    previousPageDataRef.current = currentPageData
-  }, [currentPage, currentPageData, pageSlideMs])
-
-  useLayoutEffect(() => {
-    if (!pageTransition) return
-    const oldLayer = oldPageLayerRef.current
-    const currentLayer = currentPageLayerRef.current
-    const clipContainer = gridClipRef.current
-    if (!oldLayer || !currentLayer || !clipContainer) return
-
-    slideAnimationsRef.current.forEach(animation => animation.cancel())
-    slideAnimationsRef.current = []
-    if (slideTimerRef.current !== null) {
-      window.clearTimeout(slideTimerRef.current)
-      slideTimerRef.current = null
-    }
-
-    const direction = pageTransition.direction
-    const animationToken = ++slideAnimationTokenRef.current
-    clipContainer.style.overflow = 'hidden'
-    const slideDistance = gridWidth
-    const oldTransform = `translate3d(${-direction * slideDistance}px, 0, 0)`
-    const newTransform = `translate3d(${direction * slideDistance}px, 0, 0)`
-
-    const finishSlide = () => {
-      if (slideAnimationTokenRef.current !== animationToken) return
-      if (slideTimerRef.current !== null) {
-        window.clearTimeout(slideTimerRef.current)
-        slideTimerRef.current = null
-      }
-      slideAnimationsRef.current.forEach(animation => animation.cancel())
-      slideAnimationsRef.current = []
-      oldLayer.style.removeProperty('transition')
-      oldLayer.style.removeProperty('transform')
-      oldLayer.style.removeProperty('opacity')
-      currentLayer.style.removeProperty('transition')
-      currentLayer.style.removeProperty('transform')
-      clipContainer.style.overflow = ''
-      setPageTransition(null)
-    }
-
-    if (typeof oldLayer.animate === 'function' && typeof currentLayer.animate === 'function') {
-      const oldAnimation = oldLayer.animate(
-        [
-          { transform: 'translate3d(0, 0, 0)', opacity: 1 },
-          { transform: oldTransform, opacity: 0 },
-        ],
-        { duration: pageSlideMs, easing: PAGE_SLIDE_EASING, fill: 'forwards' }
-      )
-      const newAnimation = currentLayer.animate(
-        [{ transform: newTransform }, { transform: 'translate3d(0, 0, 0)' }],
-        { duration: pageSlideMs, easing: PAGE_SLIDE_EASING, fill: 'forwards' }
-      )
-      slideAnimationsRef.current = [oldAnimation, newAnimation]
-      void Promise.allSettled([oldAnimation.finished, newAnimation.finished]).then(finishSlide)
-    } else {
-      // WebView fallback for engines without WAAPI support.
-      oldLayer.style.transition = 'none'
-      oldLayer.style.transform = 'translate3d(0, 0, 0)'
-      void oldLayer.offsetWidth
-      oldLayer.style.transition = `transform ${pageSlideMs}ms ${PAGE_SLIDE_EASING}, opacity ${pageSlideMs}ms ${PAGE_SLIDE_EASING}`
-      oldLayer.style.transform = oldTransform
-      oldLayer.style.opacity = '0'
-      currentLayer.style.transition = 'none'
-      currentLayer.style.transform = newTransform
-      void currentLayer.offsetWidth
-      currentLayer.style.transition = `transform ${pageSlideMs}ms ${PAGE_SLIDE_EASING}`
-      currentLayer.style.transform = 'translate3d(0, 0, 0)'
-    }
-
-    slideTimerRef.current = window.setTimeout(finishSlide, pageSlideMs + 40)
-
-    return () => {
-      if (slideAnimationTokenRef.current !== animationToken) return
-      slideAnimationTokenRef.current += 1
-      slideAnimationsRef.current.forEach(animation => animation.cancel())
-      slideAnimationsRef.current = []
-      if (slideTimerRef.current !== null) {
-        window.clearTimeout(slideTimerRef.current)
-        slideTimerRef.current = null
-      }
-      oldLayer.style.removeProperty('transition')
-      oldLayer.style.removeProperty('transform')
-      oldLayer.style.removeProperty('opacity')
-      currentLayer.style.removeProperty('transition')
-      currentLayer.style.removeProperty('transform')
-      clipContainer.style.overflow = ''
-    }
-  }, [gridWidth, pageSlideMs, pageTransition])
-
-  useEffect(() => {
-    return () => {
-      slideAnimationTokenRef.current += 1
-      slideAnimationsRef.current.forEach(animation => animation.cancel())
-      slideAnimationsRef.current = []
-      if (slideTimerRef.current !== null) {
-        window.clearTimeout(slideTimerRef.current)
-        slideTimerRef.current = null
-      }
-      oldPageLayerRef.current?.style.removeProperty('transition')
-      oldPageLayerRef.current?.style.removeProperty('transform')
-      oldPageLayerRef.current?.style.removeProperty('opacity')
-      currentPageLayerRef.current?.style.removeProperty('transition')
-      currentPageLayerRef.current?.style.removeProperty('transform')
-      const clipContainer = gridClipRef.current
-      if (clipContainer) clipContainer.style.overflow = ''
-    }
-  }, [])
+  const { pageTransition, oldPageLayerRef, currentPageLayerRef, gridClipRef, peekLayerRef } =
+    useOuterPageMotion(currentPageData, gridWidth, edgePaging)
 
   return (
     <GridItemResizeContext.Provider value={resizeActions ?? null}>
@@ -331,16 +194,53 @@ export function OuterGridView({
               方向键移动，Enter 或 Space 确认，Esc 取消
             </div>
           ) : null}
-          <div ref={gridClipRef} className="relative h-full w-full">
-            {pageTransition ? (
+          <div ref={peekLayerRef} className="relative h-full w-full">
+            <div ref={gridClipRef} className="relative h-full w-full">
+              {pageTransition ? (
+                <div
+                  ref={oldPageLayerRef}
+                  key={`page-transition-from-${pageTransition.from.page}`}
+                  className="absolute inset-0 z-10 pointer-events-none"
+                >
+                  <OuterGridPageLayer
+                    data={pageTransition.from}
+                    interactive={false}
+                    columns={columns}
+                    rows={rows}
+                    itemWidth={itemWidth}
+                    itemHeight={itemHeight}
+                    gridGap={gridGap}
+                    pageCellCount={pageCellCount}
+                    iconConfig={iconConfig}
+                    selectionMode={selectionMode}
+                    selectedSet={selectedSet}
+                    openFolderId={openFolderId}
+                    activeFolderSharedLayoutId={activeFolderSharedLayoutId}
+                    onToggleSelectIcon={onToggleSelectIcon}
+                    onTilePointerDown={onTilePointerDown}
+                    onTileClickCapture={onTileClickCapture}
+                    onOpenFolder={onOpenFolder}
+                    onLaunchIcon={onLaunchIcon}
+                    onResizeFolder={onResizeFolder}
+                    folderResizePreview={folderResizePreview}
+                    onPreviewFolderResize={onPreviewFolderResize}
+                    onCancelFolderResize={onCancelFolderResize}
+                    onResizeWidget={onResizeWidget}
+                    onDissolveFolder={onDissolveFolder}
+                    bindTileRef={bindTileRef}
+                    reorderAnimationMs={reorderAnimationMs}
+                  />
+                </div>
+              ) : null}
               <div
-                ref={oldPageLayerRef}
-                key={`page-transition-from-${pageTransition.from.page}`}
-                className="absolute inset-0 z-10 pointer-events-none"
+                ref={currentPageLayerRef}
+                key={`page-${currentPage}`}
+                className={pageTransition ? 'absolute inset-0 z-20' : 'relative h-full w-full'}
               >
                 <OuterGridPageLayer
-                  data={pageTransition.from}
-                  interactive={false}
+                  data={currentPageData}
+                  interactive
+                  gridRef={gridRef}
                   columns={columns}
                   rows={rows}
                   itemWidth={itemWidth}
@@ -367,44 +267,8 @@ export function OuterGridView({
                   reorderAnimationMs={reorderAnimationMs}
                 />
               </div>
-            ) : null}
-            <div
-              ref={currentPageLayerRef}
-              key={`page-${currentPage}`}
-              className={pageTransition ? 'absolute inset-0 z-20' : 'relative h-full w-full'}
-            >
-              <OuterGridPageLayer
-                data={currentPageData}
-                interactive
-                gridRef={gridRef}
-                columns={columns}
-                rows={rows}
-                itemWidth={itemWidth}
-                itemHeight={itemHeight}
-                gridGap={gridGap}
-                pageCellCount={pageCellCount}
-                iconConfig={iconConfig}
-                selectionMode={selectionMode}
-                selectedSet={selectedSet}
-                openFolderId={openFolderId}
-                activeFolderSharedLayoutId={activeFolderSharedLayoutId}
-                onToggleSelectIcon={onToggleSelectIcon}
-                onTilePointerDown={onTilePointerDown}
-                onTileClickCapture={onTileClickCapture}
-                onOpenFolder={onOpenFolder}
-                onLaunchIcon={onLaunchIcon}
-                onResizeFolder={onResizeFolder}
-                folderResizePreview={folderResizePreview}
-                onPreviewFolderResize={onPreviewFolderResize}
-                onCancelFolderResize={onCancelFolderResize}
-                onResizeWidget={onResizeWidget}
-                onDissolveFolder={onDissolveFolder}
-                bindTileRef={bindTileRef}
-                reorderAnimationMs={reorderAnimationMs}
-              />
             </div>
           </div>
-
           {canGoLeft ? (
             <button
               data-pagination

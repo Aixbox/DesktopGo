@@ -26,7 +26,7 @@ import {
   isPointOutsideScrollFolderContent,
 } from './scrollGroupLayout'
 import { releaseDragPointerCapture } from '../hooks/dragPointerCapture'
-import { resetOuterInteraction } from '../state/dragMachine'
+import { clearOuterInteractionForPageSwitch } from '../state/dragMachine'
 import { hasRenderableDragStateChanged, resolveItemById } from '../domain/dragWorkflowShared'
 import type {
   DragState,
@@ -42,8 +42,6 @@ import { measureDragFrame } from '../domain/layoutPerformance'
 
 interface DragWorkflowConfig {
   gridGap: number
-  dragEdgeSwitchZone: number
-  dragEdgeSwitchMs: number
   dragLongPressMs: number
   dragPendingMoveTolerance: number
   evasionRearmDistance: number
@@ -136,7 +134,7 @@ interface UseIconGridDragWorkflowResult {
   retargetOuterDragToScrollGroup: (targetItemIds: string[]) => void
   syncOuterDragPreview: () => void
   syncDockDragPreview: () => void
-  dragEdgeDirection: import('../hooks/useEdgeAutoPaging').DragEdgeDirection
+  edgePaging: import('../hooks/useEdgeAutoPaging').EdgePagingControl
 }
 
 export function useScrollableIconGridDragWorkflow({
@@ -236,18 +234,22 @@ export function useScrollableIconGridDragWorkflow({
     renderedDragStateRef.current = dragState
   }, [dragState])
 
-  const { clearEdgeSwitchTimer, maybeHandleOuterEdgeSwitch, dragEdgeDirection } = useEdgeAutoPaging(
-    {
-      dragEdgeSwitchZone: config.dragEdgeSwitchZone,
-      dragEdgeSwitchMs: config.dragEdgeSwitchMs,
-      containerRef,
-      dragRef,
-      setDragState,
-      currentPageRef,
-      setCurrentPage,
-      pageSizeRef,
-    }
-  )
+  const { clearEdgeSwitchTimer, maybeHandleOuterEdgeSwitch, edgePaging } = useEdgeAutoPaging({
+    disabled: openFolderId !== null,
+    itemWidth,
+    gridGap: config.gridGap,
+    prepare: () => {
+      clearOuterDragInteractionForPageSwitch()
+      clearFolderAutoOpenTimer()
+    },
+    recheck: drag => scheduleDragMove(drag.pointerId, drag.pointerX, drag.pointerY),
+    containerRef,
+    dragRef,
+    setDragState,
+    currentPageRef,
+    setCurrentPage,
+    pageSizeRef,
+  })
 
   const clearTimer = () => {
     if (timerRef.current !== null) {
@@ -891,7 +893,7 @@ export function useScrollableIconGridDragWorkflow({
     const current = dragRef.current
     if (!current || current.context !== 'outer') return
     clearOuterDwellTimer()
-    const next = { ...resetOuterInteraction(current, null), dockPreviewIndex: null }
+    const next = { ...clearOuterInteractionForPageSwitch(current), dockPreviewIndex: null }
     commitDragState(next)
   }
 
@@ -992,6 +994,6 @@ export function useScrollableIconGridDragWorkflow({
     retargetOuterDragToScrollGroup,
     syncOuterDragPreview,
     syncDockDragPreview,
-    dragEdgeDirection,
+    edgePaging,
   }
 }

@@ -1,3 +1,4 @@
+import { useWheelPageStep } from './icon-grid/hooks/useWheelPageStep'
 import { LayoutGroup } from 'framer-motion'
 import {
   useCallback,
@@ -12,7 +13,6 @@ import { getIconGridLayoutRowHeight, getIconGridRowHeight, ICON_SIZE_CONFIG } fr
 import { useIconStore } from '../stores/iconStore'
 import { getId, type GridItem, type IconItem } from './icon-grid/model'
 import { DRAG_HOLE_ID, getOccupiedPageCountForSlots } from './icon-grid/domain/slots'
-import { clampNumber } from './icon-grid/domain/geometry'
 import type { DragState } from './icon-grid/state/types'
 import { useScrollableIconGridDragWorkflow } from './icon-grid/scroll/useScrollableIconGridDragWorkflow'
 import {
@@ -45,7 +45,7 @@ import {
 import { DragOverlays } from './icon-grid/views/DragOverlays'
 import { OuterGridView } from './icon-grid/views/OuterGridView'
 import { ScrollableOuterGridView } from './icon-grid/views/ScrollableOuterGridView'
-import { EdgeGlow } from './icon-grid/views/EdgeGlow'
+import { EdgePageHints } from './icon-grid/views/EdgePageHints'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
 import { DockBar } from './icon-grid/views/DockBar'
 import { useDockKeyboardReorder } from './icon-grid/hooks/useDockKeyboardReorder'
@@ -59,8 +59,6 @@ import {
   filterItemsByIds,
 } from './icon-grid/domain/gridItems'
 import {
-  DRAG_EDGE_SWITCH_MS,
-  DRAG_EDGE_SWITCH_ZONE,
   DRAG_LONG_PRESS_MS,
   DRAG_PENDING_MOVE_TOLERANCE,
   EVASION_REARM_DISTANCE,
@@ -71,8 +69,6 @@ import {
   PAGINATION_OFFSET,
   REORDER_ANIMATION_MS,
   SIDE_ARROW_OFFSET,
-  WHEEL_PAGE_COOLDOWN_MS,
-  WHEEL_PAGE_DELTA_THRESHOLD,
 } from './icon-grid/constants'
 
 interface IconGridProps {
@@ -120,8 +116,6 @@ export function ScrollableIconGrid({
   const folderTileRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const dockSlotRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const dockItemRefs = useRef<Map<string, HTMLDivElement>>(new Map())
-  const wheelDeltaRef = useRef(0)
-  const wheelCooldownUntilRef = useRef(0)
 
   const columnWidth = ICON_SIZE_CONFIG[iconSize].columnWidth
   const layoutRowHeight = getIconGridLayoutRowHeight(iconSize)
@@ -352,17 +346,15 @@ export function ScrollableIconGrid({
     handleFolderTilePointerDown,
     handleDockItemPointerDown,
     handleTileClickCapture,
-    clearEdgeSwitchTimer,
     clearOuterDragInteractionForPageSwitch,
     retargetOuterDragToScrollGroup,
     syncOuterDragPreview,
     syncDockDragPreview,
-    dragEdgeDirection,
+    edgePaging,
+    clearEdgeSwitchTimer,
   } = useScrollableIconGridDragWorkflow({
     config: {
       gridGap: GRID_GAP,
-      dragEdgeSwitchZone: DRAG_EDGE_SWITCH_ZONE,
-      dragEdgeSwitchMs: DRAG_EDGE_SWITCH_MS,
       dragLongPressMs: DRAG_LONG_PRESS_MS,
       dragPendingMoveTolerance: DRAG_PENDING_MOVE_TOLERANCE,
       evasionRearmDistance: EVASION_REARM_DISTANCE,
@@ -596,6 +588,14 @@ export function ScrollableIconGrid({
     launchpadGridViewMode === 'scroll' ? Math.max(1, scrollGroupCount) : layoutPageCount
   usePageBounds(currentPage, pageCount, hoverPage, setCurrentPage, setHoverPage, currentPageRef)
 
+  const stepPageByWheelDelta = useWheelPageStep({
+    pageCount,
+    currentPageRef,
+    setCurrentPage,
+    clearEdgeSwitchTimer,
+    clearOuterDragInteractionForPageSwitch,
+  })
+
   const handleWheelPageSwitch = (event: ReactWheelEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null
     if (target?.closest('[data-dock]')) return
@@ -610,32 +610,7 @@ export function ScrollableIconGrid({
     if (Math.abs(primaryDelta) < 0.1) return
     event.preventDefault()
 
-    const now = performance.now()
-    if (now < wheelCooldownUntilRef.current) return
-
-    if (
-      wheelDeltaRef.current !== 0 &&
-      Math.sign(wheelDeltaRef.current) !== Math.sign(primaryDelta)
-    ) {
-      wheelDeltaRef.current = 0
-    }
-    wheelDeltaRef.current += primaryDelta
-    if (Math.abs(wheelDeltaRef.current) < WHEEL_PAGE_DELTA_THRESHOLD) return
-
-    const direction = wheelDeltaRef.current > 0 ? 1 : -1
-    wheelDeltaRef.current = 0
-    wheelCooldownUntilRef.current = now + WHEEL_PAGE_COOLDOWN_MS
-
-    const nextPage = clampNumber(currentPageRef.current + direction, 0, pageCount - 1)
-    if (nextPage === currentPageRef.current) return
-    clearEdgeSwitchTimer()
-
-    if (isOuterDrag) {
-      clearOuterDragInteractionForPageSwitch()
-    }
-
-    currentPageRef.current = nextPage
-    setCurrentPage(nextPage)
+    stepPageByWheelDelta(primaryDelta, isOuterDrag)
   }
 
   const {
@@ -726,11 +701,10 @@ export function ScrollableIconGrid({
     dropImpact,
   })
 
-  useEffect(() => () => clearEdgeSwitchTimer(), [clearEdgeSwitchTimer])
-
   return (
     <LayoutGroup id="folder-shell-layout">
       <div
+        data-edge-paging-viewport
         data-single-item-dragging={isSingleDragActive ? 'true' : 'false'}
         className={
           launchpadGridViewMode === 'scroll'
@@ -814,10 +788,17 @@ export function ScrollableIconGrid({
           />
         ) : (
           <>
-            <EdgeGlow direction="left" active={dragEdgeDirection === 'left'} />
-            <EdgeGlow direction="right" active={dragEdgeDirection === 'right'} />
+            <EdgePageHints
+              drag={dragState}
+              page={currentPage}
+              pageSize={pageSize}
+              containerRef={containerRef}
+              folderOpen={!!openFolder}
+              paging={edgePaging}
+            />
             <div ref={containerRef} className="flex h-full w-full items-center justify-center">
               <OuterGridView
+                edgePaging={edgePaging}
                 gridRef={gridRef}
                 gridWidth={gridWidth}
                 gridHeight={gridHeight}

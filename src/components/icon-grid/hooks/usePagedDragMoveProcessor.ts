@@ -41,7 +41,7 @@ interface PagedDragMoveProcessorParams {
     x: number,
     y: number
   ) => DragState
-  maybeHandleOuterEdgeSwitch: (state: DragState, x: number, y: number) => void
+  maybeHandleOuterEdgeSwitch: (state: DragState, x: number, y: number) => boolean | void
   clearEdgeSwitchTimer: () => void
   resolveNearestSlotIndexByContext: (
     state: DragState,
@@ -125,8 +125,14 @@ function processTopLevelMove(
 ) {
   // Hit-test the visible temporary order; a pending reorder alarm may later rebase it.
   let current = state
-  if (current.context === 'outer') runtime.maybeHandleOuterEdgeSwitch(current, x, y)
-  else runtime.clearEdgeSwitchTimer()
+  if (current.context === 'outer') {
+    if (runtime.maybeHandleOuterEdgeSwitch(current, x, y)) {
+      runtime.clearOuterDwellTimer()
+      const anchor = runtime.resolveCandidateAnchorIndexByContext(current, { allowOutside: true })
+      runtime.publishMoveDragState(resetOuterInteraction(current, anchor))
+      return
+    }
+  } else runtime.clearEdgeSwitchTimer()
 
   const nearestSlotIndex = runtime.resolveNearestSlotIndexByContext(current, { allowOutside: true })
   const rawCellIndex = runtime.resolveRawOuterCellIndex(current, { allowOutside: true })

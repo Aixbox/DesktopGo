@@ -27,7 +27,7 @@ import { usePagedDragGeometryController } from './usePagedDragGeometryController
 import { usePagedDragMoveProcessor } from './usePagedDragMoveProcessor'
 import { useTopLevelDwellEvasion } from './useTopLevelDwellEvasion'
 import { usePagedDragStarter } from './usePagedDragStarter'
-import { resetOuterInteraction } from '../state/dragMachine'
+import { clearOuterInteractionForPageSwitch } from '../state/dragMachine'
 import {
   collectElementCenters as collectCenters,
   hasRenderableDragStateChanged,
@@ -45,8 +45,6 @@ import {
 
 interface DragWorkflowConfig {
   gridGap: number
-  dragEdgeSwitchZone: number
-  dragEdgeSwitchMs: number
   dragLongPressMs: number
   dragPendingMoveTolerance: number
   evasionRearmDistance: number
@@ -125,7 +123,7 @@ interface UseIconGridDragWorkflowResult {
   clearEdgeSwitchTimer: () => void
   clearOuterDragInteractionForPageSwitch: () => void
   syncDockDragPreview: () => void
-  dragEdgeDirection: import('./useEdgeAutoPaging').DragEdgeDirection
+  edgePaging: import('./useEdgeAutoPaging').EdgePagingControl
 }
 
 export function useIconGridDragWorkflow({
@@ -212,18 +210,22 @@ export function useIconGridDragWorkflow({
     renderedDragStateRef.current = dragState
   }, [dragState])
 
-  const { clearEdgeSwitchTimer, maybeHandleOuterEdgeSwitch, dragEdgeDirection } = useEdgeAutoPaging(
-    {
-      dragEdgeSwitchZone: config.dragEdgeSwitchZone,
-      dragEdgeSwitchMs: config.dragEdgeSwitchMs,
-      containerRef,
-      dragRef,
-      setDragState,
-      currentPageRef,
-      setCurrentPage,
-      pageSizeRef,
-    }
-  )
+  const { clearEdgeSwitchTimer, maybeHandleOuterEdgeSwitch, edgePaging } = useEdgeAutoPaging({
+    disabled: openFolderId !== null,
+    itemWidth,
+    gridGap: config.gridGap,
+    prepare: () => {
+      clearOuterDragInteractionForPageSwitch()
+      clearFolderAutoOpenTimer()
+    },
+    recheck: drag => scheduleDragMove(drag.pointerId, drag.pointerX, drag.pointerY),
+    containerRef,
+    dragRef,
+    setDragState,
+    currentPageRef,
+    setCurrentPage,
+    pageSizeRef,
+  })
 
   const clearTimer = () => {
     if (timerRef.current !== null) {
@@ -927,7 +929,7 @@ export function useIconGridDragWorkflow({
     if (!current || current.context !== 'outer') return
     clearOuterDwellTimer()
     const next = {
-      ...resetOuterInteraction(current, null),
+      ...clearOuterInteractionForPageSwitch(current),
       dockPreviewIndex: null,
     }
     commitDragState(next)
@@ -985,6 +987,6 @@ export function useIconGridDragWorkflow({
     clearEdgeSwitchTimer,
     clearOuterDragInteractionForPageSwitch,
     syncDockDragPreview,
-    dragEdgeDirection,
+    edgePaging,
   }
 }

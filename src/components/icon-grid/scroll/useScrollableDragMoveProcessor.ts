@@ -38,7 +38,7 @@ interface ScrollableDragMoveProcessorParams {
   scheduleFolderExit: () => void
   clearFolderExitTimer: () => void
   clearOuterDwellTimer: () => void
-  maybeHandleOuterEdgeSwitch: (state: DragState, x: number, y: number) => void
+  maybeHandleOuterEdgeSwitch: (state: DragState, x: number, y: number) => boolean | void
   clearEdgeSwitchTimer: () => void
   resolveTopLevelContextAtPoint: (x: number, y: number) => 'outer' | 'dock'
   moveDragToTopLevelContext: (
@@ -157,7 +157,12 @@ export function useScrollableDragMoveProcessor(runtime: ScrollableDragMoveProces
       const isMultiOuterDrag = baseState.context === 'outer' && baseState.draggingIds.length > 1
 
       if (baseState.context === 'outer' && !isCompactOuterDrop) {
-        maybeHandleOuterEdgeSwitch(baseState, x, y)
+        if (maybeHandleOuterEdgeSwitch(baseState, x, y)) {
+          clearOuterDwellTimer()
+          const anchor = resolveCandidateAnchorIndexByContext(baseState, { allowOutside: true })
+          publishMoveDragState(resetOuterInteraction(baseState, anchor))
+          return
+        }
       } else {
         clearEdgeSwitchTimer()
       }

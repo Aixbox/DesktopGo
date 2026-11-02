@@ -1,3 +1,4 @@
+import { useWheelPageStep } from './icon-grid/hooks/useWheelPageStep'
 import { LayoutGroup } from 'framer-motion'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
@@ -14,7 +15,6 @@ import { useIconStore } from '../stores/iconStore'
 import type { GridItem, IconItem } from './icon-grid/model'
 import { getId } from './icon-grid/model'
 import { DRAG_HOLE_ID } from './icon-grid/domain/slots'
-import { clampNumber } from './icon-grid/domain/geometry'
 import { useIconGridDragWorkflow } from './icon-grid/hooks/useIconGridDragWorkflow'
 import {
   usePagedIconGridLayout,
@@ -40,7 +40,7 @@ import {
 import { DragOverlays } from './icon-grid/views/DragOverlays'
 import { OuterGridView } from './icon-grid/views/OuterGridView'
 import { resolveGridPreviewFootprint } from './icon-grid/domain/gridPreviewFootprint'
-import { EdgeGlow } from './icon-grid/views/EdgeGlow'
+import { EdgePageHints } from './icon-grid/views/EdgePageHints'
 import { FolderModalView } from './icon-grid/views/FolderModalView'
 import { DockBar } from './icon-grid/views/DockBar'
 import { useDockKeyboardReorder } from './icon-grid/hooks/useDockKeyboardReorder'
@@ -57,8 +57,6 @@ import {
   filterItemsByIds,
 } from './icon-grid/domain/gridItems'
 import {
-  DRAG_EDGE_SWITCH_MS,
-  DRAG_EDGE_SWITCH_ZONE,
   DRAG_LONG_PRESS_MS,
   DRAG_PENDING_MOVE_TOLERANCE,
   EVASION_REARM_DISTANCE,
@@ -71,8 +69,6 @@ import {
   PAGINATION_DOT_SIZE,
   REORDER_ANIMATION_MS,
   SIDE_ARROW_OFFSET,
-  WHEEL_PAGE_COOLDOWN_MS,
-  WHEEL_PAGE_DELTA_THRESHOLD,
 } from './icon-grid/constants'
 
 interface IconGridProps {
@@ -109,8 +105,6 @@ export function IconGrid({
   const dockContainerRef = useRef<HTMLDivElement>(null)
   const dockGridRef = useRef<HTMLDivElement>(null)
   const dockSlotRefs = useRef<Map<number, HTMLDivElement>>(new Map())
-  const wheelDeltaRef = useRef(0)
-  const wheelCooldownUntilRef = useRef(0)
   const folderSharedLayoutTimerRef = useRef<number | null>(null)
   const folderCloseRafRef = useRef<number | null>(null)
 
@@ -288,15 +282,13 @@ export function IconGrid({
     handleFolderTilePointerDown,
     handleDockItemPointerDown,
     handleTileClickCapture,
-    clearEdgeSwitchTimer,
     clearOuterDragInteractionForPageSwitch,
     syncDockDragPreview,
-    dragEdgeDirection,
+    edgePaging,
+    clearEdgeSwitchTimer,
   } = useIconGridDragWorkflow({
     config: {
       gridGap: GRID_GAP,
-      dragEdgeSwitchZone: DRAG_EDGE_SWITCH_ZONE,
-      dragEdgeSwitchMs: DRAG_EDGE_SWITCH_MS,
       dragLongPressMs: DRAG_LONG_PRESS_MS,
       dragPendingMoveTolerance: DRAG_PENDING_MOVE_TOLERANCE,
       evasionRearmDistance: EVASION_REARM_DISTANCE,
@@ -505,34 +497,13 @@ export function IconGrid({
   const pageCount = Math.max(1, Math.ceil(outerRenderCount / pageSize))
   usePageBounds(currentPage, pageCount, hoverPage, setCurrentPage, setHoverPage, currentPageRef)
 
-  const stepPageByWheelDelta = (primaryDelta: number, isOuterDrag: boolean) => {
-    if (pageCount <= 1 || Math.abs(primaryDelta) < 0.1) return
-    const now = performance.now()
-    if (now < wheelCooldownUntilRef.current) return
-    if (
-      wheelDeltaRef.current !== 0 &&
-      Math.sign(wheelDeltaRef.current) !== Math.sign(primaryDelta)
-    ) {
-      wheelDeltaRef.current = 0
-    }
-    wheelDeltaRef.current += primaryDelta
-    if (Math.abs(wheelDeltaRef.current) < WHEEL_PAGE_DELTA_THRESHOLD) return
-
-    const direction = wheelDeltaRef.current > 0 ? 1 : -1
-    wheelDeltaRef.current = 0
-    wheelCooldownUntilRef.current = now + WHEEL_PAGE_COOLDOWN_MS
-
-    const nextPage = clampNumber(currentPageRef.current + direction, 0, pageCount - 1)
-    if (nextPage === currentPageRef.current) return
-    clearEdgeSwitchTimer()
-
-    if (isOuterDrag) {
-      clearOuterDragInteractionForPageSwitch()
-    }
-
-    currentPageRef.current = nextPage
-    setCurrentPage(nextPage)
-  }
+  const stepPageByWheelDelta = useWheelPageStep({
+    pageCount,
+    currentPageRef,
+    setCurrentPage,
+    clearEdgeSwitchTimer,
+    clearOuterDragInteractionForPageSwitch,
+  })
 
   const handleWheelPageSwitch = (event: ReactWheelEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null
@@ -697,6 +668,7 @@ export function IconGrid({
            pt-28：网格顶部对齐后，搜索框底（68px）到网格顶 112px，间距恰好
            一个搜索框高（44px）。items-start：图标少时网格贴顶排列，
            不再被垂直居中推到窗口中部。 */
+        data-edge-paging-viewport
         data-single-item-dragging={isSingleDragActive ? 'true' : 'false'}
         className={`relative h-full w-full px-16 pt-28 ${dockEnabled ? 'pb-32' : 'pb-12'}`}
         onWheel={handleWheelPageSwitch}
@@ -707,10 +679,17 @@ export function IconGrid({
           folderLayoutProfile={folderLayoutProfile}
           pageSize={pageSize}
         />
-        <EdgeGlow direction="left" active={dragEdgeDirection === 'left'} />
-        <EdgeGlow direction="right" active={dragEdgeDirection === 'right'} />
+        <EdgePageHints
+          drag={dragState}
+          page={currentPage}
+          pageSize={pageSize}
+          containerRef={containerRef}
+          folderOpen={!!openFolder}
+          paging={edgePaging}
+        />
         <div ref={containerRef} className="flex h-full w-full items-start justify-center">
           <OuterGridView
+            edgePaging={edgePaging}
             gridRef={gridRef}
             gridWidth={gridWidth}
             gridHeight={gridHeight}

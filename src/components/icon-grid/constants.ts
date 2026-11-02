@@ -9,8 +9,6 @@ export const PAGINATION_ACTIVE_WIDTH = 18
 // 画面边缘重合，66 会让左右分页按钮贴死窗口边缘（可见部分被裁 2px）。
 // 56 = 按钮可见部分距窗口边缘约 8px，恢复旧版观感。
 export const SIDE_ARROW_OFFSET = 56
-export const DRAG_EDGE_SWITCH_ZONE = 72
-export const DRAG_EDGE_SWITCH_MS = 600
 export const WHEEL_PAGE_DELTA_THRESHOLD = 54
 export const WHEEL_PAGE_COOLDOWN_MS = 180
 /** 布局抽屉浮在网格之上，它把自己的滚轮增量用这个事件转给网格翻页。 */
