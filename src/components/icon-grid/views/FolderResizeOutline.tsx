@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react'
+import { motion, useTransform, type MotionValue } from 'framer-motion'
 import type { FolderResizeVisualGeometry } from '../domain/folderResizePolicy'
 import { getFolderResizeOutlinePaths } from '../domain/folderResizeOutlineGeometry'
 import {
@@ -7,22 +8,21 @@ import {
   getFolderResizeHitInsets,
 } from '../domain/folderResizeHitArea'
 import type { FolderResizeInteraction } from '../hooks/useFolderResizeInteraction'
-import { scaledRadius } from './folderVisualPolicy'
+import { scaledRadius, type DesktopFolderTileMetrics } from './folderVisualPolicy'
 
 interface FolderResizeOutlineProps {
-  width: number
-  height: number
-  radius: number
+  display: MotionValue<DesktopFolderTileMetrics>
   geometry: FolderResizeVisualGeometry
   rtl: boolean
   interaction: FolderResizeInteraction
 }
 
-function useOutlinePaths({ width, height, radius, geometry, rtl }: FolderResizeOutlineProps) {
+function useOutlinePaths({ display, geometry, rtl }: FolderResizeOutlineProps) {
   const surfaceRef = useRef<HTMLSpanElement>(null)
   const frameRef = useRef<SVGPathElement>(null)
   const handleRef = useRef<SVGPathElement>(null)
   const hitAreaRef = useRef<HTMLButtonElement>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
   const { frameStrokeWidth, handleStrokeWidth, handleArcLength } = geometry
   const { x: hitInsetX, y: hitInsetY } = getFolderResizeHitInsets(geometry)
   useLayoutEffect(() => {
@@ -34,39 +34,36 @@ function useOutlinePaths({ width, height, radius, geometry, rtl }: FolderResizeO
     const superellipse = /^superellipse\(([-\d.]+)\)$/.exec(shape.trim())
     const exponent =
       shape.trim() === 'squircle' ? 4 : superellipse ? 2 ** Number(superellipse[1]) : 2
-    const paths = getFolderResizeOutlinePaths({
-      width,
-      height,
-      radius: Number.parseFloat(style.borderBottomRightRadius) || radius,
-      exponent,
-      frameStrokeWidth,
-      handleArcLength,
-      rtl,
-    })
-    frameRef.current?.setAttribute('d', paths.frame)
-    handleRef.current?.setAttribute('d', paths.handle)
-    if (hitAreaRef.current) {
-      hitAreaRef.current.style.clipPath = folderResizeHitAreaClip(
-        getFolderResizeHitArea({
-          points: paths.handlePoints,
-          strokeWidth: handleStrokeWidth,
-          offsetX: hitInsetX,
-          offsetY: hitInsetY,
-        })
-      )
+    const radiusScale = Number.parseFloat(style.getPropertyValue('--ui-corner-radius-scale')) || 1
+    const draw = (metrics: DesktopFolderTileMetrics) => {
+      const { shapeWidth: width, shapeHeight: height, surfaceRadius: radius } = metrics
+      const paths = getFolderResizeOutlinePaths({
+        width,
+        height,
+        radius: radius * radiusScale,
+        exponent,
+        frameStrokeWidth,
+        handleArcLength,
+        rtl,
+      })
+      svgRef.current?.setAttribute('viewBox', `0 0 ${width} ${height}`)
+      frameRef.current?.setAttribute('d', paths.frame)
+      handleRef.current?.setAttribute('d', paths.handle)
+      if (hitAreaRef.current) {
+        hitAreaRef.current.style.clipPath = folderResizeHitAreaClip(
+          getFolderResizeHitArea({
+            points: paths.handlePoints,
+            strokeWidth: handleStrokeWidth,
+            offsetX: hitInsetX,
+            offsetY: hitInsetY,
+          })
+        )
+      }
     }
-  }, [
-    width,
-    height,
-    radius,
-    frameStrokeWidth,
-    handleStrokeWidth,
-    handleArcLength,
-    hitInsetX,
-    hitInsetY,
-    rtl,
-  ])
-  return { surfaceRef, frameRef, handleRef, hitAreaRef }
+    draw(display.get())
+    return display.on('change', draw)
+  }, [display, frameStrokeWidth, handleStrokeWidth, handleArcLength, hitInsetX, hitInsetY, rtl])
+  return { surfaceRef, frameRef, handleRef, hitAreaRef, svgRef }
 }
 
 function ResizeHitTarget({
@@ -99,21 +96,22 @@ function ResizeHitTarget({
 }
 
 export function FolderResizeOutline(props: FolderResizeOutlineProps) {
-  const { width, height, radius, geometry, interaction } = props
-  const { surfaceRef, frameRef, handleRef, hitAreaRef } = useOutlinePaths(props)
+  const { display, geometry, interaction } = props
+  const { surfaceRef, frameRef, handleRef, hitAreaRef, svgRef } = useOutlinePaths(props)
+  const borderRadius = useTransform(display, m => scaledRadius(m.surfaceRadius))
   return (
-    <span
+    <motion.span
       ref={surfaceRef}
       className="pointer-events-none absolute overflow-visible"
       style={{
         inset: `${geometry.backgroundPaddingY}px ${geometry.backgroundPaddingX}px`,
-        borderRadius: scaledRadius(radius),
+        borderRadius,
       }}
     >
       <svg
+        ref={svgRef}
         aria-hidden="true"
         className="absolute inset-0 h-full w-full overflow-visible"
-        viewBox={`0 0 ${width} ${height}`}
       >
         <path
           ref={frameRef}
@@ -138,6 +136,6 @@ export function FolderResizeOutline(props: FolderResizeOutlineProps) {
         />
       </svg>
       <ResizeHitTarget hitAreaRef={hitAreaRef} geometry={geometry} interaction={interaction} />
-    </span>
+    </motion.span>
   )
 }

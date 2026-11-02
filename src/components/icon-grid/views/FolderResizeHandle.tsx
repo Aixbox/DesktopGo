@@ -1,15 +1,15 @@
 import type { FolderSize, GridSpan } from '../model'
+import { motion, useTransform, type MotionValue } from 'framer-motion'
 import { useFolderResizeInteraction } from '../hooks/useFolderResizeInteraction'
 import { getFolderResizeVisualGeometry } from '../domain/folderResizePolicy'
 import { FolderResizeOutline } from './FolderResizeOutline'
+import type { DesktopFolderTileMetrics } from './folderVisualPolicy'
+import { ICON_GRID_TILE_PADDING_Y } from '../../../types'
 
 interface FolderResizeHandleProps {
   visible: boolean
   span: GridSpan
-  frameWidth: number
-  frameHeight: number
-  frameRadius: number
-  frameTop?: number
+  display: MotionValue<DesktopFolderTileMetrics>
   cellWidth: number
   cellHeight: number
   gridGap: number
@@ -22,10 +22,7 @@ interface FolderResizeHandleProps {
 export function FolderResizeHandle({
   visible,
   span,
-  frameWidth,
-  frameHeight,
-  frameRadius,
-  frameTop = 0,
+  display,
   cellWidth,
   cellHeight,
   gridGap,
@@ -45,34 +42,37 @@ export function FolderResizeHandle({
     onCommit,
     onCancel,
   })
+  const geometry = getFolderResizeVisualGeometry(span)
+  const x = useTransform(
+    display,
+    m => (m.footprintWidth - m.shapeWidth) / 2 - geometry.backgroundPaddingX
+  )
+  const y = useTransform(
+    display,
+    m => ICON_GRID_TILE_PADDING_Y + (m.bodyHeight - m.shapeHeight) / 2 - geometry.backgroundPaddingY
+  )
+  const width = useTransform(display, m => m.shapeWidth + geometry.backgroundPaddingX * 2)
+  const height = useTransform(display, m => m.shapeHeight + geometry.backgroundPaddingY * 2)
   if (!visible && !interaction.active) return null
 
-  const geometry = getFolderResizeVisualGeometry(span)
-  const paddedFrameWidth = frameWidth + geometry.backgroundPaddingX * 2
-  const paddedFrameHeight = frameHeight + geometry.backgroundPaddingY * 2
-  const frameLeft = `calc(50% - ${paddedFrameWidth / 2}px)`
-  const frameTopWithPadding = frameTop - geometry.backgroundPaddingY
-
   return (
-    <div
+    <motion.div
       data-folder-resize-frame={interaction.active ? 'active' : 'idle'}
-      className="pointer-events-none absolute z-40 overflow-visible"
+      className="pointer-events-none absolute left-0 top-0 z-40 overflow-visible"
       style={{
-        left: frameLeft,
-        top: frameTopWithPadding,
-        width: paddedFrameWidth,
-        height: paddedFrameHeight,
+        x,
+        y,
+        width,
+        height,
         overflow: 'visible',
       }}
     >
       <FolderResizeOutline
-        width={frameWidth}
-        height={frameHeight}
-        radius={frameRadius}
+        display={display}
         geometry={geometry}
         rtl={rtl}
         interaction={interaction}
       />
-    </div>
+    </motion.div>
   )
 }

@@ -3,7 +3,7 @@ import {
   getIconGridTitleHeight,
   ICON_GRID_TILE_PADDING_Y,
   ICON_GRID_TITLE_GAP,
-} from '../../../types'
+} from '../../../types/index'
 import type { FolderSize, GridSpan } from '../model'
 import { COLOROS_MOTION, MOTION_SPRING_EASING } from '../constants'
 
