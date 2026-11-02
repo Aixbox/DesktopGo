@@ -88,6 +88,24 @@ test('shared resize controller previews, cancels and repeatedly commits from the
   render().actions.commit('app', '2x1')
   assert.ok(params.items.some(item => item.key === 'imported'))
   assert.ok(params.outerSlotsRef.current.includes('imported'), 'commit uses the latest layout')
+
+  // Folder preview props must expose the clamped plan, not the raw diagonal gesture.
+  params.items = [{ kind: 'folder', id: 'edge', name: 'Edge', size: '1x1', children: [] }]
+  params.itemsRef.current = params.items
+  params.outerSlotsRef.current = Array(16).fill(null)
+  params.outerSlotsRef.current[12] = 'folder:edge'
+  render().actions.preview('folder:edge', '2x2')
+  assert.equal(render().folderResizeProps.folderResizePreview.size, '2x1')
+  assert.equal(render().renderItemById.get('folder:edge').size, '2x1')
+  render().actions.preview('folder:edge', '1x2')
+  assert.equal(render().plan, null)
+  assert.equal(render().folderResizeProps.folderResizePreview, null)
+  render().actions.commit('folder:edge', '2x2')
+  assert.equal(params.items[0].size, '2x1')
+  assert.equal(params.outerSlotsRef.current.indexOf('folder:edge'), 12)
+  render().actions.commit('folder:edge', '1x1')
+  assert.equal(params.items[0].size, '1x1')
+  assert.equal(params.outerSlotsRef.current.indexOf('folder:edge'), 12)
 })
 
 test('workspace icon wires size actions and renders its handle outside the activation button', () => {

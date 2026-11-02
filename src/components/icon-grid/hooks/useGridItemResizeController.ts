@@ -91,8 +91,8 @@ export function useGridItemResizeController(params: Params) {
     resizeActions: actions,
     onResizeFolder: (folderId: string, size: TileSize) =>
       actions.commit(`folder:${folderId}`, size),
-    folderResizePreview: preview?.itemId.startsWith('folder:')
-      ? { folderId: preview.itemId.slice(7), size: preview.size }
+    folderResizePreview: plan?.itemId.startsWith('folder:')
+      ? { folderId: plan.itemId.slice(7), size: plan.size }
       : null,
     onPreviewFolderResize: (folderId: string, size: TileSize) =>
       actions.preview(`folder:${folderId}`, size),

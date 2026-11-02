@@ -3,11 +3,8 @@ import { getGridItemSpan, getId } from '../model'
 import { resolveOuterItemIds } from './dock'
 import { filterItemsByIds } from './gridItems'
 import { compactEmptyPages } from './slots'
-import {
-  findBestResizeAnchorIndex,
-  getFootprintIndices,
-  normalizeOuterSlots,
-} from './topLevelLayout'
+import { getFootprintIndices, normalizeOuterSlots } from './topLevelLayout'
+import { folderSizeFromSpan } from './folderResizePolicy'
 
 export interface ItemResizePlanInput {
   items: GridItem[]
@@ -69,7 +66,7 @@ const insertEmptyPageWhenResizeWouldOverflow = ({
 
 /**
  * Build the ColorOS-style temporary resize snapshot. The source tile is
- * excluded from occupancy, the nearest legal anchor is selected, and any
+ * kept at its current anchor, growth is clamped to the page edges, and any
  * displaced neighbors are reflowed into a new temporary order. Callers can
  * render this plan while the pointer is down and discard it on cancel.
  */
@@ -77,7 +74,7 @@ export const planItemResize = ({
   items,
   slots,
   itemId,
-  size,
+  size: requestedSize,
   columns: rawColumns,
   pageSize: rawPageSize,
   dockKeys = [],
@@ -87,34 +84,34 @@ export const planItemResize = ({
     !source ||
     source.kind === 'widget' ||
     dockKeys.includes(itemId) ||
-    (source.size ?? '1x1') === size
+    (source.size ?? '1x1') === requestedSize
   )
     return null
 
   const columns = Math.max(1, Math.floor(rawColumns))
   const pageSize = Math.max(1, Math.floor(rawPageSize))
-  const nextItems = items.map(item => (getId(item) === itemId ? { ...item, size } : item))
-  const outerIds = resolveOuterItemIds(nextItems.map(getId), dockKeys)
-  const previousOuterItems = filterItemsByIds(items, outerIds)
-  const nextOuterItems = filterItemsByIds(nextItems, outerIds)
   const entryId = itemId
   const sourceAnchorIndex = slots.indexOf(entryId)
   if (sourceAnchorIndex < 0) return null
 
   const currentSpan = getGridItemSpan(source)
-  const nextSpan = getGridItemSpan({ ...source, size })
-  if (nextSpan.cols > columns || nextSpan.rows > Math.floor(pageSize / columns)) return null
-  const preferredAnchorIndex = findBestResizeAnchorIndex({
-    slots,
-    items: previousOuterItems,
-    itemId: entryId,
-    currentAnchorIndex: sourceAnchorIndex,
-    currentSpan,
-    nextSpan,
-    columns,
-    pageSize,
-  })
-  const anchorIndex = preferredAnchorIndex ?? sourceAnchorIndex
+  const requestedSpan = getGridItemSpan({ ...source, size: requestedSize })
+  const localAnchor = sourceAnchorIndex % pageSize
+  const nextSpan = {
+    cols: Math.min(requestedSpan.cols, columns - (localAnchor % columns)),
+    rows: Math.min(
+      requestedSpan.rows,
+      Math.floor(pageSize / columns) - Math.floor(localAnchor / columns)
+    ),
+  }
+  if (nextSpan.cols < 1 || nextSpan.rows < 1) return null
+  if (nextSpan.cols === currentSpan.cols && nextSpan.rows === currentSpan.rows) return null
+  if (!getFootprintIndices(sourceAnchorIndex, nextSpan, columns, pageSize)) return null
+  const size = folderSizeFromSpan(nextSpan)
+  const nextItems = items.map(item => (getId(item) === itemId ? { ...item, size } : item))
+  const outerIds = resolveOuterItemIds(nextItems.map(getId), dockKeys)
+  const nextOuterItems = filterItemsByIds(nextItems, outerIds)
+  const anchorIndex = sourceAnchorIndex
   const preferredAnchorById = new Map([[entryId, anchorIndex]])
   const temporarySlots = insertEmptyPageWhenResizeWouldOverflow({
     slots: [...slots],

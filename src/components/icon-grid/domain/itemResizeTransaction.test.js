@@ -48,15 +48,78 @@ for (const previousSize of sizes)
     })
   }
 
-test('edge growth selects an in-page legal anchor; too-small grids and dock targets are rejected', () => {
+test('bottom-right growth cannot move the anchor backwards; dock targets are rejected', () => {
   const items = [icon('app')],
     slots = Array(16).fill(null)
   slots[15] = 'app'
   const input = { items, slots, itemId: 'app', size: '2x2', columns: 4, pageSize: 16 }
-  const plan = planItemResize(input)
-  assert.equal(plan.slots.indexOf('app'), 10)
+  assert.equal(planItemResize(input), null)
   assert.equal(planItemResize({ ...input, columns: 1, pageSize: 16 }), null)
   assert.equal(planItemResize({ ...input, dockKeys: ['app'] }), null)
+})
+
+test('every legal icon/folder anchor clamps each resize axis independently on either page', () => {
+  for (const kind of ['icon', 'folder'])
+    for (const page of [0, 1])
+      for (const previousSize of sizes)
+        for (let row = 0; row < 4; row++)
+          for (let col = 0; col < 4; col++) {
+            const oldCols = Number(previousSize[0]),
+              oldRows = Number(previousSize[2])
+            if (col + oldCols > 4 || row + oldRows > 4) continue
+            const source =
+              kind === 'icon'
+                ? icon('app', previousSize)
+                : { kind: 'folder', id: 'app', name: 'App', size: previousSize, children: [] }
+            const id = kind === 'icon' ? 'app' : 'folder:app'
+            const anchor = page * 16 + row * 4 + col
+            const slots = Array((page + 1) * 16).fill(null)
+            const items = [source]
+            if (page) {
+              slots[0] = 'keeper'
+              items.push(icon('keeper'))
+            }
+            slots[anchor] = id
+            const before = structuredClone({ items, slots })
+            for (const size of sizes) {
+              const expected = `${Math.min(Number(size[0]), 4 - col)}x${Math.min(Number(size[2]), 4 - row)}`
+              const plan = planItemResize({
+                items,
+                slots,
+                itemId: id,
+                size,
+                columns: 4,
+                pageSize: 16,
+              })
+              if (expected === previousSize) {
+                assert.equal(plan, null)
+                continue
+              }
+              assert.ok(plan, `${kind} ${previousSize} -> ${size} at ${anchor}`)
+              assert.equal(plan.size, expected)
+              assert.equal(plan.items[0].size, expected)
+              assert.equal(plan.anchorIndex, anchor)
+              assert.equal(plan.slots.indexOf(id), anchor, 'resize never shifts up or left')
+              assert.deepEqual({ items, slots }, before)
+            }
+          }
+})
+
+test('occupied forward cells displace neighbors without choosing a less occupied backward anchor', () => {
+  const slots = Array(16).fill(null)
+  slots[5] = 'app'
+  slots[6] = 'neighbor'
+  const plan = planItemResize({
+    items: [icon('app'), icon('neighbor')],
+    slots,
+    itemId: 'app',
+    size: '2x1',
+    columns: 4,
+    pageSize: 16,
+  })
+  assert.equal(plan.slots.indexOf('app'), 5)
+  assert.notEqual(plan.slots.indexOf('neighbor'), 6)
+  assert.ok(plan.slots.includes('neighbor'))
 })
 
 test('large icons enter folders as compact children without changing their source object', () => {
