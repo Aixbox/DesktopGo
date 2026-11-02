@@ -62,6 +62,8 @@ export function placeItemMenu(
     side: chosen.side,
     width,
     height,
+    // Content height positions the menu; available space alone limits scrolling.
+    maxHeight: Math.max(1, chosen.height),
     x,
     y,
     alignOffset: horizontal ? y - item.top : x - item.left,

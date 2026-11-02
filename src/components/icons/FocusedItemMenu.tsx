@@ -127,7 +127,7 @@ function FocusedMenuContent({
       alignOffset={placement.alignOffset}
       avoidCollisions={false}
       className="z-[282] min-w-0 p-1.5 shadow-xl"
-      style={{ width: placement.width, maxHeight: placement.height }}
+      style={{ width: placement.width, maxHeight: placement.maxHeight }}
       onContextMenu={event => {
         event.preventDefault()
         event.stopPropagation()

@@ -63,6 +63,30 @@ test('the whole target determines menu placement on all four sides, including sm
   assert.ok(ITEM_MENU_GAP > ITEM_MENU_HIT_CLEARANCE)
 })
 
+test('scroll limits use free space instead of rounded or stale measured content height', () => {
+  const viewport = { left: 0, top: 0, width: 600, height: 600 }
+  for (const [item, side, available] of [
+    [{ left: 40, top: 40, width: 100, height: 100 }, 'right', 584],
+    [{ left: 460, top: 40, width: 100, height: 100 }, 'left', 584],
+    [{ left: 100, top: 40, width: 400, height: 100 }, 'bottom', 432],
+    [{ left: 100, top: 460, width: 400, height: 100 }, 'top', 432],
+  ]) {
+    for (const height of [262, 262.4, 290]) {
+      const menu = placeItemMenu(item, viewport, { width: 176, height })
+      assert.equal(menu.side, side)
+      assert.equal(menu.height, height)
+      assert.equal(menu.maxHeight, available)
+      assert.ok(menu.maxHeight > height, 'font rounding and content updates have room to grow')
+    }
+  }
+  const limited = placeItemMenu({ left: 40, top: 40, width: 100, height: 100 }, viewport, {
+    width: 176,
+    height: 900,
+  })
+  assert.equal(limited.maxHeight, 584)
+  assert.equal(limited.height, limited.maxHeight, 'genuine overflow still uses scrolling')
+})
+
 test('the clear cutout follows the surface contour, not the title or invisible handle hot area', () => {
   const viewport = { left: 24, top: 24, width: 600, height: 400 }
   const visual = {
