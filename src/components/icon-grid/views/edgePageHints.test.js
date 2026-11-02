@@ -173,7 +173,7 @@ test('hint animation wrapper has a full-size containing block and shows the requ
   childHooks.flushLayout()
   assert.equal(view.props.className, 'absolute inset-0')
   assert.equal(view.props.children.props.width, 1000)
-  assert.equal(node.style.opacity, '0.2')
+  assert.equal(node.style.opacity, 'var(--edge-page-opacity, 0.2)')
   assert.equal(childModule.animations.at(-1)[2], -34)
   childHooks.unmount()
 })

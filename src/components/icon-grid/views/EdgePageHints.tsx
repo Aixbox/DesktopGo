@@ -142,7 +142,11 @@ function HintSurface({
     const alpha = Number(getComputedStyle(node).opacity)
     node.style.transition =
       reduced || entering ? 'none' : 'opacity 450ms cubic-bezier(0.17, 0, 0.83, 1)'
-    if (!entering) node.style.opacity = String(visible ? EDGE_PAGING.backgroundOpacity : 0)
+    if (!entering) {
+      node.style.opacity = visible
+        ? `var(--edge-page-opacity, ${EDGE_PAGING.backgroundOpacity})`
+        : '0'
+    }
     const motion = animatePageTranslation(
       node,
       initialized.current && !resetPosition ? readTranslationX(node) : to,

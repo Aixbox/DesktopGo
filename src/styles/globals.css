@@ -622,7 +622,8 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-  --edge-page-color: #000;
+  --edge-page-color: #fff;
+  --edge-page-opacity: 0.3;
   /* 自定义背景蒙版底色；浓度由 --launchpad-background-overlay 控制。 */
   --launchpad-background-scrim-rgb: 240 240 245;
 }
@@ -671,6 +672,7 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
   --edge-page-color: #000;
+  --edge-page-opacity: 0.2;
   --launchpad-background-scrim-rgb: 10 13 20;
 }
 
