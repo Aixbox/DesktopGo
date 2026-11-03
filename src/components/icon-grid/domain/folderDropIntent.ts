@@ -9,6 +9,7 @@ export function canPreviewFolderOnOverlap(
   hit: OuterOverlapHit,
   multiDrag: boolean
 ): boolean {
+  if (hit.reorderOnly) return false
   const canCreate = !multiDrag && source.kind === 'icon' && target.kind === 'icon'
   const canAdd = source.kind === 'icon' && target.kind === 'folder'
   return (canCreate || canAdd) && hit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
@@ -22,7 +23,8 @@ export function canPreviewOuterFolder(
   multiDrag: boolean
 ): boolean {
   return (
-    canPreviewFolderOnOverlap(source, target, hit, multiDrag) ||
-    (!multiDrag && source.kind === 'icon' && target.kind === 'folder' && hit.zone === 'center')
+    !hit.reorderOnly &&
+    (canPreviewFolderOnOverlap(source, target, hit, multiDrag) ||
+      (!multiDrag && source.kind === 'icon' && target.kind === 'folder' && hit.zone === 'center'))
   )
 }

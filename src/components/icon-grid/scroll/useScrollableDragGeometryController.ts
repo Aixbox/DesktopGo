@@ -33,6 +33,11 @@ import {
 import { buildScrollGroupDragPreviewOrder, resolveScrollDropPosition } from './scrollGroupLayout'
 import { compactOuterSlotsWithinPages, maskDraggingIdsInCompactOrder } from './scrollTopLevelLayout'
 import { resolveScrollGroupHitLayout } from './scrollGroupHitLayout'
+import { findScrollGroupOverlapHit } from './scrollDragHitTesting'
+import {
+  resolveScrollGroupReorderAnchor,
+  resolveScrollGroupReorderPreview,
+} from './scrollGroupReorderPolicy'
 
 interface ScrollableDragGeometryControllerParams {
   gridGap: number
@@ -308,7 +313,36 @@ export function useScrollableDragGeometryController(
   const buildCompactOuterPreviewOrder = (
     state: DragState,
     hit: OuterOverlapHit
-  ): { order: Array<string | null>; previewSlotIndex: number | null } => {
+  ): {
+    order: Array<string | null>
+    previewSlotIndex: number | null
+    scrollGroupOrder?: string[]
+  } => {
+    if (state.scrollGroupOrder) {
+      const anchorIndex = resolveScrollReorderAnchor(
+        state,
+        hit,
+        resolveCandidateAnchorIndexByContext(state, { allowOutside: true })
+      )
+      if (anchorIndex !== null) {
+        const preview = resolveScrollGroupReorderPreview({
+          state,
+          items: resolveCompactOuterPreviewItems(state),
+          columns,
+          anchorIndex,
+          preferMoveOnTie: hit.reorderOnly,
+        })
+        // Keep other groups in the legacy slot snapshot used by drop/persistence.
+        // The visible group has its own continuous order and never consumes page indices.
+        const groupIds = new Set([...state.scrollGroupOrder, ...state.draggingIds])
+        const remaining = state.workingOrder.filter(id => id && !groupIds.has(id))
+        return {
+          ...preview,
+          order: [...remaining, ...preview.order],
+          scrollGroupOrder: preview.order,
+        }
+      }
+    }
     const currentPreviewContainsDrag = state.draggingIds.some(id => state.workingOrder.includes(id))
     const sourceOrder = currentPreviewContainsDrag
       ? state.workingOrder
@@ -534,6 +568,31 @@ export function useScrollableDragGeometryController(
     }
 
     if (isCompactOuterDrop) {
+      if (state.scrollGroupOrder) {
+        const metrics = resolveGridMetrics('outer')
+        const grid = metrics.gridElement
+        if (!grid) return null
+        const layout = resolveScrollGroupHitLayout(
+          resolveCompactOuterPreviewItems(state),
+          state.scrollGroupOrder,
+          columns
+        )
+        const scale =
+          grid.offsetWidth > 0 ? grid.getBoundingClientRect().width / grid.offsetWidth : 1
+        return resolveNearestAnchorIndexByMetrics(
+          { ...state, workingOrder: layout.slots },
+          {
+            ...metrics,
+            rows: layout.rowCount,
+            itemWidth: itemWidth * scale,
+            itemHeight: itemHeight * scale,
+            pageOffset: 0,
+          },
+          gridGap * scale,
+          getGridItemSpan(state.draggingItem),
+          options
+        )
+      }
       return null
     }
 
@@ -546,54 +605,18 @@ export function useScrollableDragGeometryController(
     return resolveNearestAnchorIndexByMetrics(state, metrics, gridGap, draggingSpan, options)
   }
 
-  const findCompactScrollGroupOverlapHit = (state: DragState): OuterOverlapHit | null => {
-    const order = state.scrollGroupOrder
-    const gridElement = resolveGridMetrics('outer').gridElement
-    if (!order || order.length === 0 || !gridElement) return null
-
-    const items = resolveCompactOuterPreviewItems(state)
-    const safeColumns = Math.max(1, columns)
-    const { entries, rowCount } = resolveScrollGroupHitLayout(items, order, safeColumns)
-    const slots = Array<string | null>(rowCount * safeColumns).fill(null)
-    const draggedIds = new Set(state.draggingIds)
-    const span = getGridItemSpan(state.draggingItem)
-    const smallIcon = state.draggingItem.kind === 'icon' && span.cols === 1 && span.rows === 1
-    const dragWidth = smallIcon ? iconImageSize : span.cols * itemWidth + (span.cols - 1) * gridGap
-    const dragHeight = smallIcon
-      ? iconImageSize
-      : span.rows * itemHeight + (span.rows - 1) * gridGap
-    const gridRect = gridElement.getBoundingClientRect()
-    entries.forEach(entry => {
-      if (draggedIds.has(entry.id)) return
-      const left = gridRect.left + entry.col * (itemWidth + gridGap)
-      const top = gridRect.top + entry.row * (itemHeight + gridGap)
-      const width = entry.span.cols * (itemWidth + gridGap) - gridGap
-      const height = entry.span.rows * (itemHeight + gridGap) - gridGap
-      // Reject distant footprints before the shared hit test measures DOM surfaces.
-      if (Math.abs(state.pointerX - left - width / 2) > (width + dragWidth) / 2 + gridGap) return
-      if (Math.abs(state.pointerY - top - height / 2) > (height + dragHeight) / 2 + gridGap) return
-      slots[entry.globalIndex] = entry.id
+  const resolveScrollReorderAnchor = (
+    state: DragState,
+    hit: OuterOverlapHit,
+    candidateAnchorIndex: number | null
+  ) =>
+    resolveScrollGroupReorderAnchor({
+      state,
+      items: resolveCompactOuterPreviewItems(state),
+      columns,
+      targetId: hit.targetId,
+      candidateAnchorIndex,
     })
-    // The rendered ghost follows the pointer center. Reuse paged visual rectangles and
-    // stable layout anchors so pointer-down offsets and FLIP motion cannot shift the hit area.
-    const hit = findOuterMaxOverlapHitByMetrics({
-      state: { ...state, workingOrder: slots },
-      gridElement,
-      columns: safeColumns,
-      rows: rowCount,
-      itemWidth,
-      itemHeight,
-      gridGap,
-      dragWidth,
-      dragHeight,
-      pageSize: slots.length,
-      currentPage: 0,
-      tileRefs: tileRefs.current,
-      items,
-    })
-    // Compact ordering consumes an item index, while the shared hit test consumes cell anchors.
-    return hit ? { ...hit, targetIndex: order.indexOf(hit.targetId) } : null
-  }
 
   const findTopLevelMaxOverlapHit = (state: DragState): OuterOverlapHit | null => {
     if (state.context === 'folder') return null
@@ -642,7 +665,17 @@ export function useScrollableDragGeometryController(
     }
 
     if (state.scrollGroupOrder) {
-      return findCompactScrollGroupOverlapHit(state)
+      return findScrollGroupOverlapHit({
+        state,
+        gridElement: resolveGridMetrics('outer').gridElement,
+        columns,
+        itemWidth,
+        itemHeight,
+        gridGap,
+        iconImageSize,
+        items: resolveCompactOuterPreviewItems(state),
+        tileRefs: tileRefs.current,
+      })
     }
 
     if (getOuterGridElementAtPoint) {
@@ -723,7 +756,11 @@ export function useScrollableDragGeometryController(
     candidateAnchorIndex: number | null
   ) => {
     if (state.context !== 'outer') return overlapHit.targetIndex
-    if (isCompactOuterDrop) return overlapHit.targetIndex
+    if (isCompactOuterDrop) {
+      return state.scrollGroupOrder
+        ? resolveScrollReorderAnchor(state, overlapHit, candidateAnchorIndex)
+        : overlapHit.targetIndex
+    }
     const draggingSpan = getGridItemSpan(state.draggingItem)
     if (draggingSpan.cols > 1 || draggingSpan.rows > 1) {
       return candidateAnchorIndex

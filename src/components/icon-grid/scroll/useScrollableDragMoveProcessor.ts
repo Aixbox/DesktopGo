@@ -8,6 +8,7 @@ import { buildDragItemMap, resolveItemById } from '../domain/dragWorkflowShared'
 import { OUTER_DRAG_RULES } from '../constants'
 import { resetOuterInteraction } from '../state/dragMachine'
 import type { DragHit, DragState, OuterOverlapHit } from '../state/types'
+import { SCROLL_GROUP_REORDER_DWELL_MS, scrollReorderSignature } from './scrollGroupReorderPolicy'
 import {
   buildCompactOuterDropPreview,
   isCompactSlotVacantForDrag,
@@ -455,6 +456,7 @@ export function useScrollableDragMoveProcessor(runtime: ScrollableDragMoveProces
         previewSlotIndex,
         dockPreviewIndex: null,
         hoverTargetId: overlapHit.targetId,
+        hoverTargetIndex: baseState.scrollGroupOrder ? previewSlotIndex : candidateAnchorIndex,
         hoverZone: overlapHit.zone,
         hoverIou: overlapHit.iou,
         centerStartedAt: null,
@@ -479,7 +481,14 @@ export function useScrollableDragMoveProcessor(runtime: ScrollableDragMoveProces
 
       if (isCompactOuterDrop && baseState.context === 'outer') {
         next.folderPreviewTargetId = null
-        const signature = `compact-overlap:${overlapHit.targetId}:${overlapHit.zone}`
+        if (overlapHit.reorderBlocked) {
+          clearOuterDwellTimer()
+          next.dwellStartedAt = null
+          next.lastEvasionSignature = null
+          publishMoveDragState(next)
+          return
+        }
+        const signature = scrollReorderSignature(next, overlapHit)
         const rearmed = hasScrollEvasionRearmed(
           { x, y },
           baseState.lastEvasionTriggerPointer,
@@ -493,8 +502,10 @@ export function useScrollableDragMoveProcessor(runtime: ScrollableDragMoveProces
         }
 
         const now = performance.now()
-        const sameTargetAndZone =
-          baseState.hoverTargetId === overlapHit.targetId && baseState.hoverZone === overlapHit.zone
+        const sameTargetAndZone = baseState.scrollGroupOrder
+          ? baseState.hoverTargetIndex === next.hoverTargetIndex
+          : baseState.hoverTargetId === overlapHit.targetId &&
+            baseState.hoverZone === overlapHit.zone
         next.dwellStartedAt =
           sameTargetAndZone && baseState.dwellStartedAt !== null ? baseState.dwellStartedAt : now
         const dwellElapsed = now - (next.dwellStartedAt ?? now)
@@ -504,12 +515,15 @@ export function useScrollableDragMoveProcessor(runtime: ScrollableDragMoveProces
             : Math.max(0, SCROLL_PREVIEW_REORDER_LOCK_MS - (now - baseState.lastEvasionAt))
         const remainingMs = Math.max(
           0,
-          SCROLL_PREVIEW_REORDER_DWELL_MS - dwellElapsed,
+          (baseState.scrollGroupOrder
+            ? SCROLL_GROUP_REORDER_DWELL_MS
+            : SCROLL_PREVIEW_REORDER_DWELL_MS) - dwellElapsed,
           lockRemaining
         )
         const targetChanged =
           outerDwellTargetIdRef.current !== overlapHit.targetId ||
-          outerDwellZoneRef.current !== overlapHit.zone
+          outerDwellZoneRef.current !== overlapHit.zone ||
+          (Boolean(baseState.scrollGroupOrder) && !sameTargetAndZone)
         if (targetChanged) clearOuterDwellTimer()
         if (outerDwellTimerRef.current === null) {
           outerDwellTargetIdRef.current = overlapHit.targetId

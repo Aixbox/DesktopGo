@@ -51,6 +51,10 @@ export interface OuterOverlapHit {
   intersectionArea: number
   centerManhattanDistance: number
   zone: HoverZone
+  /** A non-near edge may reorder even when its overlap would allow a folder. */
+  reorderOnly?: boolean
+  /** Approaching the near side of a mergeable icon must not start a reorder. */
+  reorderBlocked?: boolean
 }
 
 export interface PendingDrag {

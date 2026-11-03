@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { getGridItemSpan, getId } from '../model.ts'
-import { buildScrollGroupEntries } from './scrollGroupLayout.ts'
+import { buildScrollGroupEntries, commitScrollGroupDragResult } from './scrollGroupLayout.ts'
 import { canPreviewFolderOnOverlap } from '../domain/folderDropIntent.ts'
 import { applyFolderCreateFromSession } from '../domain/folderCreation.ts'
 import { usePagedDragGeometryController } from '../hooks/usePagedDragGeometryController.ts'
@@ -158,9 +158,10 @@ function fixture(size = '1x1', kind = 'icon', sourceSize = '1x1') {
   return { params, state, source, target, items, surfaceRect, surface, tile }
 }
 
-function harness(t, { mode = 'compact', size, kind, sourceSize } = {}) {
+function harness(t, { mode = 'compact', size, kind, sourceSize, configure = noop } = {}) {
   const clock = environment(t)
   const f = fixture(size, kind, sourceSize)
+  configure(f)
   const dragRef = ref({
     ...f.state,
     scrollGroupOrder: mode === 'compact' ? f.state.scrollGroupOrder : null,
@@ -244,6 +245,7 @@ function harness(t, { mode = 'compact', size, kind, sourceSize } = {}) {
     dragRef,
     opened,
     reordered,
+    triggerReorder: folder.triggerTopLevelDwellEvasion,
     move(x, y) {
       params.dragPointerRef.current = { pointerX: x, pointerY: y }
       process(1, x, y)
@@ -288,14 +290,21 @@ for (const size of ['1x1', '1x2', '2x1', '2x2']) {
         })
         assert.equal(actual?.targetId, expected?.targetId)
         assert.equal(actual?.iou, expected?.iou)
-        assert.equal(canPreviewFolderOnOverlap(f.source, f.target, actual, false), true)
+        assert.equal(
+          canPreviewFolderOnOverlap(f.source, f.target, actual, false),
+          x === r.right + 2 || (x === center[0] && y === center[1]),
+          'only the near (right) edge and center keep the shared overlap merge policy'
+        )
       }
     }
   })
   test(`${size}: immediate merge preserves target footprint on release in both modes`, t => {
     for (const mode of ['paged', 'scroll', 'compact']) {
       const h = harness(t, { mode, size })
-      h.move(h.surfaceRect.left - 2, h.surfaceRect.top + h.surfaceRect.height / 2)
+      h.move(
+        h.surfaceRect.left + h.surfaceRect.width / 2,
+        h.surfaceRect.top + h.surfaceRect.height / 2
+      )
       assert.equal(h.dragRef.current.folderPreviewTargetId, 'target')
       assert.equal(h.timers.size, 0, 'no pre-merge delay or pending evasion')
       const result = h.commit()
@@ -320,12 +329,13 @@ for (const size of ['1x1', '1x2', '2x1', '2x2']) {
   })
 }
 
-test('45% overlap boundary and 400ms evasion use the same rules in both modes', t => {
-  for (const mode of ['paged', 'scroll', 'compact']) {
+test('legacy paged overlap remains 45% with 400ms evasion', t => {
+  for (const mode of ['paged', 'scroll']) {
+    const dwell = 400
     const h = harness(t, { mode })
     h.move(23.59, 32) // (23.59 + 24 - 26) / 48 < 0.45
     assert.equal(h.dragRef.current.folderPreviewTargetId, null)
-    h.advance(399)
+    h.advance(dwell - 1)
     assert.equal(h.reordered.length, 0)
     h.move(23.61, 32)
     assert.equal(h.dragRef.current.folderPreviewTargetId, 'target')
@@ -333,10 +343,293 @@ test('45% overlap boundary and 400ms evasion use the same rules in both modes', 
     assert.equal(h.reordered.length, 0, 'merge cancels the pending evasion')
     h.move(23.59, 32)
     assert.equal(h.dragRef.current.folderPreviewTargetId, null)
-    h.advance(399)
+    h.advance(dwell - 1)
     assert.equal(h.reordered.length, 0)
     h.advance(1)
     assert.equal(h.reordered.length, 1)
+  }
+})
+
+for (const size of ['1x1', '1x2', '2x1', '2x2']) {
+  test(`${size}: three 20% edges reorder; only the near edge allows merging`, t => {
+    for (const [rx, ry] of [
+      [0.1, 0.5],
+      [0.9, 0.5],
+      [0.5, 0.1],
+      [0.5, 0.9],
+    ]) {
+      const h = harness(t, { size })
+      const r = h.surfaceRect
+      h.move(r.left + r.width * rx, r.top + r.height * ry)
+      assert.ok(h.dragRef.current.hoverIou >= 0.45)
+      if (rx === 0.9) {
+        assert.equal(h.dragRef.current.folderPreviewTargetId, 'target')
+        h.advance(500)
+        assert.equal(h.reordered.length, 0)
+        continue
+      }
+      assert.equal(h.dragRef.current.folderPreviewTargetId, null)
+      assert.deepEqual(h.commit().items, h.items, 'releasing on an edge must not create a folder')
+      h.advance(159)
+      assert.equal(h.reordered.length, 0)
+      h.advance(1)
+      assert.equal(h.reordered.length, 1)
+    }
+  })
+}
+
+test('entering the central 60% cancels evasion; returning to the far edge clears folder preview', t => {
+  const h = harness(t)
+  const r = h.surfaceRect
+  h.move(r.left + r.width * 0.199, r.top + r.height / 2)
+  h.advance(100)
+  h.move(r.left + r.width * 0.201, r.top + r.height / 2)
+  assert.equal(h.dragRef.current.folderPreviewTargetId, 'target')
+  h.advance(300)
+  assert.equal(h.reordered.length, 0)
+  h.move(r.left + r.width * 0.199, r.top + r.height / 2)
+  assert.equal(h.dragRef.current.folderPreviewTargetId, null)
+  h.advance(159)
+  assert.equal(h.reordered.length, 0)
+  h.advance(1)
+  assert.equal(h.reordered.length, 1)
+})
+
+function setDragDirection(f, direction) {
+  const horizontal = direction === 'left' || direction === 'right'
+  const span = getGridItemSpan(f.target)
+  const columns = horizontal ? 4 : span.cols
+  const order =
+    direction === 'left' || direction === 'up' ? ['target', 'source'] : ['source', 'target']
+  const entries = buildScrollGroupEntries(order, f.params.itemById, columns)
+  const target = entries.find(entry => entry.id === 'target')
+  const left = target.col * 108,
+    top = target.row * 126
+  const r = f.surfaceRect
+  f.surfaceRect = new Rect(r.left + left, r.top + top, r.width, r.height)
+  f.surface.rect = f.surfaceRect
+  f.tile.rect = new Rect(left, top, f.tile.rect.width, f.tile.rect.height)
+  const slots = Array(24).fill(null)
+  entries.forEach(entry => {
+    slots[entry.globalIndex] = entry.id
+  })
+  f.params.columns = columns
+  f.params.outerSlotsRef.current = slots
+  f.params.compactOuterDragBaseOrderRef.current = slots
+  f.params.compactOuterDragBaseWithoutDraggingRef.current = slots.map(id =>
+    id === 'source' ? null : id
+  )
+  f.params.getActiveScrollGroupItemIds = () => order
+  Object.assign(f.state, {
+    scrollGroupOrder: order,
+    workingOrder: [...slots],
+    sourceSlotIndex: slots.indexOf('source'),
+  })
+}
+
+for (const direction of ['left', 'right', 'up', 'down']) {
+  test(`${direction}: all three outer 8px tolerances survive grid scaling and deep scrolling`, t => {
+    const scale = 0.97,
+      top = -3500
+    const h = harness(t, {
+      configure(f) {
+        setDragDirection(f, direction)
+        f.params.iconImageSize = 8
+        const r = f.surfaceRect,
+          tile = f.tile.rect
+        f.surfaceRect = new Rect(
+          r.left * scale,
+          top + r.top * scale,
+          r.width * scale,
+          r.height * scale
+        )
+        f.surface.rect = f.surfaceRect
+        f.tile.rect = new Rect(
+          tile.left * scale,
+          top + tile.top * scale,
+          tile.width * scale,
+          tile.height * scale
+        )
+        f.params.gridRef.current = {
+          offsetWidth: 424,
+          getBoundingClientRect: () => new Rect(0, top, 424 * scale, 756 * scale),
+        }
+      },
+    })
+    const r = h.surfaceRect
+    const horizontal = direction === 'left' || direction === 'right'
+    const forward = direction === 'right' || direction === 'down'
+    const farPoint = outset =>
+      horizontal
+        ? [forward ? r.right + outset : r.left - outset, r.top + r.height / 2]
+        : [r.left + r.width / 2, forward ? r.bottom + outset : r.top - outset]
+    const lateralPoint = (outset, positive) =>
+      horizontal
+        ? [r.left + r.width / 2, positive ? r.bottom + outset : r.top - outset]
+        : [positive ? r.right + outset : r.left - outset, r.top + r.height / 2]
+    for (const point of [
+      farPoint,
+      outset => lateralPoint(outset, false),
+      outset => lateralPoint(outset, true),
+    ]) {
+      h.move(...point(8))
+      assert.equal(h.dragRef.current.hoverTargetId, 'target')
+      assert.equal(h.dragRef.current.hoverIou, 0)
+      h.move(...point(8.01))
+      assert.equal(h.dragRef.current.hoverTargetId, null)
+      assert.equal(h.timers.size, 0)
+    }
+    h.cancel()
+  })
+  for (const size of ['1x1', '1x2', '2x1', '2x2']) {
+    test(`${direction} into ${size}: near side waits, center merges, far side reorders`, t => {
+      const h = harness(t, { size, configure: f => setDragDirection(f, direction) })
+      const r = h.surfaceRect
+      const horizontal = direction === 'left' || direction === 'right'
+      const forward = direction === 'right' || direction === 'down'
+      const length = horizontal ? r.width : r.height
+      const point = progress =>
+        horizontal
+          ? [r.left + (forward ? progress : length - progress), r.top + r.height / 2]
+          : [r.left + r.width / 2, r.top + (forward ? progress : length - progress)]
+      const order = [...h.dragRef.current.scrollGroupOrder]
+      h.move(...point(-8))
+      assert.equal(h.dragRef.current.hoverTargetId, 'target')
+      assert.ok(h.dragRef.current.hoverIou < 0.45)
+      assert.equal(h.dragRef.current.folderPreviewTargetId, null)
+      h.advance(1000)
+      assert.equal(h.reordered.length, 0, 'a long pause on the near side must not reorder')
+      assert.deepEqual(h.dragRef.current.scrollGroupOrder, order)
+      h.move(...point(length * 0.1))
+      assert.equal(h.dragRef.current.folderPreviewTargetId, 'target', 'near-side overlap may merge')
+      h.move(...point(length * 0.5))
+      assert.equal(h.dragRef.current.folderPreviewTargetId, 'target')
+      assert.equal(h.timers.size, 0)
+      h.move(...point(length * 0.9))
+      assert.equal(h.dragRef.current.folderPreviewTargetId, null)
+      h.advance(100)
+      h.move(...point(-8))
+      assert.equal(h.timers.size, 0, 'returning to the near side cancels the far-side timer')
+      h.triggerReorder('target', h.dragRef.current.hoverZone)
+      assert.deepEqual(
+        h.dragRef.current.scrollGroupOrder,
+        order,
+        'alarm rechecks near-side blocking'
+      )
+      h.move(...point(length * 0.9))
+      h.advance(159)
+      assert.equal(h.reordered.length, 0)
+      h.advance(1)
+      assert.equal(h.reordered.length, 1)
+      assert.notDeepEqual(h.dragRef.current.scrollGroupOrder, order)
+      h.cancel()
+    })
+    test(`${direction} into ${size}: either perpendicular side cancels merging and reorders`, t => {
+      for (const fraction of [0.1, 0.9]) {
+        const h = harness(t, { size, configure: f => setDragDirection(f, direction) })
+        const r = h.surfaceRect
+        const horizontal = direction === 'left' || direction === 'right'
+        const point = horizontal
+          ? [r.left + r.width / 2, r.top + r.height * fraction]
+          : [r.left + r.width * fraction, r.top + r.height / 2]
+        const order = [...h.dragRef.current.scrollGroupOrder]
+        h.move(r.left + r.width / 2, r.top + r.height / 2)
+        assert.equal(h.dragRef.current.folderPreviewTargetId, 'target')
+        h.move(...point)
+        assert.equal(h.dragRef.current.hoverTargetId, 'target')
+        assert.ok(h.dragRef.current.hoverIou >= 0.45)
+        assert.equal(h.dragRef.current.folderPreviewTargetId, null)
+        assert.deepEqual(
+          h.commit().items,
+          h.items,
+          'dropping on either lateral edge must not merge'
+        )
+        h.advance(100)
+        h.move(r.left + r.width / 2, r.top + r.height / 2)
+        h.advance(200)
+        assert.equal(h.reordered.length, 0, 'returning to center cancels the lateral timer')
+        h.move(...point)
+        h.advance(159)
+        assert.equal(h.reordered.length, 0)
+        h.advance(1)
+        assert.equal(h.reordered.length, 1)
+        assert.notDeepEqual(h.dragRef.current.scrollGroupOrder, order)
+        const settled = [...h.dragRef.current.scrollGroupOrder]
+        h.move(...point)
+        h.advance(500)
+        assert.deepEqual(
+          h.dragRef.current.scrollGroupOrder,
+          settled,
+          'holding still cannot reverse the tie-break'
+        )
+        h.cancel()
+      }
+    })
+  }
+}
+
+test('near-side protection also applies to large icons pointing directly at the target surface', t => {
+  for (const sourceSize of ['1x2', '2x1', '2x2']) {
+    const h = harness(t, { sourceSize })
+    h.move(69, 32)
+    assert.equal(h.dragRef.current.hoverTargetId, 'target')
+    assert.equal(h.dragRef.current.folderPreviewTargetId, null)
+    h.advance(1000)
+    assert.equal(h.reordered.length, 0)
+    h.cancel()
+  }
+})
+
+test('outer 8px edge accepts a small ghost without overlap, and leaving it cancels the alarm', t => {
+  const h = harness(t, {
+    configure(f) {
+      f.params.iconImageSize = 8
+    },
+  })
+  const r = h.surfaceRect
+  h.move(r.left - 8, r.top + r.height / 2)
+  assert.equal(h.dragRef.current.hoverTargetId, 'target')
+  assert.equal(h.dragRef.current.hoverIou, 0)
+  assert.equal(h.dragRef.current.folderPreviewTargetId, null)
+  h.advance(100)
+  h.move(r.left - 8.01, r.top + r.height / 2)
+  assert.equal(h.dragRef.current.hoverTargetId, null)
+  h.advance(200)
+  assert.equal(h.reordered.length, 0)
+  h.move(r.left - 8, r.top + r.height / 2)
+  h.advance(160)
+  assert.equal(h.reordered.length, 1)
+})
+
+test('three outer edges follow the stable surface while the grid is scaled and scrolled', t => {
+  const scale = 0.97,
+    top = -3500
+  const h = harness(t, {
+    configure(f) {
+      crowdedGrid(f, { scale, top, count: 200 })
+      f.params.iconImageSize = 8
+    },
+  })
+  const row = 45
+  const left = 26 * scale,
+    right = 74 * scale
+  const upper = top + (row * 126 + 8) * scale
+  const lower = upper + 48 * scale
+  for (const [x, y] of [
+    [left - 8, (upper + lower) / 2],
+    [right + 8, (upper + lower) / 2],
+    [(left + right) / 2, upper - 8],
+    [(left + right) / 2, lower + 8],
+  ]) {
+    const state = { ...h.state, pointerX: x, pointerY: y }
+    const before = h.geometry.findTopLevelMaxOverlapHit(state)
+    if (y === lower + 8) {
+      assert.equal(before, null, 'only the near edge has no no-overlap fallback')
+      continue
+    }
+    assert.equal(before?.targetId, 'cell-180', `point (${x}, ${y})`)
+    assert.equal(before.reorderOnly, true)
+    assert.equal(before.intersectionArea, 0)
   }
 })
 
@@ -421,5 +714,197 @@ test('offscreen icons do not add DOM measurements to scroll hit testing', t => {
   const geometry = useScrollableDragGeometryController(f.params)
   const hit = geometry.findTopLevelMaxOverlapHit(f.state)
   assert.equal(hit.targetId, 'target')
+  const edgeGeometry = useScrollableDragGeometryController({ ...f.params, iconImageSize: 8 })
+  const edgeHit = edgeGeometry.findTopLevelMaxOverlapHit({ ...f.state, pointerX: 18, pointerY: 32 })
+  assert.equal(edgeHit.targetId, 'target')
+  assert.equal(edgeHit.intersectionArea, 0)
   assert.equal(measured, 0)
 })
+
+function crowdedGrid(f, { scale = 1, top = 0, count = 40, foreignGroup = false } = {}) {
+  const items = Array.from({ length: count }, (_, i) => ({
+    kind: 'icon',
+    key: `cell-${i}`,
+    icon: {},
+  }))
+  items.push(f.source)
+  const groupIds = items.map(getId)
+  const all = foreignGroup ? [{ kind: 'icon', key: 'other-group', icon: {} }, ...items] : items
+  const itemById = new Map(all.map(item => [getId(item), item]))
+  const entries = buildScrollGroupEntries(groupIds, itemById, 4)
+  const rows = Math.max(...entries.map(entry => entry.row + entry.span.rows))
+  const slots = Array(rows * 4).fill(null)
+  const nodes = new Map()
+  entries.forEach(entry => {
+    slots[entry.globalIndex] = entry.id
+    const left = entry.col * 108 * scale
+    const y = top + entry.row * 126 * scale
+    const rect = new Rect(left, y, 100 * scale, 118 * scale)
+    const large = entry.span.cols > 1 || entry.span.rows > 1
+    const surface = large
+      ? new Rect(
+          left + 5 * scale,
+          y + 8 * scale,
+          (entry.span.cols * 108 - 18) * scale,
+          (entry.span.rows * 126 - 38) * scale
+        )
+      : new Rect(left + 26 * scale, y + 8 * scale, 48 * scale, 48 * scale)
+    nodes.set(entry.id, {
+      getBoundingClientRect: () => rect,
+      querySelector: selector =>
+        selector === '.icon-image' ? { getBoundingClientRect: () => surface } : null,
+    })
+  })
+  f.items.splice(0, f.items.length, ...all)
+  Object.assign(f.params, {
+    itemById,
+    tileRefs: ref(nodes),
+    gridRef: ref({
+      offsetWidth: 424,
+      scrollHeight: rows * 126,
+      getBoundingClientRect: () => new Rect(0, top, 424 * scale, rows * 126 * scale),
+    }),
+    getActiveScrollGroupItemIds: () => groupIds,
+    // Legacy pages intentionally differ from this group's actual continuous grid.
+    outerSlotsRef: ref(foreignGroup ? ['other-group', ...slots] : slots),
+    compactOuterDragBaseOrderRef: ref(foreignGroup ? ['other-group', ...slots] : slots),
+    compactOuterDragBaseWithoutDraggingRef: ref(null),
+  })
+  Object.assign(f.state, {
+    workingOrder: [...f.params.outerSlotsRef.current],
+    scrollGroupOrder: groupIds,
+    sourceSlotIndex: f.params.outerSlotsRef.current.indexOf('source'),
+  })
+}
+
+for (const size of ['1x2', '2x1', '2x2']) {
+  test(`${size}: evasion starts under the dragged footprint and commits the same compact layout`, t => {
+    const h = harness(t, {
+      sourceSize: size,
+      configure: f => crowdedGrid(f, { foreignGroup: true }),
+    })
+    const span = getGridItemSpan(h.source)
+    h.move(108 + (span.cols * 108 - 8) / 2, 126 + (span.rows * 126 - 8) / 2)
+    assert.equal(h.dragRef.current.hoverTargetIndex, 5)
+    h.advance(159)
+    assert.equal(h.reordered.length, 0)
+    h.advance(1)
+    const state = h.dragRef.current
+    const entries = buildScrollGroupEntries(state.scrollGroupOrder, h.params.itemById, 4)
+    const source = entries.find(entry => entry.id === 'source')
+    assert.equal(
+      source.globalIndex,
+      5,
+      'reserve the footprint under the pointer, not the max-overlap neighbor index'
+    )
+    assert.notEqual(entries.find(entry => entry.id === 'cell-5').globalIndex, 5)
+    assert.equal(entries.find(entry => entry.id === 'cell-0').globalIndex, 0)
+    assert.ok(state.workingOrder.includes('other-group'))
+    assert.equal(new Set(state.scrollGroupOrder).size, state.scrollGroupOrder.length)
+    const committed = commitScrollGroupDragResult({
+      groups: [
+        { id: 'other', itemIds: ['other-group'] },
+        { id: 'active', itemIds: h.state.scrollGroupOrder },
+      ],
+      targetGroupId: 'active',
+      previewItemIds: state.scrollGroupOrder,
+      availableItemIds: h.items.map(getId),
+      draggingIds: state.draggingIds,
+    })
+    assert.deepEqual(committed[0].itemIds, ['other-group'])
+    assert.deepEqual(buildScrollGroupEntries(committed[1].itemIds, h.params.itemById, 4), entries)
+    const settled = [...state.scrollGroupOrder]
+    h.move(h.dragRef.current.pointerX, h.dragRef.current.pointerY)
+    h.advance(500)
+    assert.deepEqual(
+      h.dragRef.current.scrollGroupOrder,
+      settled,
+      'stationary ghost must not repeatedly repack neighbors'
+    )
+  })
+}
+
+test('crossing neighbors inside one large destination footprint does not restart evasion', t => {
+  const h = harness(t, { sourceSize: '2x2', configure: f => crowdedGrid(f) })
+  h.move(208, 240)
+  h.advance(100)
+  h.move(216, 250)
+  assert.equal(h.dragRef.current.hoverTargetIndex, 5)
+  h.advance(59)
+  assert.equal(h.reordered.length, 0)
+  h.advance(1)
+  assert.equal(h.reordered.length, 1)
+})
+
+test('scaled and scrolled grids hit the visible row, even well beyond one legacy page', t => {
+  const scale = 0.97,
+    top = -3500
+  const h = harness(t, { configure: f => crowdedGrid(f, { scale, top, count: 200 }) })
+  const targetCell = 180,
+    row = targetCell / 4
+  h.move(50 * scale, top + (row * 126 + 32) * scale)
+  assert.equal(h.dragRef.current.hoverTargetId, 'cell-180')
+  assert.equal(h.dragRef.current.folderPreviewTargetId, 'cell-180')
+  assert.equal(h.dragRef.current.hoverTargetIndex, targetCell)
+})
+
+test('large icon hit area excludes the title and padding that its ghost does not display', t => {
+  const h = harness(t, { sourceSize: '2x2', configure: f => crowdedGrid(f) })
+  const hit = h.geometry.findTopLevelMaxOverlapHit({ ...h.state, pointerX: 50, pointerY: -105 })
+  assert.equal(hit, null, 'a neighbor outside the visible ghost must not evade')
+})
+
+for (const [direction, columns, reverse, before, after] of [
+  ['right', 4, false, [210, 56], [214, 56]],
+  ['left', 4, true, [214, 56], [210, 56]],
+  ['down', 1, false, [50, 244], [50, 248.5]],
+  ['up', 1, true, [50, 249], [50, 244]],
+]) {
+  test(`${direction} far side frees the hovered cell without skipping its next neighbor`, t => {
+    const h = harness(t, {
+      configure(f) {
+        crowdedGrid(f, { count: 3 })
+        f.params.iconImageSize = 96
+        f.params.columns = columns
+        f.params.gridRef.current = {
+          offsetWidth: columns === 1 ? 100 : 424,
+          scrollHeight: 504,
+          getBoundingClientRect: () => new Rect(0, 0, columns === 1 ? 100 : 424, 504),
+        }
+        f.state.scrollGroupOrder = reverse
+          ? ['cell-0', 'cell-1', 'cell-2', 'source']
+          : ['source', 'cell-0', 'cell-1', 'cell-2']
+        f.params.tileRefs.current.forEach(node => {
+          const r = node.getBoundingClientRect()
+          node.querySelector = selector =>
+            selector === '.icon-image'
+              ? { getBoundingClientRect: () => new Rect(r.left + 2, r.top + 8, 96, 96) }
+              : null
+        })
+      },
+    })
+    const target = reverse ? 'cell-2' : 'cell-0'
+    h.move(...before)
+    assert.equal(h.dragRef.current.hoverTargetId, target)
+    h.move(...after)
+    assert.equal(
+      h.dragRef.current.hoverTargetId,
+      target,
+      'overlap hysteresis keeps the same neighbor'
+    )
+    assert.equal(h.dragRef.current.folderPreviewTargetId, null)
+    h.advance(160)
+    const expected = reverse
+      ? ['cell-0', 'cell-1', 'source', 'cell-2']
+      : ['cell-0', 'source', 'cell-1', 'cell-2']
+    assert.deepEqual(h.dragRef.current.scrollGroupOrder, expected)
+    assert.equal(h.dragRef.current.previewSlotIndex, reverse ? 2 : 1)
+    h.move(...after)
+    h.advance(500)
+    assert.deepEqual(
+      h.dragRef.current.scrollGroupOrder,
+      expected,
+      'holding still must not evade twice'
+    )
+  })
+}

@@ -6,6 +6,7 @@ type Snapshot = {
   columns: number
   entries: ReturnType<typeof buildScrollGroupEntries>
   rowCount: number
+  slots: Array<string | null>
 }
 const snapshots = new WeakMap<GridItem[], Snapshot>()
 
@@ -19,7 +20,11 @@ export function resolveScrollGroupHitLayout(items: GridItem[], order: string[], 
     columns
   )
   const rowCount = entries.reduce((count, entry) => Math.max(count, entry.row + entry.span.rows), 1)
-  const snapshot = { order, columns, entries, rowCount }
+  const slots = Array<string | null>(rowCount * columns).fill(null)
+  entries.forEach(entry => {
+    slots[entry.globalIndex] = entry.id
+  })
+  const snapshot = { order, columns, entries, rowCount, slots }
   snapshots.set(items, snapshot)
   return snapshot
 }

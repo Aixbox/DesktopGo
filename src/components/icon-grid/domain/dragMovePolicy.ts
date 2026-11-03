@@ -282,7 +282,7 @@ export const resolveOverlapTargetRect = (node: HTMLElement): DOMRect => {
   return node.getBoundingClientRect()
 }
 
-const resolveStableOverlapTargetRect = ({
+export const resolveStableOverlapTargetRect = ({
   node,
   item,
   anchorIndex,

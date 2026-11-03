@@ -9,6 +9,7 @@ import {
 import { canPreviewOuterFolder } from '../domain/folderDropIntent'
 import type { DragState, OuterOverlapHit } from '../state/types'
 import { activateDragPointerCapture, releaseDragPointerCapture } from '../hooks/dragPointerCapture'
+import { scrollReorderSignature } from './scrollGroupReorderPolicy'
 import {
   buildScrollFolderAutoOpenOrder,
   canExitScrollFolderThroughMask,
@@ -55,7 +56,7 @@ interface ScrollableFolderDragControllerParams {
   buildCompactOuterPreviewOrder: (
     state: DragState,
     hit: OuterOverlapHit
-  ) => { order: Array<string | null>; previewSlotIndex: number | null }
+  ) => { order: Array<string | null>; previewSlotIndex: number | null; scrollGroupOrder?: string[] }
   resolveScrollGroupOrderFromWorkingOrder: (
     state: DragState,
     workingOrder: Array<string | null>
@@ -183,9 +184,13 @@ export function useScrollableFolderDragController(params: ScrollableFolderDragCo
         zone: resolveCompactScrollHoverZone(latest, target, overlapHit),
       }
       if (expectedZone !== null && overlapHit.zone !== expectedZone) return
-      if (canPreviewOuterFolder(source, target, overlapHit, isMultiOuterDrag)) return
+      if (
+        overlapHit.reorderBlocked ||
+        canPreviewOuterFolder(source, target, overlapHit, isMultiOuterDrag)
+      )
+        return
 
-      const signature = `compact-overlap:${overlapHit.targetId}:${overlapHit.zone}`
+      const signature = scrollReorderSignature(latest, overlapHit)
       const rearmed = hasScrollEvasionRearmed(
         { x: latest.pointerX, y: latest.pointerY },
         latest.lastEvasionTriggerPointer,
@@ -201,10 +206,9 @@ export function useScrollableFolderDragController(params: ScrollableFolderDragCo
       }
 
       const compactPreview = buildCompactOuterPreviewOrder(latest, overlapHit)
-      const nextScrollGroupOrder = resolveScrollGroupOrderFromWorkingOrder(
-        latest,
-        compactPreview.order
-      )
+      const nextScrollGroupOrder =
+        compactPreview.scrollGroupOrder ??
+        resolveScrollGroupOrderFromWorkingOrder(latest, compactPreview.order)
       if (
         areSlotsEqual(compactPreview.order, latest.workingOrder) &&
         areSlotsEqual(nextScrollGroupOrder ?? [], latest.scrollGroupOrder ?? [])
