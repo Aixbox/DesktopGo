@@ -1,4 +1,4 @@
-import { getIconTileMetrics } from './iconTileMetrics'
+import { getIconPreviewSurfaceRadius, getIconTileMetrics } from './iconTileMetrics'
 import { IconGhostArtwork } from './IconGhostArtwork'
 import { AppWindow } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, type MutableRefObject } from 'react'
@@ -232,12 +232,14 @@ function FolderGhost({
   slotHeight,
   gridGap,
   titleLineCount,
+  compactPreview = false,
 }: {
   folder: FolderItem
   slotWidth: number
   slotHeight: number
   gridGap: number
   titleLineCount: 'one' | 'two'
+  compactPreview?: boolean
 }) {
   const direction = useDocumentDirection()
   const span = getGridItemSpan(folder)
@@ -252,7 +254,11 @@ function FolderGhost({
       surfaceTitleLineCount: 'two',
     }
   )
-  const surfaceRadius = getGhostFolderSurfaceRadius(panelBase)
+  const baseRadius = getGhostFolderSurfaceRadius(panelBase)
+  const surfaceRadius =
+    compactPreview && (span.cols > 1 || span.rows > 1)
+      ? Math.max(baseRadius, getIconPreviewSurfaceRadius(shapeWidth, shapeHeight))
+      : baseRadius
   const innerPadding = Math.min(GHOST_FOLDER_INNER_PADDING, Math.max(4, Math.floor(panelBase / 8)))
   const innerGap = Math.min(GHOST_FOLDER_INNER_GAP, Math.max(4, Math.floor(panelBase / 16)))
 
@@ -296,7 +302,7 @@ function FolderGhost({
         style={{ width: `${bodyWidth}px`, height: `${bodyHeight}px` }}
       >
         <div
-          className={`${DESKTOP_FOLDER_SURFACE_CLASS} flex items-center justify-center`}
+          className={`${DESKTOP_FOLDER_SURFACE_CLASS} flex items-center justify-center transition-[border-radius] duration-200 ease-out motion-reduce:transition-none`}
           style={{
             width: `${shapeWidth}px`,
             height: `${shapeHeight}px`,
@@ -338,7 +344,7 @@ function FolderGhost({
       style={{ width: `${bodyWidth}px`, height: `${bodyHeight}px` }}
     >
       <div
-        className={`${DESKTOP_FOLDER_SURFACE_CLASS}`}
+        className={`${DESKTOP_FOLDER_SURFACE_CLASS} transition-[border-radius] duration-200 ease-out motion-reduce:transition-none`}
         style={{
           width: `${shapeWidth}px`,
           height: `${shapeHeight}px`,
@@ -774,6 +780,7 @@ export function DragOverlays({
                         width={entry.width}
                         height={entry.height}
                         imageSize={iconImageSize}
+                        compactPreview={compactPreview}
                       />
                     </div>
                   </div>
@@ -809,6 +816,7 @@ export function DragOverlays({
                   width={ghostWidth}
                   height={ghostHeight}
                   imageSize={iconImageSize}
+                  compactPreview={compactPreview}
                 />
               ) : ghostItem.kind === 'folder' ? (
                 <FolderGhost
@@ -817,6 +825,7 @@ export function DragOverlays({
                   slotHeight={slotHeight}
                   gridGap={gridGap}
                   titleLineCount={titleLineCount}
+                  compactPreview={compactPreview}
                 />
               ) : (
                 <WidgetTile

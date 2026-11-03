@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from 'react'
 import { ResizableIcon } from './ResizableIcon'
+import { getIconPreviewSurfaceRadius } from './iconTileMetrics'
+import { scaledRadius } from './folderVisualPolicy'
 import { translate } from '../../../lib/i18n'
 import { useIconStore } from '../../../stores/iconStore'
 import { NativeScrollArea } from '@/components/ui/native-scroll-area'
@@ -506,8 +508,14 @@ export function ScrollableOuterGridView({
                         style={{ width: iconConfig.imgSize, height: iconConfig.imgSize }}
                       >
                         <span
-                          className="flex shrink-0 items-center justify-center rounded-[8px] border border-dashed border-border/80 bg-foreground/3 transition-colors group-hover:border-foreground/35 group-hover:bg-accent dark:border-white/18 dark:bg-white/4"
-                          style={{ width: iconConfig.imgSize, height: iconConfig.imgSize }}
+                          className="flex shrink-0 items-center justify-center border border-dashed border-border/80 bg-foreground/3 transition-colors group-hover:border-foreground/35 group-hover:bg-accent dark:border-white/18 dark:bg-white/4"
+                          style={{
+                            width: iconConfig.imgSize,
+                            height: iconConfig.imgSize,
+                            borderRadius: scaledRadius(
+                              getIconPreviewSurfaceRadius(iconConfig.imgSize)
+                            ),
+                          }}
                         >
                           <Plus className="h-5 w-5" />
                         </span>

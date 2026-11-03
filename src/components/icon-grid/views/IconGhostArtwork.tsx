@@ -1,6 +1,10 @@
 import type { IconItem } from '../model'
 import { getGridItemSpan, isMultiCellGridItem } from '../model'
-import { ENLARGED_ICON_SURFACE_CLASS, getIconForegroundSize } from './iconTileMetrics'
+import {
+  ENLARGED_ICON_SURFACE_CLASS,
+  getIconForegroundSize,
+  getIconPreviewSurfaceRadius,
+} from './iconTileMetrics'
 import { getDesktopFolderSurfaceRadius, scaledRadius } from './folderVisualPolicy'
 import { IconArtwork } from './IconArtwork'
 
@@ -9,11 +13,13 @@ export function IconGhostArtwork({
   width,
   height,
   imageSize,
+  compactPreview = false,
 }: {
   item: IconItem
   width: number
   height: number
   imageSize: number
+  compactPreview?: boolean
 }) {
   const enlarged = isMultiCellGridItem(item)
   const foregroundSize = getIconForegroundSize(getGridItemSpan(item), width, height)
@@ -22,8 +28,16 @@ export function IconGhostArtwork({
     : Math.min(16, imageSize / 4)
   return (
     <div
-      className={`relative flex items-center justify-center ${enlarged ? ENLARGED_ICON_SURFACE_CLASS : ''}`}
-      style={{ width, height, borderRadius: scaledRadius(radius) }}
+      className={`relative flex items-center justify-center transition-[border-radius] duration-200 ease-out motion-reduce:transition-none ${enlarged ? ENLARGED_ICON_SURFACE_CLASS : ''}`}
+      style={{
+        width,
+        height,
+        borderRadius: scaledRadius(
+          compactPreview && enlarged
+            ? Math.max(radius, getIconPreviewSurfaceRadius(width, height))
+            : radius
+        ),
+      }}
     >
       <IconArtwork
         icon={item.icon}

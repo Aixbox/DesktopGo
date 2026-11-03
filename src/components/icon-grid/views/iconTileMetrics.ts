@@ -23,6 +23,10 @@ export interface IconGridTileConfig {
   onCancel?: () => void
 }
 
+/** Keep small icon surfaces rounded in proportion to their visible short edge. */
+export const getIconPreviewSurfaceRadius = (width: number, height = width): number =>
+  Math.min(width, height) / 4
+
 /** Rectangular tiles leave 10% on each narrow edge; 2x2 retains half-width artwork. */
 export function getIconForegroundSize(
   span: GridSpan,
