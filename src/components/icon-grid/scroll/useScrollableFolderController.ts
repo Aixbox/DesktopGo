@@ -25,6 +25,7 @@ interface UseScrollableFolderControllerParams {
   layoutDimensionsTracker: LayoutDimensionsTracker
   columnWidth: number
   rowHeight: number
+  onBeforeResizeLayoutChange?: () => void
 }
 
 interface UseScrollableFolderKeyboardDismissParams {
@@ -73,6 +74,7 @@ export function useScrollableFolderController({
   layoutDimensionsTracker,
   columnWidth,
   rowHeight,
+  onBeforeResizeLayoutChange,
 }: UseScrollableFolderControllerParams) {
   const folderPanelRef = useRef<HTMLDivElement>(null)
   const folderGridContainerRef = useRef<HTMLDivElement>(null)
@@ -194,6 +196,7 @@ export function useScrollableFolderController({
     columns,
     pageSizeRef,
     layoutDimensionsTracker,
+    onBeforeLayoutChange: onBeforeResizeLayoutChange,
   })
   const { plan: folderResizePreviewPlan, renderItemById, folderResizeProps } = itemResize
 

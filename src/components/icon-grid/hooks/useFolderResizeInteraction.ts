@@ -90,7 +90,8 @@ export function useFolderResizeInteraction({
     session.moved = result.changed
     const spanChanged =
       previousSpan.cols !== result.span.cols || previousSpan.rows !== result.span.rows
-    if (result.changed || spanChanged) onPreview(folderSizeFromSpan(result.span))
+    // Movement within the same size must not replan the grid or restart its animations.
+    if (spanChanged) onPreview(folderSizeFromSpan(result.span))
   }
 
   const finishPointerResize = (event: ReactPointerEvent<HTMLButtonElement>, cancelled = false) => {

@@ -223,6 +223,7 @@ export function ScrollableIconGrid({
     layoutDimensionsTracker,
     columnWidth,
     rowHeight,
+    onBeforeResizeLayoutChange: captureScrollGridItemPositions,
   })
   const selectedSet = useMemo(() => new Set(selectedIconKeys), [selectedIconKeys])
   const iconConfig = ICON_SIZE_CONFIG[iconSize]

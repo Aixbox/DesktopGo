@@ -78,6 +78,7 @@ function resizeCommitHarness(size, rtl = false) {
   let slots = ['folder:folder', ...Array(15).fill(null)]
   let preview = null
   const commits = [],
+    previews = [],
     cancellations = []
   const { useFolderResizeInteraction, OuterFolderTile } = loadResizeComponents(rtl)
   const plan = targetSize =>
@@ -100,6 +101,7 @@ function resizeCommitHarness(size, rtl = false) {
       selectionMode: true,
       resizePreviewSize: preview,
       onPreviewFolderResize: (_id, nextSize) => {
+        previews.push(nextSize)
         preview = nextSize
       },
       onCancelFolderResize: () => {
@@ -149,6 +151,7 @@ function resizeCommitHarness(size, rtl = false) {
     render,
     event,
     commits,
+    previews,
     cancellations,
     captured,
     read: () => ({ size: items[0].size, preview }),
@@ -193,6 +196,26 @@ test('cancelling or returning to the original size discards the preview without 
     assert.equal(h.cancellations.length, 1)
     assert.equal(h.captured.size, 0)
   }
+})
+
+test('resize movement publishes a preview only when the requested size changes', () => {
+  const h = resizeCommitHarness('1x1')
+  h.render().startPointerResize(h.event())
+  for (let index = 0; index < 120; index += 1) {
+    h.render().movePointerResize(h.event(100 + index / 10, 100 + index / 10))
+  }
+  assert.deepEqual(
+    h.previews,
+    ['2x2'],
+    '120 pointer moves within one size need only one layout plan'
+  )
+  h.render().movePointerResize(h.event(110, 0))
+  h.render().movePointerResize(h.event())
+  h.render().movePointerResize(h.event(100, 100))
+  assert.deepEqual(h.previews, ['2x2', '2x1', '1x1', '2x2'])
+  h.render().finishPointerResize(h.event(100, 100))
+  assert.equal(h.read().size, '2x2')
+  assert.equal(h.commits.length, 1)
 })
 
 test('closing the focus menu after handle press preserves capture and the resize until release', () => {

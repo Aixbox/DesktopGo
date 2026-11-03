@@ -19,6 +19,8 @@ interface Params {
   columns: number
   pageSizeRef: MutableRefObject<number>
   layoutDimensionsTracker: LayoutDimensionsTracker
+  /** Capture visible positions before preview, rollback or commit changes the rendered grid. */
+  onBeforeLayoutChange?: () => void
 }
 
 function committedResizePlan(params: Params, itemId: string, size: TileSize) {
@@ -69,17 +71,24 @@ export function useGridItemResizeController(params: Params) {
     [plan, items]
   )
   const actions: GridItemResizeActions = {
-    preview: (itemId, size) =>
+    preview: (itemId, size) => {
+      const next = committedResizePlan(params, itemId, size)
+      if (next || plan) params.onBeforeLayoutChange?.()
       setPreview({
         itemId,
         size,
         sourceItems: itemsRef.current,
-        plan: committedResizePlan(params, itemId, size),
-      }),
-    cancel: () => setPreview(null),
-    commit: (itemId, size) => {
+        plan: next,
+      })
+    },
+    cancel: () => {
+      if (plan) params.onBeforeLayoutChange?.()
       setPreview(null)
+    },
+    commit: (itemId, size) => {
       const next = committedResizePlan(params, itemId, size)
+      if (next || plan) params.onBeforeLayoutChange?.()
+      setPreview(null)
       if (!next) return
       itemsRef.current = next.items
       outerSlotsRef.current = next.slots
