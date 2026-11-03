@@ -4,6 +4,7 @@ import { getGridItemSpan, getId } from '../model'
 import { DRAG_HOLE_ID } from '../domain/slots'
 import { applyEvasionPreview, moveDragHoleToIndex } from '../domain/evasionPolicy'
 import { clampNumber, classifyZone, getRectArea, getRectIntersection } from '../domain/geometry'
+import { resolveFolderAutoOpenHit } from '../hooks/folderAutoOpenHitTesting'
 import {
   applyOuterEvasionPolicy,
   findHitByMetrics,
@@ -650,7 +651,7 @@ export function useScrollableDragGeometryController(
         state.draggingItem.kind === 'folder' || draggingSpan.cols > 1 || draggingSpan.rows > 1
           ? draggingSpan.rows * metrics.itemHeight + Math.max(0, draggingSpan.rows - 1) * gridGap
           : iconImageSize
-      return findOuterMaxOverlapHitByMetrics({
+      const hit = findOuterMaxOverlapHitByMetrics({
         state,
         gridElement: metrics.gridElement,
         columns: metrics.columns,
@@ -664,6 +665,12 @@ export function useScrollableDragGeometryController(
         currentPage: currentPageRef.current,
         tileRefs: tileRefs.current,
         items: resolveOuterItemsForLayout(),
+      })
+      return resolveFolderAutoOpenHit({
+        state,
+        hit,
+        target: hit ? resolveItemById(hit.targetId) : undefined,
+        node: hit ? tileRefs.current.get(hit.targetId) : undefined,
       })
     }
 
@@ -834,6 +841,22 @@ export function useScrollableDragGeometryController(
     const dragCenter = {
       x: state.pointerX - clampNumber(state.offsetX, 0, dragWidth) + dragWidth / 2,
       y: state.pointerY - clampNumber(state.offsetY, 0, dragHeight) + dragHeight / 2,
+    }
+    if (
+      target.kind === 'folder' &&
+      state.draggingItem.kind === 'icon' &&
+      state.draggingIds.length === 1
+    ) {
+      return (
+        resolveFolderAutoOpenHit({
+          state,
+          hit: overlapHit,
+          target,
+          node: tileRefs.current.get(overlapHit.targetId),
+          point: dragCenter,
+          hitRectIsTile: !!state.scrollGroupOrder,
+        })?.zone ?? overlapHit.zone
+      )
     }
     const position = resolveScrollDropPosition(dragCenter, overlapHit.targetRect, mergeAllowed)
     return position === 'middle' ? 'center' : position === 'before' ? 'left' : 'right'

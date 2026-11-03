@@ -9,6 +9,7 @@ import {
   moveDragHoleToIndex,
 } from '../domain/evasionPolicy'
 import { clampNumber, classifyZone } from '../domain/geometry'
+import { resolveFolderAutoOpenHit } from './folderAutoOpenHitTesting'
 import {
   applyOuterEvasionPolicy,
   findHitByMetrics,
@@ -357,7 +358,7 @@ export function usePagedDragGeometryController({
       state.draggingItem.kind === 'folder' || draggingSpan.cols > 1 || draggingSpan.rows > 1
         ? draggingSpan.rows * metrics.itemHeight + Math.max(0, draggingSpan.rows - 1) * gridGap
         : iconImageSize
-    return findOuterMaxOverlapHitByMetrics({
+    const hit = findOuterMaxOverlapHitByMetrics({
       state,
       gridElement: metrics.gridElement,
       columns: metrics.columns,
@@ -371,6 +372,12 @@ export function usePagedDragGeometryController({
       currentPage: currentPageRef.current,
       tileRefs: tileRefs.current,
       items: resolveOuterItemsForLayout(),
+    })
+    return resolveFolderAutoOpenHit({
+      state,
+      hit,
+      target: hit ? resolveItemById(hit.targetId) : undefined,
+      node: hit ? tileRefs.current.get(hit.targetId) : undefined,
     })
   }
 

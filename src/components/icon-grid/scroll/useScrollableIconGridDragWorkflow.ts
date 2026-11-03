@@ -316,6 +316,7 @@ export function useScrollableIconGridDragWorkflow({
     if (
       folderAutoOpenTargetIdRef.current &&
       (next?.context !== 'outer' ||
+        next.hoverZone !== 'center' ||
         next.folderPreviewTargetId !== folderAutoOpenTargetIdRef.current)
     ) {
       clearFolderAutoOpenTimer()

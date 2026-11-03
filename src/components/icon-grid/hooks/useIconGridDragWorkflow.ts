@@ -291,6 +291,7 @@ export function useIconGridDragWorkflow({
     if (
       folderAutoOpenTargetIdRef.current &&
       (next?.context !== 'outer' ||
+        next.hoverZone !== 'center' ||
         next.folderPreviewTargetId !== folderAutoOpenTargetIdRef.current)
     ) {
       clearFolderAutoOpenTimer()
