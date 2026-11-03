@@ -43,7 +43,9 @@ export function FocusedItemMenu({
         if (!open) focus.close()
       }}
     >
-      <FocusedItemMenuContext.Provider value={{ focused: focus.open, dismiss: focus.close }}>
+      <FocusedItemMenuContext.Provider
+        value={{ focused: focus.open, dismiss: focus.close, menuId: focus.menuId }}
+      >
         <MenuAnchor asChild>
           <Slot
             ref={focus.targetRef}

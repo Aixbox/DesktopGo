@@ -68,6 +68,7 @@ function loadResizeComponents(rtl) {
     '../model': gridModel,
     './folderVisualPolicy': visualPolicy,
     './FolderTileContents': { FolderTileContents: 'FolderTileContents' },
+    './GridItemSizeMenu': { GridItemSizeMenu: 'GridItemSizeMenu' },
     '../hooks/useDocumentDirection': { useDocumentDirection: () => (rtl ? 'rtl' : 'ltr') },
   })
   return { useFolderResizeInteraction, OuterFolderTile }

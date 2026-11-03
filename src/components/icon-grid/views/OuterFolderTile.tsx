@@ -6,10 +6,11 @@ import {
 } from 'react'
 import { translate } from '../../../lib/i18n'
 import { useIconStore } from '../../../stores/iconStore'
-import { MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator } from '../../ui/menu'
+import { MenuItem, MenuSeparator } from '../../ui/menu'
 import { FocusedItemMenu } from '../../icons/FocusedItemMenu'
 import { getGridItemSpan, type FolderItem, type FolderSize, type GridSpan } from '../model'
-import { getDesktopFolderTileMetrics, scaledRadius } from './folderVisualPolicy'
+import { getDesktopFolderTileMetrics } from './folderVisualPolicy'
+import { GridItemSizeMenu } from './GridItemSizeMenu'
 import { FolderTileContents } from './FolderTileContents'
 import { useDocumentDirection } from '../hooks/useDocumentDirection'
 
@@ -34,69 +35,8 @@ interface OuterFolderTileProps {
   onDissolveFolder: (folderId: string) => void
 }
 
-const FOLDER_SIZES: Array<{ value: FolderSize; label: string; span: GridSpan }> = [
-  { value: '1x1', label: '1x1', span: { cols: 1, rows: 1 } },
-  { value: '1x2', label: '1x2', span: { cols: 1, rows: 2 } },
-  { value: '2x1', label: '2x1', span: { cols: 2, rows: 1 } },
-  { value: '2x2', label: '2x2', span: { cols: 2, rows: 2 } },
-]
 const MENU_OPEN_LABEL = '打开文件夹'
-const MENU_SIZE_LABEL = '文件夹大小'
 const MENU_DISSOLVE_LABEL = '解散文件夹'
-
-interface FolderSizePreviewProps {
-  span: GridSpan
-  active: boolean
-}
-
-function FolderSizePreview({ span, active }: FolderSizePreviewProps) {
-  const unitSize = 9
-  const slotGap = 3
-  const shellPadding = 3
-  const shellWidth = span.cols * unitSize + Math.max(0, span.cols - 1) * slotGap + shellPadding * 2
-  const shellHeight = span.rows * unitSize + Math.max(0, span.rows - 1) * slotGap + shellPadding * 2
-  const shellRadius = Math.max(5, Math.floor(Math.min(shellWidth, shellHeight) * 0.2))
-  const slotRadius = Math.max(2, Math.floor(unitSize * 0.22))
-
-  return (
-    <span className="flex h-8 w-12 shrink-0 items-center justify-center" aria-hidden="true">
-      <span
-        className={`relative overflow-hidden border shadow-[0_6px_14px_rgba(0,0,0,0.14),inset_0_1px_0_rgba(255,255,255,0.32)] transition ${
-          active
-            ? 'border-border/60 bg-background/62 shadow-[0_6px_14px_rgba(15,23,42,0.12)] ring-1 ring-foreground/[0.05] dark:border-white/24 dark:bg-white/12 dark:shadow-[0_6px_14px_rgba(0,0,0,0.16)] dark:ring-white/[0.08]'
-            : 'border-border/45 bg-background/42 shadow-[0_4px_12px_rgba(15,23,42,0.1)] ring-1 ring-foreground/[0.03] dark:border-white/16 dark:bg-white/[0.04] dark:shadow-[0_4px_12px_rgba(0,0,0,0.12)] dark:ring-white/[0.05]'
-        }`}
-        style={{
-          width: `${shellWidth}px`,
-          height: `${shellHeight}px`,
-          borderRadius: scaledRadius(shellRadius),
-        }}
-      >
-        <span
-          className="absolute inset-0 grid"
-          style={{
-            padding: `${shellPadding}px`,
-            gap: `${slotGap}px`,
-            gridTemplateColumns: `repeat(${span.cols}, minmax(0, 1fr))`,
-            gridTemplateRows: `repeat(${span.rows}, minmax(0, 1fr))`,
-          }}
-        >
-          {Array.from({ length: span.cols * span.rows }, (_, index) => (
-            <span
-              key={index}
-              className={`border transition ${
-                active
-                  ? 'border-border/40 bg-background/72 dark:border-white/18 dark:bg-white/14'
-                  : 'border-border/30 bg-background/50 dark:border-white/10 dark:bg-white/[0.05]'
-              }`}
-              style={{ borderRadius: scaledRadius(slotRadius) }}
-            />
-          ))}
-        </span>
-      </span>
-    </span>
-  )
-}
 
 function OuterFolderTileComponent({
   folder,
@@ -187,28 +127,11 @@ function OuterFolderTileComponent({
         <span>{translate(MENU_DISSOLVE_LABEL)}</span>
       </MenuItem>
       <MenuSeparator className="mx-1 my-1 bg-border/70" />
-      <MenuLabel className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-        {translate(MENU_SIZE_LABEL)}
-      </MenuLabel>
-      <MenuRadioGroup
-        value={folder.size}
-        onValueChange={value => {
-          onResizeFolder(folder.id, value as FolderSize)
-        }}
-      >
-        {FOLDER_SIZES.map(option => (
-          <MenuRadioItem
-            key={option.value}
-            value={option.value}
-            className="px-3 py-1.5 text-foreground/85 focus:bg-accent focus:text-foreground data-[state=checked]:bg-accent/80 data-[state=checked]:text-foreground"
-          >
-            <div className="flex items-center gap-3 pr-4">
-              <FolderSizePreview span={option.span} active={folder.size === option.value} />
-              <span className="text-sm font-medium leading-none">{option.label}</span>
-            </div>
-          </MenuRadioItem>
-        ))}
-      </MenuRadioGroup>
+      <GridItemSizeMenu
+        label={translate('文件夹大小')}
+        size={folder.size}
+        onResize={size => onResizeFolder(folder.id, size)}
+      />
     </FocusedItemMenu>
   )
 }

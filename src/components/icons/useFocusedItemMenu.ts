@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
   type MouseEvent,
@@ -18,6 +19,7 @@ interface FocusSnapshot {
 }
 
 export function useFocusedItemMenu(disabled: boolean, onOpen?: () => void) {
+  const menuId = useId()
   const targetRef = useRef<HTMLElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const restoreFocusRef = useRef(false)
@@ -48,7 +50,7 @@ export function useFocusedItemMenu(disabled: boolean, onOpen?: () => void) {
     })
     onOpen?.()
   }
-  useFocusedMenuDismissal(open ? snapshot?.visual : undefined, targetRef, contentRef, close)
+  useFocusedMenuDismissal(open ? snapshot?.visual : undefined, targetRef, contentRef, close, menuId)
   const onContextMenu = (event: MouseEvent<HTMLElement>) => {
     if (event.defaultPrevented) return
     event.preventDefault()
@@ -61,21 +63,37 @@ export function useFocusedItemMenu(disabled: boolean, onOpen?: () => void) {
     event.stopPropagation()
     show()
   }
-  return { targetRef, contentRef, restoreFocusRef, snapshot, open, close, onContextMenu, onKeyDown }
+  return {
+    targetRef,
+    contentRef,
+    restoreFocusRef,
+    snapshot,
+    open,
+    close,
+    onContextMenu,
+    onKeyDown,
+    menuId,
+  }
 }
 
 function useFocusedMenuDismissal(
   visual: FocusedItemVisual | undefined,
   targetRef: RefObject<HTMLElement | null>,
   contentRef: RefObject<HTMLDivElement | null>,
-  close: (restoreFocus?: boolean) => void
+  close: (restoreFocus?: boolean) => void,
+  menuId: string
 ) {
   useEffect(() => {
     if (!visual) return
     const dismiss = () => close()
+    const isOwnedSubmenu = (target: EventTarget | null) =>
+      (target as Element | null)
+        ?.closest?.('[data-focused-menu-owner]')
+        ?.getAttribute('data-focused-menu-owner') === menuId
+    const isMenuContent = (target: EventTarget | null) =>
+      contentRef.current?.contains(target as Node) || isOwnedSubmenu(target)
     const isOutside = (event: Event) =>
-      !isFocusTargetInteraction(event, targetRef.current, visual) &&
-      !contentRef.current?.contains(event.target as Node)
+      !isFocusTargetInteraction(event, targetRef.current, visual) && !isMenuContent(event.target)
     const consumeOutside = (event: Event) => {
       if (!isOutside(event)) return
       event.preventDefault()
@@ -87,10 +105,12 @@ function useFocusedMenuDismissal(
       close(true)
     }
     const handleScroll = (event: Event) => {
-      if (!contentRef.current?.contains(event.target as Node)) close()
+      if (!isMenuContent(event.target)) close()
     }
     const handleKey = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape') return
+      // Let Radix handle Escape for the active submenu.
+      if (isOwnedSubmenu(event.target)) return
       event.preventDefault()
       event.stopPropagation()
       close(true)
@@ -113,5 +133,5 @@ function useFocusedMenuDismissal(
       document.removeEventListener('contextmenu', dismissOutside, true)
       document.removeEventListener('wheel', consumeOutside, true)
     }
-  }, [visual, close, targetRef, contentRef])
+  }, [visual, close, targetRef, contentRef, menuId])
 }

@@ -12,6 +12,7 @@ import * as resizePolicy from '../icon-grid/domain/folderResizePolicy.ts'
 
 const require = createRequire(import.meta.url)
 const compiled = new Map()
+let nextMenuId = 0
 function loadModule(path, modules, globals = {}) {
   if (!compiled.has(path))
     compiled.set(
@@ -45,6 +46,7 @@ function hookRuntime() {
   }
   return {
     react: {
+      useId: () => (cells[cursor++] ??= `menu-${++nextMenuId}`),
       useRef: value => (cells[cursor++] ??= { current: value }),
       useState(initial) {
         const index = cursor++
@@ -509,7 +511,7 @@ test('ordinary background-menu closing still restores focus and respects an expl
 test('outside presses and clicks are consumed, including the clear margin around the focused tile', () => {
   const h = menuFixture()
   h.open()
-  for (const target of [{}, { closest: () => ({}) }]) {
+  for (const target of [{}, { closest: () => ({ getAttribute: () => null }) }]) {
     const down = pointer({ target })
     h.doc.dispatch('pointerdown', down)
     assert.equal(down.defaultPrevented, true)
@@ -877,4 +879,27 @@ test('focused menu interactions do not close the search panel in the launchpad c
   handlers.handleSurfacePointerDownCapture(pointer({ target: { closest: () => null } }))
   assert.equal(closed, 1)
   runtime.unmount()
+})
+
+test('portaled size submenu belongs to its focused item for clicks, wheel, scroll and keyboard', () => {
+  const h = menuFixture()
+  h.open()
+  const menuId = h.render().props.children.props.value.menuId
+  const owner = { getAttribute: () => menuId }
+  const target = { closest: selector => (selector === '[data-focused-menu-owner]' ? owner : null) }
+  for (const name of ['pointerdown', 'click', 'contextmenu', 'wheel', 'scroll']) {
+    const event = pointer({ target })
+    h.doc.dispatch(name, event)
+    assert.equal(event.defaultPrevented, false, name)
+    assert.equal(h.render().props.open, true, name)
+  }
+  const escape = pointer({ key: 'Escape', target })
+  h.win.dispatch('keydown', escape)
+  assert.equal(escape.defaultPrevented, false, 'Radix owns submenu keyboard dismissal')
+  assert.equal(h.render().props.open, true)
+  const foreign = pointer({ target: { closest: () => ({ getAttribute: () => 'different-menu' }) } })
+  h.doc.dispatch('click', foreign)
+  assert.equal(foreign.defaultPrevented, true)
+  assert.equal(h.render().props.open, false)
+  h.unmount()
 })

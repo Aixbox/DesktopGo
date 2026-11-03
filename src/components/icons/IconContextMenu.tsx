@@ -7,12 +7,15 @@ import { useIconStore } from '@/stores/iconStore'
 import type { DesktopIcon } from '@/types'
 import { MenuItem, MenuSeparator, MenuShortcut } from '@/components/ui/menu'
 import { FocusedItemMenu } from './FocusedItemMenu'
+import { GridItemSizeMenu } from '../icon-grid/views/GridItemSizeMenu'
+import type { TileSize } from '../icon-grid/model'
 
 interface IconContextMenuProps {
   icon: DesktopIcon
   children: ReactElement
   disabled?: boolean
   onOpen?: () => void
+  resize?: { size: TileSize; onResize: (size: TileSize) => void }
 }
 
 export function IconContextMenu({
@@ -20,6 +23,7 @@ export function IconContextMenu({
   children,
   disabled = false,
   onOpen,
+  resize,
 }: IconContextMenuProps) {
   const {
     iconContextMenuMode,
@@ -107,6 +111,7 @@ export function IconContextMenu({
         <Pencil className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
         <span>{translate('编辑图标信息')}</span>
       </MenuItem>
+      {resize ? <GridItemSizeMenu label={translate('图标大小')} {...resize} /> : null}
       <MenuItem
         className="gap-2 px-2.5 py-2"
         onSelect={() => {
@@ -125,14 +130,16 @@ export function IconContextMenu({
       </MenuItem>
       <MenuSeparator />
       <MenuItem
-        className="gap-2 px-2.5 py-2"
+        className="gap-2 whitespace-nowrap px-2.5 py-2"
         onSelect={() => {
           window.setTimeout(openSystemMenu, 0)
         }}
       >
-        <FolderCog className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-        <span>{translate('Windows 原生菜单')}</span>
-        <MenuShortcut>
+        <FolderCog className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate" title={translate('系统菜单')}>
+          {translate('系统菜单')}
+        </span>
+        <MenuShortcut className="shrink-0 whitespace-nowrap tracking-normal">
           {translate(iconContextMenuMode === 'custom' ? 'Shift + 右键' : '右键')}
         </MenuShortcut>
       </MenuItem>

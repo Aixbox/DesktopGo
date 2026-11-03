@@ -13,6 +13,7 @@ import * as topLevel from '../domain/topLevelLayout.ts'
 import * as types from '../../../types/index.ts'
 import * as metrics from '../views/iconTileMetrics.ts'
 import * as visuals from '../views/folderVisualPolicy.ts'
+import * as resizePolicy from '../domain/folderResizePolicy.ts'
 
 const require = createRequire(import.meta.url)
 function load(path, modules) {
@@ -163,6 +164,7 @@ test('workspace icon wires size actions and renders its handle outside the activ
     './icons/useIconRename': { useIconRename: () => ({ isRenaming: false }) },
     './icons/IconContextMenu': { IconContextMenu: 'ContextMenu' },
     './icon-grid/views/IconResizeHandle': { IconResizeHandle: 'Handle' },
+    './icon-grid/domain/folderResizePolicy': resizePolicy,
     './icon-grid/hooks/useIconTileMotion': { useIconTileMotion },
     './icon-grid/views/folderVisualPolicy': visuals,
     './icon-grid/views/iconTileMetrics': metrics,
@@ -196,7 +198,10 @@ test('workspace icon wires size actions and renders its handle outside the activ
     entry.props.gridTile.onPreview('2x2')
     entry.props.gridTile.onCommit('2x2')
     entry.props.gridTile.onCancel()
-    const wrapper = Icon(entry.props).props.children
+    const menu = Icon(entry.props)
+    assert.equal(menu.props.resize.size, size)
+    assert.equal(menu.props.resize.onResize, entry.props.gridTile.onCommit)
+    const wrapper = menu.props.children
     assert.equal(wrapper.props['data-icon'], true)
     const [button, handle] = wrapper.props.children
     assert.equal(button.type, 'button')
@@ -250,6 +255,10 @@ test('workspace icon wires size actions and renders its handle outside the activ
       'no second CSS transition behind the frame'
     )
     assert.equal(ResizableIcon({ ...props, interactive: false }).props.gridTile.onCommit, undefined)
+    assert.equal(
+      Icon(ResizableIcon({ ...props, interactive: false }).props).props.resize,
+      undefined
+    )
   }
   assert.deepEqual(calls.slice(0, 3), [
     ['preview', 'app', '2x2'],

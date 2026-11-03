@@ -10,6 +10,7 @@ import { useIconStore } from '../stores/iconStore'
 import { IconContextMenu } from './icons/IconContextMenu'
 import { useIconRename } from './icons/useIconRename'
 import { IconResizeHandle } from './icon-grid/views/IconResizeHandle'
+import { folderSizeFromSpan } from './icon-grid/domain/folderResizePolicy'
 import { IconArtwork } from './icon-grid/views/IconArtwork'
 import { useIconTileMotion } from './icon-grid/hooks/useIconTileMotion'
 import {
@@ -114,7 +115,15 @@ export const Icon = memo(function Icon({
         : 'launchpad-icon-motion'
 
   return (
-    <IconContextMenu icon={icon} disabled={isRenaming}>
+    <IconContextMenu
+      icon={icon}
+      disabled={isRenaming}
+      resize={
+        gridTile?.onCommit
+          ? { size: folderSizeFromSpan(gridTile.span), onResize: gridTile.onCommit }
+          : undefined
+      }
+    >
       <div
         data-icon
         data-icon-resize-host

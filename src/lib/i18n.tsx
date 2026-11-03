@@ -150,7 +150,7 @@ const EN_MESSAGES: Record<string, string> = {
   图标大小: 'Icon size',
   窗口大小: 'Window size',
   标题行数: 'Title lines',
-  'Windows 原生菜单': 'Windows native menu',
+  系统菜单: 'System menu',
   '图标使用 Windows 原生菜单': 'Use Windows native menu for icons',
   'Shift + 右键': 'Shift + Right-click',
   右键: 'Right-click',
@@ -454,8 +454,8 @@ const EN_MESSAGES: Record<string, string> = {
   'Microsoft PowerPoint 演示文稿': 'Microsoft PowerPoint presentation',
   '新建文件失败：{error}': 'Failed to create file: {error}',
   '设置保存失败，请稍后重试。': 'Failed to save the setting. Please try again later.',
-  '删除图标时同时删除源文件': 'Delete the source file when deleting icons',
-  '删除图标时的源文件处理': 'Source file handling when deleting icons',
+  删除图标时同时删除源文件: 'Delete the source file when deleting icons',
+  删除图标时的源文件处理: 'Source file handling when deleting icons',
   '对所有图标生效：删除图标（包括“新建”创建的和拖入导入的）都会将其指向的源文件移入回收站。':
     'Applies to all icons: deleting any icon (created via "New" or imported) moves its source file to the Recycle Bin.',
   '仅“新建”创建的图标：删除时同时删除源文件':
@@ -468,7 +468,7 @@ const EN_MESSAGES: Record<string, string> = {
     'Disabled: deleting a "New"-created icon only removes it from the icon library; the source file stays in place.',
   '开启后，删除图标会将其指向的源文件移入回收站；关闭时仅从图标库移除。':
     'When enabled, deleting an icon moves the file it points to to the Recycle Bin; when disabled, only the icon library entry is removed.',
-  '新建文件保存路径': 'New file save location',
+  新建文件保存路径: 'New file save location',
   '右键“新建”创建的文件将保存到该目录；未设置时保存到桌面。':
     'Files created from the right-click "New" menu are saved here; defaults to the desktop when unset.',
   '桌面（默认）': 'Desktop (default)',
