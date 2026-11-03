@@ -274,6 +274,16 @@
   transition: none;
 }
 
+/* The resize frame and hit area stay anchored to the surface geometry. This also
+   covers a retained handle after the menu closes or the pointer is released. */
+[data-icon-resize-host]:has(> [data-folder-resize-frame]) > .icon-item > .icon-image {
+  transform: none;
+  filter: none;
+  /* Cancel any in-flight hover transition as soon as the frame appears.
+     Resize dimensions still follow their shared MotionValue clock. */
+  transition: none !important;
+}
+
 .scroll-grid-group-drop-target {
   background: color-mix(in oklch, var(--primary) 12%, transparent);
 }

@@ -166,7 +166,13 @@ export const Icon = memo(function Icon({
 
   return (
     <IconContextMenu icon={icon} disabled={isRenaming}>
-      <div data-icon tabIndex={-1} className="relative overflow-visible" style={{ width, height }}>
+      <div
+        data-icon
+        data-icon-resize-host
+        tabIndex={-1}
+        className="relative overflow-visible"
+        style={{ width, height }}
+      >
         <button
           data-icon
           data-selection-key={selectionKey}
