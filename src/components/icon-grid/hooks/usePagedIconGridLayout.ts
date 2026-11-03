@@ -127,7 +127,11 @@ export function usePagedIconGridLayout({
   const [layoutDimensionsTracker] = useState(() =>
     createLayoutDimensionsTracker({ pageSize: Math.max(1, columns * rows), columns })
   )
-  const readLayoutHydrationEnvironment = useEffectEvent(() => ({ dockEnabled, geometryKey }))
+  const readLayoutHydrationEnvironment = useEffectEvent(() => ({
+    dockEnabled,
+    geometryKey,
+    layoutReady,
+  }))
 
   const itemIds = useMemo(() => items.map(getId), [items])
   const itemLayoutSignature = useMemo(
@@ -246,6 +250,21 @@ export function usePagedIconGridLayout({
       const rawSlots = (persistedForItems?.slots ?? []).map(key =>
         key ? key.replace(/^(desktop|customapp):/, '') : null
       )
+      // A focus refresh updates the library against the already measured in-memory layout.
+      // Publish items and normalized slots together instead of hiding the grid for another RAF.
+      const reuseMeasuredGeometry = hydrationSource === 'memory' && hydrationEnvironment.layoutReady
+      const dimensions = layoutDimensionsTracker.read()
+      const nextSlots = reuseMeasuredGeometry
+        ? compactEmptyPages(
+            normalizeOuterSlots(
+              rawSlots,
+              filterItemsByIds(nextItems, resolveOuterItemIds(nextItemIds, nextDockKeys)),
+              dimensions.pageSize,
+              dimensions.columns
+            ),
+            dimensions.pageSize
+          )
+        : rawSlots
       const hasDims = Boolean(
         persisted?.pageSize && persisted?.columns && persisted.pageSize > 1 && persisted.columns > 1
       )
@@ -275,19 +294,21 @@ export function usePagedIconGridLayout({
           lockedGeometryRef.current = null
         }
       }
-      layoutReadyRef.current = false
-      layoutBaselineRef.current = false
+      if (!reuseMeasuredGeometry) {
+        layoutReadyRef.current = false
+        layoutBaselineRef.current = false
+        setLayoutHydrationTick(tick => tick + 1)
+      }
       itemsRef.current = nextItems
-      outerSlotsRef.current = rawSlots
+      outerSlotsRef.current = nextSlots
       dockKeysRef.current = nextDockKeys
       hotseatEntriesRef.current = nextHotseatEntries
       setItems(nextItems)
-      setOuterSlots(rawSlots)
+      setOuterSlots(nextSlots)
       setDockKeys(nextDockKeys)
       setHotseatEntries(nextHotseatEntries)
       hydratedRef.current = true
       hydratedLayoutResetTokenRef.current = layoutResetToken
-      setLayoutHydrationTick(tick => tick + 1)
     }
 
     void hydrate()

@@ -193,14 +193,16 @@ function harness({ icons, layout, key = layout.geometryKey, read } = fixture()) 
     get value() {
       return output
     },
-    async settle() {
+    async settle({ flushFrames = true } = {}) {
       // Drain render/effect, promise and RAF queues, including asynchronous hydration.
       for (let i = 0; i < 20; i++) {
         if (dirty) render()
         await Promise.resolve()
-        const pending = [...frames.values()]
-        frames.clear()
-        pending.forEach(callback => callback())
+        if (flushFrames) {
+          const pending = [...frames.values()]
+          frames.clear()
+          pending.forEach(callback => callback())
+        }
       }
       assert.equal(dirty, false, 'layout effects must converge')
     },
@@ -312,6 +314,107 @@ test('refresh and explicit history restore still hydrate after geometry was alre
   h.update({ layoutResetToken: 1 })
   await h.settle()
   assert.deepEqual(snapshot(h.value), before)
+})
+
+test('reopening a ready grid keeps every refresh frame visible without waiting for a new measurement', async t => {
+  const data = fixture()
+  const h = harness(data)
+  t.after(() => h.dispose())
+  await h.settle()
+  h.value.setCurrentPage(1)
+  await h.settle()
+  const before = snapshot(h.value)
+  for (let reopen = 0; reopen < 3; reopen++) {
+    const start = h.renders.length
+    // Focus refresh returns new IPC objects, even when icon content is unchanged.
+    h.update({ icons: structuredClone(data.icons) })
+    await h.settle({ flushFrames: false })
+    assert.deepEqual(snapshot(h.value), before)
+    assert.equal(h.value.currentPage, 1)
+    for (const frame of h.renders.slice(start)) {
+      assert.equal(frame.ready, true, 'background refresh must never hide the grid')
+      assert.equal(frame.pageCount, 2, 'page indicators must stay visible too')
+    }
+    await h.settle()
+  }
+})
+
+test('background refresh updates icon artwork and folder children without hiding the measured grid', async t => {
+  const data = fixture()
+  const h = harness(data)
+  t.after(() => h.dispose())
+  await h.settle()
+  const before = snapshot(h.value)
+  const start = h.renders.length
+  h.update({
+    icons: data.icons.map(icon => ({
+      ...icon,
+      name: `Updated ${icon.name}`,
+      icon_base64: 'new-image',
+    })),
+  })
+  await h.settle()
+  assert.deepEqual(snapshot(h.value), before)
+  assert.equal(h.value.items.find(item => item.key === 'a').icon.name, 'Updated a')
+  const folder = h.value.items.find(item => item.kind === 'folder')
+  assert.equal(folder.children[0].icon.icon_base64, 'new-image')
+  assert.ok(h.renders.slice(start).every(frame => frame.ready))
+})
+
+test('background icon additions and removals publish complete slots without a blank frame', async t => {
+  const data = fixture()
+  const h = harness(data)
+  t.after(() => h.dispose())
+  await h.settle()
+  const start = h.renders.length
+  h.update({
+    icons: [
+      ...data.icons.filter(icon => icon.id !== 'last'),
+      { ...data.icons[0], id: 'new', path: 'new', name: 'New' },
+    ],
+  })
+  await h.settle()
+  assert.ok(h.value.outerSlots.includes('new'))
+  assert.ok(!h.value.outerSlots.includes('last'))
+  assert.equal(h.value.outerSlots.indexOf('folder:work'), 2)
+  assert.equal(h.value.outerSlots.indexOf('large'), 6)
+  assert.ok(h.renders.slice(start).every(frame => frame.ready && frame.pageCount > 0))
+  for (const frame of h.renders.slice(start)) {
+    if (frame.slots.includes('last')) continue // The preceding layout is still valid until refresh commits.
+    assert.ok(frame.slots.includes('new'), 'new icons and their positions must publish together')
+  }
+})
+
+test('background refresh preserves live edits while explicit restore still loads and validates saved layout', async t => {
+  const data = fixture()
+  let reads = 0
+  const h = harness({
+    ...data,
+    read: async () => {
+      reads++
+      return structuredClone(data.layout)
+    },
+  })
+  t.after(() => h.dispose())
+  await h.settle()
+  h.value.setItems(
+    h.value.items.map(item => (item.kind === 'folder' ? { ...item, name: 'Edited' } : item))
+  )
+  await h.settle()
+  h.update({ icons: structuredClone(data.icons) })
+  await h.settle()
+  assert.equal(reads, 1)
+  assert.equal(h.value.items.find(item => item.kind === 'folder').name, 'Edited')
+  const start = h.renders.length
+  h.update({ layoutResetToken: 1 })
+  await h.settle()
+  assert.equal(reads, 2)
+  assert.equal(h.value.items.find(item => item.kind === 'folder').name, 'Work')
+  assert.ok(
+    h.renders.slice(start).some(frame => !frame.ready),
+    'external restore still waits for geometry and slots to agree'
+  )
+  assert.equal(h.value.layoutReady, true)
 })
 
 test('explicit window-size setting changes still recompute and persist the grid', async t => {
