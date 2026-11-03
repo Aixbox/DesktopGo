@@ -29,17 +29,8 @@ import { normalizeDockKeys, resolveOuterItemIds } from '../domain/dock'
 import { reconcileHotseatEntries } from '../domain/hotseatLayout'
 import type { DragState, FolderDropFlight, MultiDropFlightItem } from '../state/types'
 import { DROP_FLIGHT_HANDOFF_MS, OUTER_DRAG_RULES } from '../constants'
-import {
-  FOLDER_PREVIEW_GAP,
-  FOLDER_PREVIEW_OUTER_EXPAND,
-  FOLDER_PREVIEW_PADDING,
-  FOLDER_PREVIEW_TOP_OFFSET,
-  getFolderPreviewFrameSize,
-  getFolderPreviewSlotSize,
-} from '../views/folderVisualPolicy'
 import { normalizeOuterSlots } from '../domain/topLevelLayout'
-import { resolveUnscaledGridRect } from './gridMotionGeometry'
-import { resolveDropFlightTarget } from './dropFlightGeometry'
+import { resolveDropFlightTarget, resolveFolderCreateFlightTarget } from './dropFlightGeometry'
 
 interface IconConfigLike {
   imgSize: number
@@ -270,33 +261,6 @@ export function useDragDropCommit({
       )
     })
     commitLayouts(finalized.items, finalized.outerSlots, finalized.dockKeys)
-  }
-
-  const resolveFolderSecondSlotCenter = (
-    targetId: string
-  ): { x: number; y: number; size: number } | null => {
-    const targetNode = tileRefs.current.get(targetId)
-    if (!targetNode) return null
-
-    const rect = resolveUnscaledGridRect(targetNode)
-    const iconSize = iconConfig.imgSize
-    const frameSize = getFolderPreviewFrameSize(iconSize)
-    const slotSize = getFolderPreviewSlotSize(iconSize)
-    const frameLeft = rect.left + (rect.width - frameSize) / 2
-    const frameTop = rect.top + FOLDER_PREVIEW_TOP_OFFSET - FOLDER_PREVIEW_OUTER_EXPAND
-    const slotLeft =
-      frameLeft +
-      FOLDER_PREVIEW_OUTER_EXPAND +
-      FOLDER_PREVIEW_PADDING +
-      slotSize +
-      FOLDER_PREVIEW_GAP
-    const slotTop = frameTop + FOLDER_PREVIEW_OUTER_EXPAND + FOLDER_PREVIEW_PADDING
-
-    return {
-      x: slotLeft + slotSize / 2,
-      y: slotTop + slotSize / 2,
-      size: slotSize,
-    }
   }
 
   const scheduleFolderCreateTransition = (folderId: string | null) => {
@@ -620,7 +584,9 @@ export function useDragDropCommit({
         const targetId = current.folderPreviewTargetId as string
         const sourceItem = source.kind === 'icon' ? source : null
         const slotCenter =
-          targetContext === 'outer' ? resolveFolderSecondSlotCenter(targetId) : null
+          targetContext === 'outer' && sourceItem
+            ? resolveFolderCreateFlightTarget(tileRefs.current.get(targetId), sourceItem.icon)
+            : null
         if (targetContext === 'outer' && sourceItem && slotCenter) {
           if (folderDropFlightTimerRef.current !== null) {
             window.clearTimeout(folderDropFlightTimerRef.current)
@@ -630,7 +596,7 @@ export function useDragDropCommit({
           const flightId = folderDropFlightIdRef.current + 1
           folderDropFlightIdRef.current = flightId
           setFolderPreviewFreezeTargetId(targetId)
-          setHiddenOuterItemIds([current.draggingId, targetId])
+          setHiddenOuterItemIds([current.draggingId])
           setFrozenOuterOrder(
             current.workingOrder.map(slot => (slot === DRAG_HOLE_ID ? null : slot))
           )
@@ -661,9 +627,7 @@ export function useDragDropCommit({
             setFolderDropFlight(prev => (prev && prev.id === flightId ? null : prev))
             setFolderPreviewFreezeTargetId(prev => (prev === targetId ? null : prev))
             setHiddenOuterItemIds(prev =>
-              prev.length === 2 && prev.includes(current.draggingId) && prev.includes(targetId)
-                ? []
-                : prev
+              prev.length === 1 && prev.includes(current.draggingId) ? [] : prev
             )
             setFrozenOuterOrder(prev =>
               prev && prev.some(slot => slot === current.draggingId || slot === targetId)

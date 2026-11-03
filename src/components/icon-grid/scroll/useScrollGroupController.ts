@@ -1,10 +1,10 @@
 import { asFolderChild } from '../model'
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
-import { translate } from '../../../lib/i18n'
 import type { DragState } from '../state/types'
 import type { FolderItem, GridItem, HotseatEntry, ScrollGroupMeta } from '../model'
-import { getId, makeFolderId } from '../model'
+import { getId } from '../model'
 import { clampNumber } from '../domain/geometry'
+import { createFolderFromIcons } from '../domain/folderCreation'
 import { reconcileHotseatEntries } from '../domain/hotseatLayout'
 import {
   commitScrollGroupItemOrder,
@@ -227,13 +227,7 @@ export function useScrollGroupController({
       if (target.children.some(child => child.key === source.key)) return
       replacement = { ...target, children: [...target.children, asFolderChild(source)] }
     } else {
-      replacement = {
-        kind: 'folder',
-        id: makeFolderId(),
-        name: translate('New Folder'),
-        size: '1x1',
-        children: [target, source].map(asFolderChild),
-      }
+      replacement = createFolderFromIcons(target, source)
     }
     const replacementId = getId(replacement)
     const nextItems = itemsRef.current.flatMap(item => {

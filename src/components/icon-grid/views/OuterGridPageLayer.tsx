@@ -238,6 +238,8 @@ export function OuterGridPageLayer({
               reorderAnimationMs={reorderAnimationMs}
               tileWidth={itemWidth}
               tileHeight={itemHeight}
+              span={entry.span}
+              gridGap={gridGap}
             />
           </div>
         ) : entry.item.kind === 'folder' ? (

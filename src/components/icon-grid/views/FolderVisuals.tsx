@@ -1,7 +1,12 @@
 import { AppWindow } from 'lucide-react'
 import { memo } from 'react'
 import type { DesktopIcon } from '../../../types'
+import { ICON_GRID_TILE_PADDING_Y } from '../../../types'
 import { useIconStore } from '../../../stores/iconStore'
+import type { GridSpan } from '../model'
+import { folderSizeFromSpan } from '../domain/folderResizePolicy'
+import { useDocumentDirection } from '../hooks/useDocumentDirection'
+import { getFolderTilePreviewGeometry } from './folderTilePreviewGeometry'
 import {
   DESKTOP_FOLDER_SURFACE_CLASS,
   FOLDER_PREVIEW_EASING,
@@ -12,7 +17,7 @@ import {
   FOLDER_SURFACE_CLASS,
   FOLDER_PREVIEW_ICON_FALLBACK_SCALE,
   FOLDER_PREVIEW_ICON_SCALE,
-  getDesktopSingleSlotFolderMetrics,
+  getDesktopFolderTileMetrics,
   getFolderPreviewArtworkSize,
   getFolderPreviewFrameSize,
   getFolderPreviewSlotSize,
@@ -34,7 +39,84 @@ interface FolderCreatePreviewProps {
   reorderAnimationMs: number
   tileWidth?: number
   tileHeight?: number
+  span?: GridSpan
+  gridGap?: number
   surfaceClassName?: string
+}
+
+function DesktopFolderCreatePreview({
+  active,
+  icon,
+  reorderAnimationMs,
+  tileWidth,
+  tileHeight,
+  span = { cols: 1, rows: 1 },
+  gridGap = 0,
+}: FolderCreatePreviewProps & { tileWidth: number; tileHeight: number }) {
+  const titleLineCount = useIconStore(state => state.titleLineCount)
+  const direction = useDocumentDirection()
+  const folderSize = folderSizeFromSpan(span)
+  const metrics = getDesktopFolderTileMetrics({
+    span,
+    slotWidth: tileWidth,
+    slotHeight: tileHeight,
+    gridGap,
+    folderSize,
+    titleLineCount,
+    surfaceTitleLineCount: 'two',
+  })
+  const { icons } = getFolderTilePreviewGeometry({
+    folderSize,
+    childCount: 2,
+    width: metrics.shapeWidth,
+    height: metrics.shapeHeight,
+    panelBase: metrics.panelBase,
+    rtl: direction === 'rtl',
+  })
+  const left = (metrics.footprintWidth - metrics.shapeWidth) / 2
+  const top = ICON_GRID_TILE_PADDING_Y + (metrics.bodyHeight - metrics.shapeHeight) / 2
+  return (
+    <div
+      className={`pointer-events-none absolute inset-0 z-30 transition-opacity ${active ? 'opacity-100' : 'opacity-0'}`}
+      style={{ transitionDuration: `${reorderAnimationMs}ms` }}
+      aria-hidden="true"
+    >
+      <div
+        data-folder-create-surface
+        className={`${DESKTOP_FOLDER_SURFACE_CLASS} absolute`}
+        style={{
+          position: 'absolute',
+          left,
+          top,
+          width: metrics.shapeWidth,
+          height: metrics.shapeHeight,
+          borderRadius: scaledRadius(metrics.surfaceRadius),
+        }}
+      />
+      {icons.map((slot, index) => (
+        <div
+          key={index}
+          data-folder-create-drop-slot={index === 1 ? '' : undefined}
+          className="absolute flex items-center justify-center"
+          style={{
+            left: left + slot.left,
+            top: top + slot.top,
+            width: slot.size,
+            height: slot.size,
+          }}
+        >
+          {index === 0 ? (
+            <FolderPreviewArtwork
+              icon={icon}
+              size={slot.size}
+              minimumSize={20}
+              fallbackMinimumSize={16}
+            />
+          ) : null}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export const FolderCreatePreview = memo(function FolderCreatePreview({
@@ -44,33 +126,22 @@ export const FolderCreatePreview = memo(function FolderCreatePreview({
   reorderAnimationMs,
   tileWidth,
   tileHeight,
+  span,
+  gridGap,
   surfaceClassName = FOLDER_SURFACE_CLASS,
 }: FolderCreatePreviewProps) {
-  const titleLineCount = useIconStore(state => state.titleLineCount)
-
   if (tileWidth !== undefined && tileHeight !== undefined) {
-    const metrics = getDesktopSingleSlotFolderMetrics(tileWidth, tileHeight, titleLineCount)
-
     return (
-      <div className="pointer-events-none absolute inset-0 z-30" aria-hidden="true">
-        <div
-          className={`${DESKTOP_FOLDER_SURFACE_CLASS} absolute transition-all duration-200 ${
-            active ? 'scale-100 opacity-100' : 'scale-[0.94] opacity-0'
-          }`}
-          style={{
-            left: `${metrics.surfaceLeft}px`,
-            top: `${metrics.surfaceTop}px`,
-            width: `${metrics.surfaceSize}px`,
-            height: `${metrics.surfaceSize}px`,
-            borderRadius: scaledRadius(metrics.surfaceRadius),
-            transitionDuration: `${reorderAnimationMs}ms`,
-          }}
-        >
-          <div className="absolute inset-0 flex items-center justify-center">
-            <FolderIconVisual icons={[icon]} imgSize={metrics.previewSize} withSurface={false} />
-          </div>
-        </div>
-      </div>
+      <DesktopFolderCreatePreview
+        active={active}
+        icon={icon}
+        imgSize={imgSize}
+        reorderAnimationMs={reorderAnimationMs}
+        tileWidth={tileWidth}
+        tileHeight={tileHeight}
+        span={span}
+        gridGap={gridGap}
+      />
     )
   }
 

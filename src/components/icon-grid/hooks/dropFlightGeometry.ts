@@ -1,6 +1,31 @@
 import type { GridItem } from '../model'
+import type { DesktopIcon } from '../../../types'
 import { isMultiCellGridItem } from '../model'
-import { resolveUntransformedGridRect } from './gridMotionGeometry'
+import { resolveUnscaledGridRect, resolveUntransformedGridRect } from './gridMotionGeometry'
+import {
+  FOLDER_PREVIEW_ICON_FALLBACK_SCALE,
+  FOLDER_PREVIEW_ICON_SCALE,
+  getFolderPreviewArtworkSize,
+} from '../domain/folderPreviewMetrics'
+
+/** The rendered preview owns the incoming child's destination for every folder size. */
+export function resolveFolderCreateFlightTarget(
+  tileNode: HTMLElement | undefined,
+  icon: DesktopIcon
+) {
+  const slot = tileNode?.querySelector<HTMLElement>('[data-folder-create-drop-slot]')
+  if (!slot) return null
+  const rect = resolveUnscaledGridRect(slot)
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+    size: getFolderPreviewArtworkSize(
+      rect.width,
+      icon.icon_base64 ? FOLDER_PREVIEW_ICON_SCALE : FOLDER_PREVIEW_ICON_FALLBACK_SCALE,
+      icon.icon_base64 ? 20 : 16
+    ),
+  }
+}
 
 /** Resolve the overlay's unscaled box and its scale at the final, post-drop grid position. */
 export function resolveDropFlightTarget(

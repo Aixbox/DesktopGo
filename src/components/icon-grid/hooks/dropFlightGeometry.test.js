@@ -249,3 +249,44 @@ for (const [mode, createHook] of Object.entries(hooks)) {
     })
   }
 }
+
+for (const [mode, createHook] of Object.entries(hooks)) {
+  test(`${mode}: folder merge keeps the target preview visible until committing its original size`, t => {
+    const { globals, timers } = installDom(t)
+    for (const size of ['1x1', '1x2', '2x1', '2x2']) {
+      const source = icon('source', '2x2')
+      const target = icon('target', size)
+      const { props, session } = dropFixture([source, target], { editing: false, measuredScale: 1 })
+      session.draggingIds = ['source']
+      session.folderPreviewTargetId = 'target'
+      const slotRect = { left: 320, top: 240, width: 32, height: 32 }
+      props.tileRefs.current.set('target', {
+        querySelector: selector => {
+          assert.equal(selector, '[data-folder-create-drop-slot]')
+          return { getBoundingClientRect: () => slotRect, closest: () => null }
+        },
+      })
+      const react = reactHarness()
+      const hook = createHook(
+        { react: react.react, 'framer-motion': { useReducedMotion: () => false } },
+        globals
+      )
+      assert.equal(react.render(hook, props).finishDrag(1), true)
+      const pending = react.render(hook, props)
+      assert.equal(pending.folderPreviewFreezeTargetId, 'target')
+      assert.equal(pending.hiddenOuterItemIds.includes('target'), false)
+      assert.equal(pending.folderDropFlight.endX, 336)
+      assert.equal(pending.folderDropFlight.endY, 256)
+      assert.equal(props.itemsRef.current.includes(target), true)
+      timers.shift()()
+      const folder = props.itemsRef.current.find(item => item.kind === 'folder')
+      assert.equal(folder.size, size)
+      assert.equal(props.outerSlotsRef.current[1], getId(folder))
+      const committed = react.render(hook, props)
+      assert.equal(committed.folderDropFlight, null)
+      assert.equal(committed.folderPreviewFreezeTargetId, null)
+      assert.equal(committed.hiddenOuterItemIds.length, 0)
+      timers.splice(0)
+    }
+  })
+}

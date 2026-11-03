@@ -378,6 +378,8 @@ export function ScrollableOuterGridView({
                                     reorderAnimationMs={reorderAnimationMs}
                                     tileWidth={itemWidth}
                                     tileHeight={itemHeight}
+                                    span={entry.span}
+                                    gridGap={gridGap}
                                   />
                                 </div>
                               ) : entry.item.kind === 'folder' ? (

@@ -11,6 +11,9 @@ import * as previewPolicy from './folderPreviewPolicy.ts'
 import * as ghostMotion from './dragGhostMotion.ts'
 import * as stackMotion from './stackedIconMotion.ts'
 import * as iconTileMetrics from './iconTileMetrics.ts'
+import * as folderTileGeometry from './folderTilePreviewGeometry.ts'
+import * as folderResizePolicy from '../domain/folderResizePolicy.ts'
+import * as folderPreviewTheme from '../domain/folderPreviewThemePolicy.ts'
 import {
   removeElementTranslateFromRect,
   resolveRectAtUnitScale,
@@ -300,3 +303,96 @@ for (const size of ['1x1', '1x2', '2x1', '2x2']) {
     }
   })
 }
+
+test('folder creation preview retains enlarged icon bounds and matches the committed child slots', () => {
+  for (const titleLineCount of ['one', 'two']) {
+    for (const direction of ['ltr', 'rtl']) {
+      const { FolderCreatePreview } = loadModule('./FolderVisuals.tsx', {
+        ...sharedModules,
+        react: { ...require('react'), memo: component => component },
+        '../../../stores/iconStore': { useIconStore: select => select({ titleLineCount }) },
+        '../hooks/useDocumentDirection': { useDocumentDirection: () => direction },
+        '../domain/folderResizePolicy': folderResizePolicy,
+        '../domain/folderPreviewThemePolicy': folderPreviewTheme,
+        './folderTilePreviewGeometry': folderTileGeometry,
+      })
+      for (const size of ['1x1', '1x2', '2x1', '2x2']) {
+        const span = { cols: Number(size[0]), rows: Number(size[2]) }
+        const metrics = visualPolicy.getDesktopFolderTileMetrics({
+          span,
+          slotWidth: 104,
+          slotHeight: 118,
+          gridGap: 12,
+          folderSize: size,
+          titleLineCount,
+          surfaceTitleLineCount: 'two',
+        })
+        const props = {
+          span,
+          tileWidth: 104,
+          tileHeight: 118,
+          gridGap: 12,
+          active: true,
+          icon: { name: 'Target', icon_base64: 'image' },
+          imgSize: 64,
+          reorderAnimationMs: 220,
+        }
+        const preview = nodes(FolderCreatePreview(props))
+        const surface = rectFromStyle(
+          preview.find(node => 'data-folder-create-surface' in node.props)
+        )
+        const committed = nodes(
+          FolderTileContents({
+            folder: { kind: 'folder', id: 'new', name: 'Folder', size, children: [] },
+            metrics,
+            span,
+            titleLineCount,
+          })
+        )
+        const committedSurface = rectFromStyle(
+          committed.find(node => 'data-folder-body-hitbox' in node.props)
+        )
+        assert.deepEqual(surface, committedSurface)
+        if (size !== '1x1') {
+          const iconMetrics = iconTileMetrics.getIconTileMetrics({
+            span,
+            slotWidth: 104,
+            slotHeight: 118,
+            gridGap: 12,
+            imageSize: 64,
+            titleLineCount,
+          })
+          assert.equal(surface.width, iconMetrics.shapeWidth)
+          assert.equal(surface.height, iconMetrics.shapeHeight)
+        }
+        const geometry = folderTileGeometry.getFolderTilePreviewGeometry({
+          folderSize: size,
+          childCount: 2,
+          width: metrics.shapeWidth,
+          height: metrics.shapeHeight,
+          panelBase: metrics.panelBase,
+          rtl: direction === 'rtl',
+        })
+        const slot = geometry.icons[1]
+        const dropSlot = rectFromStyle(
+          preview.find(node => node.props['data-folder-create-drop-slot'] !== undefined)
+        )
+        assert.deepEqual(dropSlot, {
+          left: surface.left + slot.left,
+          top: surface.top + slot.top,
+          width: slot.size,
+          height: slot.size,
+        })
+        const first = preview.find(node => node.type === 'img')
+        assert.equal(
+          first.props.style.width,
+          visualPolicy.getFolderPreviewArtworkSize(
+            geometry.icons[0].size,
+            visualPolicy.FOLDER_PREVIEW_ICON_SCALE,
+            20
+          )
+        )
+      }
+    }
+  }
+})

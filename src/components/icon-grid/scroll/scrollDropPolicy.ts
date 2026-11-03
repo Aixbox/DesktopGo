@@ -1,7 +1,5 @@
-import { asFolderChild } from '../model'
-import type { FolderItem, GridItem } from '../model'
-import { getGridItemSpan, getId, makeFolderId } from '../model'
-import { translate } from '../../../lib/i18n'
+import type { GridItem } from '../model'
+import { getGridItemSpan, getId } from '../model'
 import { clampNumber } from '../domain/geometry'
 import { DRAG_HOLE_ID } from '../domain/slots'
 import type { DragState } from '../state/types'
@@ -10,61 +8,7 @@ import { planFolderDropTransaction } from '../domain/folderDropTransaction'
 import type { FolderLayoutProfile } from '../domain/folderLayout'
 import { compactOuterSlotsWithinPages } from './scrollTopLevelLayout'
 
-export const applyFolderCreateFromSession = (
-  base: GridItem[],
-  session: DragState
-): { items: GridItem[]; slots: Array<string | null> } => {
-  const baseSlots = session.workingOrder.map(slot => (slot === DRAG_HOLE_ID ? null : slot))
-  const map = new Map<string, GridItem>()
-  base.forEach(item => map.set(getId(item), item))
-  const sourceExistsInBase = map.has(session.draggingId)
-  map.set(session.draggingId, session.draggingItem)
-  const sourceItem = map.get(session.draggingId)
-  const targetId = session.folderPreviewTargetId as string
-  const targetItem = map.get(targetId)
-  if (!sourceItem || !targetItem || sourceItem.kind !== 'icon' || targetItem.kind !== 'icon') {
-    return { items: base, slots: baseSlots }
-  }
-
-  const targetSlotIndex = baseSlots.indexOf(targetId)
-  if (targetSlotIndex < 0) return { items: base, slots: baseSlots }
-  const folder: FolderItem = {
-    kind: 'folder',
-    id: makeFolderId(),
-    name: translate('New Folder'),
-    size: '1x1',
-    children: [targetItem, sourceItem].map(asFolderChild),
-  }
-  const folderId = getId(folder)
-  map.delete(session.draggingId)
-  map.delete(targetId)
-  map.set(folderId, folder)
-  const nextSlots = [...baseSlots]
-  const sourceSlotIndex = nextSlots.indexOf(session.draggingId)
-  if (sourceSlotIndex >= 0) {
-    nextSlots[sourceSlotIndex] = null
-  }
-  nextSlots[targetSlotIndex] = folderId
-  const nextItems: GridItem[] = []
-  let insertedFolder = false
-  base.forEach(item => {
-    const id = getId(item)
-    if (id === session.draggingId) {
-      if (!sourceExistsInBase) {
-        nextItems.push(item)
-      }
-      return
-    }
-    if (id === targetId) {
-      nextItems.push(folder)
-      insertedFolder = true
-      return
-    }
-    nextItems.push(item)
-  })
-  if (!insertedFolder) return { items: base, slots: baseSlots }
-  return { items: nextItems, slots: nextSlots }
-}
+export { applyFolderCreateFromSession } from '../domain/folderCreation'
 
 export const applyAddToFolderFromSession = (
   base: GridItem[],
