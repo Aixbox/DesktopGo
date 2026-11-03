@@ -38,6 +38,7 @@ interface OuterGridViewProps {
   gridGap: number
   pageCellCount: number
   currentPage: number
+  pageOrder: Array<string | null>
   pageAnchorEntries: PageAnchorEntry[]
   dragContext: 'outer' | 'folder' | null
   dragPreviewSlotIndex: number | null
@@ -104,6 +105,7 @@ export function OuterGridView({
   pageCellCount,
   currentPage,
   pageAnchorEntries,
+  pageOrder,
   dragContext,
   dragPreviewSlotIndex,
   dragFolderPreviewTargetId,
@@ -242,6 +244,7 @@ export function OuterGridView({
               <OuterGridPageLayer
                 data={currentPageData}
                 interactive
+                pageOrder={pageOrder}
                 gridRef={gridRef}
                 columns={columns}
                 rows={rows}

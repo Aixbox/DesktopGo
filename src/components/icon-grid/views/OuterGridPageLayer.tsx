@@ -1,3 +1,4 @@
+import { useCrossPageReorder } from '../hooks/useCrossPageReorder'
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, useSortable } from '@dnd-kit/sortable'
 import {
@@ -79,6 +80,7 @@ function KeyboardGridCell({
 
 interface OuterGridPageLayerProps {
   data: OuterGridPageData
+  pageOrder?: Array<string | null>
   interactive: boolean
   gridRef?: Ref<HTMLDivElement>
   columns: number
@@ -108,10 +110,12 @@ interface OuterGridPageLayerProps {
 }
 
 const noop = () => undefined
+const EMPTY_ORDER: Array<string | null> = []
 
 export function OuterGridPageLayer({
   data,
   interactive,
+  pageOrder = EMPTY_ORDER,
   gridRef,
   columns,
   rows,
@@ -138,6 +142,17 @@ export function OuterGridPageLayer({
   bindTileRef,
   reorderAnimationMs,
 }: OuterGridPageLayerProps) {
+  const transfers = useCrossPageReorder(
+    {
+      page: data.page,
+      pageSize: pageCellCount,
+      columns,
+      entries: data.entries,
+      order: interactive ? pageOrder : EMPTY_ORDER,
+      hiddenIds: data.hiddenOuterItemIds,
+    },
+    { itemWidth, itemHeight, gap: gridGap }
+  )
   const highlightedOuterItemIdSet = useMemo(
     () => new Set(data.highlightedOuterItemIds),
     [data.highlightedOuterItemIds]
@@ -159,6 +174,8 @@ export function OuterGridPageLayer({
   }, [columns, data.entries])
 
   const renderEntry = (entry: PageAnchorEntry, sortable?: KeyboardSortableGridItemBindings) => {
+    const inFlight = transfers.flightIds.has(entry.id)
+    const itemInteractive = interactive && !inFlight
     const hideItem = hiddenOuterItemIdSet.has(entry.id)
     const highlightedItem = highlightedOuterItemIdSet.has(entry.id)
     const folderPreview =
@@ -168,12 +185,16 @@ export function OuterGridPageLayer({
     const tile = (
       <div
         ref={node => {
+          transfers.bindNode(entry.id, node)
           if (!interactive) return
-          sortable?.setNodeRef(node)
-          bindTileRef(entry.id, node)
+          sortable?.setNodeRef(itemInteractive ? node : null)
+          bindTileRef(entry.id, itemInteractive ? node : null)
         }}
-        {...(interactive ? sortable?.attributes : {})}
-        {...(interactive ? sortable?.listeners : {})}
+        inert={inFlight ? true : undefined}
+        aria-hidden={inFlight ? true : undefined}
+        data-cross-page-motion={inFlight ? entry.id : undefined}
+        {...(itemInteractive ? sortable?.attributes : {})}
+        {...(itemInteractive ? sortable?.listeners : {})}
         className={`relative overflow-visible justify-self-center self-start ${
           hideItem ? 'opacity-0' : 'opacity-100 transition-opacity duration-150'
         }`}
@@ -187,8 +208,10 @@ export function OuterGridPageLayer({
         {entry.item.kind === 'icon' ? (
           <div
             className="relative touch-none"
-            onPointerDown={interactive ? event => onTilePointerDown(event, entry.id) : undefined}
-            onClickCapture={interactive ? onTileClickCapture : undefined}
+            onPointerDown={
+              itemInteractive ? event => onTilePointerDown(event, entry.id) : undefined
+            }
+            onClickCapture={itemInteractive ? onTileClickCapture : undefined}
           >
             <div
               className={`transition-opacity duration-150 ${
@@ -201,10 +224,10 @@ export function OuterGridPageLayer({
                 slotWidth={itemWidth}
                 slotHeight={itemHeight}
                 gridGap={gridGap}
-                interactive={interactive && !folderPreview}
+                interactive={itemInteractive && !folderPreview}
                 selectionMode={selectionMode}
                 selected={selectedSet.has(entry.item.key)}
-                onToggleSelect={interactive ? onToggleSelectIcon : noop}
+                onToggleSelect={itemInteractive ? onToggleSelectIcon : noop}
                 highlighted={highlightedItem}
               />
             </div>
@@ -228,19 +251,19 @@ export function OuterGridPageLayer({
             folderOpen={openFolderId === entry.item.id}
             sharedLayoutActive={activeFolderSharedLayoutId === entry.item.id}
             selectionMode={selectionMode}
-            onPointerDown={interactive ? event => onTilePointerDown(event, entry.id) : noop}
-            onClickCapture={interactive ? onTileClickCapture : noop}
-            onOpenFolder={interactive ? onOpenFolder : noop}
-            onLaunchIcon={interactive ? onLaunchIcon : noop}
-            onResizeFolder={interactive ? onResizeFolder : noop}
+            onPointerDown={itemInteractive ? event => onTilePointerDown(event, entry.id) : noop}
+            onClickCapture={itemInteractive ? onTileClickCapture : noop}
+            onOpenFolder={itemInteractive ? onOpenFolder : noop}
+            onLaunchIcon={itemInteractive ? onLaunchIcon : noop}
+            onResizeFolder={itemInteractive ? onResizeFolder : noop}
             resizePreviewSize={
-              interactive && folderResizePreview?.folderId === entry.item.id
+              itemInteractive && folderResizePreview?.folderId === entry.item.id
                 ? folderResizePreview.size
                 : null
             }
-            onPreviewFolderResize={interactive ? onPreviewFolderResize : undefined}
-            onCancelFolderResize={interactive ? onCancelFolderResize : undefined}
-            onDissolveFolder={interactive ? onDissolveFolder : noop}
+            onPreviewFolderResize={itemInteractive ? onPreviewFolderResize : undefined}
+            onCancelFolderResize={itemInteractive ? onCancelFolderResize : undefined}
+            onDissolveFolder={itemInteractive ? onDissolveFolder : noop}
           />
         ) : (
           <WidgetTile
@@ -249,7 +272,7 @@ export function OuterGridPageLayer({
             slotWidth={itemWidth}
             slotHeight={itemHeight}
             gridGap={gridGap}
-            onResize={interactive ? onResizeWidget : undefined}
+            onResize={itemInteractive ? onResizeWidget : undefined}
           />
         )}
       </div>
@@ -257,7 +280,7 @@ export function OuterGridPageLayer({
 
     if (!interactive || sortable) return tile
     return (
-      <KeyboardSortableGridItem key={entry.id} id={entry.id} disabled={selectionMode}>
+      <KeyboardSortableGridItem key={entry.id} id={entry.id} disabled={selectionMode || inFlight}>
         {bindings => renderEntry(entry, bindings)}
       </KeyboardSortableGridItem>
     )
@@ -302,8 +325,12 @@ export function OuterGridPageLayer({
       ) : null}
 
       {interactive ? (
-        <SortableContext items={data.entries.map(entry => entry.id)}>
-          {data.entries.map(entry => renderEntry(entry))}
+        <SortableContext
+          items={data.entries
+            .filter(entry => !transfers.flightIds.has(entry.id))
+            .map(entry => entry.id)}
+        >
+          {transfers.entries.map(entry => renderEntry(entry))}
         </SortableContext>
       ) : (
         data.entries.map(entry => <Fragment key={entry.id}>{renderEntry(entry)}</Fragment>)

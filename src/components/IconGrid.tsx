@@ -701,6 +701,7 @@ export function IconGrid({
             pageCellCount={pageSize}
             currentPage={currentPage}
             pageAnchorEntries={pageAnchorEntries}
+            pageOrder={renderOrder}
             dragContext={dragState?.context === 'dock' ? null : (dragState?.context ?? null)}
             dragPreviewSlotIndex={
               dragState?.context === 'outer'

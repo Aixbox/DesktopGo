@@ -30,8 +30,6 @@ export function usePagedGridReorderAnimationRefs() {
       positions.set(id, { left: rect.left, top: rect.top })
     })
     pendingGridFlipPositionsRef.current = positions
-    gridFlipAnimationsRef.current.forEach(animation => animation.cancel())
-    gridFlipAnimationsRef.current.clear()
   }, [])
 
   return {
@@ -98,6 +96,10 @@ export function usePagedGridReorderAnimations({
   useLayoutEffect(() => {
     const previousPositions = pendingGridFlipPositionsRef.current
     pendingGridFlipPositionsRef.current = null
+    if (previousPositions) {
+      gridFlipAnimationsRef.current.forEach(animation => animation.cancel())
+      gridFlipAnimationsRef.current.clear()
+    }
     const isNewDropImpact =
       dropImpact !== null && dropImpact.sequence !== lastDropImpactSequenceRef.current
     if (isNewDropImpact && dropImpact) {
