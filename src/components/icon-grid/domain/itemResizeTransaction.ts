@@ -25,49 +25,11 @@ export interface ItemResizePlan {
   anchorIndex: number
 }
 
-const insertEmptyPageWhenResizeWouldOverflow = ({
-  slots,
-  anchorIndex,
-  nextSpan,
-  pageSize,
-  columns,
-}: {
-  slots: Array<string | null>
-  anchorIndex: number
-  nextSpan: { cols: number; rows: number }
-  pageSize: number
-  columns: number
-}) => {
-  const footprint = getFootprintIndices(anchorIndex, nextSpan, columns, pageSize)
-  if (!footprint) return slots
-
-  const footprintSet = new Set(footprint)
-  const pageStart = Math.floor(anchorIndex / pageSize) * pageSize
-  const pageEnd = pageStart + pageSize
-  let displacedCount = 0
-  for (let index = pageStart; index < pageEnd; index += 1) {
-    if (!footprintSet.has(index)) continue
-    const slot = slots[index]
-    if (slot) displacedCount += 1
-  }
-
-  let nextPageVacant = 0
-  for (let index = pageEnd; index < pageEnd + pageSize; index += 1) {
-    if (slots[index] === undefined || slots[index] === null) nextPageVacant += 1
-  }
-  if (displacedCount <= nextPageVacant) return slots
-
-  return [
-    ...slots.slice(0, pageEnd),
-    ...Array.from({ length: pageSize }, () => null as string | null),
-    ...slots.slice(pageEnd),
-  ]
-}
-
 /**
  * Build the ColorOS-style temporary resize snapshot. The source tile is
  * kept at its current anchor, growth is clamped to the page edges, and any
- * displaced neighbors are reflowed into a new temporary order. Callers can
+ * displaced neighbors use the nearest fitting vacancy on their current page
+ * before spilling into later pages. Unaffected anchors stay fixed. Callers can
  * render this plan while the pointer is down and discard it on cancel.
  */
 export const planItemResize = ({
@@ -113,16 +75,9 @@ export const planItemResize = ({
   const nextOuterItems = filterItemsByIds(nextItems, outerIds)
   const anchorIndex = sourceAnchorIndex
   const preferredAnchorById = new Map([[entryId, anchorIndex]])
-  const temporarySlots = insertEmptyPageWhenResizeWouldOverflow({
-    slots: [...slots],
-    anchorIndex,
-    nextSpan,
-    pageSize,
-    columns,
-  })
-  const normalizedSlots = normalizeOuterSlots(temporarySlots, nextOuterItems, pageSize, columns, {
+  const normalizedSlots = normalizeOuterSlots(slots, nextOuterItems, pageSize, columns, {
     preferredAnchorById,
-    spillStrategy: 'row-major-forward',
+    spillStrategy: 'same-page-first',
   })
 
   return {

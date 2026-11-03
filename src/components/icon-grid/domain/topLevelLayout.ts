@@ -36,7 +36,7 @@ interface NormalizeOuterSlotsOptions {
   preferredAnchorById?: Map<string, number>
   fallbackOriginAnchorById?: Map<string, number>
   preserveSourceAnchors?: boolean
-  spillStrategy?: 'nearest' | 'row-major-forward'
+  spillStrategy?: 'nearest' | 'row-major-forward' | 'same-page-first'
 }
 
 interface ResizeAnchorCandidate {
@@ -365,6 +365,11 @@ export const normalizeOuterSlots = (
   const findNearestAvailableAnchorIndex = (span: GridSpan, originIndex: number): number | null => {
     if (originIndex < 0) return null
 
+    // Resize may use holes above/left, but must not move neighbors onto an earlier page.
+    const searchStart =
+      options?.spillStrategy === 'same-page-first'
+        ? getPageStartBySlotIndex(originIndex, safePageSize)
+        : 0
     let searchLimit = Math.max(anchors.length, safePageSize)
     const minimumLimit = getPageStartBySlotIndex(originIndex, safePageSize) + safePageSize
     if (searchLimit < minimumLimit) {
@@ -375,7 +380,7 @@ export const normalizeOuterSlots = (
       let bestAnchorIndex: number | null = null
       let bestScore: [number, number, number] | null = null
 
-      for (let index = 0; index < searchLimit; index += 1) {
+      for (let index = searchStart; index < searchLimit; index += 1) {
         ensureAnchorCapacity(index)
         if (anchors[index]) continue
         if (!canPlaceAtIndex(occupied, index, span, safeColumns, safePageSize)) continue
@@ -394,7 +399,7 @@ export const normalizeOuterSlots = (
       searchLimit += safePageSize
     }
 
-    for (let index = 0; index < MAX_ANCHOR_SCAN_INDEX; index += 1) {
+    for (let index = searchStart; index < MAX_ANCHOR_SCAN_INDEX; index += 1) {
       ensureAnchorCapacity(index)
       if (anchors[index]) continue
       if (!canPlaceAtIndex(occupied, index, span, safeColumns, safePageSize)) continue

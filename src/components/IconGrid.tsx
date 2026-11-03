@@ -210,6 +210,9 @@ export function IconGrid({
     items.forEach(item => map.set(getId(item), item))
     return map
   }, [items])
+  const reorderAnimationRefs = usePagedGridReorderAnimationRefs()
+  const { tileRefs, folderTileRefs, dockItemRefs, capturePagedGridItemPositions } =
+    reorderAnimationRefs
   const itemResize = useGridItemResizeController({
     items,
     itemsRef,
@@ -221,6 +224,7 @@ export function IconGrid({
     columns,
     pageSizeRef,
     layoutDimensionsTracker,
+    onBeforeLayoutChange: capturePagedGridItemPositions,
   })
   const { plan: folderResizePreviewPlan, renderItemById } = itemResize
   const dockKeyboard = useDockKeyboardReorder({
@@ -264,9 +268,6 @@ export function IconGrid({
   })
   const selectedSet = useMemo(() => new Set(selectedIconKeys), [selectedIconKeys])
   const iconConfig = ICON_SIZE_CONFIG[iconSize]
-  const reorderAnimationRefs = usePagedGridReorderAnimationRefs()
-  const { tileRefs, folderTileRefs, dockItemRefs, capturePagedGridItemPositions } =
-    reorderAnimationRefs
   const {
     dragState,
     dragRef,
