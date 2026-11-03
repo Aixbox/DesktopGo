@@ -14,7 +14,7 @@ import { getIconGridLayoutRowHeight, getIconGridRowHeight, ICON_SIZE_CONFIG } fr
 import { useIconStore } from '../stores/iconStore'
 import type { GridItem, IconItem } from './icon-grid/model'
 import { getId } from './icon-grid/model'
-import { DRAG_HOLE_ID } from './icon-grid/domain/slots'
+import { DRAG_HOLE_ID, getPageCountBySlots } from './icon-grid/domain/slots'
 import { useIconGridDragWorkflow } from './icon-grid/hooks/useIconGridDragWorkflow'
 import {
   usePagedIconGridLayout,
@@ -143,6 +143,7 @@ export function IconGrid({
     activeDockKeys,
     outerItemIds,
     pageSize,
+    layoutReady,
     handleResizeWidget,
     folderLayoutProfile,
   } = usePagedIconGridLayout({
@@ -332,7 +333,7 @@ export function IconGrid({
     currentPageRef,
     setCurrentPage,
     pageSizeRef,
-    pageCount: Math.max(1, Math.ceil(Math.max(pageSize, outerSlots.length) / pageSize)),
+    pageCount: getPageCountBySlots(outerSlots, pageSize, layoutReady),
     openFolderId: visibleOpenFolderId,
     setOpenFolderId,
   })
@@ -493,8 +494,7 @@ export function IconGrid({
     }
   }, [dragRef, visibleOpenFolderId])
 
-  const outerRenderCount = Math.max(pageSize, renderOrder.length)
-  const pageCount = Math.max(1, Math.ceil(outerRenderCount / pageSize))
+  const pageCount = getPageCountBySlots(renderOrder, pageSize, layoutReady)
   usePageBounds(currentPage, pageCount, hoverPage, setCurrentPage, setHoverPage, currentPageRef)
 
   const stepPageByWheelDelta = useWheelPageStep({
@@ -656,7 +656,7 @@ export function IconGrid({
       return [{ id, icon: item.icon, size: item.size, sourceCenter }]
     })
   }, [dragState, draggedFolderChildSelections, itemById])
-  const canGoLeft = currentPage > 0
+  const canGoLeft = layoutReady && currentPage > 0
   const canGoRight = currentPage < pageCount - 1
   return (
     <LayoutGroup id="folder-shell-layout">
@@ -667,6 +667,7 @@ export function IconGrid({
            一个搜索框高（44px）。items-start：图标少时网格贴顶排列，
            不再被垂直居中推到窗口中部。 */
         data-edge-paging-viewport
+        aria-busy={!layoutReady}
         data-single-item-dragging={isSingleDragActive ? 'true' : 'false'}
         className={`relative h-full w-full overflow-x-clip px-16 pt-28 ${dockEnabled ? 'pb-32' : 'pb-12'}`}
         onWheel={handleWheelPageSwitch}
@@ -685,7 +686,11 @@ export function IconGrid({
           folderOpen={!!openFolder}
           paging={edgePaging}
         />
-        <div ref={containerRef} className="flex h-full w-full items-start justify-center">
+        <div
+          ref={containerRef}
+          className="flex h-full w-full items-start justify-center"
+          style={{ visibility: layoutReady ? 'visible' : 'hidden' }}
+        >
           <OuterGridView
             edgePaging={edgePaging}
             gridRef={gridRef}

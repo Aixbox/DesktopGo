@@ -6,6 +6,7 @@ import ts from 'typescript'
 import * as layoutStore from '../services/layoutStore.ts'
 import { buildGridGeometryKey } from '../domain/gridGeometry.ts'
 import { buildPersistedItemCoordinates } from '../domain/topLevelLayout.ts'
+import { getPageCountBySlots } from '../domain/slots.ts'
 
 const source = readFileSync(new URL('./usePagedIconGridLayout.ts', import.meta.url), 'utf8')
 const compiled = ts.transpileModule(source, {
@@ -65,6 +66,7 @@ function harness({ icons, layout, key = layout.geometryKey, read } = fixture()) 
     listeners = new Map()
   const container = { clientWidth: 1120, clientHeight: 480 }
   const writes = []
+  const renders = []
   let cursor = 0,
     dirty = true,
     frameId = 0,
@@ -173,6 +175,13 @@ function harness({ icons, layout, key = layout.geometryKey, read } = fixture()) 
     cursor = 0
     dirty = false
     output = exports.usePagedIconGridLayout(params)
+    renders.push({
+      ready: output.layoutReady,
+      pageCount: getPageCountBySlots(output.outerSlots, output.pageSize, output.layoutReady),
+      slots: [...output.outerSlots],
+      columns: output.columns,
+      pageSize: output.pageSize,
+    })
     output.containerRef.current = container
     output.gridRef.current = container
     for (const effect of effects.splice(0)) effect()
@@ -180,6 +189,7 @@ function harness({ icons, layout, key = layout.geometryKey, read } = fixture()) 
   return {
     params,
     writes,
+    renders,
     get value() {
       return output
     },
@@ -318,4 +328,89 @@ test('explicit window-size setting changes still recompute and persist the grid'
   assert.ok(h.value.outerSlots.includes('last'))
   assert.equal(h.writes.at(-1)[3], h.value.pageSize)
   assert.equal(h.writes.at(-1)[4], h.value.columns)
+})
+
+test('remounting the paged grid never exposes one page per saved slot during hydration', async t => {
+  // Switching scroll → paged mounts a fresh hook while the stored slots arrive asynchronously.
+  for (let mount = 0; mount < 3; mount++) {
+    const h = harness()
+    t.after(() => h.dispose())
+    await h.settle()
+    assert.equal(h.renders.at(-1).pageCount, 2)
+    assert.ok(h.renders.some(frame => !frame.ready))
+    assert.ok(h.renders.some(frame => frame.ready))
+    for (const frame of h.renders) {
+      assert.ok([0, 2].includes(frame.pageCount), `transient page count: ${frame.pageCount}`)
+      if (frame.ready) {
+        assert.equal(frame.columns, 8)
+        assert.equal(frame.pageSize, 32)
+      }
+    }
+  }
+})
+
+test('page controls wait for normalization when saved and current configurations differ', async t => {
+  const h = harness({ ...fixture(), key: geometryKey(1600, 900, 1, 'large') })
+  t.after(() => h.dispose())
+  h.resize(700, 400)
+  await h.settle()
+  const final = h.renders.at(-1)
+  assert.equal(final.ready, true)
+  for (const frame of h.renders.filter(value => value.ready)) {
+    assert.equal(frame.pageCount, final.pageCount)
+    assert.deepEqual(frame.slots, final.slots)
+    assert.equal(frame.pageSize, final.pageSize)
+  }
+})
+
+test('zero-sized mounting container keeps pagination unavailable until measurement succeeds', async t => {
+  const h = harness()
+  t.after(() => h.dispose())
+  h.resize(0, 0)
+  await h.settle()
+  assert.equal(h.renders.at(-1).pageCount, 0)
+  h.resize(1120, 480)
+  await h.settle()
+  assert.equal(h.renders.at(-1).pageCount, 2)
+  assert.equal(h.value.layoutReady, true)
+})
+
+test('pending pagination preserves the current page and only clamps once real pages are known', () => {
+  const exports = {}
+  const source = readFileSync(new URL('./usePageBounds.ts', import.meta.url), 'utf8')
+  runInNewContext(
+    ts.transpileModule(source, {
+      compilerOptions: { module: ts.ModuleKind.CommonJS },
+    }).outputText,
+    {
+      exports,
+      require: () => ({ useEffect: callback => callback() }),
+    }
+  )
+  const pageChanges = [],
+    hoverChanges = []
+  const pageRef = { current: 3 }
+  const apply = count =>
+    exports.usePageBounds(
+      3,
+      count,
+      3,
+      page => pageChanges.push(page),
+      page => hoverChanges.push(page),
+      pageRef
+    )
+  apply(0)
+  assert.equal(pageRef.current, 3)
+  assert.deepEqual(pageChanges, [])
+  assert.deepEqual(hoverChanges, [])
+  apply(2)
+  assert.equal(pageRef.current, 1)
+  assert.deepEqual(pageChanges, [1])
+  assert.deepEqual(hoverChanges, [null])
+})
+
+test('ready empty layouts retain one page and drag previews may still add a trailing page', () => {
+  assert.equal(getPageCountBySlots([], 32, true), 1)
+  assert.equal(getPageCountBySlots(Array(96).fill(null), 32, true), 3)
+  assert.equal(getPageCountBySlots(Array(96).fill(null), 1, false), 0)
 })

@@ -65,8 +65,13 @@ export const areSlotsEqual = (a: Array<string | null>, b: Array<string | null>):
   return true
 }
 
-export const getPageCountBySlots = (slots: Array<string | null>, pageSize: number): number =>
-  Math.max(1, Math.ceil(Math.max(pageSize, slots.length) / Math.max(1, pageSize)))
+/** 恢复/测量完成前没有可用的分页，不能把初始 pageSize=1 当作真实容量。 */
+export const getPageCountBySlots = (
+  slots: Array<string | null>,
+  pageSize: number,
+  layoutReady = true
+): number =>
+  layoutReady ? Math.max(1, Math.ceil(Math.max(pageSize, slots.length) / Math.max(1, pageSize))) : 0
 
 export const compactEmptyPages = (
   slots: Array<string | null>,

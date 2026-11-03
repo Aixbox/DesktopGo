@@ -106,7 +106,13 @@ export function usePagedIconGridLayout({
     key: '',
   })
   const { columns, rows } = pageGeometry
+  const [normalizedGeometry, setNormalizedGeometry] = useState<typeof pageGeometry | null>(null)
   const [layoutHydrationTick, setLayoutHydrationTick] = useState(0)
+  // 槽位、行列和本次恢复必须属于同一轮布局，才能对外显示页数。
+  const layoutReady =
+    normalizedGeometry === pageGeometry &&
+    pageGeometry.hydrationTick === layoutHydrationTick &&
+    pageGeometry.key === geometryKey
   const [currentPage, setCurrentPage] = useState(0)
   const [itemWidth, setItemWidth] = useState(columnWidth)
   const [itemHeight, setItemHeight] = useState(rowHeight)
@@ -484,12 +490,14 @@ export function usePagedIconGridLayout({
     // 此处只做空页压缩；若未来出现真正的数据损坏场景，应从源头修复而非压扁用户布局。
     const compacted = compactEmptyPages(normalized, layoutMetrics.pageSize)
     if (
+      normalizedGeometry === pageGeometry &&
       areSlotsEqual(compacted, outerSlotsRef.current) &&
       previousDimensions.columns === layoutMetrics.columns &&
       previousDimensions.pageSize === layoutMetrics.pageSize
     ) {
       return
     }
+    setNormalizedGeometry(pageGeometry)
     outerSlotsRef.current = compacted
     setOuterSlots(compacted)
   }, [
@@ -498,6 +506,7 @@ export function usePagedIconGridLayout({
     geometryKey,
     layoutDimensionsTracker,
     layoutHydrationTick,
+    normalizedGeometry,
     outerItemIds,
     pageGeometry,
     pageSize,
@@ -705,6 +714,7 @@ export function usePagedIconGridLayout({
     activeDockKeys,
     outerItemIds,
     pageSize,
+    layoutReady,
     folderLayoutProfile: getFolderLayoutProfile(folderLayoutProfileId),
     hydrationError,
   }
