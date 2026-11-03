@@ -46,6 +46,23 @@ export const buildGridGeometryKey = (
   return `${base}:viewport-${width}x${height}:visual-${visualWidth}x${visualHeight}:dpr-${dpr}:orientation-${orientation}:dir-${direction}`
 }
 
+/**
+ * 分页位置由用户的窗口模式、图标尺寸和 Dock 设置决定。视口/DPI 是显示环境，
+ * 不能使已保存的行列失效。兼容旧版测量键，同时保留额外的布局配置后缀。
+ */
+export const getPagedLayoutConfigurationKey = (geometryKey: string): string =>
+  geometryKey.replace(
+    /:viewport-\d+x\d+:visual-\d+x\d+:dpr-[\d.]+:orientation-(?:portrait|landscape):dir-(?:ltr|rtl)(?=:|$)/,
+    ''
+  )
+
+export const isSamePagedLayoutConfiguration = (
+  savedKey: string | null | undefined,
+  currentKey: string
+): boolean =>
+  !!savedKey &&
+  getPagedLayoutConfigurationKey(savedKey) === getPagedLayoutConfigurationKey(currentKey)
+
 export const readGridGeometryMeasurement = (): GridGeometryMeasurement => {
   if (typeof window === 'undefined') {
     return {

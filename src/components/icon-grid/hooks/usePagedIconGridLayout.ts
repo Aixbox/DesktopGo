@@ -25,7 +25,9 @@ import {
 } from '../domain/layoutHydrationPolicy'
 import {
   fitGridItemCount,
+  getPagedLayoutConfigurationKey,
   getLayoutNormalizationMetrics,
+  isSamePagedLayoutConfiguration,
   isSuspiciousSingleCellPageGeometry,
 } from '../domain/gridGeometry'
 import { filterItemsByIds } from '../domain/gridItems'
@@ -64,11 +66,12 @@ export function usePagedIconGridLayout({
   layoutResetToken,
   importPlacementRequest,
   dockEnabled,
-  geometryKey,
+  geometryKey: measuredGeometryKey,
   columnWidth,
   rowHeight,
   layoutRowHeight,
 }: UsePagedIconGridLayoutParams) {
+  const geometryKey = getPagedLayoutConfigurationKey(measuredGeometryKey)
   const containerRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const importHighlightTimerRef = useRef<number | null>(null)
@@ -96,8 +99,13 @@ export function usePagedIconGridLayout({
   const pageSizeRef = useRef(1)
   const layoutReadyRef = useRef(false)
 
-  const [columns, setColumns] = useState(1)
-  const [rows, setRows] = useState(1)
+  const [pageGeometry, setPageGeometry] = useState({
+    columns: 1,
+    rows: 1,
+    hydrationTick: -1,
+    key: '',
+  })
+  const { columns, rows } = pageGeometry
   const [layoutHydrationTick, setLayoutHydrationTick] = useState(0)
   const [currentPage, setCurrentPage] = useState(0)
   const [itemWidth, setItemWidth] = useState(columnWidth)
@@ -249,7 +257,7 @@ export function usePagedIconGridLayout({
         if (
           hasDims &&
           persisted?.geometryKey &&
-          persisted.geometryKey === hydrationEnvironment.geometryKey
+          isSamePagedLayoutConfiguration(persisted.geometryKey, hydrationEnvironment.geometryKey)
         ) {
           const lockedColumns = persisted.columns!
           lockedGeometryRef.current = {
@@ -261,6 +269,7 @@ export function usePagedIconGridLayout({
           lockedGeometryRef.current = null
         }
       }
+      layoutReadyRef.current = false
       layoutBaselineRef.current = false
       itemsRef.current = nextItems
       outerSlotsRef.current = rawSlots
@@ -324,6 +333,8 @@ export function usePagedIconGridLayout({
 
     let animationFrame = 0
     const recalculate = () => {
+      // 先恢复持久化行列，再测量；不能用启动/切屏过程中的尺寸归一化旧槽位。
+      if (!hydratedRef.current || element.clientWidth <= 0 || element.clientHeight <= 0) return
       const tileWidth = columnWidth
       const tileHeight = rowHeight
       const hasWideItems = itemsRef.current.some(item => getGridItemSpan(item).cols > 1)
@@ -342,7 +353,7 @@ export function usePagedIconGridLayout({
       )
       const measuredPageSize = Math.max(1, measuredColumns * measuredRows)
       const locked = lockedGeometryRef.current
-      const isLocked = locked !== null && locked.key === geometryKey
+      const isLocked = locked !== null && isSamePagedLayoutConfiguration(locked.key, geometryKey)
 
       if (
         !isLocked &&
@@ -362,8 +373,19 @@ export function usePagedIconGridLayout({
       }
       setItemWidth(tileWidth)
       setItemHeight(tileHeight)
-      setColumns(finalColumns)
-      setRows(finalRows)
+      setPageGeometry(previous =>
+        previous.columns === finalColumns &&
+        previous.rows === finalRows &&
+        previous.hydrationTick === layoutHydrationTick &&
+        previous.key === geometryKey
+          ? previous
+          : {
+              columns: finalColumns,
+              rows: finalRows,
+              hydrationTick: layoutHydrationTick,
+              key: geometryKey,
+            }
+      )
       layoutReadyRef.current = true
     }
     const schedule = () => {
@@ -403,6 +425,9 @@ export function usePagedIconGridLayout({
 
   useEffect(() => {
     if (!hydratedRef.current || !layoutReadyRef.current) return
+    if (pageGeometry.hydrationTick !== layoutHydrationTick || pageGeometry.key !== geometryKey) {
+      return
+    }
     const outerItems = filterItemsByIds(itemsRef.current, outerItemIds)
     const layoutMetrics = getLayoutNormalizationMetrics(outerItems, Math.max(1, columns), pageSize)
     const previousDimensions = layoutDimensionsTracker.read()
@@ -458,10 +483,25 @@ export function usePagedIconGridLayout({
     // 不做稀疏页"修复"：用户把图标分摊到多页是合法布局，页数多不等于数据损坏。
     // 此处只做空页压缩；若未来出现真正的数据损坏场景，应从源头修复而非压扁用户布局。
     const compacted = compactEmptyPages(normalized, layoutMetrics.pageSize)
-    if (areSlotsEqual(compacted, outerSlotsRef.current)) return
+    if (
+      areSlotsEqual(compacted, outerSlotsRef.current) &&
+      previousDimensions.columns === layoutMetrics.columns &&
+      previousDimensions.pageSize === layoutMetrics.pageSize
+    ) {
+      return
+    }
     outerSlotsRef.current = compacted
     setOuterSlots(compacted)
-  }, [columns, dockEnabled, layoutDimensionsTracker, outerItemIds, pageSize])
+  }, [
+    columns,
+    dockEnabled,
+    geometryKey,
+    layoutDimensionsTracker,
+    layoutHydrationTick,
+    outerItemIds,
+    pageGeometry,
+    pageSize,
+  ])
 
   useEffect(() => {
     if (!hydratedRef.current || !layoutBaselineRef.current || dockEnabled) return

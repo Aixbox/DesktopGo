@@ -2,6 +2,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { prepareLayoutPayloadForApply } from './layoutLibrary.ts'
+import {
+  buildGridGeometryKey,
+  isSamePagedLayoutConfiguration,
+} from '../icon-grid/domain/gridGeometry.ts'
 
 const payload = (overrides = {}) =>
   JSON.stringify({
@@ -47,4 +51,38 @@ test('treats a payload without geometry as a mismatch', () => {
 
 test('passes broken payloads through untouched', () => {
   assert.equal(prepareLayoutPayloadForApply('not json', 'medium:medium:true'), 'not json')
+})
+
+test('display and DPI changes preserve the full history payload including checksum and placements', () => {
+  const key = (width, height, dpr) =>
+    buildGridGeometryKey('medium', 'medium', true, {
+      viewportWidth: width,
+      viewportHeight: height,
+      devicePixelRatio: dpr,
+    })
+  const oldKey = key(1328, 768, 2)
+  const raw = payload({
+    version: 10,
+    geometryKey: oldKey,
+    revision: 12,
+    checksum: 'preserve-original-bytes',
+    placements: [{ id: 'a', container: 'workspace', page: 0, row: 0, col: 0, spanX: 1, spanY: 1 }],
+    folderProfileId: 'standard',
+    hotseatEntries: [],
+  })
+  for (const current of [key(1280, 720, 1), key(640, 360, 2), 'medium:medium:true']) {
+    assert.equal(prepareLayoutPayloadForApply(raw, current), raw)
+    assert.equal(isSamePagedLayoutConfiguration('medium:medium:true', current), true)
+  }
+})
+
+test('window mode, icon size, dock and extra configuration differences remain incompatible', () => {
+  for (const changed of [
+    'large:medium:true',
+    'medium:small:true',
+    'medium:medium:false',
+    'medium:medium:true:other',
+  ]) {
+    assert.equal(isSamePagedLayoutConfiguration('medium:medium:true', changed), false)
+  }
 })
