@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
 import type { FolderItem } from '../model'
 import { DRAG_HOLE_ID } from '../domain/slots'
-import { DOCK_GAP } from '../domain/dock'
 import { GRID_GAP, MOTION_SPRING_EASING } from '../constants'
 import { getReorderAnimationDuration, readCurrentTranslate } from './reorderMotion'
 import type { DropImpactEvent } from '../state/types'
@@ -18,9 +17,7 @@ export function usePagedGridReorderAnimationRefs() {
   )
   const gridFlipAnimationsRef = useRef<Map<string, Animation>>(new Map())
   const previousFolderEntriesRef = useRef<Array<string | null>>([])
-  const previousDockEntriesRef = useRef<Array<string | null>>([])
   const folderAnimationTimersRef = useRef<Map<string, number>>(new Map())
-  const dockAnimationTimersRef = useRef<Map<string, number>>(new Map())
   const lastDropImpactSequenceRef = useRef(0)
 
   const capturePagedGridItemPositions = useCallback(() => {
@@ -39,9 +36,7 @@ export function usePagedGridReorderAnimationRefs() {
     pendingGridFlipPositionsRef,
     gridFlipAnimationsRef,
     previousFolderEntriesRef,
-    previousDockEntriesRef,
     folderAnimationTimersRef,
-    dockAnimationTimersRef,
     lastDropImpactSequenceRef,
     capturePagedGridItemPositions,
   }
@@ -60,8 +55,6 @@ interface UsePagedGridReorderAnimationsParams {
   folderColumns: number
   folderItemWidth: number
   folderItemHeight: number
-  dockRenderSlots: Array<string | null>
-  dockIconImageSize: number
   dropImpact: DropImpactEvent | null
 }
 
@@ -76,20 +69,15 @@ export function usePagedGridReorderAnimations({
   folderColumns,
   folderItemWidth,
   folderItemHeight,
-  dockRenderSlots,
-  dockIconImageSize,
   dropImpact,
 }: UsePagedGridReorderAnimationsParams) {
   const {
     tileRefs,
     folderTileRefs,
-    dockItemRefs,
     pendingGridFlipPositionsRef,
     gridFlipAnimationsRef,
     previousFolderEntriesRef,
-    previousDockEntriesRef,
     folderAnimationTimersRef,
-    dockAnimationTimersRef,
     lastDropImpactSequenceRef,
   } = animationRefs
 
@@ -220,55 +208,16 @@ export function usePagedGridReorderAnimations({
     previousFolderEntriesRef,
   ])
 
-  useLayoutEffect(() => {
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const previousIndexById = new Map<string, number>()
-    previousDockEntriesRef.current.forEach((entry, index) => {
-      if (entry === null || entry === DRAG_HOLE_ID) return
-      previousIndexById.set(entry, index)
-    })
-    const stepX = Math.max(dockIconImageSize + 12, 52) + DOCK_GAP
-
-    if (!reducedMotion)
-      dockRenderSlots.forEach((entry, newIndex) => {
-        if (entry === null || entry === DRAG_HOLE_ID) return
-        const previousIndex = previousIndexById.get(entry)
-        if (previousIndex === undefined || previousIndex === newIndex) return
-        const deltaX = (previousIndex - newIndex) * stepX
-        if (Math.abs(deltaX) < 0.5) return
-        const currentTranslate = readCurrentTranslate(dockItemRefs.current.get(entry))
-        animateWithTransformTimer(
-          dockItemRefs.current.get(entry),
-          entry,
-          `translate3d(${deltaX + currentTranslate.x}px, ${currentTranslate.y}px, 0px)`,
-          dockAnimationTimersRef,
-          deltaX,
-          0,
-          stepX
-        )
-      })
-    previousDockEntriesRef.current = dockRenderSlots
-  }, [
-    dockAnimationTimersRef,
-    dockIconImageSize,
-    dockItemRefs,
-    dockRenderSlots,
-    previousDockEntriesRef,
-  ])
-
   useEffect(() => {
     const gridAnimations = gridFlipAnimationsRef.current
     const folderTimers = folderAnimationTimersRef.current
-    const dockTimers = dockAnimationTimersRef.current
     return () => {
       gridAnimations.forEach(animation => animation.cancel())
       gridAnimations.clear()
       folderTimers.forEach(timer => window.clearTimeout(timer))
       folderTimers.clear()
-      dockTimers.forEach(timer => window.clearTimeout(timer))
-      dockTimers.clear()
     }
-  }, [dockAnimationTimersRef, folderAnimationTimersRef, gridFlipAnimationsRef])
+  }, [folderAnimationTimersRef, gridFlipAnimationsRef])
 }
 
 function animateWithTransformTimer(

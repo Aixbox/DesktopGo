@@ -684,7 +684,6 @@ export function ScrollableIconGrid({
   useScrollableGridReorderAnimations({
     tileRefs,
     folderTileRefs,
-    dockItemRefs,
     pageItems,
     currentPage,
     columns,
@@ -696,8 +695,6 @@ export function ScrollableIconGrid({
     folderColumns,
     folderItemWidth,
     folderItemHeight,
-    dockRenderSlots,
-    dockIconImageSize: iconConfig.imgSize,
     dropImpact,
   })
 

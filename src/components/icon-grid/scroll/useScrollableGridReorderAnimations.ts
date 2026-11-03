@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from 'react'
 import type { FolderItem } from '../model'
 import { DRAG_HOLE_ID } from '../domain/slots'
-import { DOCK_GAP } from '../domain/dock'
 import { GRID_GAP, MOTION_SPRING_EASING, REORDER_ANIMATION_MS } from '../constants'
 import { readCurrentTranslate } from '../hooks/reorderMotion'
 import type { DropImpactEvent } from '../state/types'
@@ -12,7 +11,6 @@ const REORDER_EASING = MOTION_SPRING_EASING
 interface UseScrollableGridReorderAnimationsParams {
   tileRefs: MutableRefObject<Map<string, HTMLDivElement>>
   folderTileRefs: MutableRefObject<Map<string, HTMLDivElement>>
-  dockItemRefs: MutableRefObject<Map<string, HTMLDivElement>>
   pageItems: Array<string | null>
   currentPage: number
   columns: number
@@ -24,15 +22,12 @@ interface UseScrollableGridReorderAnimationsParams {
   folderColumns: number
   folderItemWidth: number
   folderItemHeight: number
-  dockRenderSlots: Array<string | null>
-  dockIconImageSize: number
   dropImpact: DropImpactEvent | null
 }
 
 export function useScrollableGridReorderAnimations({
   tileRefs,
   folderTileRefs,
-  dockItemRefs,
   pageItems,
   currentPage,
   columns,
@@ -44,18 +39,14 @@ export function useScrollableGridReorderAnimations({
   folderColumns,
   folderItemWidth,
   folderItemHeight,
-  dockRenderSlots,
-  dockIconImageSize,
   dropImpact,
 }: UseScrollableGridReorderAnimationsParams) {
   const previousPageEntriesRef = useRef<Array<string | null>>([])
   const previousPageRef = useRef(0)
   const previousFolderEntriesRef = useRef<Array<string | null>>([])
-  const previousDockEntriesRef = useRef<Array<string | null>>([])
   const tileAnimationTimersRef = useRef(new Map<string, number>())
   const tileImpactAnimationsRef = useRef(new Map<string, Animation>())
   const folderAnimationTimersRef = useRef(new Map<string, number>())
-  const dockAnimationTimersRef = useRef(new Map<string, number>())
   const lastDropImpactSequenceRef = useRef(0)
 
   useLayoutEffect(() => {
@@ -187,37 +178,10 @@ export function useScrollableGridReorderAnimations({
     openFolder,
   ])
 
-  useLayoutEffect(() => {
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const previousIndexById = new Map<string, number>()
-    previousDockEntriesRef.current.forEach((entry, index) => {
-      if (entry === null || entry === DRAG_HOLE_ID) return
-      previousIndexById.set(entry, index)
-    })
-    const stepX = Math.max(dockIconImageSize + 12, 52) + DOCK_GAP
-    if (!reducedMotion)
-      dockRenderSlots.forEach((entry, nextIndex) => {
-        if (entry === null || entry === DRAG_HOLE_ID) return
-        const previousIndex = previousIndexById.get(entry)
-        if (previousIndex === undefined || previousIndex === nextIndex) return
-        const deltaX = (previousIndex - nextIndex) * stepX
-        if (Math.abs(deltaX) < 0.5) return
-        const currentTranslate = readCurrentTranslate(dockItemRefs.current.get(entry))
-        animateWithTransformTimer(
-          dockItemRefs.current.get(entry),
-          entry,
-          `translate3d(${deltaX + currentTranslate.x}px, ${currentTranslate.y}px, 0px)`,
-          dockAnimationTimersRef
-        )
-      })
-    previousDockEntriesRef.current = dockRenderSlots
-  }, [dockIconImageSize, dockItemRefs, dockRenderSlots])
-
   useEffect(() => {
     const tileTimers = tileAnimationTimersRef.current
     const tileImpactAnimations = tileImpactAnimationsRef.current
     const folderTimers = folderAnimationTimersRef.current
-    const dockTimers = dockAnimationTimersRef.current
     return () => {
       tileTimers.forEach(timer => window.clearTimeout(timer))
       tileTimers.clear()
@@ -225,8 +189,6 @@ export function useScrollableGridReorderAnimations({
       tileImpactAnimations.clear()
       folderTimers.forEach(timer => window.clearTimeout(timer))
       folderTimers.clear()
-      dockTimers.forEach(timer => window.clearTimeout(timer))
-      dockTimers.clear()
     }
   }, [])
 }

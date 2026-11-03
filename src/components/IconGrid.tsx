@@ -604,8 +604,6 @@ export function IconGrid({
     folderColumns,
     folderItemWidth,
     folderItemHeight,
-    dockRenderSlots,
-    dockIconImageSize: iconConfig.imgSize,
     dropImpact,
   })
   useEffect(() => {

@@ -1,3 +1,4 @@
+import { useDockReorderAnimation } from '../hooks/useDockReorderAnimation'
 import { Check } from 'lucide-react'
 import { motion } from 'framer-motion'
 import {
@@ -181,15 +182,16 @@ export function DockBar({
   const [isIndicatorDragging, setIsIndicatorDragging] = useState(false)
   const dockButtonSize = Math.max(iconImageSize + 12, 52)
   const isVerticalHotseat = hotseatOrientation === 'vertical'
+  // Folder hover changes the indicator, not the slot geometry used by evasion/hit testing.
+  const reserveInsertionSlot = dragContext === 'dock' && dockPreviewIndex !== null
   const showInsertionPreview =
-    dragContext === 'dock' &&
-    dockPreviewIndex !== null &&
+    reserveInsertionSlot &&
     dragFolderPreviewTargetId === null &&
     folderPreviewFreezeTargetId === null
   const renderEntries = resolveHotseatDisplayEntries(
     hotseatEntries,
     displaySlots,
-    showInsertionPreview ? dockPreviewIndex : null
+    reserveInsertionSlot ? dockPreviewIndex : null
   )
   const hotseatProfile: HotseatProfile = {
     count: renderEntries.length,
@@ -197,6 +199,7 @@ export function DockBar({
     rtl: documentDirection === 'rtl',
   }
   const singleSlotFolderMetrics = getDesktopSingleSlotFolderMetrics(iconTileWidth, iconTileHeight)
+  useDockReorderAnimation(gridRef, dockButtonSize + DOCK_GAP)
   const dockContentWidth = resolveDockContentWidth(renderEntries.length, dockButtonSize)
   const dockContentHeight = resolveDockContentWidth(renderEntries.length, dockButtonSize)
   const hasVisibleItems = displaySlots.some(slot => typeof slot === 'string')
@@ -919,7 +922,7 @@ export function DockBar({
                         hasVisibleItems
                           ? 'border-border/35 bg-background/36 dark:border-white/18 dark:bg-white/[0.04]'
                           : 'border-border/45 bg-background/48 dark:border-white/24 dark:bg-white/[0.06]'
-                      } ${showInsertionPreview ? 'scale-100 opacity-100' : 'opacity-80'}`}
+                      } ${showInsertionPreview ? 'scale-100 opacity-100' : reserveInsertionSlot ? 'opacity-0' : 'opacity-80'}`}
                       style={{ width: iconImageSize + 8, height: iconImageSize + 8 }}
                       aria-hidden="true"
                     />
