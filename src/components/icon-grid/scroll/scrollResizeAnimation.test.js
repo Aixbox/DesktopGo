@@ -32,6 +32,7 @@ async function loadHook(path) {
 }
 const loadResize = await loadHook('../hooks/useGridItemResizeController.ts')
 const loadWorkflow = await loadHook('./useScrollableOuterGridDragWorkflow.ts')
+const loadLegacyAnimations = await loadHook('./useScrollableGridReorderAnimations.ts')
 
 function hooks() {
   const cells = [],
@@ -83,7 +84,12 @@ function hooks() {
 function fixture(t, kind, reducedMotion = false, scale = 1) {
   const oldWindow = globalThis.window,
     oldDocument = globalThis.document
-  globalThis.window = { addEventListener() {}, removeEventListener() {}, clearTimeout() {} }
+  globalThis.window = {
+    addEventListener() {},
+    removeEventListener() {},
+    clearTimeout() {},
+    matchMedia: () => ({ matches: reducedMotion }),
+  }
   globalThis.document = { addEventListener() {}, removeEventListener() {} }
   t.after(() => {
     globalThis.window = oldWindow
@@ -97,12 +103,13 @@ function fixture(t, kind, reducedMotion = false, scale = 1) {
     resized,
     ...Array.from({ length: 10 }, (_, i) => ({ kind: 'icon', key: `neighbor-${i}`, icon: {} })),
   ]
-  const ids = items.map(getId),
-    nodes = new Map(),
+  let ids = items.map(getId)
+  const nodes = new Map(),
     animations = []
   const external = { current: null }
   const resizeHooks = hooks(),
-    workflowHooks = hooks()
+    workflowHooks = hooks(),
+    legacyHooks = hooks()
   const useResize = loadResize({ react: resizeHooks.react })
   const useWorkflow = loadWorkflow({
     react: workflowHooks.react,
@@ -110,6 +117,23 @@ function fixture(t, kind, reducedMotion = false, scale = 1) {
     '@dnd-kit/core': { useSensor() {}, useSensors() {} },
     '@dnd-kit/sortable': {},
   })
+  const useLegacyAnimations = loadLegacyAnimations({ react: legacyHooks.react })
+  const legacyParams = {
+    tileRefs: { current: nodes },
+    folderTileRefs: { current: new Map() },
+    pageItems: ids,
+    currentPage: 0,
+    columns: 4,
+    itemWidth: 96,
+    itemHeight: 110,
+    launchpadGridViewMode: 'scroll',
+    openFolder: null,
+    folderRenderOrder: [],
+    folderColumns: 4,
+    folderItemWidth: 96,
+    folderItemHeight: 110,
+    dropImpact: null,
+  }
   const params = {
     items,
     itemsRef: { current: items },
@@ -193,15 +217,31 @@ function fixture(t, kind, reducedMotion = false, scale = 1) {
       workflow.gridItemRefs.current.set(entry.id, node)
     }
     workflowHooks.flush()
+    legacyHooks.render(() => useLegacyAnimations(legacyParams))
+    legacyHooks.flush()
     return resize
   }
   t.after(() => workflowHooks.dispose())
+  t.after(() => legacyHooks.dispose())
   const sampleMotion = progress =>
     nodes.forEach(node => {
       node.dx *= 1 - progress
       node.dy *= 1 - progress
     })
-  return { render, params, nodes, animations, external, sampleMotion, id: ids[0] }
+  return {
+    render,
+    params,
+    nodes,
+    animations,
+    external,
+    sampleMotion,
+    id: ids[0],
+    legacyParams,
+    reorder(next) {
+      params.onBeforeLayoutChange()
+      ids = next
+    },
+  }
 }
 
 for (const kind of ['icon', 'folder']) {
@@ -284,4 +324,51 @@ test('scroll reorder translates in local pixels while the grid is scaled for edi
   const after = h.nodes.get('neighbor-0').getBoundingClientRect()
   assert.ok(Math.abs(after.left - before.left) < 1e-9)
   assert.ok(Math.abs(after.top - before.top) < 1e-9)
+})
+
+for (const scale of [1, 0.97]) {
+  test(`scroll drag release at scale ${scale} preserves running neighbor motion without replaying a paged impact`, t => {
+    const h = fixture(t, 'icon', false, scale)
+    h.render()
+    const original = [...h.legacyParams.pageItems]
+    const order = [...original.slice(1, 7), original[0], ...original.slice(7)]
+    h.reorder(order)
+    h.legacyParams.pageItems = original.map(id => (id === h.id ? null : id))
+    h.render()
+    assert.ok(h.animations.length > 0, 'reordering must still animate the displaced icons')
+    h.sampleMotion(0.6)
+    const before = new Map([...h.nodes].map(([id, node]) => [id, node.getBoundingClientRect()]))
+    const animationCount = h.animations.length
+    h.params.onBeforeLayoutChange()
+    h.legacyParams.pageItems = order
+    h.legacyParams.dropImpact = { sequence: 1, itemId: h.id, targetId: h.id }
+    h.render()
+    assert.equal(h.animations.length, animationCount, 'release must not restart grid animations')
+    assert.ok(h.animations.every(animation => !animation.cancelled))
+    for (const [id, rect] of before) assert.deepEqual(h.nodes.get(id).getBoundingClientRect(), rect)
+  })
+}
+
+test('scroll release does not bounce stationary neighbors even if legacy page indices change', t => {
+  const h = fixture(t, 'folder')
+  h.render()
+  const order = [...h.legacyParams.pageItems]
+  h.legacyParams.pageItems = [...order.slice(5), ...order.slice(0, 5)]
+  h.legacyParams.dropImpact = { sequence: 1, itemId: h.id, targetId: h.id }
+  h.render()
+  assert.equal(h.animations.length, 0)
+})
+
+test('the legacy paged fallback retains its landing response and respects reduced motion', t => {
+  for (const reducedMotion of [false, true]) {
+    const h = fixture(t, 'icon', reducedMotion)
+    h.legacyParams.launchpadGridViewMode = 'paged'
+    h.render()
+    h.legacyParams.dropImpact = { sequence: 1, itemId: h.id, targetId: h.id }
+    h.render()
+    assert.equal(
+      h.animations.some(animation => animation.id === h.id),
+      !reducedMotion
+    )
+  }
 })

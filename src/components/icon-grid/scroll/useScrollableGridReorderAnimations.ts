@@ -58,11 +58,12 @@ export function useScrollableGridReorderAnimations({
     }
 
     if (launchpadGridViewMode === 'scroll') {
+      // The sidebar owns continuous, mixed-span layout and its in-flight FLIP animations.
+      // Legacy page indices cannot reconstruct those positions, even on pointer release.
+      // Drop flights already settle the dragged item; do not replay a second grid impact.
       previousPageRef.current = currentPage
-      if (!isNewDropImpact) {
-        previousPageEntriesRef.current = pageItems
-        return
-      }
+      previousPageEntriesRef.current = pageItems
+      return
     } else if (previousPageRef.current !== currentPage) {
       previousPageRef.current = currentPage
       previousPageEntriesRef.current = pageItems
