@@ -10,9 +10,9 @@ import {
 } from '../domain/evasionPolicy'
 import { armPendingCellReorderAlarm } from '../domain/pendingCellReorderAlarm'
 import { isPointOutsideFolderContent } from '../domain/folderPolicy'
+import { canPreviewFolderOnOverlap, canPreviewOuterFolder } from '../domain/folderDropIntent'
 import { buildDockLinearPreviewOrder } from '../domain/dockDragPolicy'
 import { buildDragItemMap, resolveItemById } from '../domain/dragWorkflowShared'
-import { OUTER_DRAG_RULES } from '../constants'
 import { resetOuterInteraction } from '../state/dragMachine'
 import type { DragHit, DragState, OuterOverlapHit } from '../state/types'
 
@@ -234,17 +234,6 @@ function publishTopLevelReset(
   })
 }
 
-function canPreviewFolder(
-  source: GridItem,
-  target: GridItem,
-  overlapHit: OuterOverlapHit,
-  multiDrag: boolean
-) {
-  const canCreate = !multiDrag && source.kind === 'icon' && target.kind === 'icon'
-  const canAdd = source.kind === 'icon' && target.kind === 'folder'
-  return (canCreate || canAdd) && overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
-}
-
 function processDockExternalMove({
   runtime,
   state,
@@ -256,7 +245,7 @@ function processDockExternalMove({
   runtime.clearOuterDwellTimer()
   const stableDockPreviewIndex =
     state.dockPreviewIndex ?? nearestSlotIndex ?? overlapHit.targetIndex
-  if (canPreviewFolder(source, target, overlapHit, state.draggingIds.length > 1)) {
+  if (canPreviewFolderOnOverlap(source, target, overlapHit, state.draggingIds.length > 1)) {
     runtime.publishMoveDragState({
       ...state,
       previewSlotIndex: overlapHit.targetIndex,
@@ -285,7 +274,7 @@ function processDockExternalMove({
 function processDockReorderMove(context: TopLevelMoveContext) {
   const { runtime, state, source, target, overlapHit } = context
   runtime.clearOuterDwellTimer()
-  if (canPreviewFolder(source, target, overlapHit, state.draggingIds.length > 1)) {
+  if (canPreviewFolderOnOverlap(source, target, overlapHit, state.draggingIds.length > 1)) {
     runtime.publishMoveDragState({
       ...state,
       previewSlotIndex: overlapHit.targetIndex,
@@ -330,7 +319,12 @@ function processOuterOverlapMove(context: TopLevelMoveContext) {
   const { runtime, state, source, target, overlapHit, nearestSlotIndex, candidateAnchorIndex } =
     context
   const now = performance.now()
-  const previewFolder = canPreviewFolder(source, target, overlapHit, state.draggingIds.length > 1)
+  const previewFolder = canPreviewOuterFolder(
+    source,
+    target,
+    overlapHit,
+    state.draggingIds.length > 1
+  )
   // Keep the visible preview for hit-testing; a new reorder alarm re-solves from its base.
   const next: DragState = {
     ...state,

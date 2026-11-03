@@ -272,7 +272,7 @@ const resolveFolderBodyRect = (node: HTMLDivElement): DOMRect | null => {
   return folderBody ? folderBody.getBoundingClientRect() : null
 }
 
-const resolveOverlapTargetRect = (node: HTMLDivElement): DOMRect => {
+export const resolveOverlapTargetRect = (node: HTMLElement): DOMRect => {
   const iconImage = node.querySelector<HTMLElement>('.icon-image')
   if (iconImage) return iconImage.getBoundingClientRect()
   const folderHitbox = node.querySelector<HTMLElement>('[data-folder-icon-hitbox]')

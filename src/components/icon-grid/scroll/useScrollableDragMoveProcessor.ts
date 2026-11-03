@@ -3,6 +3,7 @@ import type { GridItem, HoverZone } from '../model'
 import { areSlotsEqual } from '../domain/slots'
 import { moveDragHoleToIndex } from '../domain/evasionPolicy'
 import { buildDockLinearPreviewOrder } from '../domain/dockDragPolicy'
+import { canPreviewOuterFolder } from '../domain/folderDropIntent'
 import { buildDragItemMap, resolveItemById } from '../domain/dragWorkflowShared'
 import { OUTER_DRAG_RULES } from '../constants'
 import { resetOuterInteraction } from '../state/dragMachine'
@@ -15,7 +16,6 @@ import {
 import {
   hasScrollEvasionRearmed,
   isPointOutsideScrollFolderContent,
-  SCROLL_FOLDER_PREVIEW_DWELL_MS,
   SCROLL_PREVIEW_REORDER_DWELL_MS,
   SCROLL_PREVIEW_REORDER_LOCK_MS,
 } from './scrollGroupLayout'
@@ -84,7 +84,6 @@ interface ScrollableDragMoveProcessorParams {
     candidateAnchorIndex: number | null
   ) => number | null
   scheduleFolderAutoOpen: (targetFolderId: string) => void
-  triggerCompactFolderPreview: (expectedTargetId: string) => void
   triggerTopLevelDwellEvasion: (expectedTargetId: string, expectedZone?: HoverZone | null) => void
 }
 
@@ -126,7 +125,6 @@ export function useScrollableDragMoveProcessor(runtime: ScrollableDragMoveProces
     outerDwellTargetIdRef,
     outerDwellZoneRef,
     outerDwellTimerRef,
-    triggerCompactFolderPreview,
     triggerTopLevelDwellEvasion,
   } = runtime
 
@@ -238,11 +236,6 @@ export function useScrollableDragMoveProcessor(runtime: ScrollableDragMoveProces
           x - baseState.lastEvasionTriggerPointer.x,
           y - baseState.lastEvasionTriggerPointer.y
         ) >= evasionRearmDistance
-      if (compactOverlapTargetChanged && !compactMovedSinceLastReorder) {
-        clearOuterDwellTimer()
-        publishMoveDragState(baseState)
-        return
-      }
       const draggingFromDock = isDraggingFromDock(baseState.draggingId)
       const isMultiDockDrag = baseState.context === 'dock' && baseState.draggingIds.length > 1
 
@@ -338,6 +331,16 @@ export function useScrollableDragMoveProcessor(runtime: ScrollableDragMoveProces
           ...overlapHit,
           zone: resolveCompactScrollHoverZone(baseState, target, overlapHit),
         }
+      }
+
+      if (
+        compactOverlapTargetChanged &&
+        !compactMovedSinceLastReorder &&
+        !canPreviewOuterFolder(source, target, overlapHit, isMultiOuterDrag)
+      ) {
+        clearOuterDwellTimer()
+        publishMoveDragState({ ...baseState, folderPreviewTargetId: null })
+        return
       }
 
       if (baseState.context === 'dock' && !draggingFromDock) {
@@ -457,60 +460,18 @@ export function useScrollableDragMoveProcessor(runtime: ScrollableDragMoveProces
         centerStartedAt: null,
       }
 
-      const canFolderPreview = !isMultiOuterDrag && source.kind === 'icon' && target.kind === 'icon'
-      const canAddToExistingFolder = source.kind === 'icon' && target.kind === 'folder'
-      const canPreviewFolderAtCenter =
-        overlapHit.zone === 'center' &&
-        (canFolderPreview || canAddToExistingFolder) &&
-        (isCompactOuterDrop || overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold)
-      if (canPreviewFolderAtCenter) {
-        if (isCompactOuterDrop && baseState.context === 'outer') {
-          if (baseState.folderPreviewTargetId === overlapHit.targetId) {
-            clearOuterDwellTimer()
-            next.folderPreviewTargetId = overlapHit.targetId
-            next.dwellStartedAt = null
-            next.lastEvasionSignature = null
-            publishMoveDragState(next)
-            if (target.kind === 'folder') {
-              scheduleFolderAutoOpen(overlapHit.targetId)
-            }
-            return
-          }
-
-          const now = performance.now()
-          const sameTargetAndZone =
-            baseState.hoverTargetId === overlapHit.targetId && baseState.hoverZone === 'center'
-          next.folderPreviewTargetId = null
-          next.dwellStartedAt =
-            sameTargetAndZone && baseState.dwellStartedAt !== null ? baseState.dwellStartedAt : now
-          next.lastEvasionSignature = null
-          const dwellElapsed = now - (next.dwellStartedAt ?? now)
-          const targetChanged =
-            outerDwellTargetIdRef.current !== overlapHit.targetId ||
-            outerDwellZoneRef.current !== 'center'
-          if (targetChanged) clearOuterDwellTimer()
-          if (outerDwellTimerRef.current === null) {
-            outerDwellTargetIdRef.current = overlapHit.targetId
-            outerDwellZoneRef.current = 'center'
-            outerDwellTimerRef.current = window.setTimeout(
-              () => {
-                const targetId = outerDwellTargetIdRef.current
-                outerDwellTimerRef.current = null
-                if (targetId) triggerCompactFolderPreview(targetId)
-              },
-              Math.max(0, SCROLL_FOLDER_PREVIEW_DWELL_MS - dwellElapsed)
-            )
-          }
-          publishMoveDragState(next)
-          return
-        }
-
+      const canAutoOpenFolder =
+        source.kind === 'icon' &&
+        !isMultiOuterDrag &&
+        target.kind === 'folder' &&
+        overlapHit.zone === 'center'
+      if (canPreviewOuterFolder(source, target, overlapHit, isMultiOuterDrag)) {
         clearOuterDwellTimer()
         next.folderPreviewTargetId = overlapHit.targetId
         next.dwellStartedAt = null
         next.lastEvasionSignature = null
         publishMoveDragState(next)
-        if (baseState.context === 'outer' && target.kind === 'folder') {
+        if (canAutoOpenFolder) {
           scheduleFolderAutoOpen(overlapHit.targetId)
         }
         return

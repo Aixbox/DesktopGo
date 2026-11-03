@@ -1,4 +1,6 @@
 import type { GridItem, HoverZone } from '../model'
+import { getGridItemSpan } from '../model'
+import { resolveOverlapTargetRect } from '../domain/dragMovePolicy'
 import type { DragState, OuterOverlapHit } from '../state/types'
 import { readFocusedItemVisual } from '../../icons/focusedItemVisual'
 import { isPointInFocusVisual } from '../../icons/focusedItemMenuGeometry'
@@ -32,8 +34,13 @@ export function resolveFolderAutoOpenHit({
     return hit
 
   const visual = readFocusedItemVisual(node)
-  // Paged multi-cell hits already describe the surface; compact hits describe the whole tile.
-  const reference = hitRectIsTile || target.size === '1x1' ? node.getBoundingClientRect() : visual
+  const span = getGridItemSpan(target)
+  // Match the rectangle used by overlap testing, including small-folder hitboxes/fallbacks.
+  const reference = hitRectIsTile
+    ? node.getBoundingClientRect()
+    : span.cols === 1 && span.rows === 1
+      ? resolveOverlapTargetRect(node)
+      : visual
   const ratio = FOLDER_AUTO_OPEN_AREA_RATIO
   const area = {
     ...visual,

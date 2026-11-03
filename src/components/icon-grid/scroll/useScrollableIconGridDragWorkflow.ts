@@ -223,8 +223,6 @@ export function useScrollableIconGridDragWorkflow({
     order: Array<string | null>
     previewSlotIndex: number | null
   } | null>(null)
-  const compactScrollLastHitPointRef = useRef<{ x: number; y: number } | null>(null)
-  const compactScrollLastHitIdRef = useRef<string | null>(null)
 
   const [dragState, setDragState] = useState<DragState | null>(null)
   const [dropImpact, setDropImpact] = useState<DropImpactEvent | null>(null)
@@ -397,7 +395,6 @@ export function useScrollableIconGridDragWorkflow({
     resolveNearestSlotIndexByContext,
     resolveNearestDropOrderByContext,
     resolveCandidateAnchorIndexByContext,
-    findCompactScrollGroupOverlapHit,
     findTopLevelMaxOverlapHit,
     resolveTopLevelOverlapPreviewIndex,
     tryApplyTopLevelEvasion,
@@ -434,8 +431,6 @@ export function useScrollableIconGridDragWorkflow({
     compactOuterDragBaseWithoutDraggingRef,
     compactOuterPreviewItemsRef,
     compactOuterPreviewResultRef,
-    compactScrollLastHitPointRef,
-    compactScrollLastHitIdRef,
     getOuterGridElementAtPoint,
     getActiveScrollGroupItemIds,
   })
@@ -473,7 +468,6 @@ export function useScrollableIconGridDragWorkflow({
   })
 
   const {
-    triggerCompactFolderPreview,
     triggerTopLevelDwellEvasion,
     scheduleFolderAutoOpen,
     moveDragToTopLevelContext,
@@ -500,7 +494,6 @@ export function useScrollableIconGridDragWorkflow({
     compactOuterDragBaseWithoutDraggingRef,
     compactOuterPreviewItemsRef,
     compactOuterPreviewResultRef,
-    findCompactScrollGroupOverlapHit,
     findTopLevelMaxOverlapHit,
     resolveCompactScrollHoverZone,
     isDraggingFromDock,
@@ -547,8 +540,6 @@ export function useScrollableIconGridDragWorkflow({
     compactOuterDragBaseWithoutDraggingRef,
     compactOuterPreviewItemsRef,
     compactOuterPreviewResultRef,
-    compactScrollLastHitPointRef,
-    compactScrollLastHitIdRef,
     setOuterSlots,
     setOpenFolderId,
     clearTimer,
@@ -603,7 +594,6 @@ export function useScrollableIconGridDragWorkflow({
     resolveCompactScrollHoverZone,
     resolveTopLevelOverlapPreviewIndex,
     scheduleFolderAutoOpen,
-    triggerCompactFolderPreview,
     triggerTopLevelDwellEvasion,
   })
   const scheduleDragMove = (pointerId: number, x: number, y: number) => {
@@ -903,8 +893,6 @@ export function useScrollableIconGridDragWorkflow({
     if (!current || current.context !== 'outer' || !isCompactOuterDrop) return
 
     clearOuterDwellTimer()
-    compactScrollLastHitPointRef.current = null
-    compactScrollLastHitIdRef.current = null
     compactOuterPreviewResultRef.current = null
 
     const availableIds = new Set(resolveCompactOuterPreviewItems(current).map(getId))

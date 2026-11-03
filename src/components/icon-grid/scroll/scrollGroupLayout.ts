@@ -8,11 +8,11 @@ import {
 } from '../domain/folderPolicy'
 import type { GridItem, ScrollGroupIcon, ScrollGroupMeta } from '../model'
 import { getGridItemSpan } from '../model'
+import { OUTER_DRAG_RULES } from '../constants'
 
 const LEGACY_GROUP_ID_PREFIX = 'scroll-group-migrated'
-export const SCROLL_PREVIEW_REORDER_DWELL_MS = 100
+export const SCROLL_PREVIEW_REORDER_DWELL_MS = OUTER_DRAG_RULES.evasionDwellMs
 export const SCROLL_PREVIEW_REORDER_LOCK_MS = 200
-export const SCROLL_FOLDER_PREVIEW_DWELL_MS = 350
 export const SCROLL_FOLDER_AUTO_OPEN_DWELL_MS = FOLDER_AUTO_OPEN_DWELL_MS
 export const SCROLL_FOLDER_EXIT_DWELL_MS = FOLDER_EXIT_DWELL_MS
 export const WETAB_SIDEBAR_DROP_TARGET_SIZE = 36

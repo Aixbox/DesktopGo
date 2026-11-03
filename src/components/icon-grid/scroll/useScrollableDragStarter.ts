@@ -36,8 +36,6 @@ interface ScrollableDragStarterParams {
     order: Array<string | null>
     previewSlotIndex: number | null
   } | null>
-  compactScrollLastHitPointRef: MutableRefObject<{ x: number; y: number } | null>
-  compactScrollLastHitIdRef: MutableRefObject<string | null>
   setOuterSlots: Dispatch<SetStateAction<Array<string | null>>>
   setOpenFolderId: Dispatch<SetStateAction<string | null>>
   clearTimer: () => void
@@ -78,8 +76,6 @@ export function useScrollableDragStarter(params: ScrollableDragStarterParams) {
     compactOuterDragBaseWithoutDraggingRef,
     compactOuterPreviewItemsRef,
     compactOuterPreviewResultRef,
-    compactScrollLastHitPointRef,
-    compactScrollLastHitIdRef,
     resolveDockItemOrder,
     resolveCompactOuterTopLevelOrder,
     resolvePagedOuterTopLevelOrder,
@@ -120,8 +116,6 @@ export function useScrollableDragStarter(params: ScrollableDragStarterParams) {
     compactOuterDragBaseWithoutDraggingRef.current = null
     compactOuterPreviewItemsRef.current = null
     compactOuterPreviewResultRef.current = null
-    compactScrollLastHitPointRef.current = null
-    compactScrollLastHitIdRef.current = null
     const sourceOrder =
       pending.context === 'folder' && pending.sourceFolderId
         ? getFolderChildrenById(itemsRef.current, pending.sourceFolderId).map(child => child.key)

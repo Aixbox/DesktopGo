@@ -3,7 +3,7 @@ import type { EvasionDirection, GridItem, HoverZone } from '../model'
 import { getGridItemSpan, getId } from '../model'
 import { DRAG_HOLE_ID } from '../domain/slots'
 import { applyEvasionPreview, moveDragHoleToIndex } from '../domain/evasionPolicy'
-import { clampNumber, classifyZone, getRectArea, getRectIntersection } from '../domain/geometry'
+import { clampNumber, classifyZone } from '../domain/geometry'
 import { resolveFolderAutoOpenHit } from '../hooks/folderAutoOpenHitTesting'
 import {
   applyOuterEvasionPolicy,
@@ -33,7 +33,6 @@ import {
 import {
   buildScrollGroupDragPreviewOrder,
   buildScrollGroupEntries,
-  isPointInsideScrollDropTarget,
   resolveScrollDropPosition,
 } from './scrollGroupLayout'
 import { compactOuterSlotsWithinPages, maskDraggingIdsInCompactOrder } from './scrollTopLevelLayout'
@@ -74,8 +73,6 @@ interface ScrollableDragGeometryControllerParams {
     order: Array<string | null>
     previewSlotIndex: number | null
   } | null>
-  compactScrollLastHitPointRef: MutableRefObject<{ x: number; y: number } | null>
-  compactScrollLastHitIdRef: MutableRefObject<string | null>
   getOuterGridElementAtPoint?: (
     x: number,
     y: number
@@ -124,8 +121,6 @@ export function useScrollableDragGeometryController(
     compactOuterDragBaseWithoutDraggingRef,
     compactOuterPreviewItemsRef,
     compactOuterPreviewResultRef,
-    compactScrollLastHitPointRef,
-    compactScrollLastHitIdRef,
     getOuterGridElementAtPoint,
     getActiveScrollGroupItemIds,
   } = params
@@ -559,73 +554,53 @@ export function useScrollableDragGeometryController(
     const gridElement = resolveGridMetrics('outer').gridElement
     if (!order || order.length === 0 || !gridElement) return null
 
-    const itemMap = new Map(resolveCompactOuterPreviewItems(state).map(item => [getId(item), item]))
-    const entries = buildScrollGroupEntries(order, itemMap, Math.max(1, columns))
-    const gridRect = gridElement.getBoundingClientRect()
-    const strideX = itemWidth + gridGap
-    const strideY = itemHeight + gridGap
-    const draggingSpan = getGridItemSpan(state.draggingItem)
-    const dragWidth = draggingSpan.cols * itemWidth + Math.max(0, draggingSpan.cols - 1) * gridGap
-    const dragHeight = draggingSpan.rows * itemHeight + Math.max(0, draggingSpan.rows - 1) * gridGap
-    const offsetX = clampNumber(state.offsetX, 0, dragWidth)
-    const offsetY = clampNumber(state.offsetY, 0, dragHeight)
-    const dragRect = new DOMRect(
-      state.pointerX - offsetX,
-      state.pointerY - offsetY,
-      dragWidth,
-      dragHeight
+    const items = resolveCompactOuterPreviewItems(state)
+    const itemMap = new Map(items.map(item => [getId(item), item]))
+    const safeColumns = Math.max(1, columns)
+    const entries = buildScrollGroupEntries(order, itemMap, safeColumns)
+    const rowCount = entries.reduce(
+      (count, entry) => Math.max(count, entry.row + entry.span.rows),
+      1
     )
-    // WeTab resolves small tiles from the dragged clone's center and larger tiles from the
-    // pointer itself. It does not start a target dwell merely because two rectangles overlap.
-    const point =
-      draggingSpan.cols === 1 && draggingSpan.rows === 1
-        ? {
-            x: dragRect.left + dragRect.width / 2,
-            y: dragRect.top + dragRect.height / 2,
-          }
-        : { x: state.pointerX, y: state.pointerY }
-    const getEntryRect = (entry: (typeof entries)[number]) =>
-      new DOMRect(
-        gridRect.left + entry.col * strideX,
-        gridRect.top + entry.row * strideY,
-        entry.span.cols * itemWidth + Math.max(0, entry.span.cols - 1) * gridGap,
-        entry.span.rows * itemHeight + Math.max(0, entry.span.rows - 1) * gridGap
-      )
-    const draggedIdSet = new Set(state.draggingIds)
-    const candidates = entries.filter(entry => !draggedIdSet.has(entry.id))
-    const cachedPoint = compactScrollLastHitPointRef.current
-    const cachedId = compactScrollLastHitIdRef.current
-    let resolvedEntry =
-      cachedPoint && cachedId && Math.hypot(point.x - cachedPoint.x, point.y - cachedPoint.y) < 10
-        ? (candidates.find(
-            entry =>
-              entry.id === cachedId && isPointInsideScrollDropTarget(point, getEntryRect(entry))
-          ) ?? null)
-        : null
-
-    if (!resolvedEntry) {
-      resolvedEntry =
-        candidates.find(entry => isPointInsideScrollDropTarget(point, getEntryRect(entry))) ?? null
-    }
-    if (!resolvedEntry) return null
-
-    const targetRect = getEntryRect(resolvedEntry)
-    const overlapRect = getRectIntersection(dragRect, targetRect)
-    if (!overlapRect) return null
-    compactScrollLastHitPointRef.current = point
-    compactScrollLastHitIdRef.current = resolvedEntry.id
-    return {
-      targetId: resolvedEntry.id,
-      targetIndex: order.indexOf(resolvedEntry.id),
-      targetRect,
-      overlapRect,
-      iou: getRectArea(overlapRect) / Math.max(1, getRectArea(dragRect)),
-      intersectionArea: getRectArea(overlapRect),
-      centerManhattanDistance:
-        Math.abs(point.x - (targetRect.left + targetRect.width / 2)) +
-        Math.abs(point.y - (targetRect.top + targetRect.height / 2)),
-      zone: classifyZone(targetRect, point.x, point.y),
-    }
+    const slots = Array<string | null>(rowCount * safeColumns).fill(null)
+    const draggedIds = new Set(state.draggingIds)
+    const span = getGridItemSpan(state.draggingItem)
+    const smallIcon = state.draggingItem.kind === 'icon' && span.cols === 1 && span.rows === 1
+    const dragWidth = smallIcon ? iconImageSize : span.cols * itemWidth + (span.cols - 1) * gridGap
+    const dragHeight = smallIcon
+      ? iconImageSize
+      : span.rows * itemHeight + (span.rows - 1) * gridGap
+    const gridRect = gridElement.getBoundingClientRect()
+    entries.forEach(entry => {
+      if (draggedIds.has(entry.id)) return
+      const left = gridRect.left + entry.col * (itemWidth + gridGap)
+      const top = gridRect.top + entry.row * (itemHeight + gridGap)
+      const width = entry.span.cols * (itemWidth + gridGap) - gridGap
+      const height = entry.span.rows * (itemHeight + gridGap) - gridGap
+      // Reject distant footprints before the shared hit test measures DOM surfaces.
+      if (Math.abs(state.pointerX - left - width / 2) > (width + dragWidth) / 2 + gridGap) return
+      if (Math.abs(state.pointerY - top - height / 2) > (height + dragHeight) / 2 + gridGap) return
+      slots[entry.globalIndex] = entry.id
+    })
+    // The rendered ghost follows the pointer center. Reuse paged visual rectangles and
+    // stable layout anchors so pointer-down offsets and FLIP motion cannot shift the hit area.
+    const hit = findOuterMaxOverlapHitByMetrics({
+      state: { ...state, workingOrder: slots },
+      gridElement,
+      columns: safeColumns,
+      rows: rowCount,
+      itemWidth,
+      itemHeight,
+      gridGap,
+      dragWidth,
+      dragHeight,
+      pageSize: slots.length,
+      currentPage: 0,
+      tileRefs: tileRefs.current,
+      items,
+    })
+    // Compact ordering consumes an item index, while the shared hit test consumes cell anchors.
+    return hit ? { ...hit, targetIndex: order.indexOf(hit.targetId) } : null
   }
 
   const findTopLevelMaxOverlapHit = (state: DragState): OuterOverlapHit | null => {
@@ -833,15 +808,6 @@ export function useScrollableDragGeometryController(
     target: GridItem,
     overlapHit: OuterOverlapHit
   ): HoverZone => {
-    const mergeAllowed =
-      state.draggingItem.kind === 'icon' && (target.kind === 'icon' || target.kind === 'folder')
-    const draggingSpan = getGridItemSpan(state.draggingItem)
-    const dragWidth = draggingSpan.cols * itemWidth + Math.max(0, draggingSpan.cols - 1) * gridGap
-    const dragHeight = draggingSpan.rows * itemHeight + Math.max(0, draggingSpan.rows - 1) * gridGap
-    const dragCenter = {
-      x: state.pointerX - clampNumber(state.offsetX, 0, dragWidth) + dragWidth / 2,
-      y: state.pointerY - clampNumber(state.offsetY, 0, dragHeight) + dragHeight / 2,
-    }
     if (
       target.kind === 'folder' &&
       state.draggingItem.kind === 'icon' &&
@@ -853,12 +819,14 @@ export function useScrollableDragGeometryController(
           hit: overlapHit,
           target,
           node: tileRefs.current.get(overlapHit.targetId),
-          point: dragCenter,
-          hitRectIsTile: !!state.scrollGroupOrder,
         })?.zone ?? overlapHit.zone
       )
     }
-    const position = resolveScrollDropPosition(dragCenter, overlapHit.targetRect, mergeAllowed)
+    const position = resolveScrollDropPosition(
+      { x: state.pointerX, y: state.pointerY },
+      overlapHit.targetRect,
+      false
+    )
     return position === 'middle' ? 'center' : position === 'before' ? 'left' : 'right'
   }
 
@@ -880,7 +848,6 @@ export function useScrollableDragGeometryController(
     resolveNearestSlotIndexByContext,
     resolveNearestDropOrderByContext,
     resolveCandidateAnchorIndexByContext,
-    findCompactScrollGroupOverlapHit,
     findTopLevelMaxOverlapHit,
     resolveTopLevelOverlapPreviewIndex,
     tryApplyTopLevelEvasion,

@@ -6,7 +6,7 @@ import {
   collectElementCenters as collectCenters,
   resolveItemById,
 } from '../domain/dragWorkflowShared'
-import { OUTER_DRAG_RULES } from '../constants'
+import { canPreviewOuterFolder } from '../domain/folderDropIntent'
 import type { DragState, OuterOverlapHit } from '../state/types'
 import { activateDragPointerCapture, releaseDragPointerCapture } from '../hooks/dragPointerCapture'
 import {
@@ -45,7 +45,6 @@ interface ScrollableFolderDragControllerParams {
     order: Array<string | null>
     previewSlotIndex: number | null
   } | null>
-  findCompactScrollGroupOverlapHit: (state: DragState) => OuterOverlapHit | null
   findTopLevelMaxOverlapHit: (state: DragState) => OuterOverlapHit | null
   resolveCompactScrollHoverZone: (
     state: DragState,
@@ -132,7 +131,6 @@ export function useScrollableFolderDragController(params: ScrollableFolderDragCo
     compactOuterDragBaseWithoutDraggingRef,
     compactOuterPreviewItemsRef,
     compactOuterPreviewResultRef,
-    findCompactScrollGroupOverlapHit,
     findTopLevelMaxOverlapHit,
     resolveCompactScrollHoverZone,
     isDraggingFromDock,
@@ -160,37 +158,6 @@ export function useScrollableFolderDragController(params: ScrollableFolderDragCo
     resolveTopLevelContextAtPoint,
   } = params
 
-  const triggerCompactFolderPreview = (expectedTargetId: string) => {
-    const latest = dragRef.current
-    if (!latest || latest.context !== 'outer' || !isCompactOuterDrop) return
-    if (latest.hoverTargetId !== expectedTargetId || latest.hoverZone !== 'center') return
-
-    const overlapHit = findCompactScrollGroupOverlapHit(latest)
-    if (!overlapHit || overlapHit.targetId !== expectedTargetId) return
-    const target = resolveItemById(itemById, itemsRef.current, expectedTargetId)
-    if (!target) return
-    const zone = resolveCompactScrollHoverZone(latest, target, overlapHit)
-    if (zone !== 'center') return
-
-    const canCreateFolder =
-      latest.draggingIds.length === 1 &&
-      latest.draggingItem.kind === 'icon' &&
-      target.kind === 'icon'
-    const canAddToFolder = latest.draggingItem.kind === 'icon' && target.kind === 'folder'
-    if (!canCreateFolder && !canAddToFolder) return
-
-    publishMoveDragState({
-      ...latest,
-      hoverIou: overlapHit.iou,
-      folderPreviewTargetId: expectedTargetId,
-      dwellStartedAt: null,
-      lastEvasionSignature: null,
-    })
-    if (target.kind === 'folder') {
-      scheduleFolderAutoOpen(expectedTargetId)
-    }
-  }
-
   const triggerTopLevelDwellEvasion = (
     expectedTargetId: string,
     expectedZone: HoverZone | null = null
@@ -216,7 +183,7 @@ export function useScrollableFolderDragController(params: ScrollableFolderDragCo
         zone: resolveCompactScrollHoverZone(latest, target, overlapHit),
       }
       if (expectedZone !== null && overlapHit.zone !== expectedZone) return
-      if (overlapHit.zone === 'center') return
+      if (canPreviewOuterFolder(source, target, overlapHit, isMultiOuterDrag)) return
 
       const signature = `compact-overlap:${overlapHit.targetId}:${overlapHit.zone}`
       const rearmed = hasScrollEvasionRearmed(
@@ -277,13 +244,8 @@ export function useScrollableFolderDragController(params: ScrollableFolderDragCo
       resolveNearestSlotIndexByContext(latest, { allowOutside: true }),
       candidateAnchorIndex
     )
-    const canAddToExistingFolder =
-      source.kind === 'icon' &&
-      target.kind === 'folder' &&
-      overlapHit.zone === 'center' &&
-      overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
-    if (canAddToExistingFolder) {
-      const nextState: DragState = {
+    if (canPreviewOuterFolder(source, target, overlapHit, isMultiOuterDrag)) {
+      publishMoveDragState({
         ...latest,
         previewSlotIndex,
         dockPreviewIndex: null,
@@ -293,29 +255,10 @@ export function useScrollableFolderDragController(params: ScrollableFolderDragCo
         folderPreviewTargetId: overlapHit.targetId,
         dwellStartedAt: null,
         lastEvasionSignature: null,
+      })
+      if (target.kind === 'folder' && overlapHit.zone === 'center') {
+        scheduleFolderAutoOpen(overlapHit.targetId)
       }
-      publishMoveDragState(nextState)
-      return
-    }
-
-    const canFolderPreview = !isMultiOuterDrag && source.kind === 'icon' && target.kind === 'icon'
-    if (
-      canFolderPreview &&
-      overlapHit.zone === 'center' &&
-      overlapHit.iou >= OUTER_DRAG_RULES.folderOverlapThreshold
-    ) {
-      const previewState: DragState = {
-        ...latest,
-        previewSlotIndex,
-        dockPreviewIndex: null,
-        hoverTargetId: overlapHit.targetId,
-        hoverZone: overlapHit.zone,
-        hoverIou: overlapHit.iou,
-        folderPreviewTargetId: overlapHit.targetId,
-        dwellStartedAt: null,
-        lastEvasionSignature: null,
-      }
-      publishMoveDragState(previewState)
       return
     }
 
@@ -353,9 +296,7 @@ export function useScrollableFolderDragController(params: ScrollableFolderDragCo
     const validationState = pointer
       ? { ...latest, pointerX: pointer.pointerX, pointerY: pointer.pointerY }
       : latest
-    const currentOverlap = isCompactOuterDrop
-      ? findCompactScrollGroupOverlapHit(validationState)
-      : findTopLevelMaxOverlapHit(validationState)
+    const currentOverlap = findTopLevelMaxOverlapHit(validationState)
     if (!currentOverlap || currentOverlap.targetId !== expectedTargetId) return
     const currentZone = isCompactOuterDrop
       ? resolveCompactScrollHoverZone(validationState, target, currentOverlap)
@@ -575,7 +516,6 @@ export function useScrollableFolderDragController(params: ScrollableFolderDragCo
   }
 
   return {
-    triggerCompactFolderPreview,
     triggerTopLevelDwellEvasion,
     scheduleFolderAutoOpen,
     moveDragToTopLevelContext,
