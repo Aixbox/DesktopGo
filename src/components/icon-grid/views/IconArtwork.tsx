@@ -1,4 +1,5 @@
 import { AppWindow } from 'lucide-react'
+import { motion, type MotionValue } from 'framer-motion'
 import type { DesktopIcon } from '../../../types'
 import { useIconDominantColor } from '../hooks/useIconDominantColor'
 import { useRoundedIcon } from '../hooks/useRoundedIcon'
@@ -14,12 +15,14 @@ export function IconArtwork({
   enlarged,
   fallbackSize,
   imageSize,
+  displaySize,
   name = icon.name,
 }: {
   icon: DesktopIcon
   enlarged: boolean
   fallbackSize: number
   imageSize?: number
+  displaySize?: MotionValue<number>
   name?: string
 }) {
   const color = useIconDominantColor(enlarged ? icon.icon_base64 : undefined)
@@ -28,10 +31,10 @@ export function IconArtwork({
     ...(imageSize === undefined
       ? {}
       : {
-          width: imageSize,
-          height: imageSize,
+          width: displaySize ?? imageSize,
+          height: displaySize ?? imageSize,
           flexShrink: 0,
-          transition: enlarged ? 'inherit' : undefined,
+          transition: displaySize ? 'none' : enlarged ? 'inherit' : undefined,
         }),
     // Rounded pixels already follow the visible artwork, including its transparent padding.
     ...(enlarged
@@ -58,7 +61,7 @@ export function IconArtwork({
         />
       ) : null}
       {icon.icon_base64 ? (
-        <img
+        <motion.img
           src={roundedImage ?? icon.icon_base64}
           alt={name}
           draggable={false}
@@ -66,10 +69,12 @@ export function IconArtwork({
           style={enlarged || imageSize !== undefined ? foregroundStyle : undefined}
         />
       ) : (
-        <AppWindow
-          className="launchpad-icon-artwork relative text-foreground/60"
-          style={{ width: fallbackSize, height: fallbackSize }}
-        />
+        <motion.span
+          className="launchpad-icon-artwork relative shrink-0 text-foreground/60"
+          style={{ width: displaySize ?? fallbackSize, height: displaySize ?? fallbackSize }}
+        >
+          <AppWindow className="h-full w-full" />
+        </motion.span>
       )}
     </>
   )

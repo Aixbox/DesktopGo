@@ -190,6 +190,9 @@ export const buildScrollGroupEntries = (
     }
   })
 
+  // Occupancy only grows. A footprint that did not fit before cannot fit later,
+  // so each span resumes its first-fit search instead of rescanning from cell zero.
+  const nextAnchorBySpan = new Map<string, number>()
   itemIds.forEach(id => {
     if (reservedIds.has(id)) return
     const item = itemById.get(id)
@@ -199,7 +202,8 @@ export const buildScrollGroupEntries = (
       cols: Math.max(1, rawSpan.cols),
       rows: Math.max(1, rawSpan.rows),
     }
-    let anchorIndex = 0
+    const spanKey = `${span.cols}x${span.rows}`
+    let anchorIndex = nextAnchorBySpan.get(spanKey) ?? 0
 
     while (true) {
       const row = Math.floor(anchorIndex / safeColumns)
@@ -217,6 +221,7 @@ export const buildScrollGroupEntries = (
       }
       if (footprint.every(cell => !occupiedCells.has(cell))) {
         footprint.forEach(cell => occupiedCells.add(cell))
+        nextAnchorBySpan.set(spanKey, anchorIndex + 1)
         entries.push({
           id,
           item,

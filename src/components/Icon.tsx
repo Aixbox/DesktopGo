@@ -10,14 +10,14 @@ import { useIconStore } from '../stores/iconStore'
 import { IconContextMenu } from './icons/IconContextMenu'
 import { IconResizeHandle } from './icon-grid/views/IconResizeHandle'
 import { IconArtwork } from './icon-grid/views/IconArtwork'
-import { scaledRadius } from './icon-grid/views/folderVisualPolicy'
+import { useIconTileMotion } from './icon-grid/hooks/useIconTileMotion'
 import {
   ENLARGED_ICON_SURFACE_CLASS,
   getIconForegroundSize,
   ICON_TILE_RESIZE_TRANSITION,
   type IconGridTileConfig,
 } from './icon-grid/views/iconTileMetrics'
-import { useReducedMotion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { Check } from 'lucide-react'
 import {
   memo,
@@ -77,6 +77,14 @@ export const Icon = memo(function Icon({
         gridTile.metrics.shapeHeight
       )
     : config.imgSize
+  const fallbackSize = metrics
+    ? (foregroundSize ?? Math.min(metrics.shapeWidth, metrics.shapeHeight) * 0.7)
+    : 32
+  const tileMotion = useIconTileMotion(
+    metrics,
+    icon.icon_base64 ? (foregroundSize ?? config.imgSize) : fallbackSize,
+    reducedMotion
+  )
 
   const [isRenaming, setIsRenaming] = useState(false)
   const [draftName, setDraftName] = useState(displayName)
@@ -193,7 +201,7 @@ export const Icon = memo(function Icon({
             </span>
           ) : null}
 
-          <div
+          <motion.div
             className={`icon-image flex flex-1 items-center justify-center overflow-hidden ${
               usesScrollMotion ? '' : 'transition-all duration-200'
             } ${imageMotionClass} ${enlarged ? ENLARGED_ICON_SURFACE_CLASS : ''}`}
@@ -203,11 +211,11 @@ export const Icon = memo(function Icon({
                     position: 'absolute',
                     left: 0,
                     top: 0,
-                    width: metrics.shapeWidth,
-                    height: metrics.shapeHeight,
-                    translate: `${(metrics.footprintWidth - metrics.shapeWidth) / 2}px ${ICON_GRID_TILE_PADDING_Y + (metrics.bodyHeight - metrics.shapeHeight) / 2}px`,
-                    borderRadius: scaledRadius(metrics.surfaceRadius),
-                    transition: resizeTransition,
+                    width: tileMotion.width,
+                    height: tileMotion.height,
+                    translate: tileMotion.translate,
+                    borderRadius: tileMotion.borderRadius,
+                    transition: 'filter 180ms ease, transform 180ms ease',
                   }
                 : { width: config.imgSize, height: config.imgSize }
             }
@@ -216,14 +224,11 @@ export const Icon = memo(function Icon({
               icon={icon}
               name={displayName}
               enlarged={enlarged}
-              imageSize={foregroundSize}
-              fallbackSize={
-                metrics
-                  ? (foregroundSize ?? Math.min(metrics.shapeWidth, metrics.shapeHeight) * 0.7)
-                  : 32
-              }
+              imageSize={metrics ? (foregroundSize ?? config.imgSize) : foregroundSize}
+              displaySize={metrics ? tileMotion.foregroundSize : undefined}
+              fallbackSize={fallbackSize}
             />
-          </div>
+          </motion.div>
           {isRenaming ? (
             <input
               ref={inputRef}
@@ -251,7 +256,7 @@ export const Icon = memo(function Icon({
               maxLength={64}
             />
           ) : (
-            <span
+            <motion.span
               className="icon-label text-[11px] text-center leading-[15px] text-foreground drop-shadow-md"
               style={{
                 // 标题不受磁贴左右 padding 限制，和 hover 背景保持同宽。
@@ -272,17 +277,24 @@ export const Icon = memo(function Icon({
                       position: 'absolute',
                       left: 0,
                       top: 0,
-                      transform: `translateY(${ICON_GRID_TILE_PADDING_Y + metrics.bodyHeight + ICON_GRID_TITLE_GAP}px)`,
-                      transition: resizeTransition,
+                      y: tileMotion.titleY,
+                      width: tileMotion.titleWidth,
+                      maxWidth: tileMotion.titleWidth,
                     } as const)
                   : {}),
               }}
             >
               {displayName}
-            </span>
+            </motion.span>
           )}
         </button>
-        {gridTile && !isRenaming ? <IconResizeHandle tile={gridTile} /> : null}
+        {gridTile && !isRenaming ? (
+          <IconResizeHandle
+            tile={gridTile}
+            display={tileMotion.display}
+            source={icon.icon_base64}
+          />
+        ) : null}
       </div>
     </IconContextMenu>
   )

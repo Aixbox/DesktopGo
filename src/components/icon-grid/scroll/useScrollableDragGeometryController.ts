@@ -30,12 +30,9 @@ import {
   buildCompactOuterPreviewItems as createCompactOuterPreviewItems,
   resolveCompactOuterPreview,
 } from './scrollCompactPreviewPolicy'
-import {
-  buildScrollGroupDragPreviewOrder,
-  buildScrollGroupEntries,
-  resolveScrollDropPosition,
-} from './scrollGroupLayout'
+import { buildScrollGroupDragPreviewOrder, resolveScrollDropPosition } from './scrollGroupLayout'
 import { compactOuterSlotsWithinPages, maskDraggingIdsInCompactOrder } from './scrollTopLevelLayout'
+import { resolveScrollGroupHitLayout } from './scrollGroupHitLayout'
 
 interface ScrollableDragGeometryControllerParams {
   gridGap: number
@@ -555,13 +552,8 @@ export function useScrollableDragGeometryController(
     if (!order || order.length === 0 || !gridElement) return null
 
     const items = resolveCompactOuterPreviewItems(state)
-    const itemMap = new Map(items.map(item => [getId(item), item]))
     const safeColumns = Math.max(1, columns)
-    const entries = buildScrollGroupEntries(order, itemMap, safeColumns)
-    const rowCount = entries.reduce(
-      (count, entry) => Math.max(count, entry.row + entry.span.rows),
-      1
-    )
+    const { entries, rowCount } = resolveScrollGroupHitLayout(items, order, safeColumns)
     const slots = Array<string | null>(rowCount * safeColumns).fill(null)
     const draggedIds = new Set(state.draggingIds)
     const span = getGridItemSpan(state.draggingItem)

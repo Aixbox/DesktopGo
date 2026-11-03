@@ -1,15 +1,30 @@
-import { useReducedMotion } from 'framer-motion'
+import { useEffect } from 'react'
+import type { MotionValue } from 'framer-motion'
 import { useItemMenuFocused } from '../../icons/focusedItemMenuContext'
-import { useFolderResizeMotion } from '../hooks/useFolderResizeMotion'
+import type { DesktopFolderTileMetrics } from './folderVisualPolicy'
+import { loadIconColor } from '../services/iconColor'
+import { loadRoundedIcon } from '../services/roundedIcon'
 import { useDocumentDirection } from '../hooks/useDocumentDirection'
 import { FolderResizeHandle } from './FolderResizeHandle'
 import type { IconGridTileConfig } from './iconTileMetrics'
 
 /** Ordinary icons use the same contour, hit band, capture and retained-handle lifecycle as folders. */
-export function IconResizeHandle({ tile }: { tile: IconGridTileConfig }) {
+export function IconResizeHandle({
+  tile,
+  display,
+  source,
+}: {
+  tile: IconGridTileConfig
+  display: MotionValue<DesktopFolderTileMetrics>
+  source?: string
+}) {
   const focused = useItemMenuFocused()
-  const reducedMotion = useReducedMotion() ?? false
-  const display = useFolderResizeMotion(tile.metrics, reducedMotion)
+  // Prepare only the focused icon, before the resize crosses its first size threshold.
+  useEffect(() => {
+    if (!focused || !source) return
+    void loadIconColor(source)
+    void loadRoundedIcon(source)
+  }, [focused, source])
   const rtl = useDocumentDirection() === 'rtl'
   if (!tile.onCommit || !tile.onPreview || !tile.onCancel) return null
   return (

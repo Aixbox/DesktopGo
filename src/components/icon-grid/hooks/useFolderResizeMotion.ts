@@ -3,9 +3,18 @@ import { animate, useMotionValue } from 'framer-motion'
 import type { DesktopFolderTileMetrics } from '../views/folderVisualPolicy'
 import { FOLDER_RESIZE_TRANSITION, interpolateFolderGeometry } from '../views/folderResizeMotion'
 
-/** Animate only the folder's visual geometry, never the grid's occupancy or persisted size. */
-export function useFolderResizeMotion(target: DesktopFolderTileMetrics, reducedMotion: boolean) {
-  const geometry = useMotionValue(target)
+export type TileResizeDisplay = DesktopFolderTileMetrics & { artworkSize?: number }
+
+/** Animate visual geometry only; grid occupancy and persisted sizes stay discrete. */
+export function useFolderResizeMotion(
+  target: DesktopFolderTileMetrics,
+  reducedMotion: boolean,
+  artworkSize?: number
+) {
+  const geometry = useMotionValue<TileResizeDisplay>({
+    ...target,
+    ...(artworkSize === undefined ? {} : { artworkSize }),
+  })
   // Primitive dependencies keep repeated pointer previews from restarting the animation.
   const {
     footprintWidth,
@@ -29,6 +38,7 @@ export function useFolderResizeMotion(target: DesktopFolderTileMetrics, reducedM
       shapeHeight,
       panelBase,
       surfaceRadius,
+      ...(artworkSize === undefined ? {} : { artworkSize }),
     }
     const from = geometry.get()
     if (reducedMotion) {
@@ -58,6 +68,7 @@ export function useFolderResizeMotion(target: DesktopFolderTileMetrics, reducedM
     shapeHeight,
     panelBase,
     surfaceRadius,
+    artworkSize,
   ])
   return geometry
 }

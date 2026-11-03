@@ -293,6 +293,26 @@ test('resize retargets from the displayed geometry; release does not restart; un
   assert.equal(h.animations[1].stopped, true)
 })
 
+test('icon foreground size follows the surface clock through enlargement and interrupted shrink', () => {
+  const h = animationHarness()
+  const small = metrics('1x1'),
+    large = metrics('2x2')
+  const value = h.render(small, false, 48)
+  h.render(large, false, 90)
+  h.animations[0].options.onUpdate(0.5)
+  assert.equal(value.get().artworkSize, 69)
+  assert.equal(value.get().shapeWidth, (small.shapeWidth + large.shapeWidth) / 2)
+  h.render(small, false, 48)
+  h.animations[1].options.onUpdate(0)
+  assert.equal(value.get().artworkSize, 69)
+  h.animations[1].options.onUpdate(1)
+  assert.equal(value.get().artworkSize, 48)
+  h.render(large, true, 90)
+  assert.equal(value.get().shapeWidth, large.shapeWidth)
+  assert.equal(value.get().artworkSize, 90)
+  h.unmount()
+})
+
 test('outline and hit area follow intermediate geometry without scaling the handle stroke', () => {
   const effects = [],
     nodes = []

@@ -29,6 +29,7 @@ import { resolveVerticalEdgeScrollSpeed } from './scrollEdgeAutoScrollPolicy'
 import { MOTION_SPRING_EASING } from '../constants'
 import type { DropImpactEvent } from '../state/types'
 import { animateDropImpactNodes } from '../views/dropImpactMotion'
+import { getReorderAnimationDuration } from '../hooks/reorderMotion'
 import {
   buildScrollGroupEntries,
   moveScrollItemRelative,
@@ -127,6 +128,7 @@ export function useScrollableOuterGridDragWorkflow({
   const gridItemRefs = useRef(new Map<string, HTMLDivElement>())
   const pendingGridFlipRef = useRef<Map<string, GridItemPosition> | null>(null)
   const gridFlipAnimationsRef = useRef(new Map<string, Animation>())
+  const gridFlipLayoutRef = useRef(new Map<string, string>())
   const dropImpactSequenceRef = useRef(0)
   const lastDropImpactSequenceRef = useRef(0)
   const pointerDragSessionRef = useRef<PointerDragSession | null>(null)
@@ -379,6 +381,14 @@ export function useScrollableOuterGridDragWorkflow({
   }
 
   useLayoutEffect(() => {
+    const previousLayout = gridFlipLayoutRef.current
+    const nextLayout = new Map(
+      entries.map(entry => [
+        entry.id,
+        `${entry.col}:${entry.row}:${itemWidth}:${itemHeight}:${gridGap}`,
+      ])
+    )
+    gridFlipLayoutRef.current = nextLayout
     const internalPositions = pendingGridFlipRef.current
     const externalPositions = externalGridFlipPositionsRef.current
     const previousPositions = internalPositions ?? externalPositions
@@ -389,7 +399,11 @@ export function useScrollableOuterGridDragWorkflow({
     if (isNewDropImpact && dropImpact) {
       lastDropImpactSequenceRef.current = dropImpact.sequence
     }
-    if (reducedMotion) return
+    if (reducedMotion) {
+      gridFlipAnimationsRef.current.forEach(animation => animation.cancel())
+      gridFlipAnimationsRef.current.clear()
+      return
+    }
     if (isNewDropImpact && dropImpact) {
       animateDropImpactNodes({
         nodes: gridItemRefs.current,
@@ -404,9 +418,12 @@ export function useScrollableOuterGridDragWorkflow({
       return
     }
     if (!previousPositions) return
+    const continuing = new Set<string>()
     if (!internalPositions && externalPositions) {
-      gridFlipAnimationsRef.current.forEach(animation => animation.cancel())
-      gridFlipAnimationsRef.current.clear()
+      gridFlipAnimationsRef.current.forEach((animation, id) => {
+        if (nextLayout.has(id) && nextLayout.get(id) === previousLayout.get(id)) continuing.add(id)
+        else animation.cancel()
+      })
     }
     const movedItems: Array<{
       id: string
@@ -415,26 +432,36 @@ export function useScrollableOuterGridDragWorkflow({
       deltaY: number
     }> = []
     previousPositions.forEach((previous, id) => {
-      if (id === activeDraggedItemId) return
+      if (id === activeDraggedItemId || continuing.has(id)) return
       const node = gridItemRefs.current.get(id)
       if (!node) return
       const next = node.getBoundingClientRect()
-      const deltaX = previous.left - next.left
-      const deltaY = previous.top - next.top
+      const scaleX = next.width > 0 && node.offsetWidth > 0 ? next.width / node.offsetWidth : 1
+      const scaleY = next.height > 0 && node.offsetHeight > 0 ? next.height / node.offsetHeight : 1
+      const deltaX = (previous.left - next.left) / scaleX
+      const deltaY = (previous.top - next.top) / scaleY
       if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return
       movedItems.push({ id, node, deltaX, deltaY })
     })
     movedItems.forEach(({ id, node, deltaX, deltaY }) => {
+      node.style.willChange = 'transform'
       const animation = node.animate(
         [
           { transform: `translate3d(${deltaX}px, ${deltaY}px, 0)` },
           { transform: 'translate3d(0, 0, 0)' },
         ],
-        { duration: reorderAnimationMs, easing: MOTION_SPRING_EASING }
+        {
+          duration: Math.max(
+            reorderAnimationMs,
+            getReorderAnimationDuration(deltaX, deltaY, Math.max(itemWidth, itemHeight) + gridGap)
+          ),
+          easing: MOTION_SPRING_EASING,
+        }
       )
       const clearAnimation = () => {
         if (gridFlipAnimationsRef.current.get(id) === animation) {
           gridFlipAnimationsRef.current.delete(id)
+          node.style.willChange = ''
         }
       }
       animation.onfinish = clearAnimation

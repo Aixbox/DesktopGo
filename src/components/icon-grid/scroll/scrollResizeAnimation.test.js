@@ -80,7 +80,7 @@ function hooks() {
   }
 }
 
-function fixture(t, kind, reducedMotion = false) {
+function fixture(t, kind, reducedMotion = false, scale = 1) {
   const oldWindow = globalThis.window,
     oldDocument = globalThis.document
   globalThis.window = { addEventListener() {}, removeEventListener() {}, clearTimeout() {} }
@@ -150,12 +150,20 @@ function fixture(t, kind, reducedMotion = false) {
       let node = nodes.get(entry.id)
       if (!node) {
         node = {
+          style: {},
+          offsetWidth: 96,
+          offsetHeight: 110,
           left: 0,
           top: 0,
           dx: 0,
           dy: 0,
           getBoundingClientRect() {
-            return { left: this.left + this.dx, top: this.top + this.dy }
+            return {
+              left: (this.left + this.dx) * scale,
+              top: (this.top + this.dy) * scale,
+              width: this.offsetWidth * scale,
+              height: this.offsetHeight * scale,
+            }
           },
           animate(frames, options) {
             const [x, y] = frames[0].transform.match(/-?[\d.]+(?=px)/g).map(Number)
@@ -180,6 +188,8 @@ function fixture(t, kind, reducedMotion = false) {
       }
       node.left = entry.col * 104
       node.top = entry.row * 118
+      node.offsetWidth = entry.span.cols * 104 - 8
+      node.offsetHeight = entry.span.rows * 118 - 8
       workflow.gridItemRefs.current.set(entry.id, node)
     }
     workflowHooks.flush()
@@ -236,11 +246,17 @@ for (const kind of ['icon', 'folder']) {
     h.render()
     h.sampleMotion(0.6)
     const before = h.nodes.get('neighbor-0').getBoundingClientRect()
+    const animationCount = h.animations.length
     h.render().actions.commit(h.id, '2x2')
     assert.equal(h.render().plan, null)
     assert.equal(h.params.items[0].size, '2x2')
     assert.deepEqual(h.nodes.get('neighbor-0').getBoundingClientRect(), before)
     assert.equal(h.nodes.get('neighbor-0').left, 208)
+    assert.equal(
+      h.animations.length,
+      animationCount,
+      'release must continue the existing animation'
+    )
   })
 }
 
@@ -254,4 +270,18 @@ test('scroll resize honors reduced motion without dropping the new layout or its
   h.render()
   assert.equal(h.nodes.get('neighbor-0').left, 104)
   assert.equal(h.external.current, null)
+})
+
+test('scroll reorder translates in local pixels while the grid is scaled for editing', t => {
+  const h = fixture(t, 'icon', false, 0.97)
+  h.render().actions.preview(h.id, '2x2')
+  h.render()
+  assert.ok(Math.abs(h.nodes.get('neighbor-0').getBoundingClientRect().left - 104 * 0.97) < 1e-9)
+  h.sampleMotion(0.5)
+  const before = h.nodes.get('neighbor-0').getBoundingClientRect()
+  h.render().actions.preview(h.id, '1x2')
+  h.render()
+  const after = h.nodes.get('neighbor-0').getBoundingClientRect()
+  assert.ok(Math.abs(after.left - before.left) < 1e-9)
+  assert.ok(Math.abs(after.top - before.top) < 1e-9)
 })

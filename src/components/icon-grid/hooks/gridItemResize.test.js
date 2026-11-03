@@ -109,6 +109,27 @@ test('shared resize controller previews, cancels and repeatedly commits from the
 })
 
 test('workspace icon wires size actions and renders its handle outside the activation button', () => {
+  const motion = {
+    motion: new Proxy({}, { get: (_, name) => name }),
+    useReducedMotion: () => false,
+    useTransform: (value, transform) => ({ get: () => transform(value.get()) }),
+  }
+  const { useIconTileMotion } = load('./useIconTileMotion.ts', {
+    'framer-motion': motion,
+    '../../../types': types,
+    '../views/folderVisualPolicy': visuals,
+    './useFolderResizeMotion': {
+      useFolderResizeMotion: (metrics, _reduced, artworkSize) => {
+        let value = { ...metrics, artworkSize }
+        return {
+          get: () => value,
+          set: next => {
+            value = next
+          },
+        }
+      },
+    },
+  })
   const calls = [],
     store = {
       iconSize: 'medium',
@@ -141,15 +162,17 @@ test('workspace icon wires size actions and renders its handle outside the activ
     '../stores/iconStore': { useIconStore },
     './icons/IconContextMenu': { IconContextMenu: 'ContextMenu' },
     './icon-grid/views/IconResizeHandle': { IconResizeHandle: 'Handle' },
+    './icon-grid/hooks/useIconTileMotion': { useIconTileMotion },
     './icon-grid/views/folderVisualPolicy': visuals,
     './icon-grid/views/iconTileMetrics': metrics,
     './icon-grid/views/IconArtwork': load('../views/IconArtwork.tsx', {
+      'framer-motion': motion,
       '../hooks/useRoundedIcon': { useRoundedIcon: source => (source ? 'rounded-image' : null) },
       '../hooks/useIconDominantColor': {
         useIconDominantColor: source => (source ? '#336699' : null),
       },
     }),
-    'framer-motion': { useReducedMotion: () => false },
+    'framer-motion': motion,
   })
   for (const size of ['1x1', '1x2', '2x1', '2x2']) {
     const item = {
@@ -183,17 +206,17 @@ test('workspace icon wires size actions and renders its handle outside the activ
     const image = button.props.children.find(child =>
       child?.props?.className?.includes('icon-image')
     )
-    assert.equal(image.props.style.width, entry.props.gridTile.metrics.shapeWidth)
-    assert.equal(image.props.style.height, entry.props.gridTile.metrics.shapeHeight)
+    assert.equal(image.props.style.width.get(), entry.props.gridTile.metrics.shapeWidth)
+    assert.equal(image.props.style.height.get(), entry.props.gridTile.metrics.shapeHeight)
     const artwork = image.props.children.type(image.props.children.props).props.children
     assert.ok(artwork[1].props.className.includes('object-contain'))
     if (size !== '1x1') {
       const { shapeWidth, shapeHeight } = entry.props.gridTile.metrics
       const expectedSize = size === '2x2' ? shapeWidth / 2 : Math.min(shapeWidth, shapeHeight) * 0.8
-      assert.equal(artwork[1].props.style.width, expectedSize)
-      assert.equal(artwork[1].props.style.height, expectedSize)
+      assert.equal(artwork[1].props.style.width.get(), expectedSize)
+      assert.equal(artwork[1].props.style.height.get(), expectedSize)
       assert.equal(artwork[1].props.style.flexShrink, 0)
-    } else if (size === '1x1') assert.equal(artwork[1].props.style, undefined)
+    } else assert.equal(artwork[1].props.style.width.get(), types.ICON_SIZE_CONFIG.medium.imgSize)
     if (size !== '1x1') {
       assert.equal(artwork[1].props.src, 'rounded-image')
       assert.equal(artwork[1].props.style.borderRadius, 0)
@@ -211,16 +234,64 @@ test('workspace icon wires size actions and renders its handle outside the activ
         surfaceTitleLineCount: 'two',
       })
       assert.equal(
-        image.props.style.borderRadius,
+        image.props.style.borderRadius.get(),
         visuals.scaledRadius(folderMetrics.surfaceRadius)
       )
     } else assert.equal(artwork[0], null)
+    const current = handle.props.display.get()
+    handle.props.display.set({ ...current, shapeWidth: 73, shapeHeight: 91, artworkSize: 37 })
+    assert.equal(image.props.style.width.get(), 73)
+    assert.equal(image.props.style.height.get(), 91)
+    assert.equal(artwork[1].props.style.width.get(), 37)
+    assert.equal(
+      artwork[1].props.style.transition,
+      'none',
+      'no second CSS transition behind the frame'
+    )
     assert.equal(ResizableIcon({ ...props, interactive: false }).props.gridTile.onCommit, undefined)
   }
   assert.deepEqual(calls.slice(0, 3), [
     ['preview', 'app', '2x2'],
     ['commit', 'app', '2x2'],
     'cancel',
+  ])
+})
+
+test('only a focused resize handle prepares icon assets, and it reuses the surface animation', () => {
+  let focused = false
+  const effects = [],
+    prepared = []
+  const display = { get: () => ({ shapeWidth: 48, shapeHeight: 48 }) }
+  const { IconResizeHandle } = load('../views/IconResizeHandle.tsx', {
+    react: { useEffect: callback => effects.push(callback) },
+    '../../icons/focusedItemMenuContext': { useItemMenuFocused: () => focused },
+    '../hooks/useDocumentDirection': { useDocumentDirection: () => 'ltr' },
+    '../services/iconColor': { loadIconColor: source => prepared.push(['color', source]) },
+    '../services/roundedIcon': { loadRoundedIcon: source => prepared.push(['rounded', source]) },
+    './FolderResizeHandle': { FolderResizeHandle: 'FolderResizeHandle' },
+  })
+  const props = {
+    source: 'data:image/png;base64,icon',
+    display,
+    tile: {
+      span: { cols: 1, rows: 1 },
+      slotWidth: 96,
+      slotHeight: 110,
+      gridGap: 8,
+      onPreview() {},
+      onCommit() {},
+      onCancel() {},
+    },
+  }
+  assert.equal(IconResizeHandle(props).props.display, display)
+  effects.splice(0).forEach(callback => callback())
+  assert.equal(prepared.length, 0)
+  focused = true
+  assert.equal(IconResizeHandle(props).props.display, display)
+  effects.splice(0).forEach(callback => callback())
+  assert.deepEqual(prepared, [
+    ['color', props.source],
+    ['rounded', props.source],
   ])
 })
 
