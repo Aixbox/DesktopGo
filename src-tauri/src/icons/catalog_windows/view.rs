@@ -5,6 +5,7 @@ use crate::icons::search_icon_plan::is_special_shell_path;
 
 use super::image::read_icon_file_as_data_uri;
 use super::item::{is_web_url, resolved_icon_color, resolved_icon_source};
+use super::shell_entry::shell_entry_path;
 use super::storage::snapshot_base_dir;
 
 pub(super) fn snapshot_to_ordered_desktop_icons(
@@ -42,6 +43,8 @@ pub(super) fn snapshot_to_ordered_desktop_icons(
                     id: item.id.clone(),
                     name: item.name.clone(),
                     path: item.path.clone(),
+                    shell_path: shell_entry_path(item, &base_dir.join("icon-library-entries"))
+                        .to_string(),
                     target_path: item.target_path.clone(),
                     launch_arguments: item.launch_arguments.clone(),
                     working_directory: item.working_directory.clone(),
@@ -89,6 +92,8 @@ pub(super) fn snapshot_to_ordered_icon_manager_items(
                     id: item.id.clone(),
                     name: item.name.clone(),
                     path: item.path.clone(),
+                    shell_path: shell_entry_path(item, &base_dir.join("icon-library-entries"))
+                        .to_string(),
                     target_path: item.target_path.clone(),
                     launch_arguments: item.launch_arguments.clone(),
                     working_directory: item.working_directory.clone(),

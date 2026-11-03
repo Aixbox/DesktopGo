@@ -160,6 +160,7 @@ test('workspace icon wires size actions and renders its handle outside the activ
     },
     '../types': types,
     '../stores/iconStore': { useIconStore },
+    './icons/useIconRename': { useIconRename: () => ({ isRenaming: false }) },
     './icons/IconContextMenu': { IconContextMenu: 'ContextMenu' },
     './icon-grid/views/IconResizeHandle': { IconResizeHandle: 'Handle' },
     './icon-grid/hooks/useIconTileMotion': { useIconTileMotion },

@@ -1,6 +1,7 @@
 mod image;
 mod item;
 pub(super) mod operations;
+mod shell_entry;
 mod source;
 mod storage;
 mod view;

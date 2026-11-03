@@ -69,6 +69,7 @@ interface IconStore {
   setCustomName: (path: string, name: string) => void
   clearCustomName: (path: string) => void
   clearRenameTrigger: () => void
+  renameIconSource: (icon: DesktopIcon, name: string) => Promise<void>
   requestIconEdit: (icon: DesktopIcon) => void
   clearIconEditRequest: () => void
   setSelectedIconKeys: (keys: string[]) => void
@@ -321,7 +322,7 @@ export const useIconStore = create<IconStore>((set, get) => ({
   showShellContextMenu: async (icon: DesktopIcon) => {
     try {
       const selectedVerb = await invoke<string | null>('show_shell_context_menu', {
-        path: icon.path,
+        path: icon.shell_path || icon.path,
       })
       if (selectedVerb === null) {
         return
@@ -439,6 +440,45 @@ export const useIconStore = create<IconStore>((set, get) => ({
 
   clearRenameTrigger: () => {
     set({ renameTriggerPath: null })
+  },
+
+  renameIconSource: async (icon, name) => {
+    const renamed = await invoke<
+      Array<
+        Pick<
+          DesktopIcon,
+          'id' | 'name' | 'path' | 'target_path' | 'shell_path' | 'working_directory'
+        > & {
+          old_path: string
+        }
+      >
+    >('rename_icon_entry', { id: icon.id, name })
+    // Publish only after the file move and snapshot save both succeed. IDs stay
+    // stable, so folder membership, item size and layout positions are retained.
+    set(state => {
+      const customNames = { ...state.customNames }
+      const updates = new Map(
+        renamed.map(({ old_path, ...item }) => {
+          if (item.id === icon.id) {
+            delete customNames[old_path]
+            delete customNames[item.path]
+          } else if (old_path !== item.path && old_path in customNames) {
+            customNames[item.path] = customNames[old_path]
+            delete customNames[old_path]
+          }
+          return [item.id, item]
+        })
+      )
+      return {
+        icons: state.icons.map(item =>
+          updates.has(item.id) ? { ...item, ...updates.get(item.id) } : item
+        ),
+        customNames,
+      }
+    })
+    void saveCustomNames(get().customNames).catch(error => {
+      console.error('Failed to persist custom names after file rename:', error)
+    })
   },
 
   requestIconEdit: (icon: DesktopIcon) => {

@@ -3,6 +3,8 @@ mod entry;
 mod import;
 mod mutation;
 mod query;
+mod rename;
+mod rename_shortcuts;
 mod update;
 
 pub(in crate::icons) use create::{create_icon_entries_windows, create_icon_entry_windows};
@@ -14,4 +16,5 @@ pub(in crate::icons) use query::{
     get_all_icon_manager_items_windows, get_all_icons_windows, get_custom_icon_source,
     get_icon_edit_source,
 };
+pub(in crate::icons) use rename::rename_icon_entry_windows;
 pub(in crate::icons) use update::update_icon_entry_windows;

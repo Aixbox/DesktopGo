@@ -2,6 +2,8 @@ export interface DesktopIcon {
   id: string
   name: string
   path: string
+  /** Windows 文件操作的真实入口；文档使用源文件，程序使用快捷方式。 */
+  shell_path?: string
   target_path: string
   launch_arguments?: string
   working_directory?: string

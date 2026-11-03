@@ -1,5 +1,5 @@
 use super::models::{
-    CreateIconEntryInput, DesktopIcon, IconManagerItem, IconMutationTarget,
+    CreateIconEntryInput, DesktopIcon, IconManagerItem, IconMutationTarget, IconRenameResult,
     ImportDroppedPathsResult, InvalidIconEntry, ScannedInstalledApp, UpdateIconEntryInput,
 };
 use super::search_cache;
@@ -202,6 +202,22 @@ pub fn update_icon_entry(
     {
         let _ = app_handle;
         let _ = input;
+        Err("Not supported on this platform".to_string())
+    }
+}
+
+pub fn rename_icon_entry(
+    app_handle: tauri::AppHandle,
+    id: &str,
+    name: &str,
+) -> Result<Vec<IconRenameResult>, String> {
+    #[cfg(windows)]
+    {
+        catalog_windows::operations::rename_icon_entry_windows(&app_handle, id, name)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app_handle, id, name);
         Err("Not supported on this platform".to_string())
     }
 }

@@ -8,6 +8,7 @@ import {
 } from '../types'
 import { useIconStore } from '../stores/iconStore'
 import { IconContextMenu } from './icons/IconContextMenu'
+import { useIconRename } from './icons/useIconRename'
 import { IconResizeHandle } from './icon-grid/views/IconResizeHandle'
 import { IconArtwork } from './icon-grid/views/IconArtwork'
 import { useIconTileMotion } from './icon-grid/hooks/useIconTileMotion'
@@ -19,14 +20,7 @@ import {
 } from './icon-grid/views/iconTileMetrics'
 import { motion, useReducedMotion } from 'framer-motion'
 import { Check } from 'lucide-react'
-import {
-  memo,
-  useEffect,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
-} from 'react'
+import { memo } from 'react'
 
 interface IconProps {
   gridTile?: IconGridTileConfig
@@ -55,10 +49,6 @@ export const Icon = memo(function Icon({
   const iconSize = useIconStore(state => state.iconSize)
   const titleLineCount = useIconStore(state => state.titleLineCount)
   const customName = useIconStore(state => state.customNames[icon.path])
-  const setCustomName = useIconStore(state => state.setCustomName)
-  const clearCustomName = useIconStore(state => state.clearCustomName)
-  const renameTriggerPath = useIconStore(state => state.renameTriggerPath)
-  const clearRenameTrigger = useIconStore(state => state.clearRenameTrigger)
   const config = ICON_SIZE_CONFIG[iconSize]
   const tileHeight = getIconGridRowHeight(iconSize)
   const isSingleLineTitle = titleLineCount === 'one'
@@ -86,25 +76,15 @@ export const Icon = memo(function Icon({
     reducedMotion
   )
 
-  const [isRenaming, setIsRenaming] = useState(false)
-  const [draftName, setDraftName] = useState(displayName)
-  const inputRef = useRef<HTMLInputElement | null>(null)
-
-  useEffect(() => {
-    if (renameTriggerPath && renameTriggerPath === icon.path) {
-      // An external context-menu request intentionally opens this local editor.
-      setDraftName(displayName)
-      setIsRenaming(true)
-      clearRenameTrigger()
-    }
-  }, [renameTriggerPath, icon.path, displayName, clearRenameTrigger])
-
-  useEffect(() => {
-    if (isRenaming && inputRef.current) {
-      inputRef.current.focus()
-      inputRef.current.select()
-    }
-  }, [isRenaming])
+  const {
+    isRenaming,
+    draftName,
+    setDraftName,
+    isSaving,
+    inputRef,
+    commitRename,
+    handleInputKeyDown,
+  } = useIconRename(icon)
 
   const handleClick = () => {
     if (isRenaming) return
@@ -119,37 +99,6 @@ export const Icon = memo(function Icon({
     }
 
     void launchApp(icon.path)
-  }
-
-  const commitRename = () => {
-    if (!isRenaming) return
-    const trimmed = draftName.trim()
-    if (trimmed.length === 0 || trimmed === icon.name) {
-      clearCustomName(icon.path)
-    } else if (trimmed !== displayName) {
-      setCustomName(icon.path, trimmed)
-    }
-    setIsRenaming(false)
-  }
-
-  const cancelRename = () => {
-    setIsRenaming(false)
-    setDraftName(displayName)
-  }
-
-  const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setDraftName(event.target.value)
-  }
-
-  const handleInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
-    event.stopPropagation()
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      commitRename()
-    } else if (event.key === 'Escape') {
-      event.preventDefault()
-      cancelRename()
-    }
   }
 
   const buttonStateClass = selectionMode
@@ -240,7 +189,9 @@ export const Icon = memo(function Icon({
               ref={inputRef}
               type="text"
               value={draftName}
-              onChange={handleInputChange}
+              onChange={event => setDraftName(event.target.value)}
+              disabled={isSaving}
+              aria-busy={isSaving}
               onKeyDown={handleInputKeyDown}
               onBlur={commitRename}
               onClick={event => event.stopPropagation()}
@@ -259,7 +210,7 @@ export const Icon = memo(function Icon({
                     } as const)
                   : {}),
               }}
-              maxLength={64}
+              maxLength={255}
             />
           ) : (
             <motion.span

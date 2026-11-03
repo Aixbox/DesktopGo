@@ -15,6 +15,7 @@ pub struct DesktopIcon {
     pub id: String,
     pub name: String,
     pub path: String,
+    pub shell_path: String,
     pub target_path: String,
     pub launch_arguments: String,
     pub working_directory: String,
@@ -32,6 +33,7 @@ pub struct IconManagerItem {
     pub id: String,
     pub name: String,
     pub path: String,
+    pub shell_path: String,
     pub target_path: String,
     pub launch_arguments: String,
     pub working_directory: String,
@@ -57,6 +59,17 @@ pub struct InvalidIconEntry {
 #[derive(Debug, Clone, Deserialize)]
 pub struct IconMutationTarget {
     pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct IconRenameResult {
+    pub id: String,
+    pub name: String,
+    pub old_path: String,
+    pub path: String,
+    pub target_path: String,
+    pub shell_path: String,
+    pub working_directory: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

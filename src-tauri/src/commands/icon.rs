@@ -107,6 +107,17 @@ pub async fn extract_website_icon(url: String) -> Result<WebsiteIconResult, Stri
 }
 
 #[tauri::command]
+pub async fn rename_icon_entry(
+    app_handle: tauri::AppHandle,
+    id: String,
+    name: String,
+) -> Result<Vec<icons::IconRenameResult>, String> {
+    tauri::async_runtime::spawn_blocking(move || icons::rename_icon_entry(app_handle, &id, &name))
+        .await
+        .map_err(|error| format!("无法完成文件重命名：{error}"))?
+}
+
+#[tauri::command]
 pub async fn launch_app(path: String) -> Result<(), String> {
     // 必须离开主线程：唤起已在运行的程序时要等目标窗口自己完成还原（见 running_app.rs），
     // 在启动台的 UI 线程上做这件事会让它的失焦/隐藏逻辑嵌套进跨进程的窗口操作里。
