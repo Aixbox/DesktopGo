@@ -172,6 +172,7 @@ export function buildQuickImportEditDraft(app: QuickImportAppDraft): AddIconDial
     customIconPath: edit?.customIconPath ?? '',
     websiteIconBase64: edit?.websiteIconBase64 ?? '',
     generatedIconBase64: edit?.generatedIconBase64 ?? '',
+    currentIconBase64: edit?.generatedIconBase64 || edit?.websiteIconBase64 || app.preview,
     iconSource: edit?.iconSource ?? 'target',
     iconColor: edit?.iconColor ?? 'none',
     iconText: edit?.iconText ?? '',

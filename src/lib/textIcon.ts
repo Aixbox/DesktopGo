@@ -1,19 +1,6 @@
 import type { CropCornerRadii } from './imageCrop'
-
-export const ICON_COLOR_PRESETS = [
-  { id: 'none', color: 'transparent', foreground: '#334155' },
-  { id: 'ocean', color: '#2563EB', foreground: '#F8FAFC' },
-  { id: 'cyan', color: '#0E7490', foreground: '#ECFEFF' },
-  { id: 'emerald', color: '#059669', foreground: '#F8FAFC' },
-  { id: 'lime', color: '#4D7C0F', foreground: '#F7FEE7' },
-  { id: 'amber', color: '#D97706', foreground: '#FFFBEB' },
-  { id: 'coral', color: '#DC4C64', foreground: '#FFF1F2' },
-  { id: 'pink', color: '#BE185D', foreground: '#FDF2F8' },
-  { id: 'plum', color: '#7C3AED', foreground: '#FAF5FF' },
-  { id: 'graphite', color: '#475569', foreground: '#F8FAFC' },
-] as const
-
-export type IconColorId = (typeof ICON_COLOR_PRESETS)[number]['id']
+import { ICON_COLOR_PRESETS, resolveIconColor, type IconColorId } from './iconColors'
+export { ICON_COLOR_PRESETS, type IconColorId } from './iconColors'
 
 const COLORED_ICON_PRESETS = ICON_COLOR_PRESETS.filter(preset => preset.id !== 'none')
 const MAX_TEXT_ICON_CHARACTERS = 6
@@ -62,8 +49,7 @@ export const createTextIconDataUri = (value: string, colorId: IconColorId, size 
   const text = normalizeTextIconText(value)
   if (typeof document === 'undefined') return ''
 
-  const preset =
-    ICON_COLOR_PRESETS.find(candidate => candidate.id === colorId) ?? ICON_COLOR_PRESETS[0]
+  const preset = resolveIconColor(colorId)
   if (!text && preset.id === 'none') return ''
 
   const canvas = document.createElement('canvas')
@@ -113,8 +99,8 @@ export const createColoredIconDataUri = async (
 ): Promise<string> => {
   if (!source || colorId === 'none' || typeof document === 'undefined') return source
 
-  const preset = ICON_COLOR_PRESETS.find(candidate => candidate.id === colorId)
-  if (!preset) return source
+  const preset = resolveIconColor(colorId)
+  if (preset.id === 'none') return source
 
   return createIconWithBackgroundColorDataUri(source, preset.color, size, cornerRadii)
 }

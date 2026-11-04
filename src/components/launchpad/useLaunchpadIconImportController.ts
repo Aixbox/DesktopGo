@@ -119,6 +119,7 @@ export function useLaunchpadIconImportController({
             ? canonicalSource || editRequestedIcon.icon_base64
             : '',
           generatedIconBase64: isWebsiteTarget ? '' : canonicalSource,
+          currentIconBase64: canonicalSource || editRequestedIcon.icon_base64,
           iconSource,
           iconColor: editRequestedIcon.icon_color ?? 'none',
           iconText: editRequestedIcon.icon_text ?? '',
@@ -255,7 +256,7 @@ export function useLaunchpadIconImportController({
     (index: number) => {
       const draft = pendingDropDrafts[index]
       if (!draft) return
-      setAddIconInitialDraft(draft)
+      setAddIconInitialDraft({ ...draft, currentIconBase64: draft.preview })
       setEditingDropIndex(index)
       setAddIconDialogOpen(true)
     },

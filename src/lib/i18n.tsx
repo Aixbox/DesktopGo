@@ -6,6 +6,7 @@ import { EN_APPEARANCE_MESSAGES } from './i18n/appearanceMessages'
 import { EN_AI_MESSAGES } from './i18n/aiMessages'
 import { EN_LAYOUT_LIBRARY_MESSAGES } from './i18n/layoutMessages'
 import { EN_QUICK_IMPORT_MESSAGES } from './i18n/quickImportMessages'
+import { EN_ICON_EDITOR_MESSAGES } from './i18n/iconEditorMessages'
 
 export { useI18n } from './i18n/context'
 export { getCurrentLanguage, getIntlLocale } from './i18n/language'
@@ -30,6 +31,7 @@ const ZH_MESSAGES: Record<string, string> = {
 const EN_MESSAGES: Record<string, string> = {
   ...EN_APPEARANCE_MESSAGES,
   ...EN_QUICK_IMPORT_MESSAGES,
+  ...EN_ICON_EDITOR_MESSAGES,
   '\u6dfb\u52a0\u56fe\u6807': 'Add icons',
   '\u5bfc\u5165\u5931\u8d25\uff1a{error}': 'Import failed: {error}',
   '\u9009\u62e9\u6587\u4ef6\u5931\u8d25\uff1a{error}': 'Failed to choose files: {error}',
@@ -624,31 +626,6 @@ const EN_MESSAGES: Record<string, string> = {
   选择目标后自动生成: 'Generated after choosing a target',
   '可选；留空时使用目标文件名。': 'Optional; leave blank to use the target file name.',
   '例如：Visual Studio Code': 'For example: Visual Studio Code',
-  图标预览: 'Icon preview',
-  使用图标: 'Use icon',
-  使用自动提取的图标: 'Use the automatically extracted icon',
-  自动提取的图标: 'Automatically extracted icon',
-  自动提取: 'Automatic',
-  使用自定义图标: 'Use custom icon',
-  更换自定义图标: 'Replace custom icon',
-  添加自定义图标: 'Add custom icon',
-  使用文字图标: 'Use text icon',
-  文字图标: 'Text icon',
-  图标颜色: 'Icon color',
-  无色: 'No color',
-  海蓝: 'Ocean blue',
-  湖青: 'Cyan',
-  翠绿: 'Emerald',
-  青柠: 'Lime',
-  琥珀: 'Amber',
-  珊瑚: 'Coral',
-  莓红: 'Berry',
-  梅紫: 'Plum',
-  石墨: 'Graphite',
-  图标文字: 'Icon text',
-  输入最多六个字符: 'Enter up to six characters',
-  '最多使用六个字符生成图标，内容较长时会自动缩小并保持单行。':
-    'Use up to six characters. Longer text shrinks automatically to stay on one line.',
   '未能从自定义文件提取图标，请重新选择。':
     'No icon could be extracted from the custom file. Please choose another file.',
   等待生成名称: 'Waiting to generate a name',

@@ -328,6 +328,19 @@ mod tests {
     }
 
     #[test]
+    fn create_and_update_preserve_custom_icon_color_metadata() {
+        let mut create = create_input();
+        create.icon_color = " #A1B2C3 ".to_string();
+        let created = NormalizedIconEntry::from_create(&create).unwrap();
+        assert_eq!(created.icon_color, "#a1b2c3");
+
+        let mut update = update_input();
+        update.icon_color = "#D4E5F6".to_string();
+        let updated = NormalizedIconEntry::from_update(&update).unwrap();
+        assert_eq!(updated.icon_color, "#d4e5f6");
+    }
+
+    #[test]
     fn shell_namespace_entries_keep_display_name_and_clear_local_launch_options() {
         let mut input = create_input();
         input.display_name = "回收站".to_string();

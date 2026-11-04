@@ -1,8 +1,10 @@
 import type { IconColorId } from '../../lib/textIcon'
+import { normalizeIconColor } from '../../lib/iconColors'
 import { isWebsiteTarget } from '../../lib/websiteIcon'
 
 export type AddIconKind = 'app' | 'website'
 export type IconSource = 'target' | 'custom' | 'text'
+export type IconChoice = IconSource | 'current'
 
 export const DEFAULT_TEXT_ICON_TEXT = 'D'
 export const DEFAULT_TEXT_ICON_COLOR: IconColorId = 'ocean'
@@ -16,6 +18,8 @@ export interface AddIconDialogDraft {
   customIconPath: string
   websiteIconBase64?: string
   generatedIconBase64?: string
+  /** 仅供编辑会话展示和还原，不作为新的持久化图标来源。 */
+  currentIconBase64?: string
   iconSource?: IconSource
   iconColor?: IconColorId
   iconText?: string
@@ -28,7 +32,8 @@ export interface AddIconDialogInitialState {
   launchArguments: string
   workingDirectory: string
   customIconPath: string
-  selectedIconSource: IconSource
+  selectedIconSource: IconChoice
+  currentIconPreview: string
   iconColor: IconColorId
   iconText: string
   editedTextIconPreview: string
@@ -53,6 +58,7 @@ export function createAddIconDialogInitialState(
       workingDirectory: '',
       customIconPath: '',
       selectedIconSource: 'text',
+      currentIconPreview: '',
       iconColor: DEFAULT_TEXT_ICON_COLOR,
       iconText: DEFAULT_TEXT_ICON_TEXT,
       editedTextIconPreview: '',
@@ -67,12 +73,13 @@ export function createAddIconDialogInitialState(
   }
 
   const entryKind = draft.entryKind ?? (isWebsiteTarget(draft.targetPath) ? 'website' : 'app')
-  const selectedIconSource =
-    draft.iconSource ??
-    (draft.generatedIconBase64 ? 'text' : draft.customIconPath ? 'custom' : 'target')
+  const selectedIconSource = resolveDraftIconSource(draft)
+  const currentIconPreview = draft.currentIconBase64 ?? ''
   const generatedPreview = draft.generatedIconBase64 ?? ''
   const targetPreview =
-    entryKind === 'app' && selectedIconSource === 'target' ? generatedPreview : ''
+    entryKind === 'app' && selectedIconSource === 'target' && !currentIconPreview
+      ? generatedPreview
+      : ''
   const customPreview = selectedIconSource === 'custom' ? generatedPreview : ''
   const websitePreview = draft.websiteIconBase64 ?? ''
 
@@ -83,8 +90,9 @@ export function createAddIconDialogInitialState(
     launchArguments: draft.launchArguments,
     workingDirectory: draft.workingDirectory,
     customIconPath: draft.customIconPath,
-    selectedIconSource,
-    iconColor: draft.iconColor ?? 'none',
+    selectedIconSource: currentIconPreview ? 'current' : selectedIconSource,
+    currentIconPreview,
+    iconColor: normalizeIconColor(draft.iconColor),
     iconText: draft.iconText ?? '',
     editedTextIconPreview: selectedIconSource === 'text' ? generatedPreview : '',
     targetPreview,
@@ -95,4 +103,11 @@ export function createAddIconDialogInitialState(
     websitePreviews: websitePreview ? [websitePreview] : [],
     websitePreviewResolved: Boolean(websitePreview),
   }
+}
+
+export function resolveDraftIconSource(draft: AddIconDialogDraft): IconSource {
+  return (
+    draft.iconSource ??
+    (draft.generatedIconBase64 ? 'text' : draft.customIconPath ? 'custom' : 'target')
+  )
 }

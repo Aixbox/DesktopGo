@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { translate } from '@/lib/i18n'
 import { ICON_COLOR_PRESETS, type IconColorId } from '@/lib/textIcon'
+import { resolveIconColor } from '@/lib/iconColors'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -270,13 +271,13 @@ export function IconCropBackgroundControls({
                       backgroundImage: ICON_TRANSPARENT_CHECKERBOARD,
                       backgroundSize: '8px 8px',
                     }
-                  : { backgroundColor: preset.color }
+                  : { backgroundColor: preset.color, color: preset.foreground }
               }
             >
               {preset.id === 'none' ? (
                 <X className="h-3.5 w-3.5 text-slate-600 drop-shadow-[0_1px_1px_rgba(255,255,255,0.9)]" />
               ) : selected ? (
-                <Check className="h-3.5 w-3.5 text-white" />
+                <Check className="h-3.5 w-3.5" />
               ) : null}
             </button>
           )
@@ -286,8 +287,8 @@ export function IconCropBackgroundControls({
             type="button"
             role="radio"
             aria-checked={usingCustomColor}
-            aria-label={translate('选择提取的颜色')}
-            title={`${translate('选择提取的颜色')} ${customColor}`}
+            aria-label={translate('自定义颜色')}
+            title={`${translate('自定义颜色')} ${customColor}`}
             onClick={onSelectCustomColor}
             disabled={disabled}
             className={cn(
@@ -296,11 +297,12 @@ export function IconCropBackgroundControls({
                 ? 'border-foreground ring-2 ring-foreground/15'
                 : 'border-border hover:border-foreground/40'
             )}
-            style={{ backgroundColor: customColor }}
+            style={{
+              backgroundColor: customColor,
+              color: resolveIconColor(customColor).foreground,
+            }}
           >
-            {usingCustomColor ? (
-              <Check className="h-3.5 w-3.5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]" />
-            ) : null}
+            {usingCustomColor ? <Check className="h-3.5 w-3.5" /> : null}
           </button>
         ) : null}
       </div>

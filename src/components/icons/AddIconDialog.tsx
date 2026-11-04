@@ -23,10 +23,9 @@ import {
   X,
 } from 'lucide-react'
 import { deriveIconEntryName } from '@/lib/iconManager'
-import { ICON_CROP_OUTPUT_SIZE, type CropCornerRadii } from '@/lib/imageCrop'
+import type { CropCornerRadii } from '@/lib/imageCrop'
 import { deriveWebsiteName, normalizeWebsiteUrl } from '@/lib/websiteIcon'
 import {
-  createColoredIconDataUri,
   createTextIconDataUri,
   normalizeTextIconText,
   pickRandomIconColor,
@@ -48,12 +47,14 @@ import {
 } from './AddIconFormSections'
 import {
   createAddIconDialogInitialState,
+  resolveDraftIconSource,
   DEFAULT_TEXT_ICON_COLOR,
   DEFAULT_TEXT_ICON_TEXT,
   type AddIconDialogDraft,
   type AddIconKind,
-  type IconSource,
+  type IconChoice,
 } from './addIconDialogState'
+import { createIconAppearanceDraft } from './iconAppearanceDraft'
 
 export type { AddIconDialogDraft, AddIconKind } from './addIconDialogState'
 
@@ -118,7 +119,7 @@ function AddIconDialogSession({
   const [launchArguments, setLaunchArguments] = useState(initialState.launchArguments)
   const [workingDirectory, setWorkingDirectory] = useState(initialState.workingDirectory)
   const [customIconPath, setCustomIconPath] = useState(initialState.customIconPath)
-  const [selectedIconSource, setSelectedIconSource] = useState<IconSource>(
+  const [selectedIconSource, setSelectedIconSource] = useState<IconChoice>(
     initialState.selectedIconSource
   )
   const [iconColor, setIconColor] = useState<IconColorId>(initialState.iconColor)
@@ -198,7 +199,8 @@ function AddIconDialogSession({
       entryKind === 'app' &&
       previewPath &&
       previewPath === initialDraft?.targetPath.trim() &&
-      initialGeneratedPreview
+      initialGeneratedPreview &&
+      !initialDraft?.currentIconBase64
     ) {
       return
     }
@@ -347,9 +349,14 @@ function AddIconDialogSession({
     window.requestAnimationFrame(() => targetInputRef.current?.focus())
   }
 
-  const handleIconSourceChange = (source: IconSource) => {
+  const handleIconSourceChange = (source: IconChoice) => {
     if (source === selectedIconSource) return
     setSelectedIconSource(source)
+    if (source === 'current') {
+      setIconColor(initialState.iconColor)
+      setIconText(initialState.iconText)
+      return
+    }
     if (source !== 'text') return
 
     const normalizedTarget =
@@ -364,6 +371,27 @@ function AddIconDialogSession({
   }
 
   const handleIconColorChange = (nextColor: IconColorId) => {
+    if (selectedIconSource === 'current' && initialDraft) {
+      const source = resolveDraftIconSource(initialDraft)
+      const preview = initialState.currentIconPreview
+      setSelectedIconSource(source)
+      if (source === 'custom') {
+        customPreviewRequestRef.current += 1
+        setCustomIconPath(initialState.customIconPath)
+        setCustomPreview(preview)
+        setCustomPreviewLoading(false)
+      } else if (source === 'target' && entryKind === 'website') {
+        websitePreviewRequestRef.current += 1
+        setWebsitePreview(preview)
+        setWebsitePreviews(current => (current.includes(preview) ? current : [preview, ...current]))
+        setWebsitePreviewLoading(false)
+      } else if (source === 'target') {
+        targetPreviewRequestRef.current += 1
+        setTargetPreview(preview)
+        setTargetPreviewLoading(false)
+      }
+      setEditedRasterPreviews(current => [...current, preview])
+    }
     setEditedTextIconPreview('')
     setIconColor(nextColor)
   }
@@ -526,7 +554,8 @@ function AddIconDialogSession({
       !normalizedTargetPath ||
       (selectedIconSource === 'custom' && (!customPreview || customPreviewLoading)) ||
       (selectedIconSource === 'text' && !textIconPreview) ||
-      (selectedIconSource !== 'text' &&
+      (selectedIconSource !== 'current' &&
+        selectedIconSource !== 'text' &&
         iconColor !== 'none' &&
         !(selectedIconSource === 'custom'
           ? customPreview
@@ -550,52 +579,26 @@ function AddIconDialogSession({
       const selectedCornerRadii = editedRasterCornerRadii.find(
         entry => entry.dataUri === selectedPreview
       )?.cornerRadii
-      const initialTargetPath = initialDraft
-        ? initialDraft.entryKind === 'website'
-          ? normalizeWebsiteUrl(initialDraft.targetPath)
-          : initialDraft.targetPath.trim()
-        : ''
-      const canReuseGeneratedIcon = Boolean(
-        initialDraft?.generatedIconBase64 &&
-        !editedRasterPreviews.includes(selectedPreview) &&
-        selectedIconSource === initialDraft.iconSource &&
-        iconColor === initialDraft.iconColor &&
-        normalizedTargetPath === initialTargetPath &&
-        (selectedIconSource !== 'custom' ||
-          customIconPath.trim() === initialDraft.customIconPath.trim()) &&
-        (selectedIconSource !== 'text' ||
-          normalizeTextIconText(iconText) === normalizeTextIconText(initialDraft.iconText ?? ''))
-      )
-      const generatedIconBase64 = canReuseGeneratedIcon
-        ? (initialDraft?.generatedIconBase64 ?? '')
-        : selectedIconSource === 'text'
-          ? textIconPreview
-          : iconColor !== 'none'
-            ? await createColoredIconDataUri(
-                selectedPreview,
-                iconColor,
-                ICON_CROP_OUTPUT_SIZE,
-                selectedCornerRadii
-              )
-            : editedRasterPreviews.includes(selectedPreview) &&
-                !(entryKind === 'website' && selectedIconSource === 'target')
-              ? selectedPreview
-              : ''
+      const appearance = await createIconAppearanceDraft({
+        initialDraft,
+        entryKind,
+        selectedIconSource,
+        selectedPreview,
+        selectedCornerRadii,
+        editedRasterPreviews,
+        normalizedTargetPath,
+        customIconPath,
+        websitePreview,
+        iconColor,
+        iconText,
+      })
       const draft: AddIconDialogDraft = {
         entryKind,
         displayName,
         targetPath: normalizedTargetPath,
         launchArguments: entryKind === 'app' ? launchArguments.trim() : '',
         workingDirectory: entryKind === 'app' ? workingDirectory.trim() : '',
-        customIconPath: selectedIconSource === 'custom' ? customIconPath.trim() : '',
-        websiteIconBase64:
-          entryKind === 'website' && selectedIconSource === 'target' && iconColor === 'none'
-            ? websitePreview
-            : '',
-        generatedIconBase64,
-        iconSource: selectedIconSource,
-        iconColor,
-        iconText: selectedIconSource === 'text' ? normalizeTextIconText(iconText) : '',
+        ...appearance,
       }
       if (onSubmitDraft) {
         await onSubmitDraft(draft)
@@ -658,7 +661,10 @@ function AddIconDialogSession({
   const selectedRasterPreview = selectedIconSource === 'custom' ? customPreview : automaticPreview
   const selectedTextIconInvalid = selectedIconSource === 'text' && !textIconPreview
   const selectedColoredIconInvalid =
-    selectedIconSource !== 'text' && iconColor !== 'none' && !selectedRasterPreview
+    selectedIconSource !== 'current' &&
+    selectedIconSource !== 'text' &&
+    iconColor !== 'none' &&
+    !selectedRasterPreview
 
   const dialogPortal = createPortal(
     <div
@@ -911,6 +917,7 @@ function AddIconDialogSession({
                 )}
 
                 <AddIconAppearanceFields
+                  currentIconPreview={initialState.currentIconPreview}
                   iconTextInputId={iconTextInputId}
                   entryKind={entryKind}
                   websitePreviews={websitePreviews}

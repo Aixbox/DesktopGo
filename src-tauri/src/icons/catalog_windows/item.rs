@@ -184,10 +184,7 @@ pub(super) fn set_automatic_target_icon_cache(
 }
 
 pub(super) fn resolved_icon_color(item: &SnapshotIconItem) -> String {
-    match item.icon_color.as_str() {
-        "none" | "ocean" | "emerald" | "amber" | "coral" | "plum" => item.icon_color.clone(),
-        _ => "none".to_string(),
-    }
+    normalize_icon_color(&item.icon_color)
 }
 
 pub(super) fn normalize_icon_source(value: &str, custom_icon_path: &str) -> String {
@@ -199,9 +196,16 @@ pub(super) fn normalize_icon_source(value: &str, custom_icon_path: &str) -> Stri
 }
 
 pub(super) fn normalize_icon_color(value: &str) -> String {
-    match value.trim() {
+    let trimmed = value.trim();
+    match trimmed {
         "ocean" | "cyan" | "emerald" | "lime" | "amber" | "coral" | "pink" | "plum"
-        | "graphite" => value.trim().to_string(),
+        | "graphite" => trimmed.to_string(),
+        _ if trimmed.len() == 7
+            && trimmed.starts_with('#')
+            && trimmed.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit) =>
+        {
+            trimmed.to_ascii_lowercase()
+        }
         _ => "none".to_string(),
     }
 }
@@ -210,7 +214,10 @@ pub(super) fn normalize_icon_color(value: &str) -> String {
 mod tests {
     use crate::icons::models::SnapshotIconItem;
 
-    use super::{set_automatic_target_icon_cache, AUTOMATIC_TARGET_ICON_CACHE_VERSION};
+    use super::{
+        normalize_icon_color, resolved_icon_color, set_automatic_target_icon_cache,
+        AUTOMATIC_TARGET_ICON_CACHE_VERSION,
+    };
 
     fn target_item() -> SnapshotIconItem {
         SnapshotIconItem {
@@ -233,6 +240,31 @@ mod tests {
             automatic_target_icon_cache: false,
             automatic_target_icon_cache_version: 0,
             legacy_icons: None,
+        }
+    }
+
+    #[test]
+    fn icon_colors_round_trip_all_presets_and_custom_rgb() {
+        for color in [
+            "none", "ocean", "cyan", "emerald", "lime", "amber", "coral", "pink", "plum",
+            "graphite", "#a1b2c3", "#000000", "#ffffff",
+        ] {
+            let mut item = target_item();
+            item.icon_color = normalize_icon_color(color);
+            assert_eq!(item.icon_color, color);
+            assert_eq!(resolved_icon_color(&item), color);
+        }
+        assert_eq!(normalize_icon_color(" #A1B2C3 "), "#a1b2c3");
+        for invalid in [
+            "",
+            "unknown",
+            "#fff",
+            "#12345678",
+            "#zzzzzz",
+            "rgb(1,2,3)",
+            "#中文",
+        ] {
+            assert_eq!(normalize_icon_color(invalid), "none");
         }
     }
 

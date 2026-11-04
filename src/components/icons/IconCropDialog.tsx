@@ -30,11 +30,8 @@ import {
   type UpscaledContainObjectFit,
 } from '@/lib/imageCrop'
 import { translate } from '@/lib/i18n'
-import {
-  createIconWithBackgroundColorDataUri,
-  ICON_COLOR_PRESETS,
-  type IconColorId,
-} from '@/lib/textIcon'
+import { createIconWithBackgroundColorDataUri, type IconColorId } from '@/lib/textIcon'
+import { isCustomIconColor, normalizeIconColor, resolveIconColor } from '@/lib/iconColors'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { NativeScrollArea } from '@/components/ui/native-scroll-area'
@@ -161,8 +158,10 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
   const [mediaObjectFit, setMediaObjectFit] = useState<UpscaledContainObjectFit | null>(null)
   const [viewportSize, setViewportSize] = useState(0)
   const [colorId, setColorId] = useState<IconColorId>(initialColor)
-  const [customColor, setCustomColor] = useState<string | null>(null)
-  const [usingCustomColor, setUsingCustomColor] = useState(false)
+  const [customColor, setCustomColor] = useState<string | null>(
+    isCustomIconColor(initialColor) ? initialColor : null
+  )
+  const [usingCustomColor, setUsingCustomColor] = useState(isCustomIconColor(initialColor))
   const [extractingColor, setExtractingColor] = useState(false)
   const [samplingColor, setSamplingColor] = useState(false)
   const [editorSource, setEditorSource] = useState(source)
@@ -522,7 +521,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
           : dataUri
       onApply({
         dataUri: outputDataUri,
-        colorId: usingCustomColor ? 'none' : colorId,
+        colorId: usingCustomColor ? normalizeIconColor(customColor) : colorId,
         cornerRadii: outputCornerRadii,
       })
     } catch {
@@ -644,7 +643,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
     }
   }
 
-  const selectedColor = ICON_COLOR_PRESETS.find(preset => preset.id === colorId)
+  const selectedColor = resolveIconColor(colorId)
   const visibleBackgroundColor = usingCustomColor ? customColor : selectedColor?.color
   const imageOptimized = Boolean(optimizedSource && editorSource === optimizedSource)
 

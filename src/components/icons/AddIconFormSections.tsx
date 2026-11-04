@@ -1,7 +1,5 @@
 import type { ReactNode } from 'react'
 import {
-  Ban,
-  Check,
   CheckCircle2,
   ChevronDown,
   CircleAlert,
@@ -15,24 +13,12 @@ import {
   Upload,
 } from 'lucide-react'
 import { translate } from '@/lib/i18n'
-import { ICON_COLOR_PRESETS, type IconColorId } from '@/lib/textIcon'
+import { resolveIconColor, type IconColorId } from '@/lib/iconColors'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import type { AddIconKind, IconSource } from './addIconDialogState'
-
-const ICON_COLOR_LABELS: Record<IconColorId, string> = {
-  none: '无色',
-  ocean: '海蓝',
-  cyan: '湖青',
-  emerald: '翠绿',
-  lime: '青柠',
-  amber: '琥珀',
-  coral: '珊瑚',
-  pink: '莓红',
-  plum: '梅紫',
-  graphite: '石墨',
-}
+import type { AddIconKind, IconChoice } from './addIconDialogState'
+import { IconColorPicker } from './IconColorPicker'
 
 const ICON_PICKER_FOCUS_RING_CLASS_NAME =
   'focus-visible:border-ring/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45'
@@ -76,9 +62,10 @@ export function AddIconFormRow({
 type AddIconAppearanceFieldsProps = {
   iconTextInputId: string
   entryKind: AddIconKind
+  currentIconPreview: string
   websitePreviews: string[]
   websitePreview: string
-  selectedIconSource: IconSource
+  selectedIconSource: IconChoice
   automaticPreview: string
   automaticPreviewLoading: boolean
   automaticPreviewLabel: string
@@ -91,7 +78,7 @@ type AddIconAppearanceFieldsProps = {
   disabled: boolean
   onColorChange: (colorId: IconColorId) => void
   onTextChange: (text: string) => void
-  onIconSourceChange: (source: IconSource) => void
+  onIconSourceChange: (source: IconChoice) => void
   onOpenCropEditor: (target: IconCropEditorTarget) => void
   onPickCustomIcon: () => void
 }
@@ -99,6 +86,7 @@ type AddIconAppearanceFieldsProps = {
 export function AddIconAppearanceFields({
   iconTextInputId,
   entryKind,
+  currentIconPreview,
   websitePreviews,
   websitePreview,
   selectedIconSource,
@@ -118,49 +106,12 @@ export function AddIconAppearanceFields({
   onOpenCropEditor,
   onPickCustomIcon,
 }: AddIconAppearanceFieldsProps) {
-  const selectedColorPreset = ICON_COLOR_PRESETS.find(preset => preset.id === iconColor)
+  const selectedColorPreset = resolveIconColor(iconColor)
 
   return (
     <>
       <AddIconFormRow label={translate('图标颜色')}>
-        <div
-          role="radiogroup"
-          aria-label={translate('图标颜色')}
-          className="flex min-h-9 flex-wrap items-center gap-1.5"
-        >
-          {ICON_COLOR_PRESETS.map(preset => {
-            const colorLabel = translate(ICON_COLOR_LABELS[preset.id])
-            const selected = iconColor === preset.id
-            return (
-              <button
-                key={preset.id}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                aria-label={colorLabel}
-                title={colorLabel}
-                onClick={() => onColorChange(preset.id)}
-                disabled={disabled}
-                className={cn(
-                  'relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-[border-color,box-shadow,transform] duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-35 motion-reduce:transform-none motion-reduce:transition-none',
-                  selected
-                    ? 'border-foreground ring-2 ring-foreground/15'
-                    : 'border-border hover:border-foreground/40',
-                  preset.id === 'none' && 'bg-background text-muted-foreground'
-                )}
-                style={preset.id === 'none' ? undefined : { backgroundColor: preset.color }}
-              >
-                {preset.id === 'none' ? <Ban className="h-3.5 w-3.5" /> : null}
-                {selected && preset.id !== 'none' ? (
-                  <Check className="absolute h-3.5 w-3.5 text-white" />
-                ) : null}
-              </button>
-            )
-          })}
-          <span className="ml-1 text-xs text-muted-foreground">
-            {translate(ICON_COLOR_LABELS[iconColor])}
-          </span>
-        </div>
+        <IconColorPicker value={iconColor} onChange={onColorChange} disabled={disabled} />
       </AddIconFormRow>
 
       <AddIconFormRow label={translate('图标文字')} labelFor={iconTextInputId}>
@@ -181,6 +132,37 @@ export function AddIconAppearanceFields({
       <AddIconFormRow label="">
         <div className="space-y-3">
           <div className="flex flex-wrap items-start gap-x-[20px] gap-y-3">
+            {currentIconPreview ? (
+              <div className="flex w-16 shrink-0 flex-col items-center gap-1.5">
+                <button
+                  type="button"
+                  aria-pressed={selectedIconSource === 'current'}
+                  aria-label={translate('使用当前图标')}
+                  onClick={() => onIconSourceChange('current')}
+                  disabled={disabled}
+                  className={cn(
+                    'relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
+                    ICON_PICKER_FOCUS_RING_CLASS_NAME,
+                    selectedIconSource === 'current'
+                      ? 'border-ring/45 ring-2 ring-ring/45'
+                      : 'border-border hover:border-foreground/30'
+                  )}
+                >
+                  <img
+                    src={currentIconPreview}
+                    alt={translate('当前图标')}
+                    draggable={false}
+                    className="h-full w-full object-contain"
+                  />
+                  {selectedIconSource === 'current' ? (
+                    <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
+                  ) : null}
+                </button>
+                <span className="whitespace-nowrap text-center text-[11px] leading-4 text-muted-foreground">
+                  {translate('当前图标')}
+                </span>
+              </div>
+            ) : null}
             {entryKind === 'website' && websitePreviews.length > 0
               ? websitePreviews.map((preview, index) => {
                   const selected = selectedIconSource === 'target' && websitePreview === preview

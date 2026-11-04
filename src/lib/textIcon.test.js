@@ -33,14 +33,19 @@ assert.equal(
 
 let drawnFont = ''
 let drawnImageRect = []
+let backgroundFill = ''
+let textFill = ''
 const context = {
   beginPath() {},
   clearRect() {},
   closePath() {},
-  fill() {},
+  fill() {
+    backgroundFill = this.fillStyle
+  },
   fillStyle: '',
   fillText() {
     drawnFont = this.font
+    textFill = this.fillStyle
   },
   drawImage(_image, x, y, width, height) {
     drawnImageRect = [x, y, width, height]
@@ -76,6 +81,13 @@ globalThis.Image = class {
 }
 
 assert.equal(createTextIconDataUri('', 'ocean'), 'data:image/png;base64,text-icon')
+assert.equal(backgroundFill, ICON_COLOR_PRESETS.find(preset => preset.id === 'ocean').color)
+createTextIconDataUri('字', '#e5c8b1')
+assert.equal(backgroundFill, '#e5c8b1')
+assert.equal(textFill, '#263244')
+createTextIconDataUri('字', '#123456')
+assert.equal(backgroundFill, '#123456')
+assert.equal(textFill, '#FFFFFF')
 assert.equal(createTextIconDataUri('', 'none'), '')
 createTextIconDataUri('桌面工具栏', 'ocean')
 assert.ok(Number.parseInt(drawnFont.match(/700 (\d+)px/)?.[1] ?? '0', 10) < Math.round(256 * 0.41))
@@ -83,6 +95,9 @@ assert.equal(
   await createColoredIconDataUri('data:image/png;base64,source', 'ocean'),
   'data:image/png;base64,text-icon'
 )
+assert.equal(backgroundFill, ICON_COLOR_PRESETS.find(preset => preset.id === 'ocean').color)
+await createColoredIconDataUri('data:image/png;base64,source', '#a1b2c3')
+assert.equal(backgroundFill, '#a1b2c3')
 assert.equal(
   await createIconWithBackgroundColorDataUri('data:image/png;base64,source', '#123456'),
   'data:image/png;base64,text-icon'

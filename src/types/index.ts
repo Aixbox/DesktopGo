@@ -1,3 +1,5 @@
+import type { IconColorId } from '../lib/iconColors'
+
 export interface DesktopIcon {
   id: string
   name: string
@@ -10,7 +12,7 @@ export interface DesktopIcon {
   custom_icon_path?: string
   icon_base64: string
   icon_source?: 'target' | 'custom' | 'text'
-  icon_color?: 'none' | 'ocean' | 'emerald' | 'amber' | 'coral' | 'plum'
+  icon_color?: IconColorId
   icon_text?: string
   item_type: 'shortcut' | 'folder' | 'file' | 'executable' | 'special' | 'website'
   /** 图标来源：new = 应用内"新建"创建；import = 导入（拖入/添加对话框）。 */
