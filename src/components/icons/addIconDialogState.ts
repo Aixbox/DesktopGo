@@ -1,5 +1,6 @@
 import type { IconColorId } from '../../lib/textIcon'
 import { normalizeIconColor } from '../../lib/iconColors'
+import { resolveTextIconColor, type TextIconColor } from '../../lib/textIconColor'
 import { isWebsiteTarget } from '../../lib/websiteIcon'
 
 export type AddIconKind = 'app' | 'website'
@@ -23,6 +24,7 @@ export interface AddIconDialogDraft {
   iconSource?: IconSource
   iconColor?: IconColorId
   iconText?: string
+  iconTextColor?: TextIconColor
 }
 
 export interface AddIconDialogInitialState {
@@ -36,6 +38,7 @@ export interface AddIconDialogInitialState {
   currentIconPreview: string
   iconColor: IconColorId
   iconText: string
+  iconTextColor: TextIconColor
   editedTextIconPreview: string
   targetPreview: string
   targetPreviewLoading: boolean
@@ -61,6 +64,7 @@ export function createAddIconDialogInitialState(
       currentIconPreview: '',
       iconColor: DEFAULT_TEXT_ICON_COLOR,
       iconText: DEFAULT_TEXT_ICON_TEXT,
+      iconTextColor: 'black',
       editedTextIconPreview: '',
       targetPreview: '',
       targetPreviewLoading: false,
@@ -94,6 +98,7 @@ export function createAddIconDialogInitialState(
     currentIconPreview,
     iconColor: normalizeIconColor(draft.iconColor),
     iconText: draft.iconText ?? '',
+    iconTextColor: resolveTextIconColor(draft.iconTextColor, draft.iconColor),
     editedTextIconPreview: selectedIconSource === 'text' ? generatedPreview : '',
     targetPreview,
     targetPreviewLoading: entryKind === 'app' && Boolean(draft.targetPath.trim()) && !targetPreview,

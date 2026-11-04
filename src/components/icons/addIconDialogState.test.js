@@ -2,13 +2,17 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createAddIconDialogInitialState } from './addIconDialogState.ts'
 import { createIconAppearanceDraft } from './iconAppearanceDraft.ts'
-import { buildQuickImportEditDraft } from '../quick-import/quickImportModel.ts'
+import {
+  buildQuickImportEditDraft,
+  buildQuickImportEntryInput,
+} from '../quick-import/quickImportModel.ts'
 
 test('new icon sessions start from the text icon defaults', () => {
   const state = createAddIconDialogInitialState(null)
   assert.equal(state.entryKind, 'app')
   assert.equal(state.selectedIconSource, 'text')
   assert.equal(state.iconText, 'D')
+  assert.equal(state.iconTextColor, 'black')
   assert.equal(state.targetPreviewLoading, false)
   assert.equal(state.currentIconPreview, '')
 })
@@ -35,6 +39,7 @@ const appearanceInput = (overrides = {}) => ({
   websitePreview: '',
   iconColor: 'none',
   iconText: '',
+  iconTextColor: 'black',
   ...overrides,
 })
 
@@ -122,6 +127,53 @@ test('text and cropped custom candidates still save their chosen artwork', async
   )
   assert.equal(custom.generatedIconBase64, 'data:image/png;base64,alternative')
   assert.equal(custom.customIconPath, 'C:\\Images\\replacement.png')
+})
+
+test('text color survives saving, reopening, current-artwork restoration and quick import', async () => {
+  for (const iconTextColor of ['black', 'white']) {
+    const appearance = await createIconAppearanceDraft(
+      appearanceInput({
+        selectedIconSource: 'text',
+        iconText: '测试',
+        iconTextColor,
+      })
+    )
+    const draft = { ...originalDraft, ...appearance }
+    assert.equal(appearance.iconTextColor, iconTextColor)
+    assert.equal(createAddIconDialogInitialState(draft).iconTextColor, iconTextColor)
+    const restored = await createIconAppearanceDraft(
+      appearanceInput({
+        initialDraft: draft,
+        iconTextColor: iconTextColor === 'black' ? 'white' : 'black',
+      })
+    )
+    assert.equal(restored.iconTextColor, iconTextColor)
+    const app = { displayName: 'Example', sourcePath: draft.targetPath, preview: '', edit: draft }
+    assert.equal(buildQuickImportEditDraft(app).iconTextColor, iconTextColor)
+    assert.equal(buildQuickImportEntryInput(app).iconTextColor, iconTextColor)
+  }
+})
+
+test('legacy text icons retain their artwork and derive the initial black or white selection', async () => {
+  for (const [iconColor, expected] of [
+    ['#123456', 'white'],
+    ['ocean', 'black'],
+  ]) {
+    const draft = { ...originalDraft, iconSource: 'text', iconColor }
+    const state = createAddIconDialogInitialState(draft)
+    assert.equal(state.iconTextColor, expected)
+    assert.equal(state.editedTextIconPreview, draft.generatedIconBase64)
+    const saved = await createIconAppearanceDraft(appearanceInput({ initialDraft: draft }))
+    assert.equal(saved.generatedIconBase64, draft.generatedIconBase64)
+    assert.equal(saved.iconTextColor, undefined)
+  }
+  const raster = await createIconAppearanceDraft(
+    appearanceInput({
+      selectedIconSource: 'target',
+      iconTextColor: 'white',
+    })
+  )
+  assert.equal(raster.iconTextColor, undefined)
 })
 
 test('quick import editing supplies the current preview without changing the stored source', () => {

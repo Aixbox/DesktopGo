@@ -1,6 +1,7 @@
 import type { CropCornerRadii } from './imageCrop'
 import { fillIconBackground } from './iconBackground'
 import { ICON_COLOR_PRESETS, resolveIconColor, type IconColorId } from './iconColors'
+import { TEXT_ICON_COLORS, type TextIconColor } from './textIconColor'
 export { ICON_COLOR_PRESETS, type IconColorId } from './iconColors'
 
 const COLORED_ICON_PRESETS = ICON_COLOR_PRESETS.filter(preset => preset.id !== 'none')
@@ -46,7 +47,12 @@ const drawRoundedSquare = (
   context.closePath()
 }
 
-export const createTextIconDataUri = (value: string, colorId: IconColorId, size = 256): string => {
+export const createTextIconDataUri = (
+  value: string,
+  colorId: IconColorId,
+  size = 256,
+  textColor?: TextIconColor
+): string => {
   const text = normalizeTextIconText(value)
   if (typeof document === 'undefined') return ''
 
@@ -80,11 +86,11 @@ export const createTextIconDataUri = (value: string, colorId: IconColorId, size 
 
     if (preset.id === 'none') {
       context.lineWidth = Math.max(8, Math.round(size * 0.055))
-      context.strokeStyle = '#F8FAFC'
+      context.strokeStyle = textColor === 'white' ? '#334155' : '#F8FAFC'
       context.strokeText(text, size / 2, size / 2 + size * 0.025)
     }
 
-    context.fillStyle = preset.foreground
+    context.fillStyle = textColor ? TEXT_ICON_COLORS[textColor] : preset.foreground
     context.fillText(text, size / 2, size / 2 + size * 0.025)
   }
 

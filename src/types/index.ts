@@ -1,4 +1,5 @@
 import type { IconColorId } from '../lib/iconColors'
+import type { TextIconColor } from '../lib/textIconColor'
 
 export interface DesktopIcon {
   id: string
@@ -14,6 +15,7 @@ export interface DesktopIcon {
   icon_source?: 'target' | 'custom' | 'text'
   icon_color?: IconColorId
   icon_text?: string
+  icon_text_color?: TextIconColor | ''
   item_type: 'shortcut' | 'folder' | 'file' | 'executable' | 'special' | 'website'
   /** 图标来源：new = 应用内"新建"创建；import = 导入（拖入/添加对话框）。 */
   origin: 'new' | 'import'

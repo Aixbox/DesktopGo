@@ -233,6 +233,7 @@ fn classification_matches_identity_and_name() {
         icon_source: "target".to_string(),
         icon_color: "none".to_string(),
         icon_text: String::new(),
+        icon_text_color: String::new(),
         item_type: "shortcut".to_string(),
         origin: "import".to_string(),
         hidden: false,

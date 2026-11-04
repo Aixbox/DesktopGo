@@ -4,7 +4,9 @@ use crate::icons::models::{DesktopIcon, IconManagerItem, IconSnapshot, SnapshotI
 use crate::icons::search_icon_plan::is_special_shell_path;
 
 use super::image::read_icon_file_as_data_uri;
-use super::item::{is_web_url, resolved_icon_color, resolved_icon_source};
+use super::item::{
+    is_web_url, normalize_icon_text_color, resolved_icon_color, resolved_icon_source,
+};
 use super::shell_entry::shell_entry_path;
 use super::storage::snapshot_base_dir;
 
@@ -53,6 +55,7 @@ pub(super) fn snapshot_to_ordered_desktop_icons(
                     icon_source: resolved_icon_source(item),
                     icon_color: resolved_icon_color(item),
                     icon_text: item.icon_text.clone(),
+                    icon_text_color: normalize_icon_text_color(&item.icon_text_color),
                     item_type: item.item_type.clone(),
                     origin: item.origin.clone(),
                 },
@@ -102,6 +105,7 @@ pub(super) fn snapshot_to_ordered_icon_manager_items(
                     icon_source: resolved_icon_source(item),
                     icon_color: resolved_icon_color(item),
                     icon_text: item.icon_text.clone(),
+                    icon_text_color: normalize_icon_text_color(&item.icon_text_color),
                     item_type: item.item_type.clone(),
                     origin: item.origin.clone(),
                     hidden: item.hidden,

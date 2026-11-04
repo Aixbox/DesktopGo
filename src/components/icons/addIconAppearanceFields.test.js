@@ -21,6 +21,7 @@ const modules = {
   '@/lib/iconColors': iconColors,
   '@/lib/iconBackground': iconBackground,
   './IconColorPicker': { IconColorPicker: 'IconColorPicker' },
+  './TextIconColorPicker': { TextIconColorPicker: 'TextIconColorPicker' },
   '@/lib/utils': { cn: (...classes) => classes.filter(Boolean).join(' ') },
   '@/components/ui/button': { Button: 'button' },
   '@/components/ui/input': { Input: 'input' },

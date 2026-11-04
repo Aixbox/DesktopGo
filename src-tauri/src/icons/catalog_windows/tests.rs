@@ -21,6 +21,7 @@ fn snapshot_item_with_legacy_icons(paths: LegacySnapshotIconPaths) -> SnapshotIc
         icon_source: "target".to_string(),
         icon_color: "none".to_string(),
         icon_text: String::new(),
+        icon_text_color: String::new(),
         item_type: "shortcut".to_string(),
         origin: "import".to_string(),
         hidden: false,

@@ -176,6 +176,7 @@ export function buildQuickImportEditDraft(app: QuickImportAppDraft): AddIconDial
     iconSource: edit?.iconSource ?? 'target',
     iconColor: edit?.iconColor ?? 'none',
     iconText: edit?.iconText ?? '',
+    iconTextColor: edit?.iconTextColor,
   }
 }
 
@@ -194,5 +195,6 @@ export function buildQuickImportEntryInput(app: QuickImportAppDraft) {
     iconSource: edit?.iconSource ?? 'target',
     iconColor: edit?.iconColor ?? 'none',
     iconText: edit?.iconText ?? '',
+    iconTextColor: edit?.iconTextColor,
   }
 }

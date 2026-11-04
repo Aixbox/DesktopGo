@@ -11,7 +11,7 @@ use crate::icons::website::normalize_website_url;
 
 use super::super::item::{
     build_import_file_path, build_scanned_item_from_path, has_extension, import_identity_key,
-    is_web_url, normalize_icon_color, normalize_icon_source,
+    is_web_url, normalize_icon_color, normalize_icon_source, normalize_icon_text_color,
 };
 
 struct RawEntryInput<'a> {
@@ -26,6 +26,7 @@ struct RawEntryInput<'a> {
     icon_source: &'a str,
     icon_color: &'a str,
     icon_text: &'a str,
+    icon_text_color: &'a str,
 }
 
 #[derive(Debug)]
@@ -39,6 +40,7 @@ pub(super) struct NormalizedIconEntry {
     pub icon_source: String,
     pub icon_color: String,
     pub icon_text: String,
+    pub icon_text_color: String,
     pub is_web: bool,
     pub is_special: bool,
     pub source_path: PathBuf,
@@ -62,6 +64,7 @@ impl NormalizedIconEntry {
                 icon_source: &input.icon_source,
                 icon_color: &input.icon_color,
                 icon_text: &input.icon_text,
+                icon_text_color: &input.icon_text_color,
             },
             false,
         )
@@ -81,6 +84,7 @@ impl NormalizedIconEntry {
                 icon_source: &input.icon_source,
                 icon_color: &input.icon_color,
                 icon_text: &input.icon_text,
+                icon_text_color: &input.icon_text_color,
             },
             true,
         )
@@ -138,6 +142,11 @@ impl NormalizedIconEntry {
             website_icon_base64: raw.website_icon_base64.trim().to_string(),
             generated_icon_base64,
             icon_color: normalize_icon_color(raw.icon_color),
+            icon_text_color: if icon_source == "text" {
+                normalize_icon_text_color(raw.icon_text_color)
+            } else {
+                String::new()
+            },
             icon_text: if icon_source == "text" {
                 raw.icon_text.trim().to_string()
             } else {
@@ -165,6 +174,7 @@ impl NormalizedIconEntry {
         item.icon_source.clone_from(&self.icon_source);
         item.icon_color.clone_from(&self.icon_color);
         item.icon_text.clone_from(&self.icon_text);
+        item.icon_text_color.clone_from(&self.icon_text_color);
     }
 
     pub fn writes_direct_snapshot(&self) -> bool {
@@ -295,6 +305,7 @@ mod tests {
             icon_source: "target".to_string(),
             icon_color: "none".to_string(),
             icon_text: String::new(),
+            icon_text_color: String::new(),
             origin: String::new(),
         }
     }
@@ -314,6 +325,7 @@ mod tests {
             icon_source: input.icon_source,
             icon_color: input.icon_color,
             icon_text: input.icon_text,
+            icon_text_color: input.icon_text_color,
         }
     }
 
@@ -338,6 +350,71 @@ mod tests {
         update.icon_color = "#D4E5F6".to_string();
         let updated = NormalizedIconEntry::from_update(&update).unwrap();
         assert_eq!(updated.icon_color, "#d4e5f6");
+    }
+
+    #[test]
+    fn text_icon_color_survives_create_update_and_snapshot_roundtrip() {
+        for color in ["black", "white"] {
+            let mut create = create_input();
+            create.icon_source = "text".to_string();
+            create.icon_text_color = format!(" {color} ");
+            let created = NormalizedIconEntry::from_create(&create).unwrap();
+            assert_eq!(created.icon_text_color, color);
+
+            let mut update = update_input();
+            update.icon_source = "text".to_string();
+            update.icon_text_color = color.to_string();
+            let updated = NormalizedIconEntry::from_update(&update).unwrap();
+            assert_eq!(updated.icon_text_color, color);
+
+            let mut item: SnapshotIconItem = serde_json::from_value(serde_json::json!({
+                "id": "text-id", "key": "text-key", "name": "Example",
+                "path": "https://example.com/", "target_path": "https://example.com/",
+                "item_type": "website"
+            }))
+            .unwrap();
+            assert!(item.icon_text_color.is_empty());
+            updated.apply_metadata(&mut item);
+            let restored: SnapshotIconItem =
+                serde_json::from_str(&serde_json::to_string(&item).unwrap()).unwrap();
+            assert_eq!(restored.icon_text_color, color);
+        }
+    }
+
+    #[test]
+    fn text_icon_color_accepts_legacy_inputs_and_clears_invalid_or_raster_colors() {
+        let mut input: CreateIconEntryInput = serde_json::from_value(serde_json::json!({
+            "displayName": "Example", "targetPath": "https://example.com/", "iconSource": "text"
+        }))
+        .unwrap();
+        assert!(NormalizedIconEntry::from_create(&input)
+            .unwrap()
+            .icon_text_color
+            .is_empty());
+        for value in ["", "red", "#ffffff"] {
+            input.icon_text_color = value.to_string();
+            assert!(NormalizedIconEntry::from_create(&input)
+                .unwrap()
+                .icon_text_color
+                .is_empty());
+        }
+        input.icon_source = "target".to_string();
+        input.icon_text_color = "white".to_string();
+        assert!(NormalizedIconEntry::from_create(&input)
+            .unwrap()
+            .icon_text_color
+            .is_empty());
+        let update: UpdateIconEntryInput = serde_json::from_value(serde_json::json!({
+            "id": "text-id", "displayName": "Example", "targetPath": "https://example.com/",
+            "iconSource": "text", "iconTextColor": "white"
+        }))
+        .unwrap();
+        assert_eq!(
+            NormalizedIconEntry::from_update(&update)
+                .unwrap()
+                .icon_text_color,
+            "white"
+        );
     }
 
     #[test]

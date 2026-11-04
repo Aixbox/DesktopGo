@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { getIconBackgroundStyle, ICON_COLOR_SHADING } from './iconBackground.ts'
+import { resolveTextIconColor } from './textIconColor.ts'
 import {
   createColoredIconDataUri,
   createIconWithBackgroundColorDataUri,
@@ -152,6 +153,20 @@ assert.equal(textFill, '#263244')
 createTextIconDataUri('字', '#123456')
 assert.equal(backgroundFill, '#123456')
 assert.equal(textFill, '#FFFFFF')
+for (const [textColor, expected] of [
+  ['black', '#000000'],
+  ['white', '#FFFFFF'],
+]) {
+  for (const background of ['ocean', '#000000', '#ffffff', 'none']) {
+    createTextIconDataUri('字', background, 256, textColor)
+    assert.equal(textFill, expected, 'the selected text color must not follow the background')
+    if (background === 'none') assert.notEqual(context.strokeStyle, expected)
+  }
+  assert.equal(resolveTextIconColor(textColor, '#123456'), textColor)
+}
+assert.equal(resolveTextIconColor(undefined, '#123456'), 'white')
+assert.equal(resolveTextIconColor('', 'ocean'), 'black')
+assert.equal(resolveTextIconColor('invalid', '#ffffff'), 'black')
 assert.equal(createTextIconDataUri('', 'none'), '')
 createTextIconDataUri('桌面工具栏', 'ocean')
 assert.ok(Number.parseInt(drawnFont.match(/700 (\d+)px/)?.[1] ?? '0', 10) < Math.round(256 * 0.41))

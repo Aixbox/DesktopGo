@@ -123,6 +123,7 @@ export function useLaunchpadIconImportController({
           iconSource,
           iconColor: editRequestedIcon.icon_color ?? 'none',
           iconText: editRequestedIcon.icon_text ?? '',
+          iconTextColor: editRequestedIcon.icon_text_color || undefined,
         })
         setEditingDropIndex(null)
         setEditingIcon(editRequestedIcon)
@@ -300,6 +301,7 @@ export function useLaunchpadIconImportController({
           iconSource: draft.iconSource ?? 'target',
           iconColor: draft.iconColor ?? 'none',
           iconText: draft.iconText ?? '',
+          iconTextColor: draft.iconTextColor ?? '',
         },
       })
       clearCustomName(editingIcon.path)
@@ -343,6 +345,7 @@ export function useLaunchpadIconImportController({
               iconSource: draft.iconSource ?? 'target',
               iconColor: draft.iconColor ?? 'none',
               iconText: draft.iconText ?? '',
+              iconTextColor: draft.iconTextColor ?? '',
             },
           })
           result.imported_count += itemResult.imported_count

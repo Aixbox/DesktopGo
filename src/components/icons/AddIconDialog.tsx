@@ -1,12 +1,4 @@
-import {
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-  type KeyboardEvent,
-} from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
@@ -25,12 +17,7 @@ import {
 import { deriveIconEntryName } from '@/lib/iconManager'
 import type { CropCornerRadii } from '@/lib/imageCrop'
 import { deriveWebsiteName, normalizeWebsiteUrl } from '@/lib/websiteIcon'
-import {
-  createTextIconDataUri,
-  normalizeTextIconText,
-  pickRandomIconColor,
-  type IconColorId,
-} from '@/lib/textIcon'
+import { normalizeTextIconText, pickRandomIconColor, type IconColorId } from '@/lib/textIcon'
 import { translate, useI18n } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -49,12 +36,12 @@ import {
   createAddIconDialogInitialState,
   resolveDraftIconSource,
   DEFAULT_TEXT_ICON_COLOR,
-  DEFAULT_TEXT_ICON_TEXT,
   type AddIconDialogDraft,
   type AddIconKind,
   type IconChoice,
 } from './addIconDialogState'
 import { createIconAppearanceDraft } from './iconAppearanceDraft'
+import { useTextIconDraft } from './useTextIconDraft'
 
 export type { AddIconDialogDraft, AddIconKind } from './addIconDialogState'
 
@@ -123,10 +110,14 @@ function AddIconDialogSession({
     initialState.selectedIconSource
   )
   const [iconColor, setIconColor] = useState<IconColorId>(initialState.iconColor)
-  const [iconText, setIconText] = useState(initialState.iconText)
-  const [editedTextIconPreview, setEditedTextIconPreview] = useState(
-    initialState.editedTextIconPreview
-  )
+  const {
+    iconText,
+    iconTextColor,
+    textIconPreview,
+    setIconText,
+    setEditedTextIconPreview,
+    ...textIconDraft
+  } = useTextIconDraft(initialState, iconColor)
   const [targetPreview, setTargetPreview] = useState(initialState.targetPreview)
   const [targetPreviewLoading, setTargetPreviewLoading] = useState(
     initialState.targetPreviewLoading
@@ -150,10 +141,6 @@ function AddIconDialogSession({
   const [editedRasterCornerRadii, setEditedRasterCornerRadii] = useState<
     Array<{ dataUri: string; cornerRadii: CropCornerRadii }>
   >([])
-  const textIconPreview = useMemo(
-    () => editedTextIconPreview || createTextIconDataUri(iconText, iconColor),
-    [editedTextIconPreview, iconColor, iconText]
-  )
 
   const closeDialog = () => {
     if (!submitting) onOpenChange(false)
@@ -335,8 +322,7 @@ function AddIconDialogSession({
     setCustomIconPath('')
     setSelectedIconSource('text')
     setIconColor(DEFAULT_TEXT_ICON_COLOR)
-    setIconText(DEFAULT_TEXT_ICON_TEXT)
-    setEditedTextIconPreview('')
+    textIconDraft.reset()
     setTargetPreview('')
     setTargetPreviewLoading(false)
     setCustomPreview('')
@@ -354,7 +340,7 @@ function AddIconDialogSession({
     setSelectedIconSource(source)
     if (source === 'current') {
       setIconColor(initialState.iconColor)
-      setIconText(initialState.iconText)
+      textIconDraft.restore()
       return
     }
     if (source !== 'text') return
@@ -394,12 +380,6 @@ function AddIconDialogSession({
     }
     setEditedTextIconPreview('')
     setIconColor(nextColor)
-  }
-
-  const handleIconTextChange = (nextText: string) => {
-    if (selectedIconSource !== 'text') handleIconSourceChange('text')
-    setEditedTextIconPreview('')
-    setIconText(normalizeTextIconText(nextText))
   }
 
   const handleExtractWebsiteIcon = async () => {
@@ -591,6 +571,7 @@ function AddIconDialogSession({
         websitePreview,
         iconColor,
         iconText,
+        iconTextColor,
       })
       const draft: AddIconDialogDraft = {
         entryKind,
@@ -928,13 +909,21 @@ function AddIconDialogSession({
                   automaticPreviewLabel={automaticPreviewLabel}
                   iconColor={iconColor}
                   iconText={iconText}
+                  iconTextColor={iconTextColor}
                   textIconPreview={textIconPreview}
                   customIconPath={customIconPath}
                   customPreview={customPreview}
                   customPreviewLoading={customPreviewLoading}
                   disabled={submitting}
                   onColorChange={handleIconColorChange}
-                  onTextChange={handleIconTextChange}
+                  onTextChange={text => {
+                    handleIconSourceChange('text')
+                    textIconDraft.changeText(text)
+                  }}
+                  onTextColorChange={color => {
+                    handleIconSourceChange('text')
+                    textIconDraft.changeTextColor(color)
+                  }}
                   onIconSourceChange={handleIconSourceChange}
                   onOpenCropEditor={openCropEditor}
                   onPickCustomIcon={() => void handlePickCustomIcon()}

@@ -20,6 +20,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { AddIconKind, IconChoice } from './addIconDialogState'
 import { IconColorPicker } from './IconColorPicker'
+import { TextIconColorPicker } from './TextIconColorPicker'
+import type { TextIconColor } from '@/lib/textIconColor'
 
 const ICON_PICKER_FOCUS_RING_CLASS_NAME =
   'focus-visible:border-ring/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45'
@@ -72,6 +74,7 @@ type AddIconAppearanceFieldsProps = {
   automaticPreviewLabel: string
   iconColor: IconColorId
   iconText: string
+  iconTextColor: TextIconColor
   textIconPreview: string
   customIconPath: string
   customPreview: string
@@ -79,6 +82,7 @@ type AddIconAppearanceFieldsProps = {
   disabled: boolean
   onColorChange: (colorId: IconColorId) => void
   onTextChange: (text: string) => void
+  onTextColorChange: (color: TextIconColor) => void
   onIconSourceChange: (source: IconChoice) => void
   onOpenCropEditor: (target: IconCropEditorTarget) => void
   onPickCustomIcon: () => void
@@ -96,6 +100,7 @@ export function AddIconAppearanceFields({
   automaticPreviewLabel,
   iconColor,
   iconText,
+  iconTextColor,
   textIconPreview,
   customIconPath,
   customPreview,
@@ -103,6 +108,7 @@ export function AddIconAppearanceFields({
   disabled,
   onColorChange,
   onTextChange,
+  onTextColorChange,
   onIconSourceChange,
   onOpenCropEditor,
   onPickCustomIcon,
@@ -135,13 +141,21 @@ export function AddIconAppearanceFields({
 
       <AddIconFormRow label={translate('图标文字')} labelFor={iconTextInputId}>
         <div className="min-w-0 space-y-1.5">
-          <Input
-            id={iconTextInputId}
-            value={iconText}
-            onChange={event => onTextChange(event.target.value)}
-            placeholder={translate('输入最多六个字符')}
-            disabled={disabled}
-          />
+          <div className="flex min-w-0 items-center gap-2">
+            <Input
+              id={iconTextInputId}
+              value={iconText}
+              onChange={event => onTextChange(event.target.value)}
+              placeholder={translate('输入最多六个字符')}
+              disabled={disabled}
+              className="min-w-0 flex-1"
+            />
+            <TextIconColorPicker
+              value={iconTextColor}
+              onChange={onTextColorChange}
+              disabled={disabled}
+            />
+          </div>
           <span className="block text-xs leading-5 text-muted-foreground">
             {translate('最多使用六个字符生成图标，内容较长时会自动缩小并保持单行。')}
           </span>

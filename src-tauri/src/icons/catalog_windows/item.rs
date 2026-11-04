@@ -138,6 +138,7 @@ pub(super) fn build_snapshot_item(
         icon_source: "target".to_string(),
         icon_color: "none".to_string(),
         icon_text: String::new(),
+        icon_text_color: String::new(),
         item_type: item.item_type.clone(),
         origin: "import".to_string(),
         hidden: false,
@@ -187,6 +188,14 @@ pub(super) fn resolved_icon_color(item: &SnapshotIconItem) -> String {
     normalize_icon_color(&item.icon_color)
 }
 
+pub(super) fn normalize_icon_text_color(value: &str) -> String {
+    match value.trim() {
+        "black" => "black".to_string(),
+        "white" => "white".to_string(),
+        _ => String::new(),
+    }
+}
+
 pub(super) fn normalize_icon_source(value: &str, custom_icon_path: &str) -> String {
     match value.trim() {
         "text" => "text".to_string(),
@@ -233,6 +242,7 @@ mod tests {
             icon_source: "target".to_string(),
             icon_color: "none".to_string(),
             icon_text: String::new(),
+            icon_text_color: String::new(),
             item_type: "shortcut".to_string(),
             origin: "import".to_string(),
             hidden: false,

@@ -32,6 +32,9 @@ export const EN_ICON_EDITOR_MESSAGES: Record<string, string> = {
   梅紫: 'Plum',
   石墨: 'Graphite',
   图标文字: 'Icon text',
+  文字颜色: 'Text color',
+  黑色: 'Black',
+  白色: 'White',
   输入最多六个字符: 'Enter up to six characters',
   '最多使用六个字符生成图标，内容较长时会自动缩小并保持单行。':
     'Use up to six characters. Longer text shrinks automatically to stay on one line.',

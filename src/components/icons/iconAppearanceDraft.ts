@@ -5,6 +5,7 @@ import {
   type IconColorId,
 } from '../../lib/textIcon'
 import { normalizeWebsiteUrl } from '../../lib/websiteIcon'
+import { resolveTextIconColor, type TextIconColor } from '../../lib/textIconColor'
 import {
   resolveDraftIconSource,
   type AddIconDialogDraft,
@@ -24,6 +25,7 @@ interface IconAppearanceInput {
   websitePreview: string
   iconColor: IconColorId
   iconText: string
+  iconTextColor: TextIconColor
 }
 
 type IconAppearanceDraft = Pick<
@@ -34,6 +36,7 @@ type IconAppearanceDraft = Pick<
   | 'iconSource'
   | 'iconColor'
   | 'iconText'
+  | 'iconTextColor'
 >
 
 /** 「当前图标」还原进入编辑前的图片和来源；其他选项沿用已有的生成、裁剪流程。 */
@@ -52,6 +55,7 @@ export async function createIconAppearanceDraft(
       iconSource: source,
       iconColor: initialDraft.iconColor ?? 'none',
       iconText: source === 'text' ? normalizeTextIconText(initialDraft.iconText ?? '') : '',
+      iconTextColor: source === 'text' ? initialDraft.iconTextColor : undefined,
     }
   }
 
@@ -70,7 +74,9 @@ export async function createIconAppearanceDraft(
     (selectedIconSource !== 'custom' ||
       input.customIconPath.trim() === initialDraft.customIconPath.trim()) &&
     (selectedIconSource !== 'text' ||
-      normalizeTextIconText(iconText) === normalizeTextIconText(initialDraft.iconText ?? ''))
+      (normalizeTextIconText(iconText) === normalizeTextIconText(initialDraft.iconText ?? '') &&
+        input.iconTextColor ===
+          resolveTextIconColor(initialDraft.iconTextColor, initialDraft.iconColor)))
   )
   const generatedIconBase64 = canReuseGeneratedIcon
     ? (initialDraft?.generatedIconBase64 ?? '')
@@ -97,5 +103,6 @@ export async function createIconAppearanceDraft(
     iconSource: selectedIconSource,
     iconColor,
     iconText: selectedIconSource === 'text' ? normalizeTextIconText(iconText) : '',
+    iconTextColor: selectedIconSource === 'text' ? input.iconTextColor : undefined,
   }
 }

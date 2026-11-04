@@ -24,6 +24,7 @@ pub struct DesktopIcon {
     pub icon_source: String,
     pub icon_color: String,
     pub icon_text: String,
+    pub icon_text_color: String,
     pub item_type: String,
     pub origin: String,
 }
@@ -42,6 +43,7 @@ pub struct IconManagerItem {
     pub icon_source: String,
     pub icon_color: String,
     pub icon_text: String,
+    pub icon_text_color: String,
     pub item_type: String,
     pub origin: String,
     pub hidden: bool,
@@ -105,6 +107,8 @@ pub(crate) struct SnapshotIconItem {
     pub(crate) icon_color: String,
     #[serde(default)]
     pub(crate) icon_text: String,
+    #[serde(default)]
+    pub(crate) icon_text_color: String,
     pub(crate) item_type: String,
     #[serde(default = "default_icon_origin")]
     pub(crate) origin: String,
@@ -150,6 +154,8 @@ pub struct CreateIconEntryInput {
     pub icon_color: String,
     #[serde(default)]
     pub icon_text: String,
+    #[serde(default)]
+    pub icon_text_color: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -176,6 +182,8 @@ pub struct UpdateIconEntryInput {
     pub icon_color: String,
     #[serde(default)]
     pub icon_text: String,
+    #[serde(default)]
+    pub icon_text_color: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
