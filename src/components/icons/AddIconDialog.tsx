@@ -42,6 +42,7 @@ import {
 } from './addIconDialogState'
 import { createIconAppearanceDraft } from './iconAppearanceDraft'
 import { useTextIconDraft } from './useTextIconDraft'
+import { useIconArtworkSource } from './useIconArtworkSource'
 
 export type { AddIconDialogDraft, AddIconKind } from './addIconDialogState'
 
@@ -85,6 +86,7 @@ function AddIconDialogSession({
 }: AddIconDialogProps) {
   useI18n()
   const initialState = createAddIconDialogInitialState(initialDraft)
+  const resolveArtworkSource = useIconArtworkSource(initialDraft)
 
   const titleId = useId()
   const descriptionId = useId()
@@ -117,7 +119,7 @@ function AddIconDialogSession({
     setIconText,
     setEditedTextIconPreview,
     ...textIconDraft
-  } = useTextIconDraft(initialState, iconColor)
+  } = useTextIconDraft(initialState)
   const [targetPreview, setTargetPreview] = useState(initialState.targetPreview)
   const [targetPreviewLoading, setTargetPreviewLoading] = useState(
     initialState.targetPreviewLoading
@@ -359,9 +361,12 @@ function AddIconDialogSession({
   const handleIconColorChange = (nextColor: IconColorId) => {
     if (selectedIconSource === 'current' && initialDraft) {
       const source = resolveDraftIconSource(initialDraft)
-      const preview = initialState.currentIconPreview
+      const preview = resolveArtworkSource(initialState.currentIconPreview)
+      if (!preview) return
       setSelectedIconSource(source)
-      if (source === 'custom') {
+      if (source === 'text') {
+        setEditedTextIconPreview(preview)
+      } else if (source === 'custom') {
         customPreviewRequestRef.current += 1
         setCustomIconPath(initialState.customIconPath)
         setCustomPreview(preview)
@@ -378,7 +383,9 @@ function AddIconDialogSession({
       }
       setEditedRasterPreviews(current => [...current, preview])
     }
-    setEditedTextIconPreview('')
+    if (selectedIconSource === 'text') {
+      setEditedTextIconPreview(resolveArtworkSource(textIconPreview) || textIconPreview)
+    }
     setIconColor(nextColor)
   }
 
@@ -485,8 +492,9 @@ function AddIconDialogSession({
   }
 
   const openCropEditor = (target: IconCropEditorTarget) => {
-    if (!target.source || submitting) return
-    setCropEditorTarget(target)
+    const source = resolveArtworkSource(target.source)
+    if (!source || submitting) return
+    setCropEditorTarget({ ...target, source })
   }
 
   const handleCropApply = ({ dataUri, colorId, cornerRadii }: IconCropResult) => {
@@ -564,6 +572,9 @@ function AddIconDialogSession({
         entryKind,
         selectedIconSource,
         selectedPreview,
+        selectedArtwork: resolveArtworkSource(
+          selectedIconSource === 'current' ? initialState.currentIconPreview : selectedPreview
+        ),
         selectedCornerRadii,
         editedRasterPreviews,
         normalizedTargetPath,
@@ -899,6 +910,7 @@ function AddIconDialogSession({
 
                 <AddIconAppearanceFields
                   currentIconPreview={initialState.currentIconPreview}
+                  resolveArtworkSource={resolveArtworkSource}
                   iconTextInputId={iconTextInputId}
                   entryKind={entryKind}
                   websitePreviews={websitePreviews}

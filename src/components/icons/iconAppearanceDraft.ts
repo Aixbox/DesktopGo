@@ -18,6 +18,7 @@ interface IconAppearanceInput {
   entryKind: AddIconKind
   selectedIconSource: IconChoice
   selectedPreview: string
+  selectedArtwork?: string
   selectedCornerRadii?: CropCornerRadii
   editedRasterPreviews: string[]
   normalizedTargetPath: string
@@ -37,6 +38,7 @@ type IconAppearanceDraft = Pick<
   | 'iconColor'
   | 'iconText'
   | 'iconTextColor'
+  | 'iconArtworkBase64'
 >
 
 /** 「当前图标」还原进入编辑前的图片和来源；其他选项沿用已有的生成、裁剪流程。 */
@@ -56,6 +58,7 @@ export async function createIconAppearanceDraft(
       iconColor: initialDraft.iconColor ?? 'none',
       iconText: source === 'text' ? normalizeTextIconText(initialDraft.iconText ?? '') : '',
       iconTextColor: source === 'text' ? initialDraft.iconTextColor : undefined,
+      iconArtworkBase64: input.selectedArtwork || initialDraft.iconArtworkBase64,
     }
   }
 
@@ -80,19 +83,18 @@ export async function createIconAppearanceDraft(
   )
   const generatedIconBase64 = canReuseGeneratedIcon
     ? (initialDraft?.generatedIconBase64 ?? '')
-    : selectedIconSource === 'text'
-      ? selectedPreview
-      : iconColor !== 'none'
-        ? await createColoredIconDataUri(
-            selectedPreview,
-            iconColor,
-            ICON_CROP_OUTPUT_SIZE,
-            input.selectedCornerRadii
-          )
-        : input.editedRasterPreviews.includes(selectedPreview) &&
-            !(entryKind === 'website' && selectedIconSource === 'target')
-          ? selectedPreview
-          : ''
+    : iconColor !== 'none'
+      ? await createColoredIconDataUri(
+          input.selectedArtwork || selectedPreview,
+          iconColor,
+          ICON_CROP_OUTPUT_SIZE,
+          input.selectedCornerRadii
+        )
+      : selectedIconSource === 'text' ||
+          (input.editedRasterPreviews.includes(selectedPreview) &&
+            !(entryKind === 'website' && selectedIconSource === 'target'))
+        ? input.selectedArtwork || selectedPreview
+        : ''
   return {
     customIconPath: selectedIconSource === 'custom' ? input.customIconPath.trim() : '',
     websiteIconBase64:
@@ -100,6 +102,7 @@ export async function createIconAppearanceDraft(
         ? input.websitePreview
         : '',
     generatedIconBase64,
+    iconArtworkBase64: input.selectedArtwork || selectedPreview,
     iconSource: selectedIconSource,
     iconColor,
     iconText: selectedIconSource === 'text' ? normalizeTextIconText(iconText) : '',

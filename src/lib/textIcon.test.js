@@ -167,6 +167,16 @@ for (const [textColor, expected] of [
 assert.equal(resolveTextIconColor(undefined, '#123456'), 'white')
 assert.equal(resolveTextIconColor('', 'ocean'), 'black')
 assert.equal(resolveTextIconColor('invalid', '#ffffff'), 'black')
+for (const textColor of ['black', 'white']) {
+  const beforeDrawing = drawing.length
+  createTextIconDataUri('字', 'none', 256, textColor, false)
+  assert.equal(drawing.length, beforeDrawing, 'raw text must not paint a background')
+  assert.equal(textFill, textColor === 'black' ? '#000000' : '#FFFFFF')
+}
+assert.equal(
+  createTextIconDataUri('', 'none', 256, 'black', false),
+  'data:image/png;base64,text-icon'
+)
 assert.equal(createTextIconDataUri('', 'none'), '')
 createTextIconDataUri('桌面工具栏', 'ocean')
 assert.ok(Number.parseInt(drawnFont.match(/700 (\d+)px/)?.[1] ?? '0', 10) < Math.round(256 * 0.41))

@@ -21,6 +21,8 @@ export interface AddIconDialogDraft {
   generatedIconBase64?: string
   /** 仅供编辑会话展示和还原，不作为新的持久化图标来源。 */
   currentIconBase64?: string
+  /** 编辑草稿中的透明图像层，用于再次裁剪、换色和取色。 */
+  iconArtworkBase64?: string
   iconSource?: IconSource
   iconColor?: IconColorId
   iconText?: string
@@ -99,7 +101,8 @@ export function createAddIconDialogInitialState(
     iconColor: normalizeIconColor(draft.iconColor),
     iconText: draft.iconText ?? '',
     iconTextColor: resolveTextIconColor(draft.iconTextColor, draft.iconColor),
-    editedTextIconPreview: selectedIconSource === 'text' ? generatedPreview : '',
+    editedTextIconPreview:
+      selectedIconSource === 'text' ? draft.iconArtworkBase64 || generatedPreview : '',
     targetPreview,
     targetPreviewLoading: entryKind === 'app' && Boolean(draft.targetPath.trim()) && !targetPreview,
     customPreview,

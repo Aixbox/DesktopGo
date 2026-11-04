@@ -64,6 +64,7 @@ type AddIconAppearanceFieldsProps = {
   iconTextInputId: string
   entryKind: AddIconKind
   currentIconPreview: string
+  resolveArtworkSource: (preview: string) => string
   websitePreviews: string[]
   websitePreview: string
   selectedIconSource: IconChoice
@@ -90,6 +91,7 @@ export function AddIconAppearanceFields({
   iconTextInputId,
   entryKind,
   currentIconPreview,
+  resolveArtworkSource,
   websitePreviews,
   websitePreview,
   selectedIconSource,
@@ -132,7 +134,7 @@ export function AddIconAppearanceFields({
           value={iconColor}
           onChange={onColorChange}
           disabled={disabled}
-          extractionSource={extractionSource}
+          extractionSource={resolveArtworkSource(extractionSource)}
           selectionKey={selectedIconSource}
         />
       </AddIconFormRow>
@@ -221,7 +223,7 @@ export function AddIconAppearanceFields({
                           }
                         >
                           <img
-                            src={preview}
+                            src={resolveArtworkSource(preview) || preview}
                             alt=""
                             draggable={false}
                             className="h-full w-full object-contain"
@@ -276,7 +278,7 @@ export function AddIconAppearanceFields({
                       <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
                     ) : automaticPreview ? (
                       <img
-                        src={automaticPreview}
+                        src={resolveArtworkSource(automaticPreview) || automaticPreview}
                         alt={automaticPreviewLabel}
                         className="h-full w-full object-contain"
                       />
@@ -305,6 +307,11 @@ export function AddIconAppearanceFields({
               <div className="relative h-16 w-16">
                 <IconPreviewButton
                   aria-pressed={selectedIconSource === 'text'}
+                  surfaceStyle={
+                    iconColor !== 'none'
+                      ? getIconBackgroundStyle(selectedColorPreset.color)
+                      : undefined
+                  }
                   aria-label={translate('编辑 {name}', { name: translate('文字图标') })}
                   title={translate('裁剪图标')}
                   onClick={() => {
@@ -323,7 +330,7 @@ export function AddIconAppearanceFields({
                 >
                   {textIconPreview ? (
                     <img
-                      src={textIconPreview}
+                      src={resolveArtworkSource(textIconPreview) || textIconPreview}
                       alt={translate('文字图标')}
                       className="h-full w-full object-contain"
                     />
@@ -373,7 +380,7 @@ export function AddIconAppearanceFields({
                       <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
                     ) : customPreview ? (
                       <img
-                        src={customPreview}
+                        src={resolveArtworkSource(customPreview) || customPreview}
                         alt={translate('自定义图标')}
                         className="h-full w-full object-contain"
                       />

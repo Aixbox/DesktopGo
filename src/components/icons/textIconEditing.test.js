@@ -49,30 +49,33 @@ test('text edits and color switches regenerate artwork; restoring current resets
     },
     '../../lib/textIcon': {
       ...textIcon,
-      createTextIconDataUri: (text, background, _size, color) => `${text}/${background}/${color}`,
+      createTextIconDataUri: (text, background, _size, color, outline) => {
+        assert.equal(background, 'none')
+        assert.equal(outline, false)
+        return `${text}/${background}/${color}`
+      },
     },
     './addIconDialogState': dialogState,
   })
-  const render = (background = 'ocean') => {
+  const render = () => {
     cursor = 0
-    return useTextIconDraft(initial, background)
+    return useTextIconDraft(initial)
   }
   assert.equal(render().textIconPreview, 'original-crop')
   render().changeTextColor('black')
-  assert.equal(render().textIconPreview, '原图/ocean/black')
-  assert.equal(render('#112233').textIconPreview, '原图/#112233/black')
+  assert.equal(render().textIconPreview, '原图/none/black')
   render().changeText(' 长文字123456 ')
   assert.equal(render().iconText, '长文字123')
   assert.equal(render().iconTextColor, 'black')
   render().setEditedTextIconPreview('new-crop')
   assert.equal(render().textIconPreview, 'new-crop')
   render().changeTextColor('white')
-  assert.equal(render().textIconPreview, '长文字123/ocean/white')
+  assert.equal(render().textIconPreview, '长文字123/none/white')
   render().restore()
   assert.equal(render().iconTextColor, 'white')
   assert.equal(render().textIconPreview, 'original-crop')
   render().reset()
-  assert.equal(render().textIconPreview, 'D/ocean/black')
+  assert.equal(render().textIconPreview, 'D/none/black')
 })
 
 test('text color controls are two labelled native radios with selection and disabled semantics', () => {

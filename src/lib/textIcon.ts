@@ -51,13 +51,14 @@ export const createTextIconDataUri = (
   value: string,
   colorId: IconColorId,
   size = 256,
-  textColor?: TextIconColor
+  textColor?: TextIconColor,
+  transparentOutline = true
 ): string => {
   const text = normalizeTextIconText(value)
   if (typeof document === 'undefined') return ''
 
   const preset = resolveIconColor(colorId)
-  if (!text && preset.id === 'none') return ''
+  if (!text && preset.id === 'none' && transparentOutline) return ''
 
   const canvas = document.createElement('canvas')
   canvas.width = size
@@ -84,7 +85,7 @@ export const createTextIconDataUri = (
     context.textBaseline = 'middle'
     context.lineJoin = 'round'
 
-    if (preset.id === 'none') {
+    if (preset.id === 'none' && transparentOutline) {
       context.lineWidth = Math.max(8, Math.round(size * 0.055))
       context.strokeStyle = textColor === 'white' ? '#334155' : '#F8FAFC'
       context.strokeText(text, size / 2, size / 2 + size * 0.025)

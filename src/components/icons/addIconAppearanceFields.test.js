@@ -63,6 +63,7 @@ function render(overrides = {}) {
   return exports.AddIconAppearanceFields({
     entryKind: 'app',
     currentIconPreview: 'current.png',
+    resolveArtworkSource: preview => preview,
     automaticPreview: 'automatic.png',
     automaticPreviewLabel: '自动提取',
     textIconPreview: 'text.png',
@@ -115,7 +116,7 @@ test('automatic, custom and website candidates preview the same shading used by 
   for (const entryKind of ['app', 'website']) {
     const tree = render({ entryKind, iconColor: 'ocean', websitePreviews: ['website.png'] })
     const backgrounds = collect(tree, node => node.props.style?.backgroundColor)
-    assert.equal(backgrounds.length, 2)
+    assert.equal(backgrounds.length, 3)
     for (const node of backgrounds) {
       assert.equal(node.props.style.backgroundColor, iconColors.resolveIconColor('ocean').color)
       assert.equal(node.props.style.backgroundImage, iconBackground.ICON_COLOR_SHADING)
@@ -138,6 +139,25 @@ test('color extraction samples the selected bitmap and waits for loading artwork
     assert.equal(picker.props.extractionSource, expected)
     assert.equal(picker.props.selectionKey, selectedIconSource)
   }
+})
+
+test('extraction and editable previews use the foreground while the current choice retains the saved image', () => {
+  for (const selectedIconSource of ['current', 'text', 'target', 'custom']) {
+    const tree = render({
+      selectedIconSource,
+      iconColor: '#dd8844',
+      resolveArtworkSource: preview => `raw-${preview}`,
+    })
+    const picker = collect(tree, node => node.type === 'IconColorPicker')[0]
+    assert.ok(picker.props.extractionSource.startsWith('raw-'))
+    const images = collect(tree, node => node.type === 'img').map(node => node.props.src)
+    assert.deepEqual(images, ['current.png', 'raw-automatic.png', 'raw-text.png', 'raw-custom.png'])
+  }
+  const loading = render({ resolveArtworkSource: () => '' })
+  assert.equal(
+    collect(loading, node => node.type === 'IconColorPicker')[0].props.extractionSource,
+    ''
+  )
 })
 
 test('all preview choices keep a stationary clickable surface while only their non-interactive artwork lifts', () => {

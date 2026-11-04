@@ -14,7 +14,6 @@ import {
   constrainCropFramePosition,
   constrainMediaPositionToViewport,
   clampCropCornerRadii,
-  cropImageViewportDataUri,
   extractImageColorAtViewportPoint,
   getImageBoundedSquareCropSize,
   getNativeCropOutputSize,
@@ -30,9 +29,10 @@ import {
   type UpscaledContainObjectFit,
 } from '@/lib/imageCrop'
 import { translate } from '@/lib/i18n'
-import { createIconWithBackgroundColorDataUri, type IconColorId } from '@/lib/textIcon'
+import type { IconColorId } from '@/lib/textIcon'
 import { isCustomIconColor, normalizeIconColor, resolveIconColor } from '@/lib/iconColors'
 import { getIconBackgroundStyle } from '@/lib/iconBackground'
+import { createIconCropResult, type IconCropResult } from './iconCropResult'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { NativeScrollArea } from '@/components/ui/native-scroll-area'
@@ -43,11 +43,7 @@ import {
   IconCropTransformControls,
 } from '@/components/icons/IconCropControls'
 
-export type IconCropResult = {
-  dataUri: string
-  colorId: IconColorId
-  cornerRadii: CropCornerRadii
-}
+export type { IconCropResult } from './iconCropResult'
 
 type IconCropDialogProps = {
   open: boolean
@@ -488,7 +484,7 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
     setError('')
     try {
       const outputSize = getNativeCropOutputSize(cropSize, mediaSize, zoom)
-      const dataUri = await cropImageViewportDataUri(
+      const result = await createIconCropResult(
         editorSource,
         {
           crop: {
@@ -501,30 +497,10 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
           rotation,
           cornerRadii,
         },
-        outputSize
+        outputSize,
+        usingCustomColor ? normalizeIconColor(customColor) : colorId
       )
-      if (!dataUri) throw new Error('The cropped icon is empty')
-      const outputRadiusScale = outputSize / Math.max(1, cropSize.width)
-      const outputCornerRadii: CropCornerRadii = {
-        nw: cornerRadii.nw * outputRadiusScale,
-        ne: cornerRadii.ne * outputRadiusScale,
-        se: cornerRadii.se * outputRadiusScale,
-        sw: cornerRadii.sw * outputRadiusScale,
-      }
-      const outputDataUri =
-        usingCustomColor && customColor
-          ? await createIconWithBackgroundColorDataUri(
-              dataUri,
-              customColor,
-              outputSize,
-              outputCornerRadii
-            )
-          : dataUri
-      onApply({
-        dataUri: outputDataUri,
-        colorId: usingCustomColor ? normalizeIconColor(customColor) : colorId,
-        cornerRadii: outputCornerRadii,
-      })
+      onApply(result)
     } catch {
       setError(translate('无法生成裁剪后的图标，请重试。'))
       setApplying(false)
