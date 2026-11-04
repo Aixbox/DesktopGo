@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { translate } from '@/lib/i18n'
 import { resolveIconColor, type IconColorId } from '@/lib/iconColors'
+import { getIconBackgroundStyle } from '@/lib/iconBackground'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -107,11 +108,29 @@ export function AddIconAppearanceFields({
   onPickCustomIcon,
 }: AddIconAppearanceFieldsProps) {
   const selectedColorPreset = resolveIconColor(iconColor)
+  const extractionSource =
+    selectedIconSource === 'current'
+      ? currentIconPreview
+      : selectedIconSource === 'text'
+        ? textIconPreview
+        : selectedIconSource === 'custom'
+          ? customPreviewLoading
+            ? ''
+            : customPreview
+          : automaticPreviewLoading
+            ? ''
+            : automaticPreview
 
   return (
     <>
       <AddIconFormRow label={translate('图标颜色')}>
-        <IconColorPicker value={iconColor} onChange={onColorChange} disabled={disabled} />
+        <IconColorPicker
+          value={iconColor}
+          onChange={onColorChange}
+          disabled={disabled}
+          extractionSource={extractionSource}
+          selectionKey={selectedIconSource}
+        />
       </AddIconFormRow>
 
       <AddIconFormRow label={translate('图标文字')} labelFor={iconTextInputId}>
@@ -191,7 +210,7 @@ export function AddIconAppearanceFields({
                           )}
                           style={
                             iconColor !== 'none'
-                              ? { backgroundColor: selectedColorPreset?.color }
+                              ? getIconBackgroundStyle(selectedColorPreset.color)
                               : undefined
                           }
                         >
@@ -246,7 +265,7 @@ export function AddIconAppearanceFields({
                     )}
                     style={
                       iconColor !== 'none'
-                        ? { backgroundColor: selectedColorPreset?.color }
+                        ? getIconBackgroundStyle(selectedColorPreset.color)
                         : undefined
                     }
                   >
@@ -349,7 +368,7 @@ export function AddIconAppearanceFields({
                     )}
                     style={
                       iconColor !== 'none'
-                        ? { backgroundColor: selectedColorPreset?.color }
+                        ? getIconBackgroundStyle(selectedColorPreset.color)
                         : undefined
                     }
                   >

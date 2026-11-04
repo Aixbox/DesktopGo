@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { extractIconDominantColor } from '../domain/iconDominantColor.ts'
-import { loadIconColor, readCachedIconColor } from './iconColor.ts'
+import { extractIconDominantColor } from './iconDominantColor.ts'
+import { loadIconColor, readCachedIconColor } from './iconColorSampling.ts'
 
 test('dominant color ignores transparent RGB, weights opacity and does not mix separate hues', () => {
   const rgba = new Uint8ClampedArray([

@@ -12,6 +12,7 @@ import {
 import { translate } from '@/lib/i18n'
 import { ICON_COLOR_PRESETS, type IconColorId } from '@/lib/textIcon'
 import { resolveIconColor } from '@/lib/iconColors'
+import { getIconBackgroundStyle } from '@/lib/iconBackground'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -271,7 +272,7 @@ export function IconCropBackgroundControls({
                       backgroundImage: ICON_TRANSPARENT_CHECKERBOARD,
                       backgroundSize: '8px 8px',
                     }
-                  : { backgroundColor: preset.color, color: preset.foreground }
+                  : { ...getIconBackgroundStyle(preset.color), color: preset.foreground }
               }
             >
               {preset.id === 'none' ? (
@@ -298,7 +299,7 @@ export function IconCropBackgroundControls({
                 : 'border-border hover:border-foreground/40'
             )}
             style={{
-              backgroundColor: customColor,
+              ...getIconBackgroundStyle(customColor),
               color: resolveIconColor(customColor).foreground,
             }}
           >

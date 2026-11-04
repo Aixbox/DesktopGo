@@ -11,6 +11,7 @@ import * as gridItems from '../domain/gridItems.ts'
 import * as gridGeometry from '../domain/gridGeometry.ts'
 import * as topLevel from '../domain/topLevelLayout.ts'
 import * as types from '../../../types/index.ts'
+import * as iconBackground from '../../../lib/iconBackground.ts'
 import * as metrics from '../views/iconTileMetrics.ts'
 import * as visuals from '../views/folderVisualPolicy.ts'
 import * as resizePolicy from '../domain/folderResizePolicy.ts'
@@ -169,6 +170,7 @@ test('workspace icon wires size actions and renders its handle outside the activ
     './icon-grid/views/folderVisualPolicy': visuals,
     './icon-grid/views/iconTileMetrics': metrics,
     './icon-grid/views/IconArtwork': load('../views/IconArtwork.tsx', {
+      '../../../lib/iconBackground': iconBackground,
       'framer-motion': motion,
       '../hooks/useRoundedIcon': { useRoundedIcon: source => (source ? 'rounded-image' : null) },
       '../hooks/useIconDominantColor': {
@@ -276,7 +278,7 @@ test('only a focused resize handle prepares icon assets, and it reuses the surfa
     react: { useEffect: callback => effects.push(callback) },
     '../../icons/focusedItemMenuContext': { useItemMenuFocused: () => focused },
     '../hooks/useDocumentDirection': { useDocumentDirection: () => 'ltr' },
-    '../services/iconColor': { loadIconColor: source => prepared.push(['color', source]) },
+    '../../../lib/iconColorSampling': { loadIconColor: source => prepared.push(['color', source]) },
     '../services/roundedIcon': { loadRoundedIcon: source => prepared.push(['rounded', source]) },
     './FolderResizeHandle': { FolderResizeHandle: 'FolderResizeHandle' },
   })
@@ -306,8 +308,13 @@ test('only a focused resize handle prepares icon assets, and it reuses the surfa
 })
 
 for (const [hook, service, read, loadValue] of [
-  ['useIconDominantColor', 'iconColor', 'readCachedIconColor', 'loadIconColor'],
-  ['useRoundedIcon', 'roundedIcon', 'readCachedRoundedIcon', 'loadRoundedIcon'],
+  [
+    'useIconDominantColor',
+    '../../../lib/iconColorSampling',
+    'readCachedIconColor',
+    'loadIconColor',
+  ],
+  ['useRoundedIcon', '../services/roundedIcon', 'readCachedRoundedIcon', 'loadRoundedIcon'],
 ]) {
   test(`${hook} discards stale results and retains cached results in drag clones`, async () => {
     let state,
@@ -331,7 +338,7 @@ for (const [hook, service, read, loadValue] of [
           effect = callback
         },
       },
-      [`../services/${service}`]: {
+      [service]: {
         [read]: source => cache.get(source) ?? null,
         [loadValue]: source => new Promise(resolve => pending.set(source, resolve)),
       },

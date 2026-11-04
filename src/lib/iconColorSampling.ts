@@ -1,4 +1,4 @@
-import { extractIconDominantColor } from '../domain/iconDominantColor'
+import { extractIconDominantColor } from './iconDominantColor'
 
 const SAMPLE_SIZE = 32
 const CACHE_LIMIT = 128
@@ -40,7 +40,7 @@ function sampleIconColor(source: string): Promise<string | null> {
   })
 }
 
-/** Share one small decode between the tile, drag ghost and landing animation. */
+/** 图标编辑、大图标及拖拽预览共用采样结果，避免重复解码。 */
 export function loadIconColor(source: string): Promise<string | null> {
   if (!source.startsWith('data:image/')) return Promise.resolve(null)
   const cached = colorCache.get(source)

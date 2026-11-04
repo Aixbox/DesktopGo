@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
 import * as gridTypes from '../../../types/index.ts'
+import * as iconBackground from '../../../lib/iconBackground.ts'
 import * as gridModel from '../model.ts'
 import * as visualPolicy from './folderVisualPolicy.ts'
 import * as previewPolicy from './folderPreviewPolicy.ts'
@@ -44,6 +45,7 @@ const sharedModules = {
   './iconTileMetrics': iconTileMetrics,
   '../model': gridModel,
   './IconArtwork': loadModule('./IconArtwork.tsx', {
+    '../../../lib/iconBackground': iconBackground,
     '../hooks/useRoundedIcon': { useRoundedIcon: source => (source ? 'rounded-image' : null) },
     '../hooks/useIconDominantColor': {
       useIconDominantColor: source => (source ? '#336699' : null),

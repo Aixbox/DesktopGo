@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { loadIconColor, readCachedIconColor } from '../services/iconColor'
+import { loadIconColor, readCachedIconColor } from '../../../lib/iconColorSampling'
 
 export function useIconDominantColor(source: string | undefined): string | null {
   const [sample, setSample] = useState(() => ({ source, color: readCachedIconColor(source) }))

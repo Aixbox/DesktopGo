@@ -1,15 +1,15 @@
 /** 图标背景使用明度适中、色相清晰的柔和预设；自定义色保留用户选择的原始 RGB。 */
 export const ICON_COLOR_PRESETS = [
   { id: 'none', color: 'transparent', foreground: '#334155' },
-  { id: 'ocean', color: '#719FE8', foreground: '#263244' },
-  { id: 'cyan', color: '#59B4C8', foreground: '#263244' },
-  { id: 'emerald', color: '#65B895', foreground: '#263244' },
-  { id: 'lime', color: '#A1BF68', foreground: '#263244' },
-  { id: 'amber', color: '#E5B464', foreground: '#263244' },
-  { id: 'coral', color: '#E58E7D', foreground: '#263244' },
-  { id: 'pink', color: '#D88DB2', foreground: '#263244' },
-  { id: 'plum', color: '#AE93D8', foreground: '#263244' },
-  { id: 'graphite', color: '#96A6BC', foreground: '#263244' },
+  { id: 'ocean', color: '#638FD8', foreground: '#111827' },
+  { id: 'cyan', color: '#48A6BD', foreground: '#111827' },
+  { id: 'emerald', color: '#52AA85', foreground: '#111827' },
+  { id: 'lime', color: '#91B354', foreground: '#111827' },
+  { id: 'amber', color: '#DDA44D', foreground: '#111827' },
+  { id: 'coral', color: '#DA7D6C', foreground: '#111827' },
+  { id: 'pink', color: '#CB7BA1', foreground: '#111827' },
+  { id: 'plum', color: '#9E80CC', foreground: '#111827' },
+  { id: 'graphite', color: '#8597B0', foreground: '#111827' },
 ] as const
 
 export type IconPresetColorId = (typeof ICON_COLOR_PRESETS)[number]['id']

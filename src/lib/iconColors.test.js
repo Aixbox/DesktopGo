@@ -28,9 +28,20 @@ test('all icon presets resolve and custom colors are normalized without changing
   }
 })
 
-test('preset backgrounds retain readable text', () => {
+test('preset backgrounds retain readable text including the shaded lower edge', () => {
   for (const preset of ICON_COLOR_PRESETS.filter(item => item.id !== 'none')) {
     assert.ok(contrast(preset.color, preset.foreground) >= 4.5, preset.id)
+    const shaded =
+      '#' +
+      preset.color
+        .match(/[\da-f]{2}/gi)
+        .map(channel =>
+          Math.round(parseInt(channel, 16) * 0.91)
+            .toString(16)
+            .padStart(2, '0')
+        )
+        .join('')
+    assert.ok(contrast(shaded, preset.foreground) >= 4.5, `${preset.id} shadow`)
   }
 })
 

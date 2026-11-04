@@ -1,5 +1,6 @@
 import { Ban, Check, Palette } from 'lucide-react'
 import { translate } from '@/lib/i18n'
+import { getIconBackgroundStyle } from '@/lib/iconBackground'
 import {
   ICON_COLOR_PRESETS,
   isCustomIconColor,
@@ -9,6 +10,7 @@ import {
   type IconPresetColorId,
 } from '@/lib/iconColors'
 import { cn } from '@/lib/utils'
+import { IconColorExtractionButton } from './IconColorExtractionButton'
 
 const COLOR_LABELS: Record<IconPresetColorId, string> = {
   none: '无色',
@@ -27,6 +29,8 @@ interface IconColorPickerProps {
   value: IconColorId
   onChange: (value: IconColorId) => void
   disabled?: boolean
+  extractionSource?: string
+  selectionKey?: string
 }
 
 function CustomIconColorPicker({ value, onChange, disabled }: IconColorPickerProps) {
@@ -42,9 +46,9 @@ function CustomIconColorPicker({ value, onChange, disabled }: IconColorPickerPro
       )}
       style={
         selected
-          ? { backgroundColor: resolved.color, color: resolved.foreground }
+          ? { ...getIconBackgroundStyle(resolved.color), color: resolved.foreground }
           : {
-              background: 'conic-gradient(#719FE8, #AE93D8, #E58E7D, #E5B464, #65B895, #719FE8)',
+              background: 'conic-gradient(#638FD8, #9E80CC, #DA7D6C, #DDA44D, #52AA85, #638FD8)',
               color: '#263244',
             }
       }
@@ -66,7 +70,13 @@ function CustomIconColorPicker({ value, onChange, disabled }: IconColorPickerPro
 }
 
 /** 与设置页一样使用原生颜色选择器；所有图标背景选项共享同一份颜色解析。 */
-export function IconColorPicker({ value, onChange, disabled }: IconColorPickerProps) {
+export function IconColorPicker({
+  value,
+  onChange,
+  disabled,
+  extractionSource = '',
+  selectionKey = '',
+}: IconColorPickerProps) {
   const selectedValue = normalizeIconColor(value)
   const label = isCustomIconColor(selectedValue)
     ? `${translate('自定义颜色')} ${selectedValue.toUpperCase()}`
@@ -98,7 +108,7 @@ export function IconColorPicker({ value, onChange, disabled }: IconColorPickerPr
             style={
               preset.id === 'none'
                 ? undefined
-                : { backgroundColor: preset.color, color: preset.foreground }
+                : { ...getIconBackgroundStyle(preset.color), color: preset.foreground }
             }
           >
             {preset.id === 'none' ? (
@@ -109,6 +119,13 @@ export function IconColorPicker({ value, onChange, disabled }: IconColorPickerPr
           </button>
         )
       })}
+      <IconColorExtractionButton
+        source={extractionSource}
+        selectionKey={selectionKey}
+        value={value}
+        disabled={Boolean(disabled)}
+        onChange={onChange}
+      />
       <CustomIconColorPicker value={selectedValue} onChange={onChange} disabled={disabled} />
       <span className="ml-1 text-xs text-muted-foreground">{label}</span>
     </div>

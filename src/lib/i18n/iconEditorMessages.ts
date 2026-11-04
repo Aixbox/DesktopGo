@@ -15,6 +15,12 @@ export const EN_ICON_EDITOR_MESSAGES: Record<string, string> = {
   图标颜色: 'Icon color',
   自定义颜色: 'Custom color',
   选择自定义图标颜色: 'Choose a custom icon color',
+  从图标取色: 'Pick color from icon',
+  从当前选中的图标中提取背景色: 'Extract the background color from the selected icon',
+  请先选择可用的图标: 'Select an available icon first',
+  '正在取色…': 'Extracting…',
+  '未能从图标中提取颜色，请选择其他图标或重试。':
+    'Could not extract a color. Choose another icon or try again.',
   无色: 'No color',
   海蓝: 'Ocean blue',
   湖青: 'Cyan',

@@ -32,6 +32,7 @@ import {
 import { translate } from '@/lib/i18n'
 import { createIconWithBackgroundColorDataUri, type IconColorId } from '@/lib/textIcon'
 import { isCustomIconColor, normalizeIconColor, resolveIconColor } from '@/lib/iconColors'
+import { getIconBackgroundStyle } from '@/lib/iconBackground'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { NativeScrollArea } from '@/components/ui/native-scroll-area'
@@ -696,7 +697,13 @@ function IconCropDialogContent({ source, initialColor, onCancel, onApply }: Icon
                       backgroundImage: ICON_TRANSPARENT_CHECKERBOARD,
                       backgroundSize: '16px 16px',
                     }
-                  : { backgroundColor: visibleBackgroundColor ?? undefined }
+                  : {
+                      ...getIconBackgroundStyle(visibleBackgroundColor ?? undefined),
+                      backgroundSize: cropSize
+                        ? `${cropSize.width}px ${cropSize.height}px`
+                        : '100% 100%',
+                      backgroundPosition: `calc(50% + ${cropFramePosition.x}px) calc(50% + ${cropFramePosition.y}px)`,
+                    }
               }
             >
               <div

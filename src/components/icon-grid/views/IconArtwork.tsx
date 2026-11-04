@@ -1,13 +1,9 @@
 import { AppWindow } from 'lucide-react'
 import { motion, type MotionValue } from 'framer-motion'
 import type { DesktopIcon } from '../../../types'
+import { getIconBackgroundStyle } from '../../../lib/iconBackground'
 import { useIconDominantColor } from '../hooks/useIconDominantColor'
 import { useRoundedIcon } from '../hooks/useRoundedIcon'
-
-// Broad, smooth lighting over the extracted color; no grain or image texture.
-const ICON_COLOR_SHADING =
-  'radial-gradient(ellipse at 20% 0%, rgb(255 255 255 / 14%), rgb(255 255 255 / 0%) 70%), ' +
-  'linear-gradient(180deg, rgb(0 0 0 / 0%) 35%, rgb(0 0 0 / 9%) 100%)'
 
 /** One artwork layer for workspace tiles and drag/landing previews. */
 export function IconArtwork({
@@ -52,10 +48,7 @@ export function IconArtwork({
           data-icon-color-fill
           className="pointer-events-none absolute inset-0"
           style={{
-            backgroundColor: color,
-            backgroundImage: ICON_COLOR_SHADING,
-            backgroundSize: '100% 100%',
-            backgroundRepeat: 'no-repeat',
+            ...getIconBackgroundStyle(color),
             opacity: 'var(--launchpad-icon-opacity, 1)',
           }}
         />

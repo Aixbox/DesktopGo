@@ -1,4 +1,5 @@
 import type { CropCornerRadii } from './imageCrop'
+import { fillIconBackground } from './iconBackground'
 import { ICON_COLOR_PRESETS, resolveIconColor, type IconColorId } from './iconColors'
 export { ICON_COLOR_PRESETS, type IconColorId } from './iconColors'
 
@@ -61,8 +62,7 @@ export const createTextIconDataUri = (value: string, colorId: IconColorId, size 
   context.clearRect(0, 0, size, size)
   if (preset.id !== 'none') {
     drawRoundedSquare(context, size, Math.round(size * 0.22))
-    context.fillStyle = preset.color
-    context.fill()
+    fillIconBackground(context, preset.color, size)
   }
 
   if (text) {
@@ -127,8 +127,7 @@ export const createIconWithBackgroundColorDataUri = async (
   if (!context) return ''
 
   drawRoundedSquare(context, size, cornerRadii ?? Math.round(size * 0.22))
-  context.fillStyle = color
-  context.fill()
+  fillIconBackground(context, color, size)
 
   const availableSize = size
   const scale = Math.min(availableSize / image.naturalWidth, availableSize / image.naturalHeight)

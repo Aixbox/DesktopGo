@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { getIconBackgroundStyle, ICON_COLOR_SHADING } from './iconBackground.ts'
 import {
   createColoredIconDataUri,
   createIconWithBackgroundColorDataUri,
@@ -35,7 +36,48 @@ let drawnFont = ''
 let drawnImageRect = []
 let backgroundFill = ''
 let textFill = ''
+const drawing = []
+let clipped = false
+const states = []
+function gradient(kind, coords) {
+  return {
+    kind,
+    coords,
+    stops: [],
+    addColorStop(offset, color) {
+      this.stops.push([offset, color])
+    },
+  }
+}
 const context = {
+  save() {
+    states.push({ fillStyle: this.fillStyle, clipped })
+    drawing.push('save')
+  },
+  clip() {
+    clipped = true
+    drawing.push('clip')
+  },
+  restore() {
+    const state = states.pop()
+    this.fillStyle = state.fillStyle
+    clipped = state.clipped
+    drawing.push('restore')
+  },
+  scale(...values) {
+    drawing.push(['scale', ...values])
+  },
+  createLinearGradient(...coords) {
+    return gradient('linear', coords)
+  },
+  createRadialGradient(...coords) {
+    return gradient('radial', coords)
+  },
+  fillRect() {
+    assert.equal(clipped, true, 'background lighting must stay inside the rounded outline')
+    if (typeof this.fillStyle === 'string') backgroundFill = this.fillStyle
+    drawing.push(this.fillStyle)
+  },
   beginPath() {},
   clearRect() {},
   closePath() {},
@@ -44,10 +86,12 @@ const context = {
   },
   fillStyle: '',
   fillText() {
+    assert.equal(clipped, false, 'background drawing state must be restored before drawing text')
     drawnFont = this.font
     textFill = this.fillStyle
   },
   drawImage(_image, x, y, width, height) {
+    assert.equal(clipped, false, 'background drawing state must be restored before drawing artwork')
     drawnImageRect = [x, y, width, height]
   },
   font: '',
@@ -82,6 +126,26 @@ globalThis.Image = class {
 
 assert.equal(createTextIconDataUri('', 'ocean'), 'data:image/png;base64,text-icon')
 assert.equal(backgroundFill, ICON_COLOR_PRESETS.find(preset => preset.id === 'ocean').color)
+assert.deepEqual(drawing.slice(0, 2), ['save', 'clip'])
+const shadow = drawing.find(value => value?.kind === 'linear')
+const highlight = drawing.find(value => value?.kind === 'radial')
+assert.deepEqual(shadow.stops, [
+  [0.35, 'rgba(0, 0, 0, 0)'],
+  [1, 'rgba(0, 0, 0, 0.09)'],
+])
+assert.deepEqual(highlight.stops, [
+  [0, 'rgba(255, 255, 255, 0.14)'],
+  [0.7, 'rgba(255, 255, 255, 0)'],
+])
+assert.ok(
+  drawing.indexOf(shadow) < drawing.indexOf(highlight),
+  'highlight overlays the shadow as it does in CSS'
+)
+assert.equal(drawing.at(-1), 'restore')
+assert.equal(getIconBackgroundStyle('transparent').backgroundImage, undefined)
+assert.equal(getIconBackgroundStyle('#123456').backgroundImage, ICON_COLOR_SHADING)
+assert.ok(ICON_COLOR_SHADING.includes('/ 14%'))
+assert.ok(ICON_COLOR_SHADING.includes('/ 9%'))
 createTextIconDataUri('字', '#e5c8b1')
 assert.equal(backgroundFill, '#e5c8b1')
 assert.equal(textFill, '#263244')
@@ -103,6 +167,7 @@ assert.equal(
   'data:image/png;base64,text-icon'
 )
 assert.deepEqual(drawnImageRect, [0, 64, 256, 128])
+assert.equal(states.length, 0)
 
 delete globalThis.document
 delete globalThis.Image

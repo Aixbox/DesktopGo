@@ -1,4 +1,4 @@
-/** Most prevalent visible color, without blending unrelated hues or discarding neutral artwork. */
+/** Shared icon artwork policy: most prevalent visible color, without blending unrelated hues. */
 export function extractIconDominantColor(pixels: Uint8ClampedArray): string | null {
   const buckets = new Map<number, { weight: number; red: number; green: number; blue: number }>()
   for (let index = 0; index + 3 < pixels.length; index += 4) {

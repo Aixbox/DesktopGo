@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
 import * as iconColors from '../../lib/iconColors.ts'
+import * as iconBackground from '../../lib/iconBackground.ts'
 
 const require = createRequire(import.meta.url)
 const code = ts.transpileModule(
@@ -18,6 +19,7 @@ const modules = {
   'lucide-react': require('lucide-react'),
   '@/lib/i18n': { translate: (text, params) => text.replace('{name}', params?.name ?? '') },
   '@/lib/iconColors': iconColors,
+  '@/lib/iconBackground': iconBackground,
   './IconColorPicker': { IconColorPicker: 'IconColorPicker' },
   '@/lib/utils': { cn: (...classes) => classes.filter(Boolean).join(' ') },
   '@/components/ui/button': { Button: 'button' },
@@ -88,4 +90,33 @@ test('new icons have no current artwork choice and submission disables that choi
   const submitting = render({ disabled: true })
   const current = collect(submitting, node => node.props['aria-label'] === '使用当前图标')[0]
   assert.equal(current.props.disabled, true)
+})
+
+test('automatic, custom and website candidates preview the same shading used by enlarged icons', () => {
+  for (const entryKind of ['app', 'website']) {
+    const tree = render({ entryKind, iconColor: 'ocean', websitePreviews: ['website.png'] })
+    const backgrounds = collect(tree, node => node.props.style?.backgroundColor)
+    assert.equal(backgrounds.length, 2)
+    for (const node of backgrounds) {
+      assert.equal(node.props.style.backgroundColor, iconColors.resolveIconColor('ocean').color)
+      assert.equal(node.props.style.backgroundImage, iconBackground.ICON_COLOR_SHADING)
+    }
+  }
+})
+
+test('color extraction samples the selected bitmap and waits for loading artwork', () => {
+  for (const [selectedIconSource, overrides, expected] of [
+    ['current', {}, 'current.png'],
+    ['text', {}, 'text.png'],
+    ['custom', {}, 'custom.png'],
+    ['target', {}, 'automatic.png'],
+    ['target', { entryKind: 'website', automaticPreview: 'website.png' }, 'website.png'],
+    ['target', { automaticPreviewLoading: true }, ''],
+    ['custom', { customPreviewLoading: true }, ''],
+  ]) {
+    const tree = render({ selectedIconSource, ...overrides })
+    const picker = collect(tree, node => node.type === 'IconColorPicker')[0]
+    assert.equal(picker.props.extractionSource, expected)
+    assert.equal(picker.props.selectionKey, selectedIconSource)
+  }
 })
