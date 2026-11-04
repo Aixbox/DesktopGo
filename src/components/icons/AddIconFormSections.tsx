@@ -21,10 +21,8 @@ import { Input } from '@/components/ui/input'
 import type { AddIconKind, IconChoice } from './addIconDialogState'
 import { IconColorPicker } from './IconColorPicker'
 import { TextIconColorPicker } from './TextIconColorPicker'
+import { IconPreviewButton } from './IconPreviewButton'
 import type { TextIconColor } from '@/lib/textIconColor'
-
-const ICON_PICKER_FOCUS_RING_CLASS_NAME =
-  'focus-visible:border-ring/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45'
 
 export type IconCropEditorTarget =
   | { kind: 'target'; source: string }
@@ -167,18 +165,15 @@ export function AddIconAppearanceFields({
           <div className="flex flex-wrap items-start gap-x-[20px] gap-y-3">
             {currentIconPreview ? (
               <div className="flex w-16 shrink-0 flex-col items-center gap-1.5">
-                <button
-                  type="button"
+                <IconPreviewButton
                   aria-pressed={selectedIconSource === 'current'}
                   aria-label={translate('使用当前图标')}
                   onClick={() => onIconSourceChange('current')}
                   disabled={disabled}
-                  className={cn(
-                    'relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
-                    ICON_PICKER_FOCUS_RING_CLASS_NAME,
+                  surfaceClassName={cn(
                     selectedIconSource === 'current'
                       ? 'border-ring/45 ring-2 ring-ring/45'
-                      : 'border-border hover:border-foreground/30'
+                      : 'border-border group-hover/icon-preview:border-foreground/30'
                   )}
                 >
                   <img
@@ -190,7 +185,7 @@ export function AddIconAppearanceFields({
                   {selectedIconSource === 'current' ? (
                     <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
                   ) : null}
-                </button>
+                </IconPreviewButton>
                 <span className="whitespace-nowrap text-center text-[11px] leading-4 text-muted-foreground">
                   {translate('当前图标')}
                 </span>
@@ -205,9 +200,8 @@ export function AddIconAppearanceFields({
                       key={`${index}-${preview.slice(-32)}`}
                       className="flex w-16 shrink-0 flex-col items-center gap-1.5"
                     >
-                      <div className="group relative h-16 w-16">
-                        <button
-                          type="button"
+                      <div className="relative h-16 w-16">
+                        <IconPreviewButton
                           aria-pressed={selected}
                           aria-label={translate('编辑 {name}', { name: candidateLabel })}
                           title={translate('裁剪图标')}
@@ -215,14 +209,12 @@ export function AddIconAppearanceFields({
                             onOpenCropEditor({ kind: 'website', source: preview, index })
                           }
                           disabled={disabled}
-                          className={cn(
-                            'relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
-                            ICON_PICKER_FOCUS_RING_CLASS_NAME,
+                          surfaceClassName={cn(
                             selected
                               ? 'border-ring/45 ring-2 ring-ring/45'
-                              : 'border-border hover:border-foreground/30'
+                              : 'border-border group-hover/icon-preview:border-foreground/30'
                           )}
-                          style={
+                          surfaceStyle={
                             iconColor !== 'none'
                               ? getIconBackgroundStyle(selectedColorPreset.color)
                               : undefined
@@ -237,10 +229,10 @@ export function AddIconAppearanceFields({
                           {selected ? (
                             <CheckCircle2 className="absolute right-1 top-1 z-10 h-4 w-4 fill-primary text-primary-foreground" />
                           ) : null}
-                          <span className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] bg-black/60 text-white opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+                          <span className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] bg-black/60 text-white opacity-0 transition-opacity duration-150 group-focus-visible/icon-preview:opacity-100 group-hover/icon-preview:opacity-100">
                             <Pencil className="h-4 w-4" />
                           </span>
-                        </button>
+                        </IconPreviewButton>
                       </div>
                       <span className="whitespace-nowrap text-center text-[11px] leading-4 text-muted-foreground">
                         {candidateLabel}
@@ -252,9 +244,8 @@ export function AddIconAppearanceFields({
 
             {entryKind !== 'website' || websitePreviews.length === 0 ? (
               <div className="flex w-16 shrink-0 flex-col items-center gap-1.5">
-                <div className="group relative h-16 w-16">
-                  <button
-                    type="button"
+                <div className="relative h-16 w-16">
+                  <IconPreviewButton
                     aria-pressed={selectedIconSource === 'target'}
                     aria-label={
                       automaticPreview
@@ -270,14 +261,12 @@ export function AddIconAppearanceFields({
                       onIconSourceChange('target')
                     }}
                     disabled={disabled}
-                    className={cn(
-                      'relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
-                      ICON_PICKER_FOCUS_RING_CLASS_NAME,
+                    surfaceClassName={cn(
                       selectedIconSource === 'target'
                         ? 'border-ring/45 ring-2 ring-ring/45'
-                        : 'border-border hover:border-foreground/30'
+                        : 'border-border group-hover/icon-preview:border-foreground/30'
                     )}
-                    style={
+                    surfaceStyle={
                       iconColor !== 'none'
                         ? getIconBackgroundStyle(selectedColorPreset.color)
                         : undefined
@@ -300,11 +289,11 @@ export function AddIconAppearanceFields({
                       <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
                     ) : null}
                     {automaticPreview && !automaticPreviewLoading ? (
-                      <span className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] bg-black/60 text-white opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+                      <span className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] bg-black/60 text-white opacity-0 transition-opacity duration-150 group-focus-visible/icon-preview:opacity-100 group-hover/icon-preview:opacity-100">
                         <Pencil className="h-4 w-4" />
                       </span>
                     ) : null}
-                  </button>
+                  </IconPreviewButton>
                 </div>
                 <span className="whitespace-nowrap text-center text-[11px] leading-4 text-muted-foreground">
                   {automaticPreviewLabel}
@@ -313,9 +302,8 @@ export function AddIconAppearanceFields({
             ) : null}
 
             <div className="flex w-16 shrink-0 flex-col items-center gap-1.5">
-              <div className="group relative h-16 w-16">
-                <button
-                  type="button"
+              <div className="relative h-16 w-16">
+                <IconPreviewButton
                   aria-pressed={selectedIconSource === 'text'}
                   aria-label={translate('编辑 {name}', { name: translate('文字图标') })}
                   title={translate('裁剪图标')}
@@ -327,12 +315,10 @@ export function AddIconAppearanceFields({
                     onIconSourceChange('text')
                   }}
                   disabled={disabled}
-                  className={cn(
-                    'relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
-                    ICON_PICKER_FOCUS_RING_CLASS_NAME,
+                  surfaceClassName={cn(
                     selectedIconSource === 'text'
                       ? 'border-ring/45 ring-2 ring-ring/45'
-                      : 'border-border hover:border-foreground/30'
+                      : 'border-border group-hover/icon-preview:border-foreground/30'
                   )}
                 >
                   {textIconPreview ? (
@@ -348,11 +334,11 @@ export function AddIconAppearanceFields({
                     <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
                   ) : null}
                   {textIconPreview ? (
-                    <span className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] bg-black/60 text-white opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+                    <span className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] bg-black/60 text-white opacity-0 transition-opacity duration-150 group-focus-visible/icon-preview:opacity-100 group-hover/icon-preview:opacity-100">
                       <Pencil className="h-4 w-4" />
                     </span>
                   ) : null}
-                </button>
+                </IconPreviewButton>
               </div>
               <span className="whitespace-nowrap text-center text-[11px] leading-4 text-muted-foreground">
                 {translate('文字图标')}
@@ -361,9 +347,8 @@ export function AddIconAppearanceFields({
 
             <div className="flex w-16 shrink-0 flex-col items-center gap-1.5">
               {customIconPath ? (
-                <div className="group relative h-16 w-16">
-                  <button
-                    type="button"
+                <div className="relative h-16 w-16">
+                  <IconPreviewButton
                     aria-pressed={selectedIconSource === 'custom'}
                     aria-label={translate('编辑 {name}', { name: translate('自定义图标') })}
                     title={translate('裁剪图标')}
@@ -373,14 +358,12 @@ export function AddIconAppearanceFields({
                       }
                     }}
                     disabled={disabled || !customPreview}
-                    className={cn(
-                      'relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border bg-background transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
-                      ICON_PICKER_FOCUS_RING_CLASS_NAME,
+                    surfaceClassName={cn(
                       selectedIconSource === 'custom'
                         ? 'border-ring/45 ring-2 ring-ring/45'
-                        : 'border-border hover:border-foreground/30'
+                        : 'border-border group-hover/icon-preview:border-foreground/30'
                     )}
-                    style={
+                    surfaceStyle={
                       iconColor !== 'none'
                         ? getIconBackgroundStyle(selectedColorPreset.color)
                         : undefined
@@ -401,25 +384,23 @@ export function AddIconAppearanceFields({
                       <CheckCircle2 className="absolute right-1 top-1 h-4 w-4 fill-primary text-primary-foreground" />
                     ) : null}
                     {customPreview && !customPreviewLoading ? (
-                      <span className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] bg-black/60 text-white opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+                      <span className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] bg-black/60 text-white opacity-0 transition-opacity duration-150 group-focus-visible/icon-preview:opacity-100 group-hover/icon-preview:opacity-100">
                         <Pencil className="h-4 w-4" />
                       </span>
                     ) : null}
-                  </button>
+                  </IconPreviewButton>
                 </div>
               ) : (
-                <button
-                  type="button"
+                <IconPreviewButton
                   aria-label={translate('添加自定义图标')}
                   onClick={onPickCustomIcon}
                   disabled={disabled}
-                  className={cn(
-                    'flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-border bg-muted/15 text-muted-foreground transition-[border-color,color,background-color,transform] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:-translate-y-0.5 hover:border-foreground/35 hover:bg-muted/35 hover:text-foreground disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
-                    ICON_PICKER_FOCUS_RING_CLASS_NAME
+                  surfaceClassName={cn(
+                    'border-dashed border-border bg-muted/15 text-muted-foreground group-hover/icon-preview:border-foreground/35 group-hover/icon-preview:bg-muted/35 group-hover/icon-preview:text-foreground'
                   )}
                 >
                   <ImagePlus className="h-5 w-5" />
-                </button>
+                </IconPreviewButton>
               )}
               <span className="whitespace-nowrap text-center text-[11px] leading-4 text-muted-foreground">
                 {customIconPath ? translate('自定义图标') : translate('添加图标')}

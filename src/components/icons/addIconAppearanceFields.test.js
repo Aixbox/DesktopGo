@@ -8,6 +8,20 @@ import * as iconColors from '../../lib/iconColors.ts'
 import * as iconBackground from '../../lib/iconBackground.ts'
 
 const require = createRequire(import.meta.url)
+const previewExports = {}
+runInNewContext(
+  ts.transpileModule(readFileSync(new URL('./IconPreviewButton.tsx', import.meta.url), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText,
+  {
+    exports: previewExports,
+    require: name =>
+      ({
+        'react/jsx-runtime': require('react/jsx-runtime'),
+        '@/lib/utils': { cn: (...classes) => classes.filter(Boolean).join(' ') },
+      })[name],
+  }
+)
 const code = ts.transpileModule(
   readFileSync(new URL('./AddIconFormSections.tsx', import.meta.url), 'utf8'),
   {
@@ -22,6 +36,7 @@ const modules = {
   '@/lib/iconBackground': iconBackground,
   './IconColorPicker': { IconColorPicker: 'IconColorPicker' },
   './TextIconColorPicker': { TextIconColorPicker: 'TextIconColorPicker' },
+  './IconPreviewButton': previewExports,
   '@/lib/utils': { cn: (...classes) => classes.filter(Boolean).join(' ') },
   '@/components/ui/button': { Button: 'button' },
   '@/components/ui/input': { Input: 'input' },
@@ -37,6 +52,9 @@ runInNewContext(code, {
 
 function collect(tree, predicate) {
   if (Array.isArray(tree)) return tree.flatMap(child => collect(child, predicate))
+  if (tree?.type === previewExports.IconPreviewButton) {
+    return collect(previewExports.IconPreviewButton(tree.props), predicate)
+  }
   if (!tree?.props) return []
   return [...(predicate(tree) ? [tree] : []), ...collect(tree.props.children, predicate)]
 }
@@ -120,4 +138,42 @@ test('color extraction samples the selected bitmap and waits for loading artwork
     assert.equal(picker.props.extractionSource, expected)
     assert.equal(picker.props.selectionKey, selectedIconSource)
   }
+})
+
+test('all preview choices keep a stationary clickable surface while only their non-interactive artwork lifts', () => {
+  const seen = new Set()
+  for (const options of [
+    {},
+    { entryKind: 'website', websitePreviews: ['website.png'] },
+    { currentIconPreview: '', customIconPath: '' },
+  ]) {
+    const actions = []
+    const tree = render({
+      ...options,
+      onIconSourceChange: source => actions.push(source),
+      onOpenCropEditor: target => actions.push(target.kind),
+      onPickCustomIcon: () => actions.push('add'),
+    })
+    const buttons = collect(tree, node => node.type === 'button')
+    for (const button of buttons) {
+      assert.match(button.props.className, /h-16 w-16/)
+      assert.doesNotMatch(button.props.className, /translate|scale|transform/)
+      const surface = button.props.children
+      assert.match(surface.props.className, /pointer-events-none/)
+      assert.match(
+        surface.props.className,
+        /motion-safe:group-hover\/icon-preview:-translate-y-0\.5/
+      )
+      assert.equal(surface.props.onClick, undefined)
+      button.props.onClick()
+    }
+    assert.equal(actions.length, buttons.length, 'the fixed surface handles every click')
+    actions.forEach(action => seen.add(action))
+  }
+  assert.deepEqual([...seen].sort(), ['add', 'current', 'custom', 'target', 'text', 'website'])
+  const disabledButtons = collect(render({ disabled: true }), node => node.type === 'button')
+  assert.ok(disabledButtons.every(button => button.props.disabled))
+  assert.ok(
+    disabledButtons.every(button => !button.props.children.props.className.includes('translate-y'))
+  )
 })
