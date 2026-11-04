@@ -151,7 +151,7 @@ const EN_MESSAGES: Record<string, string> = {
   窗口大小: 'Window size',
   标题行数: 'Title lines',
   系统菜单: 'System menu',
-  '图标使用 Windows 原生菜单': 'Use Windows native menu for icons',
+  图标原生菜单: 'Native icon menu',
   'Shift + 右键': 'Shift + Right-click',
   右键: 'Right-click',
   编辑图标信息: 'Edit icon',

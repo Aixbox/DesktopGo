@@ -225,14 +225,14 @@ export function LaunchpadContextMenuContent({
       </ContextMenuSub>
       <ContextMenuSeparator />
       <ContextMenuCheckboxItem
-        className="gap-2"
+        className="gap-2 whitespace-nowrap"
         checked={iconContextMenuMode === 'system'}
         onCheckedChange={checked => {
           setIconContextMenuMode(checked ? 'system' : 'custom')
         }}
       >
         <FolderCog className={MENU_ICON_CLASS} aria-hidden="true" />
-        {translate('图标使用 Windows 原生菜单')}
+        {translate('图标原生菜单')}
       </ContextMenuCheckboxItem>
       <ContextMenuSeparator />
       <ContextMenuItem className="gap-2" onSelect={onOpenSettings}>
