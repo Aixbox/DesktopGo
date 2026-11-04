@@ -217,7 +217,7 @@ export function LayoutLibraryPanel() {
               {translate('还没有历史快照，改动布局后会自动记录。')}
             </p>
           ) : (
-            historyVersions.slice(0, 10).map(version => (
+            historyVersions.map(version => (
               <div
                 key={version.id}
                 className="flex items-center justify-between gap-3 px-4 py-2.5"

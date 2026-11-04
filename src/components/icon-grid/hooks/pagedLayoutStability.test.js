@@ -182,6 +182,7 @@ function harness({ icons, layout, key = layout.geometryKey, read } = fixture()) 
       slots: [...output.outerSlots],
       columns: output.columns,
       pageSize: output.pageSize,
+      currentPage: output.currentPage,
     })
     output.containerRef.current = container
     output.gridRef.current = container
@@ -412,10 +413,166 @@ test('background refresh preserves live edits while explicit restore still loads
   assert.equal(reads, 2)
   assert.equal(h.value.items.find(item => item.kind === 'folder').name, 'Work')
   assert.ok(
-    h.renders.slice(start).some(frame => !frame.ready),
-    'external restore still waits for geometry and slots to agree'
+    h.renders.slice(start).every(frame => frame.ready),
+    'external restore publishes validated positions without hiding the measured grid'
   )
   assert.equal(h.value.layoutReady, true)
+})
+
+test('preview and cancel keep the preceding grid visible until complete replacement slots are ready', async t => {
+  const data = fixture()
+  let resolveRead
+  let defer = false
+  const h = harness({
+    ...data,
+    read: () =>
+      defer
+        ? new Promise(resolve => {
+            resolveRead = resolve
+          })
+        : Promise.resolve(structuredClone(data.layout)),
+  })
+  t.after(() => h.dispose())
+  const captured = []
+  h.update({ onBeforeLayoutChange: () => captured.push([...h.value.outerSlots]) })
+  await h.settle()
+  assert.equal(captured.length, 0, 'initial hydration has no existing pose to animate')
+  const original = [...h.value.outerSlots]
+  const preview = structuredClone(data.layout)
+  preview.slots[0] = null
+  preview.slots[1] = 'a'
+  defer = true
+  for (const [token, incoming] of [
+    [1, preview],
+    [2, data.layout],
+  ]) {
+    const previous = [...h.value.outerSlots]
+    const start = h.renders.length
+    h.update({ layoutResetToken: token })
+    await h.settle()
+    assert.deepEqual([...h.value.outerSlots], previous)
+    resolveRead(structuredClone(incoming))
+    await h.settle({ flushFrames: false })
+    assert.deepEqual(captured.at(-1), previous)
+    assert.deepEqual([...h.value.outerSlots], incoming.slots)
+    assert.ok(h.renders.slice(start).every(frame => frame.ready && frame.pageCount === 2))
+    await h.settle()
+  }
+  assert.deepEqual([...h.value.outerSlots], original)
+  assert.equal(captured.length, 2)
+})
+
+test('restoring different saved dimensions publishes rows and slots together without a blank frame', async t => {
+  const data = fixture()
+  let saved = data.layout
+  const h = harness({ ...data, read: async () => structuredClone(saved) })
+  t.after(() => h.dispose())
+  await h.settle()
+  const original = snapshot(h.value)
+  const start = h.renders.length
+  saved = { ...data.layout, columns: 10, pageSize: 50, slots: Array(100).fill(null) }
+  saved.slots[1] = 'a'
+  saved.slots[3] = 'folder:work'
+  saved.slots[7] = 'large'
+  saved.slots[96] = 'last'
+  const previewSlots = [...saved.slots]
+  h.update({ layoutResetToken: 1 })
+  await h.settle()
+  assert.equal(h.value.columns, 10)
+  assert.equal(h.value.rows, 5)
+  assert.deepEqual([...h.value.outerSlots], saved.slots)
+  saved = data.layout
+  h.update({ layoutResetToken: 2 })
+  await h.settle()
+  assert.deepEqual(snapshot(h.value), original)
+  for (const frame of h.renders.slice(start)) {
+    assert.equal(frame.ready, true)
+    assert.deepEqual(frame.slots, frame.columns === 10 ? previewSlots : data.layout.slots)
+    assert.equal(frame.pageCount, 2)
+  }
+})
+
+test('a delayed preview hydration cannot overwrite the newer cancellation restore', async t => {
+  const data = fixture()
+  const reads = []
+  let deferred = false
+  const h = harness({
+    ...data,
+    read: () =>
+      deferred
+        ? new Promise(resolve => reads.push(resolve))
+        : Promise.resolve(structuredClone(data.layout)),
+  })
+  t.after(() => h.dispose())
+  await h.settle()
+  const original = snapshot(h.value)
+  const start = h.renders.length
+  deferred = true
+  h.update({ layoutResetToken: 1 })
+  await h.settle()
+  h.update({ layoutResetToken: 2 })
+  await h.settle()
+  reads[1](structuredClone(data.layout))
+  await h.settle()
+  const stale = structuredClone(data.layout)
+  stale.slots[0] = null
+  stale.slots[1] = 'a'
+  reads[0](stale)
+  await h.settle()
+  assert.deepEqual(snapshot(h.value), original)
+  assert.ok(h.renders.slice(start).every(frame => frame.ready))
+})
+
+test('restoring fewer pages clamps the active page in the same visible render', async t => {
+  const data = fixture()
+  let saved = data.layout
+  const h = harness({ ...data, read: async () => structuredClone(saved) })
+  t.after(() => h.dispose())
+  await h.settle()
+  h.value.setCurrentPage(1)
+  await h.settle()
+  saved = { ...data.layout, slots: data.layout.slots.slice(0, 32) }
+  saved.slots[16] = 'last'
+  const start = h.renders.length
+  h.update({ layoutResetToken: 1 })
+  await h.settle()
+  assert.equal(h.value.currentPage, 0)
+  for (const frame of h.renders.slice(start)) {
+    assert.equal(frame.ready, true)
+    assert.ok(
+      frame.currentPage < frame.pageCount,
+      'no intermediate frame may display an empty invalid page'
+    )
+  }
+})
+
+test('failed restoration keeps the visible layout intact and can be retried', async t => {
+  const data = fixture()
+  let fail = false
+  const h = harness({
+    ...data,
+    read: async () => {
+      if (fail) throw new Error('restore read failed')
+      return structuredClone(data.layout)
+    },
+  })
+  t.after(() => h.dispose())
+  await h.settle()
+  const original = snapshot(h.value)
+  const writes = h.writes.length
+  const start = h.renders.length
+  fail = true
+  h.update({ layoutResetToken: 1 })
+  await h.settle()
+  assert.deepEqual(snapshot(h.value), original)
+  assert.match(h.value.hydrationError, /restore read failed/)
+  assert.equal(h.writes.length, writes)
+  fail = false
+  h.update({ layoutResetToken: 2 })
+  await h.settle()
+  assert.equal(h.value.hydrationError, null)
+  assert.deepEqual(snapshot(h.value), original)
+  assert.ok(h.renders.slice(start).every(frame => frame.ready))
 })
 
 test('explicit window-size setting changes still recompute and persist the grid', async t => {

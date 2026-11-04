@@ -38,6 +38,7 @@ import { getFolderLayoutProfile } from '../domain/folderLayout'
 import { hydrateHotseatEntries } from '../domain/hotseatLayout'
 import { useWidgetResizeHandler } from './useWidgetResizeHandler'
 import { getPagedGridChrome, syncPagedGridInsets } from './pagedGridInsets'
+import { prepareMeasuredPagedLayout } from '../domain/pagedLayoutHydration'
 
 export interface PagedImportPlacementRequest {
   token: number
@@ -55,6 +56,7 @@ interface UsePagedIconGridLayoutParams {
   rowHeight: number
   iconSize?: IconSize
   windowGeometryPending?: boolean
+  onBeforeLayoutChange?: () => void
 }
 
 interface LockedGeometry {
@@ -73,6 +75,7 @@ export function usePagedIconGridLayout({
   rowHeight,
   iconSize,
   windowGeometryPending = false,
+  onBeforeLayoutChange,
 }: UsePagedIconGridLayoutParams) {
   const geometryKey = getPagedLayoutConfigurationKey(measuredGeometryKey)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -135,6 +138,8 @@ export function usePagedIconGridLayout({
     dockEnabled,
     geometryKey,
     layoutReady,
+    pageGeometry,
+    onBeforeLayoutChange,
   }))
 
   const itemIds = useMemo(() => items.map(getId), [items])
@@ -175,7 +180,6 @@ export function usePagedIconGridLayout({
 
   useEffect(() => {
     let cancelled = false
-    const hydrationEnvironment = readLayoutHydrationEnvironment()
 
     const hydrate = async () => {
       if (!hydratedRef.current && icons.length === 0) return
@@ -220,14 +224,18 @@ export function usePagedIconGridLayout({
         if (!persistedLayoutLoadedRef.current) {
           persistedLayoutLoadPromiseRef.current ??= readLayoutStrict()
           try {
-            persistedLayoutRef.current = await persistedLayoutLoadPromiseRef.current
+            const loaded = await persistedLayoutLoadPromiseRef.current
+            if (cancelled) return
+            persistedLayoutRef.current = loaded
             hydrationBlockedRef.current = false
             setHydrationError(null)
           } catch (error) {
+            if (cancelled) return
             hydrationBlockedRef.current = true
             persistedLayoutRef.current = null
             setHydrationError(String(error))
             console.error('Failed to hydrate persisted launchpad layout:', error)
+            if (hydratedRef.current) return
           }
           persistedLayoutLoadedRef.current = true
         }
@@ -235,6 +243,7 @@ export function usePagedIconGridLayout({
         persisted = persistedLayoutRef.current
       }
 
+      const hydrationEnvironment = readLayoutHydrationEnvironment()
       const hydratedLayout = measureLayoutPerformance(
         'hydrate',
         () => hydrateLayout(icons, persisted),
@@ -254,21 +263,16 @@ export function usePagedIconGridLayout({
       const rawSlots = (persistedForItems?.slots ?? []).map(key =>
         key ? key.replace(/^(desktop|customapp):/, '') : null
       )
-      // A focus refresh updates the library against the already measured in-memory layout.
-      // Publish items and normalized slots together instead of hiding the grid for another RAF.
-      const reuseMeasuredGeometry = hydrationSource === 'memory' && hydrationEnvironment.layoutReady
-      const dimensions = layoutDimensionsTracker.read()
-      const nextSlots = reuseMeasuredGeometry
-        ? compactEmptyPages(
-            normalizeOuterSlots(
-              rawSlots,
-              filterItemsByIds(nextItems, resolveOuterItemIds(nextItemIds, nextDockKeys)),
-              dimensions.pageSize,
-              dimensions.columns
-            ),
-            dimensions.pageSize
-          )
-        : rawSlots
+      const prepared = hydrationEnvironment.layoutReady
+        ? prepareMeasuredPagedLayout({
+            layout: persistedForItems,
+            items: nextItems,
+            dockKeys: nextDockKeys,
+            slots: rawSlots,
+            geometry: hydrationEnvironment.pageGeometry,
+          })
+        : null
+      const nextSlots = prepared?.slots ?? rawSlots
       const hasDims = Boolean(
         persisted?.pageSize && persisted?.columns && persisted.pageSize > 1 && persisted.columns > 1
       )
@@ -282,7 +286,30 @@ export function usePagedIconGridLayout({
       persistedFolderProfileIdRef.current = persistedForItems?.folderProfileId
       setFolderLayoutProfileId(persistedForItems?.folderProfileId ?? 'standard')
 
-      if (hydrationSource !== 'memory') {
+      if (prepared) {
+        // Capture the displayed pose immediately before publishing the complete replacement.
+        if (hydrationSource === 'persisted') hydrationEnvironment.onBeforeLayoutChange?.()
+        const previous = hydrationEnvironment.pageGeometry
+        const nextGeometry =
+          previous.columns === prepared.columns && previous.rows === prepared.rows
+            ? previous
+            : { ...previous, columns: prepared.columns, rows: prepared.rows }
+        lockedGeometryRef.current = nextGeometry
+        persistedGeometryKeyRef.current = nextGeometry.key
+        layoutDimensionsTracker.update({
+          columns: prepared.columns,
+          pageSize: prepared.columns * prepared.rows,
+        })
+        const lastPage = Math.max(
+          0,
+          Math.ceil(prepared.slots.length / (prepared.columns * prepared.rows)) - 1
+        )
+        const nextPage = clampNumber(currentPageRef.current, 0, lastPage)
+        currentPageRef.current = nextPage
+        setCurrentPage(nextPage)
+        setPageGeometry(nextGeometry)
+        setNormalizedGeometry(nextGeometry)
+      } else if (hydrationSource !== 'memory') {
         if (
           hasDims &&
           persisted?.geometryKey &&
@@ -298,7 +325,7 @@ export function usePagedIconGridLayout({
           lockedGeometryRef.current = null
         }
       }
-      if (!reuseMeasuredGeometry) {
+      if (!prepared) {
         layoutReadyRef.current = false
         layoutBaselineRef.current = false
         setLayoutHydrationTick(tick => tick + 1)

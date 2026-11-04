@@ -205,7 +205,13 @@ function fixture(t, kind, reduced = false) {
   const modules = { react: runtime.react }
   modules['./icon-grid/hooks/useGridItemResizeController'] = loadResize(modules, window)
   modules['./icon-grid/hooks/usePagedGridReorderAnimations'] = loadAnimation(modules, window)
-  modules['./icon-grid/hooks/usePagedIconGridLayout'] = { usePagedIconGridLayout: () => layout }
+  let beforeRestore
+  modules['./icon-grid/hooks/usePagedIconGridLayout'] = {
+    usePagedIconGridLayout: params => {
+      beforeRestore = params.onBeforeLayoutChange
+      return layout
+    },
+  }
   modules['../stores/iconStore'] = {
     useIconStore: () => ({ iconSize: 'medium', selectedIconKeys: [], dockEnabled: false }),
   }
@@ -225,10 +231,61 @@ function fixture(t, kind, reduced = false) {
     return props
   }
   t.after(() => runtime.dispose())
-  return { id, render, nodes, animations, layout }
+  const restoreSlots = slots => {
+    assert.equal(
+      typeof beforeRestore,
+      'function',
+      'external restoration must capture the current pose'
+    )
+    beforeRestore()
+    layout.outerSlots = slots
+    layout.outerSlotsRef.current = slots
+  }
+  return { id, render, nodes, animations, layout, restoreSlots }
 }
 
 for (const kind of ['icon', 'folder']) {
+  test(`${kind}: layout preview cancellation animates from the current visible position back to its original slot`, t => {
+    const h = fixture(t, kind)
+    h.render()
+    const originalSlots = [...h.layout.outerSlots]
+    const originalPosition = h.nodes.get(h.id).getBoundingClientRect()
+    const previewSlots = [...originalSlots]
+    ;[previewSlots[10], previewSlots[11]] = [previewSlots[11], previewSlots[10]]
+    h.restoreSlots(previewSlots)
+    h.render()
+    const node = h.nodes.get(h.id)
+    assert.deepEqual(node.getBoundingClientRect(), originalPosition)
+    assert.equal(h.animations.length, 2, 'only the swapped tiles animate')
+    for (const id of [h.id, 'n11']) {
+      h.nodes.get(id).dx *= 0.4
+      h.nodes.get(id).dy *= 0.4
+    }
+    const interruptedPosition = node.getBoundingClientRect()
+    h.restoreSlots(originalSlots)
+    h.render()
+    assert.deepEqual(
+      node.getBoundingClientRect(),
+      interruptedPosition,
+      'cancel continues from the in-flight pose'
+    )
+    assert.deepEqual({ left: node.left, top: node.top }, originalPosition)
+    assert.equal(h.animations.length, 4)
+    assert.ok(h.animations[0].cancelled)
+    assert.ok(h.animations.at(-1).options.duration > 0)
+  })
+
+  test(`${kind}: reduced motion restores layout preview directly without movement`, t => {
+    const h = fixture(t, kind, true)
+    h.render()
+    const slots = [...h.layout.outerSlots]
+    ;[slots[10], slots[11]] = [slots[11], slots[10]]
+    h.restoreSlots(slots)
+    h.render()
+    assert.equal(h.nodes.get(h.id).left, 312)
+    assert.equal(h.animations.length, 0)
+  })
+
   test(`${kind}: paged size menu animates the displaced icon into the upper-left vacancy`, t => {
     const h = fixture(t, kind)
     const props = h.render()

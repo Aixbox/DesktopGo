@@ -123,6 +123,9 @@ export function IconGrid({
   const [hoverPage, setHoverPage] = useState<number | null>(null)
   const [openFolderId, setOpenFolderId] = useState<string | null>(null)
   const [activeFolderSharedLayoutId, setActiveFolderSharedLayoutId] = useState<string | null>(null)
+  const reorderAnimationRefs = usePagedGridReorderAnimationRefs()
+  const { tileRefs, folderTileRefs, dockItemRefs, capturePagedGridItemPositions } =
+    reorderAnimationRefs
   const {
     containerRef,
     gridRef,
@@ -164,6 +167,7 @@ export function IconGrid({
     rowHeight,
     iconSize,
     windowGeometryPending,
+    onBeforeLayoutChange: capturePagedGridItemPositions,
   })
 
   const clearFolderSharedLayoutTimer = () => {
@@ -219,9 +223,6 @@ export function IconGrid({
     items.forEach(item => map.set(getId(item), item))
     return map
   }, [items])
-  const reorderAnimationRefs = usePagedGridReorderAnimationRefs()
-  const { tileRefs, folderTileRefs, dockItemRefs, capturePagedGridItemPositions } =
-    reorderAnimationRefs
   const itemResize = useGridItemResizeController({
     items,
     itemsRef,
