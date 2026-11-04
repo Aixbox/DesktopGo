@@ -22,8 +22,11 @@ import { shouldRefreshAfterShellMenuVerb } from '../lib/shellContextMenu'
 import { getSetting, setSetting } from '../lib/settingsStore'
 import { loadCustomNames, saveCustomNames } from '../lib/customNamesStore'
 import { buildIconSelectionKey } from '../lib/iconKey'
+import { waitForWindowGeometrySync } from '../lib/windowGeometry'
 
 export { buildIconSelectionKey }
+
+let windowModeRequest = 0
 
 const resolveSelectableIconKeySet = (icons: DesktopIcon[]) =>
   new Set(icons.map(icon => buildIconSelectionKey(icon)))
@@ -36,6 +39,7 @@ interface IconStore {
   iconCornerRadius: number
   iconOpacity: number
   windowMode: WindowMode
+  windowGeometryPending: boolean
   titleLineCount: TitleLineCount
   launchpadGridViewMode: LaunchpadGridViewMode
   dockEnabled: boolean
@@ -83,6 +87,7 @@ export const useIconStore = create<IconStore>((set, get) => ({
   iconCornerRadius: DEFAULT_ICON_CORNER_RADIUS,
   iconOpacity: DEFAULT_ICON_OPACITY,
   windowMode: 'medium',
+  windowGeometryPending: false,
   titleLineCount: 'two',
   launchpadGridViewMode: 'paged',
   dockEnabled: true,
@@ -160,7 +165,7 @@ export const useIconStore = create<IconStore>((set, get) => ({
   },
 
   setWindowMode: (mode: WindowMode) => {
-    set({ windowMode: mode })
+    set({ windowMode: mode, windowGeometryPending: true })
     void setSetting('windowMode', mode).catch(e => {
       console.error('Failed to persist window mode:', e)
     })
@@ -342,6 +347,8 @@ export const useIconStore = create<IconStore>((set, get) => ({
   },
 
   applyWindowMode: async (mode: WindowMode) => {
+    const request = ++windowModeRequest
+    set({ windowGeometryPending: true })
     try {
       if (mode === 'fullscreen') {
         await invoke('set_window_mode', { mode })
@@ -349,8 +356,11 @@ export const useIconStore = create<IconStore>((set, get) => ({
         const config = WINDOW_SIZE_CONFIG[mode]
         await invoke('set_window_mode', { mode, width: config.width, height: config.height })
       }
+      await waitForWindowGeometrySync()
     } catch (e) {
       console.error('Failed to set window mode:', e)
+    } finally {
+      if (request === windowModeRequest) set({ windowGeometryPending: false })
     }
   },
 

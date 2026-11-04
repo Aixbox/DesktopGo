@@ -62,7 +62,7 @@ export function getIconTileMetrics({
       gridGap,
       titleLineCount,
       folderSize: folderSizeFromSpan(span),
-      surfaceTitleLineCount: 'two',
+      surfaceTitleLineCount: titleLineCount,
     })
   }
   const footprintWidth = span.cols * slotWidth + (span.cols - 1) * gridGap

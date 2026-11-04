@@ -4,6 +4,7 @@ import {
   isSamePagedLayoutConfiguration,
   readGridGeometryMeasurement,
 } from '../icon-grid/domain/gridGeometry'
+import { canMigratePagedGridCapacity } from '../icon-grid/domain/pagedGridMetrics'
 
 /** 布局库只对分页网格开放；滚动模式的分组结构是另一套，先不混进来。 */
 export type LayoutLibraryScope = 'paged'
@@ -141,6 +142,7 @@ export const resolveCurrentGeometryKey = (windowMode: string, iconSize: string, 
  * 布局里的槽位是「第几页第几行第几列」，窗口模式、图标尺寸或 Dock 开关一变，行列数跟着变，
  * 旧槽位就会越界。配置不一致时丢掉槽位与坐标，让网格按 items 顺序重排——与 AI 整理写空
  * slots 的路子一致；几何一致则原样恢复，保留用户精确的摆放。
+ * 仅容量算法或标题行数不同则保留原始尺寸和坐标，由网格按原页、行、列迁移。
  */
 export const prepareLayoutPayloadForApply = (raw: string, currentGeometryKey: string): string => {
   let parsed: Record<string, unknown>
@@ -152,7 +154,11 @@ export const prepareLayoutPayloadForApply = (raw: string, currentGeometryKey: st
   if (!parsed || typeof parsed !== 'object') return raw
 
   const savedGeometryKey = typeof parsed.geometryKey === 'string' ? parsed.geometryKey : null
-  if (isSamePagedLayoutConfiguration(savedGeometryKey, currentGeometryKey)) return raw
+  if (
+    isSamePagedLayoutConfiguration(savedGeometryKey, currentGeometryKey) ||
+    canMigratePagedGridCapacity(savedGeometryKey, currentGeometryKey)
+  )
+    return raw
 
   return JSON.stringify({
     version: 9,

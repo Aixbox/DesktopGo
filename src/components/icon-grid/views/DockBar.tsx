@@ -18,7 +18,7 @@ import { useIconStore } from '@/stores/iconStore'
 import { IconContextMenu } from '@/components/icons/IconContextMenu'
 import type { GridItem } from '../model'
 import { DockFolderContextMenu } from './DockFolderContextMenu'
-import { DOCK_GAP } from '../domain/dock'
+import { DOCK_GAP, getDockButtonSize } from '../domain/dock'
 import {
   DOCK_FOLDER_SURFACE_ACTIVE_CLASS,
   DOCK_FOLDER_SURFACE_CLASS,
@@ -180,7 +180,7 @@ export function DockBar({
   const smoothScrollLastFrameRef = useRef<number | null>(null)
   const [hasHorizontalOverflow, setHasHorizontalOverflow] = useState(false)
   const [isIndicatorDragging, setIsIndicatorDragging] = useState(false)
-  const dockButtonSize = Math.max(iconImageSize + 12, 52)
+  const dockButtonSize = getDockButtonSize(iconImageSize)
   const isVerticalHotseat = hotseatOrientation === 'vertical'
   // Folder hover changes the indicator, not the slot geometry used by evasion/hit testing.
   const reserveInsertionSlot = dragContext === 'dock' && dockPreviewIndex !== null
@@ -647,6 +647,7 @@ export function DockBar({
     >
       <div
         ref={panelRef}
+        data-dock-panel
         className="launchpad-glass-panel relative overflow-hidden rounded-dock px-4 py-3 transition-[width] duration-[220ms]"
         style={{
           maxWidth: isVerticalHotseat

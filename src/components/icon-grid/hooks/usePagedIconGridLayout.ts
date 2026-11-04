@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
-import type { DesktopIcon } from '../../../types'
+import type { DesktopIcon, IconSize } from '../../../types'
 import type { FolderLayoutProfileId, GridItem, HotseatEntry, PersistedLayout } from '../model'
 import { getGridItemSpan, getId } from '../model'
 import { compactEmptyPages, areSlotsEqual } from '../domain/slots'
@@ -33,10 +33,11 @@ import {
 import { filterItemsByIds } from '../domain/gridItems'
 import { measureLayoutPerformance } from '../domain/layoutPerformance'
 import { createLayoutDimensionsTracker } from '../state/layoutDimensionsTracker'
-import { GRID_GAP, IMPORT_HIGHLIGHT_MS } from '../constants'
+import { IMPORT_HIGHLIGHT_MS } from '../constants'
 import { getFolderLayoutProfile } from '../domain/folderLayout'
 import { hydrateHotseatEntries } from '../domain/hotseatLayout'
 import { useWidgetResizeHandler } from './useWidgetResizeHandler'
+import { getPagedGridChrome, syncPagedGridInsets } from './pagedGridInsets'
 
 export interface PagedImportPlacementRequest {
   token: number
@@ -52,7 +53,8 @@ interface UsePagedIconGridLayoutParams {
   geometryKey: string
   columnWidth: number
   rowHeight: number
-  layoutRowHeight: number
+  iconSize?: IconSize
+  windowGeometryPending?: boolean
 }
 
 interface LockedGeometry {
@@ -69,7 +71,8 @@ export function usePagedIconGridLayout({
   geometryKey: measuredGeometryKey,
   columnWidth,
   rowHeight,
-  layoutRowHeight,
+  iconSize,
+  windowGeometryPending = false,
 }: UsePagedIconGridLayoutParams) {
   const geometryKey = getPagedLayoutConfigurationKey(measuredGeometryKey)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -110,6 +113,7 @@ export function usePagedIconGridLayout({
   const [layoutHydrationTick, setLayoutHydrationTick] = useState(0)
   // 槽位、行列和本次恢复必须属于同一轮布局，才能对外显示页数。
   const layoutReady =
+    !windowGeometryPending &&
     normalizedGeometry === pageGeometry &&
     pageGeometry.hydrationTick === layoutHydrationTick &&
     pageGeometry.key === geometryKey
@@ -325,6 +329,7 @@ export function usePagedIconGridLayout({
     dockKeysRef.current = dockKeys
     hotseatEntriesRef.current = hotseatEntries
     if (!hydratedRef.current || !layoutBaselineRef.current || hydrationBlockedRef.current) return
+    if (!layoutReady) return
 
     const layoutDimensions = layoutDimensionsTracker.read()
     if (layoutDimensions.pageSize === 1 && layoutDimensions.columns === 1) return
@@ -348,7 +353,15 @@ export function usePagedIconGridLayout({
       .catch(error => {
         console.error('Failed to persist launchpad layout:', error)
       })
-  }, [dockKeys, geometryKey, hotseatEntries, items, layoutDimensionsTracker, outerSlots])
+  }, [
+    dockKeys,
+    geometryKey,
+    hotseatEntries,
+    items,
+    layoutDimensionsTracker,
+    layoutReady,
+    outerSlots,
+  ])
 
   useEffect(() => {
     currentPageRef.current = currentPage
@@ -361,19 +374,15 @@ export function usePagedIconGridLayout({
     let animationFrame = 0
     const recalculate = () => {
       // 先恢复持久化行列，再测量；不能用启动/切屏过程中的尺寸归一化旧槽位。
+      if (windowGeometryPending) return
+      if (iconSize) syncPagedGridInsets(element, iconSize, dockEnabled)
       if (!hydratedRef.current || element.clientWidth <= 0 || element.clientHeight <= 0) return
       const tileWidth = columnWidth
       const tileHeight = rowHeight
       const hasWideItems = itemsRef.current.some(item => getGridItemSpan(item).cols > 1)
       const hasTallItems = itemsRef.current.some(item => getGridItemSpan(item).rows > 1)
       const minimumRows = hasTallItems ? 2 : 1
-      const baseRows = Math.max(
-        minimumRows,
-        fitGridItemCount(element.clientHeight, layoutRowHeight)
-      )
-      const nextRowGridHeight = (baseRows + 1) * tileHeight + baseRows * GRID_GAP
-      const measuredRows =
-        !dockEnabled && nextRowGridHeight <= element.clientHeight ? baseRows + 1 : baseRows
+      const measuredRows = Math.max(minimumRows, fitGridItemCount(element.clientHeight, tileHeight))
       const measuredColumns = Math.max(
         hasWideItems ? 2 : 1,
         fitGridItemCount(element.clientWidth, tileWidth)
@@ -429,6 +438,9 @@ export function usePagedIconGridLayout({
     const observer = new ResizeObserver(schedule)
     observer.observe(element)
     if (gridRef.current) observer.observe(gridRef.current)
+    const { search, panel: dock } = getPagedGridChrome(element)
+    if (search) observer.observe(search)
+    if (dock) observer.observe(dock)
     window.addEventListener('resize', schedule)
     return () => {
       cancelAnimationFrame(animationFrame)
@@ -442,8 +454,9 @@ export function usePagedIconGridLayout({
     geometryKey,
     itemLayoutSignature,
     layoutHydrationTick,
-    layoutRowHeight,
+    iconSize,
     rowHeight,
+    windowGeometryPending,
   ])
 
   useEffect(() => {
@@ -452,6 +465,7 @@ export function usePagedIconGridLayout({
 
   useEffect(() => {
     if (!hydratedRef.current || !layoutReadyRef.current) return
+    if (windowGeometryPending) return
     if (pageGeometry.hydrationTick !== layoutHydrationTick || pageGeometry.key !== geometryKey) {
       return
     }
@@ -531,6 +545,7 @@ export function usePagedIconGridLayout({
     outerItemIds,
     pageGeometry,
     pageSize,
+    windowGeometryPending,
   ])
 
   useEffect(() => {

@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { prepareLayoutPayloadForApply } from './layoutLibrary.ts'
+import { getPagedGridGeometrySuffix } from '../icon-grid/domain/pagedGridMetrics.ts'
 import {
   buildGridGeometryKey,
   isSamePagedLayoutConfiguration,
@@ -84,5 +85,35 @@ test('window mode, icon size, dock and extra configuration differences remain in
     'medium:medium:true:other',
   ]) {
     assert.equal(isSamePagedLayoutConfiguration('medium:medium:true', changed), false)
+  }
+})
+
+test('capacity policy and title changes preserve history coordinates for migration at the grid boundary', () => {
+  for (const savedKey of [
+    'medium:medium:true',
+    'medium:medium:true:cells-v2:titles-two',
+    'medium:medium:true:cells-v2:titles-one',
+    `medium:medium:true:${getPagedGridGeometrySuffix('two')}`,
+    `medium:medium:true:${getPagedGridGeometrySuffix('one')}`,
+    buildGridGeometryKey('medium', 'medium', true, {
+      viewportWidth: 1328,
+      viewportHeight: 768,
+      devicePixelRatio: 2,
+    }),
+  ]) {
+    const raw = payload({ geometryKey: savedKey, checksum: 'keep-original', revision: 12 })
+    for (const titles of ['one', 'two']) {
+      assert.equal(
+        prepareLayoutPayloadForApply(
+          raw,
+          `medium:medium:true:${getPagedGridGeometrySuffix(titles)}`
+        ),
+        raw
+      )
+    }
+    const incompatible = JSON.parse(
+      prepareLayoutPayloadForApply(raw, `large:medium:true:${getPagedGridGeometrySuffix('one')}`)
+    )
+    assert.deepEqual(incompatible.slots, [])
   }
 })

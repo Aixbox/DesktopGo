@@ -35,6 +35,7 @@ import { useLaunchpadIconImportController } from '@/components/launchpad/useLaun
 import { useLaunchpadSurfaceInteractions } from '@/components/launchpad/useLaunchpadSurfaceInteractions'
 import { useLaunchpadWindowController } from '@/components/launchpad/useLaunchpadWindowController'
 import { useGridGeometryKey } from '@/components/icon-grid/hooks/useGridGeometryKey'
+import { getPagedGridGeometrySuffix } from '@/components/icon-grid/domain/pagedGridMetrics'
 import { LayoutLibraryDrawer } from '@/components/layout-library/LayoutLibraryDrawer'
 import { LayoutNameDialog } from '@/components/layout-library/LayoutNameDialog'
 import {
@@ -72,6 +73,7 @@ export function Launchpad() {
     iconCornerRadius,
     iconOpacity,
     iconSize,
+    titleLineCount,
     dockEnabled,
     windowMode,
     launchpadGridViewMode,
@@ -185,7 +187,12 @@ export function Launchpad() {
   const preloadGridView = useCallback((mode: 'paged' | 'scroll') => {
     void (mode === 'scroll' ? loadScrollableIconGrid() : loadIconGrid())
   }, [])
-  const currentLayoutGeometryKey = useGridGeometryKey(windowMode, iconSize, dockEnabled)
+  const currentLayoutGeometryKey = useGridGeometryKey(
+    windowMode,
+    iconSize,
+    dockEnabled,
+    launchpadGridViewMode === 'paged' ? getPagedGridGeometrySuffix(titleLineCount) : 'scroll'
+  )
   const bumpLayoutToken = useCallback(() => {
     setLayoutResetToken(current => current + 1)
   }, [setLayoutResetToken])

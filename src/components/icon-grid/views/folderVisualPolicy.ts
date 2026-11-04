@@ -148,7 +148,7 @@ export const getDesktopSingleSlotFolderMetrics = (
     gridGap: 0,
     folderSize: '1x1',
     titleLineCount,
-    surfaceTitleLineCount: 'two',
+    surfaceTitleLineCount: titleLineCount,
   })
   const previewInset = getDesktopSingleSlotPreviewInset(metrics.panelBase)
   const previewSize = Math.max(24, metrics.shapeWidth - previewInset * 2)

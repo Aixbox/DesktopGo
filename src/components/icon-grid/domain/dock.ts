@@ -1,4 +1,5 @@
 export const DOCK_GAP = 14
+export const getDockButtonSize = (imageSize: number) => Math.max(imageSize + 12, 52)
 
 export const normalizeDockKeys = (
   source: Array<string | null> | null | undefined,

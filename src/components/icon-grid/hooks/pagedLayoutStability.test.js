@@ -7,6 +7,8 @@ import * as layoutStore from '../services/layoutStore.ts'
 import { buildGridGeometryKey } from '../domain/gridGeometry.ts'
 import { buildPersistedItemCoordinates } from '../domain/topLevelLayout.ts'
 import { getPageCountBySlots } from '../domain/slots.ts'
+import { getIconGridRowHeight, ICON_SIZE_CONFIG, WINDOW_SIZE_CONFIG } from '../../../types/index.ts'
+import { getPagedGridInsets, getPagedGridGeometrySuffix } from '../domain/pagedGridMetrics.ts'
 
 const source = readFileSync(new URL('./usePagedIconGridLayout.ts', import.meta.url), 'utf8')
 const compiled = ts.transpileModule(source, {
@@ -169,7 +171,6 @@ function harness({ icons, layout, key = layout.geometryKey, read } = fixture()) 
     dockEnabled: true,
     columnWidth: 96,
     rowHeight: 112,
-    layoutRowHeight: 120,
   }
   const render = () => {
     cursor = 0
@@ -516,4 +517,124 @@ test('ready empty layouts retain one page and drag previews may still add a trai
   assert.equal(getPageCountBySlots([], 32, true), 1)
   assert.equal(getPageCountBySlots(Array(96).fill(null), 32, true), 3)
   assert.equal(getPageCountBySlots(Array(96).fill(null), 1, false), 0)
+})
+
+test('fresh capacity uses the rendered cell size for every window, icon, title and Dock combination', async t => {
+  for (const [mode, window] of Object.entries(WINDOW_SIZE_CONFIG))
+    for (const [size, config] of Object.entries(ICON_SIZE_CONFIG))
+      for (const titles of ['one', 'two'])
+        for (const dock of [false, true]) {
+          const insets = getPagedGridInsets(size, dock)
+          const rowHeight = getIconGridRowHeight(size, titles)
+          const width = window.width - insets.horizontal * 2
+          const height = window.height - insets.top - insets.bottom
+          const h = harness({ ...fixture(), read: async () => null })
+          t.after(() => h.dispose())
+          h.update({
+            columnWidth: config.columnWidth,
+            rowHeight,
+            dockEnabled: dock,
+            geometryKey: `${mode}:${size}:${dock}:${getPagedGridGeometrySuffix(titles)}`,
+          })
+          h.resize(width, height)
+          await h.settle()
+          assert.equal(h.value.rows, Math.floor((height + 8) / (rowHeight + 8)))
+          assert.equal(h.value.columns, Math.floor((width + 8) / (config.columnWidth + 8)))
+          assert.equal(h.value.itemHeight, rowHeight)
+          assert.ok((h.value.rows + 1) * rowHeight + h.value.rows * 8 > height)
+          assert.ok(h.value.rows * rowHeight + (h.value.rows - 1) * 8 <= height)
+        }
+})
+
+test('window mode changes cannot lock old bounds before native resize completes', async t => {
+  const h = harness()
+  t.after(() => h.dispose())
+  await h.settle()
+  const writes = h.writes.length
+  h.update({ geometryKey: geometryKey(1280, 720, 1, 'large'), windowGeometryPending: true })
+  await h.settle()
+  assert.equal(h.value.layoutReady, false)
+  assert.equal(h.writes.length, writes)
+  h.resize(1472, 660)
+  await h.settle()
+  assert.equal(h.writes.length, writes, 'intermediate native measurements cannot persist')
+  h.update({ windowGeometryPending: false, columnWidth: 76, rowHeight: 93 })
+  await h.settle()
+  assert.equal(h.value.columns, 17)
+  assert.equal(h.value.rows, 6)
+  assert.equal(h.value.layoutReady, true)
+  assert.equal(h.writes.at(-1)[3], 102)
+  assert.ok(
+    h.writes.slice(writes).every(args => args[3] === 102 && args[4] === 17),
+    'every persisted layout must pair the new configuration with normalized final dimensions'
+  )
+})
+
+test('capacity migration and title changes retain page/row/column coordinates instead of filling earlier pages', async t => {
+  const h = harness()
+  t.after(() => h.dispose())
+  await h.settle()
+  const before = snapshot(h.value).coordinates
+  for (const titles of ['two', 'one', 'two']) {
+    h.update({
+      geometryKey: `${geometryKey(1280, 720)}:${getPagedGridGeometrySuffix(titles)}`,
+      columnWidth: 76,
+      rowHeight: getIconGridRowHeight('medium', titles),
+    })
+    h.resize(1152, 480)
+    await h.settle()
+    assert.equal(h.value.rows, titles === 'one' ? 5 : 4)
+    assert.deepEqual(snapshot(h.value).coordinates, before)
+    assert.ok(h.writes.at(-1)[5].endsWith(getPagedGridGeometrySuffix(titles)))
+  }
+})
+
+test('updated capacity remains stable when DPI, resolution, window visibility or focus changes', async t => {
+  const h = harness()
+  t.after(() => h.dispose())
+  const suffix = getPagedGridGeometrySuffix('one')
+  h.update({ geometryKey: `${geometryKey(1280, 720)}:${suffix}`, rowHeight: 86, columnWidth: 76 })
+  await h.settle()
+  const before = snapshot(h.value),
+    writes = h.writes.length
+  h.resize(0, 0)
+  await h.settle()
+  h.update({ geometryKey: `${geometryKey(640, 360, 2)}:${suffix}` })
+  h.resize(500, 150)
+  await h.settle()
+  assert.deepEqual(snapshot(h.value), before)
+  assert.equal(h.writes.length, writes)
+  h.update({ icons: structuredClone(h.params.icons) })
+  await h.settle()
+  assert.deepEqual(snapshot(h.value), before)
+  assert.ok(h.value.layoutReady)
+})
+
+test('tightened spacing unlocks a saved four-row layout without moving existing page coordinates', async t => {
+  const data = fixture()
+  const oldKey = `${geometryKey(1280, 720)}:cells-v2:titles-two`
+  const slots = Array(104).fill(null)
+  slots[0] = 'a'
+  slots[2] = 'folder:work'
+  slots[6] = 'large'
+  slots[96] = 'last'
+  Object.assign(data.layout, { columns: 13, pageSize: 52, slots, geometryKey: oldKey })
+  const h = harness(data)
+  t.after(() => h.dispose())
+  h.update({ columnWidth: 76, rowHeight: getIconGridRowHeight('medium', 'two') })
+  h.resize(1152, 478)
+  await h.settle()
+  assert.equal(h.value.rows, 4)
+  const before = snapshot(h.value).coordinates
+  const writes = h.writes.length
+
+  const insets = getPagedGridInsets('medium', true)
+  h.resize(1152, 720 - insets.top - insets.bottom)
+  h.update({ geometryKey: `${geometryKey(1280, 720)}:${getPagedGridGeometrySuffix('two')}` })
+  await h.settle()
+  assert.equal(h.value.columns, 13)
+  assert.equal(h.value.rows, 5)
+  assert.deepEqual(snapshot(h.value).coordinates, before)
+  assert.ok(h.writes.length > writes)
+  assert.ok(h.writes.slice(writes).every(args => args[3] === 65 && args[4] === 13))
 })

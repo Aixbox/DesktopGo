@@ -33,24 +33,11 @@ import {
 import { useToast } from '@/components/ui/toast'
 import { buildIconSelectionKey, useIconStore } from '@/stores/iconStore'
 import { findNewlyAddedIconKeys } from './iconRefreshPolicy'
+import { waitForWindowGeometrySync } from '@/lib/windowGeometry'
 
 const LAUNCHPAD_SHOWN_EVENT = 'launchpad:shown'
 const EXTERNAL_SHOW_CLICK_GUARD_MS = 350
 export const AI_ORGANIZE_PANEL_WIDTH = 460
-
-const waitForWindowGeometrySync = async () => {
-  await new Promise<void>(resolve => {
-    let settled = false
-    const finish = () => {
-      if (settled) return
-      settled = true
-      window.clearTimeout(timeoutId)
-      resolve()
-    }
-    const timeoutId = window.setTimeout(finish, 50)
-    window.requestAnimationFrame(() => window.requestAnimationFrame(finish))
-  })
-}
 
 async function waitForSettingsWindowDisposed() {
   for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -227,7 +214,6 @@ export function useLaunchpadWindowController({
         const { windowMode, launchpadGridViewMode, applyWindowMode } = useIconStore.getState()
         preloadGridView(launchpadGridViewMode)
         await applyWindowMode(windowMode)
-        await waitForWindowGeometrySync()
         await fetchIcons()
         await syncWindowPersistentState()
         await syncMainWindowAlwaysOnTopState()

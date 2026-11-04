@@ -57,6 +57,7 @@ function storeHarness(rename = async () => [renamed]) {
     },
     '../types': types,
     '../lib/iconKey': iconKey,
+    '../lib/windowGeometry': { waitForWindowGeometrySync: async () => {} },
     '../lib/shellContextMenu': shellMenu,
     '../lib/settingsStore': {},
     '../lib/customNamesStore': { saveCustomNames: async value => saved.push(value) },

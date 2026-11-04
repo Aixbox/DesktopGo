@@ -203,7 +203,7 @@ function FolderGlyph({ entry, metrics, titleLineCount, iconImages }: FolderGlyph
     gridGap: metrics.gap,
     folderSize,
     titleLineCount,
-    surfaceTitleLineCount: 'two',
+    surfaceTitleLineCount: titleLineCount,
   })
   // body 在 footprint 里水平居中，表面在 body 里再居中，合起来就是相对格子居中；
   // 垂直方向从顶部留白开始，下面要给标题让位。
@@ -354,7 +354,7 @@ export function LayoutThumbnailView({
 
   const metrics: GridMetrics = {
     cellWidth: ICON_SIZE_CONFIG[iconSizeKey].columnWidth,
-    cellHeight: getIconGridRowHeight(iconSizeKey),
+    cellHeight: getIconGridRowHeight(iconSizeKey, titleLineCount),
     gap: GRID_GAP,
     icon: ICON_SIZE_CONFIG[iconSizeKey].imgSize,
   }

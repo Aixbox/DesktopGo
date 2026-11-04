@@ -63,7 +63,7 @@ function DesktopFolderCreatePreview({
     gridGap,
     folderSize,
     titleLineCount,
-    surfaceTitleLineCount: 'two',
+    surfaceTitleLineCount: titleLineCount,
   })
   const { icons } = getFolderTilePreviewGeometry({
     folderSize,

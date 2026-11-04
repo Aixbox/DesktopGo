@@ -251,7 +251,7 @@ function FolderGhost({
       gridGap,
       folderSize: folder.size,
       titleLineCount,
-      surfaceTitleLineCount: 'two',
+      surfaceTitleLineCount: titleLineCount,
     }
   )
   const baseRadius = getGhostFolderSurfaceRadius(panelBase)

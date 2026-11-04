@@ -51,7 +51,7 @@ export const Icon = memo(function Icon({
   const titleLineCount = useIconStore(state => state.titleLineCount)
   const customName = useIconStore(state => state.customNames[icon.path])
   const config = ICON_SIZE_CONFIG[iconSize]
-  const tileHeight = getIconGridRowHeight(iconSize)
+  const tileHeight = getIconGridRowHeight(iconSize, titleLineCount)
   const isSingleLineTitle = titleLineCount === 'one'
   const titleMetrics = getIconGridTitleMetrics(titleLineCount)
   const displayName = customName ?? icon.name

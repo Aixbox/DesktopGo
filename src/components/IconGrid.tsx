@@ -10,7 +10,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from 'react'
 import type { DesktopIcon } from '../types'
-import { getIconGridLayoutRowHeight, getIconGridRowHeight, ICON_SIZE_CONFIG } from '../types'
+import { getIconGridRowHeight, ICON_SIZE_CONFIG } from '../types'
 import { useIconStore } from '../stores/iconStore'
 import type { GridItem, IconItem } from './icon-grid/model'
 import { getId } from './icon-grid/model'
@@ -51,6 +51,7 @@ import {
 } from './icon-grid/domain/folderPolicy'
 import { DragAnnouncementLiveRegion } from './icon-grid/views/DragAnnouncementLiveRegion'
 import { useGridGeometryKey } from './icon-grid/hooks/useGridGeometryKey'
+import { getPagedGridGeometrySuffix, getPagedGridInsets } from './icon-grid/domain/pagedGridMetrics'
 import { usePageBounds } from './icon-grid/hooks/usePageBounds'
 import {
   extractDraggedIconsFromSourceFolders,
@@ -93,6 +94,8 @@ export function IconGrid({
   const {
     iconSize,
     windowMode,
+    windowGeometryPending,
+    titleLineCount,
     dockEnabled,
     selectionMode,
     selectedIconKeys,
@@ -109,9 +112,14 @@ export function IconGrid({
   const folderCloseRafRef = useRef<number | null>(null)
 
   const columnWidth = ICON_SIZE_CONFIG[iconSize].columnWidth
-  const layoutRowHeight = getIconGridLayoutRowHeight(iconSize)
-  const rowHeight = getIconGridRowHeight(iconSize)
-  const geometryKey = useGridGeometryKey(windowMode, iconSize, dockEnabled)
+  const rowHeight = getIconGridRowHeight(iconSize, titleLineCount)
+  const gridInsets = getPagedGridInsets(iconSize, dockEnabled)
+  const geometryKey = useGridGeometryKey(
+    windowMode,
+    iconSize,
+    dockEnabled,
+    getPagedGridGeometrySuffix(titleLineCount)
+  )
   const [hoverPage, setHoverPage] = useState<number | null>(null)
   const [openFolderId, setOpenFolderId] = useState<string | null>(null)
   const [activeFolderSharedLayoutId, setActiveFolderSharedLayoutId] = useState<string | null>(null)
@@ -154,7 +162,8 @@ export function IconGrid({
     geometryKey,
     columnWidth,
     rowHeight,
-    layoutRowHeight,
+    iconSize,
+    windowGeometryPending,
   })
 
   const clearFolderSharedLayoutTimer = () => {
@@ -662,15 +671,15 @@ export function IconGrid({
   return (
     <LayoutGroup id="folder-shell-layout">
       <div
-        /* pb-32：底部内边距每 +8px 都可能跨过一个行位（行高 112+8），pb-40 会让
-           medium 图标在 720px 窗口下从 4 行掉到 3 行，故分页网格固定 pb-32。
-           pt-28：网格顶部对齐后，搜索框底（68px）到网格顶 112px，间距恰好
-           一个搜索框高（44px）。items-start：图标少时网格贴顶排列，
-           不再被垂直居中推到窗口中部。 */
         data-edge-paging-viewport
         aria-busy={!layoutReady}
         data-single-item-dragging={isSingleDragActive ? 'true' : 'false'}
-        className={`relative h-full w-full overflow-x-clip px-16 pt-28 ${dockEnabled ? 'pb-32' : 'pb-12'}`}
+        className="relative h-full w-full overflow-x-clip"
+        style={{
+          paddingInline: gridInsets.horizontal,
+          paddingTop: `var(--paged-grid-top, ${gridInsets.top}px)`,
+          paddingBottom: `var(--paged-grid-bottom, ${gridInsets.bottom}px)`,
+        }}
         onWheel={handleWheelPageSwitch}
       >
         <DragAnnouncementLiveRegion
@@ -775,14 +784,17 @@ export function IconGrid({
           </button>
         ) : null}
 
-        {/* 分页指示器：固定挂在容器底部内边距区（bottom = pb 值），位置恒定、
-            紧贴 dock 上方，不随网格内容高度（行数/图标尺寸）浮动。
+        {/* 分页指示器：按 Dock 实际顶边预留间隔；网格底部另留安全距离，
+            不随网格内容高度（行数/图标尺寸）浮动。
             paginationBottom 非 0 时以它为准：布局抽屉展开时指示器要抬到抽屉上方。 */}
         <div
           data-pagination
           className="absolute left-1/2 z-[55] -translate-x-1/2 px-3 py-1.5"
           style={{
-            bottom: `${paginationBottom > 0 ? paginationBottom : dockEnabled ? 128 : 48}px`,
+            bottom:
+              paginationBottom > 0
+                ? paginationBottom
+                : `var(--paged-pagination-bottom, ${gridInsets.paginationBottom}px)`,
           }}
           onMouseLeave={() => setHoverPage(null)}
         >

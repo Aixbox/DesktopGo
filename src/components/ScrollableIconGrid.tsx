@@ -94,6 +94,7 @@ export function ScrollableIconGrid({
 }: IconGridProps) {
   const {
     iconSize,
+    titleLineCount,
     windowMode,
     launchpadGridViewMode,
     dockEnabled,
@@ -119,7 +120,7 @@ export function ScrollableIconGrid({
 
   const columnWidth = ICON_SIZE_CONFIG[iconSize].columnWidth
   const layoutRowHeight = getIconGridLayoutRowHeight(iconSize)
-  const rowHeight = getIconGridRowHeight(iconSize)
+  const rowHeight = getIconGridRowHeight(iconSize, titleLineCount)
   const geometryKey = useGridGeometryKey(
     windowMode,
     iconSize,

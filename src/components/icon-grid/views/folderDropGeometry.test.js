@@ -104,14 +104,14 @@ function renderCase(size, titleLineCount, iconSize) {
     folder: { kind: 'folder', id: 'folder', name: 'Folder', size, children: [] },
     span,
     slotWidth: config.columnWidth,
-    slotHeight: gridTypes.getIconGridRowHeight(iconSize),
+    slotHeight: gridTypes.getIconGridRowHeight(iconSize, titleLineCount),
     gridGap: 12,
     titleLineCount,
   }
   const metrics = visualPolicy.getDesktopFolderTileMetrics({
     ...props,
     folderSize: size,
-    surfaceTitleLineCount: 'two',
+    surfaceTitleLineCount: titleLineCount,
   })
   const tile = nodes(FolderTileContents({ ...props, metrics }))
   const body = rectFromStyle(tile.find(node => 'data-folder-visual-body' in node.props))
@@ -158,7 +158,7 @@ for (const size of ['1x1', '1x2', '2x1', '2x2']) {
       for (const titleLineCount of ['one', 'two'])
         for (const [iconSize, config] of Object.entries(gridTypes.ICON_SIZE_CONFIG)) {
           for (const slotHeight of [
-            gridTypes.getIconGridRowHeight(iconSize),
+            gridTypes.getIconGridRowHeight(iconSize, titleLineCount),
             gridTypes.getIconGridLayoutRowHeight(iconSize),
           ]) {
             const input = {
@@ -172,7 +172,7 @@ for (const size of ['1x1', '1x2', '2x1', '2x2']) {
             const folder = visualPolicy.getDesktopFolderTileMetrics({
               ...input,
               folderSize: size,
-              surfaceTitleLineCount: 'two',
+              surfaceTitleLineCount: titleLineCount,
             })
             assert.deepEqual(icon, folder)
             assert.ok(
@@ -325,7 +325,7 @@ test('folder creation preview retains enlarged icon bounds and matches the commi
           gridGap: 12,
           folderSize: size,
           titleLineCount,
-          surfaceTitleLineCount: 'two',
+          surfaceTitleLineCount: titleLineCount,
         })
         const props = {
           span,

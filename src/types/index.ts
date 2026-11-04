@@ -76,9 +76,18 @@ export const getIconGridTitleMetrics = (titleLineCount: TitleLineCount) => ({
 export const getIconGridLayoutRowHeight = (iconSize: IconSize): number =>
   ICON_GRID_LAYOUT_ROW_HEIGHT[iconSize]
 
-export const getIconGridRowHeight = (iconSize: IconSize): number =>
-  ICON_SIZE_CONFIG[iconSize].columnWidth +
-  Math.ceil((ICON_GRID_TITLE_HEIGHT + ICON_GRID_TITLE_GAP) / 2)
+export const getIconGridRowHeight = (
+  iconSize: IconSize,
+  titleLineCount: TitleLineCount = 'two'
+): number => {
+  const { columnWidth, imgSize } = ICON_SIZE_CONFIG[iconSize]
+  const titleHeight = getIconGridTitleHeight(titleLineCount)
+  // Fit both a full-size 1x1 artwork and a square 2x2 surface plus its title.
+  return Math.max(
+    imgSize + ICON_GRID_TILE_PADDING_Y * 2 + ICON_GRID_TITLE_GAP + titleHeight,
+    columnWidth + Math.ceil((titleHeight + ICON_GRID_TITLE_GAP) / 2)
+  )
+}
 
 export type WindowMode = 'fullscreen' | 'large' | 'medium'
 

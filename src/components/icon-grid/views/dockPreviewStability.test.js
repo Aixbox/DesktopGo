@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
 import * as hotseat from '../domain/hotseatLayout.ts'
-import { DOCK_GAP } from '../domain/dock.ts'
+import { DOCK_GAP, getDockButtonSize } from '../domain/dock.ts'
 
 const require = createRequire(import.meta.url)
 function loadDock() {
@@ -24,7 +24,7 @@ function loadDock() {
     '@/stores/iconStore': { useIconStore: () => ({}) },
     '@/components/icons/IconContextMenu': { IconContextMenu: 'menu' },
     './DockFolderContextMenu': { DockFolderContextMenu: 'folder-menu' },
-    '../domain/dock': { DOCK_GAP },
+    '../domain/dock': { DOCK_GAP, getDockButtonSize },
     './folderVisualPolicy': { getDesktopSingleSlotFolderMetrics: () => ({}), scaledRadius: x => x },
     './FolderVisuals': { FolderIconVisual: 'folder' },
     './DockFolderCreatePreview': { DockFolderCreatePreview: 'preview' },

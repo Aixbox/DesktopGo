@@ -70,7 +70,7 @@ function OuterFolderTileComponent({
     gridGap,
     folderSize: effectiveSize,
     titleLineCount,
-    surfaceTitleLineCount: 'two',
+    surfaceTitleLineCount: titleLineCount,
   })
 
   return (
