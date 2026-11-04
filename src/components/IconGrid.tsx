@@ -63,7 +63,6 @@ import {
   EVASION_REARM_DISTANCE,
   FOLDER_SHARED_LAYOUT_WINDOW_MS,
   GRID_GAP,
-  LAYOUT_PAGE_STEP_EVENT,
   OUTER_DRAG_RULES,
   PAGINATION_ACTIVE_WIDTH,
   PAGINATION_DOT_GAP,
@@ -530,25 +529,6 @@ export function IconGrid({
     event.preventDefault()
     stepPageByWheelDelta(primaryDelta, isOuterDrag)
   }
-
-  /* 布局抽屉浮在网格之上，落在抽屉上的滚轮到不了根节点的 onWheel。
-     把抽屉那层转过来的增量接到同一套累积逻辑上，预览时滚轮才整屏可用。 */
-  const stepPageByWheelDeltaRef = useRef<(delta: number) => void>(() => {})
-  useEffect(() => {
-    stepPageByWheelDeltaRef.current = delta =>
-      stepPageByWheelDelta(delta, dragState?.context === 'outer')
-  })
-  useEffect(() => {
-    const onExternalWheel = (event: Event) => {
-      const delta = (event as CustomEvent<number>).detail
-      if (typeof delta !== 'number' || !Number.isFinite(delta)) return
-      stepPageByWheelDeltaRef.current(delta)
-    }
-    window.addEventListener(LAYOUT_PAGE_STEP_EVENT, onExternalWheel)
-    return () => {
-      window.removeEventListener(LAYOUT_PAGE_STEP_EVENT, onExternalWheel)
-    }
-  }, [])
 
   const handleDissolveFolder = (folderId: string) => {
     const result = dissolveFolderInTopLevelLayout(

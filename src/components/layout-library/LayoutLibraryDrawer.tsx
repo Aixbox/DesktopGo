@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { WheelEvent } from 'react'
 import {
   ChevronDown,
   ChevronUp,
@@ -14,7 +13,6 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { NativeScrollArea } from '@/components/ui/native-scroll-area'
 import { useToast } from '@/components/ui/toast'
-import { LAYOUT_PAGE_STEP_EVENT } from '@/components/icon-grid/constants'
 import { useIconStore } from '@/stores/iconStore'
 import {
   formatLayoutVersionTime,
@@ -24,6 +22,7 @@ import {
 import { LayoutHoverPreview } from './LayoutHoverPreview'
 import { LayoutThumbnailView } from './LayoutThumbnailView'
 import { useLayoutHoverPreview } from './useLayoutHoverPreview'
+import { useLayoutDrawerWheel } from './useLayoutDrawerWheel'
 
 interface LayoutLibraryDrawerProps {
   currentGeometryKey: string
@@ -168,6 +167,7 @@ export function LayoutLibraryDrawer({
   onDelete,
 }: LayoutLibraryDrawerProps) {
   const toast = useToast()
+  const { drawerRef, scrollAreaRef } = useLayoutDrawerWheel()
   const icons = useIconStore(state => state.icons)
   const [versions, setVersions] = useState<LayoutVersionMeta[] | null>(null)
   const [tab, setTab] = useState<DrawerTab>('saved')
@@ -196,15 +196,6 @@ export function LayoutLibraryDrawer({
     }
   }, [refreshToken, toast])
 
-  /* 抽屉盖在网格上方，落在抽屉上的滚轮到不了网格，翻页就断了。
-     这里把增量原样转给网格，阈值累积和冷却都由网格那边统一处理。 */
-  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
-    const primaryDelta =
-      Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
-    if (Math.abs(primaryDelta) < 0.1) return
-    window.dispatchEvent(new CustomEvent(LAYOUT_PAGE_STEP_EVENT, { detail: primaryDelta }))
-  }
-
   const allVersions = versions ?? []
   const savedVersions = allVersions.filter(version => version.kind === 'saved')
   const historyVersions = allVersions.filter(version => version.kind === 'auto')
@@ -219,9 +210,9 @@ export function LayoutLibraryDrawer({
   return (
     <div className="absolute inset-x-0 bottom-0 z-[60]">
       <div
+        ref={drawerRef}
         data-layout-drawer
         className="launchpad-layout-drawer overflow-hidden rounded-t-2xl border-t border-border/80 bg-card/92 shadow-[0_-18px_48px_rgba(15,23,42,0.24)] backdrop-blur-xl"
-        onWheel={handleWheel}
       >
         <div className="flex h-12 items-center gap-2 px-4">
           <div className="accent-tonal flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border">
@@ -282,7 +273,10 @@ export function LayoutLibraryDrawer({
           /* 用项目统一的 native-scroll-area，滚动条样式跟设置页、弹窗里一致；
              `pb-3` 去掉，卡片区和滚动条轨道挤在同一段高度里。 */
           <NativeScrollArea asChild gutter="auto">
-            <div className="h-[136px] overflow-x-auto overflow-y-hidden px-4">
+            <div
+              ref={scrollAreaRef}
+              className="h-[136px] overflow-x-auto overflow-y-hidden overscroll-contain px-4"
+            >
               {loading ? (
                 <div className="flex h-full items-center gap-2 text-xs text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
