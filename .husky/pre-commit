@@ -1,2 +1,3 @@
 pnpm test
 pnpm rust:clippy
+pnpm rust:test

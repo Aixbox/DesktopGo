@@ -1,9 +1,20 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::{rename_entry as rename_transaction, renamed_path};
 use crate::icons::models::{IconRenameResult, IconSnapshot, SnapshotIconItem};
 use crate::icons::platform_windows::{create_shortcut_windows, resolve_lnk};
+
+fn assert_shortcut_target(shortcut: &str, expected: &str) {
+    let actual = resolve_lnk(Path::new(shortcut)).expect("shortcut target must resolve");
+    // Shell expands 8.3 aliases (e.g. RUNNER~1), while TEMP may retain them.
+    // Compare the existing files, not the spelling returned by the two APIs.
+    assert_eq!(
+        fs::canonicalize(&actual).expect("resolved shortcut target must exist"),
+        fs::canonicalize(expected).expect("expected shortcut target must exist"),
+        "shortcut target must resolve to the expected file: {actual:?} != {expected:?}"
+    );
+}
 
 fn rename_entry(
     snapshot: &IconSnapshot,
@@ -246,10 +257,7 @@ fn wrapped_url_renames_the_actual_source_and_retargets_the_launch_shortcut() {
     assert_eq!(fs::read(&result.target_path).unwrap(), source_bytes);
     assert_eq!(result.shell_path, result.target_path);
     assert_eq!(result.path, original.path);
-    assert_eq!(
-        resolve_lnk(&PathBuf::from(&result.path)).unwrap(),
-        result.target_path
-    );
+    assert_shortcut_target(&result.path, &result.target_path);
     let reloaded: IconSnapshot = serde_json::from_slice(&fs::read(snapshot_path).unwrap()).unwrap();
     assert_eq!(reloaded.icons[0].target_path, result.target_path);
     assert_eq!(reloaded.icons[0].id, original.id);
@@ -274,10 +282,7 @@ fn wrapped_url_persistence_failure_restores_source_and_exact_shortcut_bytes() {
     assert!(error.contains("snapshot failure"));
     assert_eq!(fs::read(&original.path).unwrap(), wrapper_bytes);
     assert_eq!(fs::read(&original.target_path).unwrap(), source_bytes);
-    assert_eq!(
-        resolve_lnk(&PathBuf::from(&original.path)).unwrap(),
-        original.target_path
-    );
+    assert_shortcut_target(&original.path, &original.target_path);
     assert!(!fixture.directory.join("new.url").exists());
 }
 
@@ -355,10 +360,7 @@ fn every_library_entry_pointing_at_the_renamed_url_gets_its_target_updated() {
     assert_eq!(results.len(), 2);
     for result in &results {
         assert!(result.target_path.ends_with("new.url"));
-        assert_eq!(
-            resolve_lnk(std::path::Path::new(&result.path)).unwrap(),
-            result.target_path
-        );
+        assert_shortcut_target(&result.path, &result.target_path);
     }
 }
 
