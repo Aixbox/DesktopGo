@@ -56,10 +56,11 @@ function installRenderer(t) {
     observers = [],
     events = new Map()
   let serial = 0
-  function element(rect) {
+  function element(rect, className = 'folder-icon-surface') {
     const properties = new Map()
     return {
       rect,
+      className,
       isConnected: true,
       offsetWidth: rect.width,
       offsetHeight: rect.height,
@@ -76,7 +77,9 @@ function installRenderer(t) {
       contains(node) {
         return node === this
       },
-      matches: () => true,
+      matches(selector) {
+        return selector.split(',').some(part => part.trim() === `.${this.className}`)
+      },
     }
   }
   const root = element({ left: 0, top: 0, width: 1000, height: 700 })
@@ -123,7 +126,7 @@ function installRenderer(t) {
     document: {
       documentElement: root,
       querySelector: () => wallpaper,
-      querySelectorAll: () => surfaces,
+      querySelectorAll: selector => surfaces.filter(surface => surface.matches(selector)),
       addEventListener: (name, fn) => events.set(name, fn),
       removeEventListener: name => events.delete(name),
       createElement: () => {
@@ -274,6 +277,47 @@ test('one shared texture tracks scroll, transformed portals, theme, resize and c
   assert.equal(h.frames.size, 0, 'a late observer callback cannot restart a disposed material')
 })
 
+test('folders, Dock and search share one texture while other glass panels are excluded', t => {
+  const h = installRenderer(t)
+  const dock = h.element(
+    { left: 300, top: 580, width: 400, height: 90 },
+    'launchpad-material-surface'
+  )
+  const search = h.element(
+    { left: 200, top: 40, width: 600, height: 44 },
+    'launchpad-material-surface'
+  )
+  const results = h.element(
+    { left: 200, top: 100, width: 600, height: 300 },
+    'search-panel-surface'
+  )
+  h.surfaces.push(dock, search, results)
+  const stop = syncFolderMaterialSurfaces({ naturalWidth: 1600, naturalHeight: 900 }, 'bright')
+  h.flush()
+  assert.equal(h.canvases.length, 3, 'one texture pipeline for all three surfaces')
+  for (const surface of [h.surface, dock, search]) {
+    assert.equal(
+      surface.style.getPropertyValue('background-image'),
+      'var(--folder-material-texture, none)'
+    )
+    assert.equal(h.observers[0].targets.has(surface), true)
+  }
+  assert.equal(dock.style.getPropertyValue('background-position'), '-290.000px -570.000px')
+  assert.equal(search.style.getPropertyValue('background-position'), '-190.000px -30.000px')
+  assert.equal(results.style.getPropertyValue('background-image'), '')
+  assert.equal(h.observers[0].targets.has(results), false)
+  dock.rect.width = dock.offsetWidth = 500
+  h.observers[0].callback()
+  h.flush()
+  assert.equal(h.canvases.length, 3, 'Dock resizing reuses the wallpaper texture')
+  stop()
+  for (const surface of [h.surface, dock, search]) {
+    assert.equal(surface.style.getPropertyValue('background-image'), '')
+    assert.equal(surface.style.getPropertyValue('background-position'), '')
+    assert.equal(surface.style.getPropertyValue('background-size'), '')
+  }
+})
+
 test('CSS transform transitions repaint only for their active duration', t => {
   const h = installRenderer(t)
   const stop = syncFolderMaterialSurfaces({ naturalWidth: 1600, naturalHeight: 900 }, 'bright')
@@ -346,4 +390,70 @@ test('material keeps its texture without decorative outlines or corner overrides
       decl => decl.prop === 'background-image' && decl.value.includes('--folder-material-texture')
     )
   )
+  const focus = declarations.find(
+    decl =>
+      decl.prop === 'outline' &&
+      decl.parent.selector?.includes(
+        '.launchpad-search-bar:has(.launchpad-search-input:focus-visible)'
+      )
+  )
+  assert.equal(focus?.value, '2px solid var(--ring)')
+  assert.equal(
+    focus?.parent.nodes.find(decl => decl.prop === 'outline-offset')?.value,
+    '0',
+    'focus ring must touch the search surface without an outer gap'
+  )
+})
+
+test('search uses the shared material without extra tint and preserves the filter glass', () => {
+  const material = postcss.parse(
+    readFileSync(new URL('../styles/folder-material.css', import.meta.url), 'utf8')
+  )
+  const globals = postcss.parse(
+    readFileSync(new URL('../styles/globals.css', import.meta.url), 'utf8')
+  )
+  const sharedSurface = material.nodes.find(
+    node =>
+      node.selector ===
+      "[data-folder-material='coloros'] :is(.folder-icon-surface, .launchpad-material-surface)"
+  )
+  assert.equal(
+    sharedSurface?.nodes.find(decl => decl.prop === 'background-color')?.value,
+    'var(--coloros-folder-fill)',
+    'search must retain the same fallback fill as folders and Dock'
+  )
+  material.walkDecls(decl => {
+    if (decl.prop === 'background-image' && decl.value !== 'none') {
+      assert.deepEqual(
+        postcss.list.comma(decl.value),
+        ['var(--folder-material-texture, none)'],
+        'all surfaces use one texture without a second tint layer'
+      )
+    }
+    if (decl.parent.selector?.includes('.launchpad-search-bar')) {
+      assert.ok(
+        !/^(background|--folder-material|filter|opacity|mix-blend-mode|box-shadow)/.test(decl.prop),
+        'search must not override the shared material paint'
+      )
+    }
+    if (decl.parent.selector?.includes('.launchpad-search-filter')) {
+      assert.ok(
+        !/^(background|border|color|opacity|box-shadow)/.test(decl.prop),
+        'material must not override filter glass or its interactive states'
+      )
+    }
+  })
+  for (const selector of ['.launchpad-glass-button', '.launchpad-glass-button:hover']) {
+    const rule = globals.nodes.find(node => node.selector === selector)
+    const background = rule?.nodes.find(decl => decl.prop === 'background')
+    assert.match(background?.value ?? '', /var\(--background\) (64|78)%/)
+  }
+  for (const condition of ['(prefers-reduced-transparency: reduce)', '(forced-colors: active)']) {
+    const media = material.nodes.find(node => node.type === 'atrule' && node.params === condition)
+    const disabled = new Set()
+    media.walkDecls(decl => {
+      if (decl.value === 'none' && decl.important) disabled.add(decl.prop)
+    })
+    assert.ok(disabled.has('--folder-material-texture'))
+  }
 })

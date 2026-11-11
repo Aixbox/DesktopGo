@@ -482,12 +482,22 @@ test('preview preserves icon keys across all sizes, disables hidden children and
     )
   }
   const event = { stopPropagation() {} }
-  render('1x2')[0].props.onClick(event)
-  render('1x2')[2].props.onClick(event)
-  render('1x2', true)[0].props.onClick(event)
-  render('2x2')[0].props.onClick(event)
-  assert.deepEqual(launched, ['path-0'])
-  assert.deepEqual(opened, ['folder', 'folder', 'folder'])
+  const clickCases = [
+    ['1x1', 0, false, false],
+    ['1x2', 0, false, true],
+    ['1x2', 2, false, false],
+    ['1x2', 0, true, false],
+    ['2x2', 0, false, true],
+    ['2x2', 8, false, false],
+    ['2x2', 0, true, false],
+  ]
+  for (const [size, index, selectionMode, launchesApp] of clickCases) {
+    opened.length = 0
+    launched.length = 0
+    render(size, selectionMode)[index].props.onClick(event)
+    assert.deepEqual(launched, launchesApp ? [`path-${index}`] : [])
+    assert.deepEqual(opened, launchesApp ? [] : ['folder'])
+  }
 })
 
 test('stacked preview buttons forward presses to folder dragging while retaining folder clicks', () => {

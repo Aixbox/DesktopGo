@@ -1,6 +1,6 @@
-# 柔雾文件夹材质
+# 柔雾启动台材质
 
-设置入口：设置 → 语言与外观 → 文件夹材质 → 柔雾。旧设置继续使用默认玻璃。此次只调整文件夹图标表面的材质和边缘效果，圆角、连续曲率、尺寸、内部图标和留白均保留。
+设置入口：设置 → 语言与外观 → 启动台材质 → 柔雾。旧设置继续使用默认玻璃。文件夹图标、Dock 栏和顶部搜索框共用同一材质设置与纹理。已有圆角、连续曲率、尺寸、内部图标和留白均保留。持久化键与取值不变，已选择柔雾的用户无需重新选择。
 
 ## 已核实的原生绘制路径
 
@@ -18,16 +18,17 @@
 ## DesktopGo 实现
 
 1. `folderMaterialTexture.ts` 用 Canvas 生成共享壁纸纹理：与桌面相同的居中 cover 取景、背景蒙版、边缘扩展、模糊，再按日夜分支进行 color-dodge/overlay 和 blend 叠色。纹理最长边限制为 1024，避免每个文件夹重复解码或模糊。
-2. `folderMaterialSurfaceSync.ts` 按桌面壁纸层与文件夹的实际矩形对齐背景，补偿拖拽/缩放的局部比例。支持网格各尺寸、Dock、创建预览、拖拽门户以及右键菜单复制的前景；处理复制样式中的 important 值，避免浮层冻结旧背景。滚动/尺寸/主题变化触发更新，CSS 动画期间连续更新，静止时无常驻刷新循环。更换壁纸或材质会清理观察器、事件和纹理。
+2. `folderMaterialSurfaceSync.ts` 按桌面壁纸层与文件夹的实际矩形对齐背景，补偿拖拽/缩放的局部比例。支持网格各尺寸文件夹、Dock 栏、顶部搜索框、创建预览、拖拽门户以及右键菜单复制的前景；处理复制样式中的 important 值，避免浮层冻结旧背景。滚动/尺寸/主题变化触发更新，CSS 动画期间连续更新，静止时无常驻刷新循环。更换壁纸或材质会清理观察器、事件和纹理。
 3. `folder-material.css` 不绘制常驻高光环、内描边或外投影，也不在 Dock 打开/创建预览时额外添加白色边框。保留透明边框占位，不修改任何圆角和几何参数。拖拽接收、调整大小、键盘焦点等独立交互提示沿用现有实现；强制颜色模式仍保留系统色边界以便辨识。
 4. 保留全局 WebView2 `backdrop-filter: none !important` 防撕裂规则。实际柔雾来自已模糊的普通背景图片，即使 backdrop 被关闭仍可工作。
-5. `folderMaterialAppearance.ts` 继续负责壁纸解码和明暗采样；设置保存、主窗口同步及语言切换复用原有外观链路。
+5. Dock 栏和顶部搜索框通过 `launchpad-material-surface` 显式加入共享表面，文件夹继续使用 `folder-icon-surface`。复用同一次纹理生成、坐标对齐与清理逻辑，搜索结果面板和下拉菜单不加入。搜索框由外层容器绘制材质，输入框使用 appearance-none 和透明背景。三者使用相同的单层材质纹理与回退底色，搜索框不再额外叠加中性填色，以免浅色主题下泛白、偏离文件夹与 Dock；不同位置仍会随各自下面的壁纸颜色变化。切回默认玻璃时统一清除纹理覆盖。筛选按钮保留原有玻璃底色、边框和悬停样式，清除继承的壁纸文字投影。容器保留输入焦点轮廓，偏移为 0，直接贴合表面边缘；筛选按钮保留键盘焦点提示。自定义壁纸下搜索文字跟随图标标题颜色，减少透明度和强制颜色模式恢复相应前景色。
+6. `folderMaterialAppearance.ts` 继续负责壁纸解码和明暗采样；设置保存、主窗口同步及语言切换复用原有外观链路。
 
 ## 平台适配边界
 
 实现采用已核实的材质层次和混色参数。Android BlurService/PostEffect 的 native shader 没有在 WebView 中执行：32 CSS px 模糊与 Canvas 混色顺序属于 DesktopGo 适配参数，不宣称与厂商 GPU 输出逐像素相同。原生高光的 35%/20% 是 shader 输入，还需经过空间衰减与合成，不能直接映射成固定透明度的 CSS 边框，因此当前不模拟这一可选分支。整图亮度采用 alpha 加权 60% 阈值，也不等同于 ColorOS 的设备取色算法。无壁纸或 Canvas 不可用时使用半透明回退底色。
 
-打开后的文件夹内容面板保留现有面板材质，本选项针对桌面文件夹图标。
+打开后的文件夹内容面板、搜索结果面板及筛选菜单保留现有面板材质。
 
 ## 验证
 
@@ -46,3 +47,36 @@ git diff --check
 未启动 DesktopGo、Vite、浏览器或 Tauri，未使用截图或像素比较。测试通过不代表已经核实 ColorOS 真机与 DesktopGo 的最终屏幕观感一致。
 
 本轮结果：49 项相关测试通过；TypeScript、生产构建、改动文件严格 lint、Prettier 与文件规模检查通过。全项目 lint 仍报未修改文件中的 16 个错误和 3 个警告（拖拽控制、Dock 记忆化、右键菜单 refs/effect 与菜单组件导出）。生产构建的已有警告包括 Browserslist 数据过期、layoutStore 混合导入和大块体积。
+
+Dock / 搜索框接入验证：15 项材质测试、生产构建（含 TypeScript）、以下文件的严格 lint、格式和文件规模检查通过。全项目 lint 仍为此前的 16 个错误、3 个警告；DockBar 本次仅增加共享表面类，原有记忆化规则错误仍存在。
+
+```powershell
+node --experimental-strip-types --import ./scripts/register-ts-test-loader.mjs --test src/lib/folderMaterial.test.js src/lib/folderMaterialRendering.test.js src/lib/settingsStore.folderMaterial.test.js
+pnpm.cmd exec eslint src/components/launchpad/LaunchpadSearchBar.tsx src/lib/folderMaterialSurfaceSync.ts src/components/settings/AppearanceSettingsCards.tsx src/lib/i18n/appearanceMessages.ts --max-warnings 0
+pnpm.cmd exec prettier --check src/components/launchpad/LaunchpadSearchBar.tsx src/lib/folderMaterialSurfaceSync.ts src/styles/folder-material.css src/components/settings/AppearanceSettingsCards.tsx src/lib/i18n/appearanceMessages.ts src/lib/folderMaterialRendering.test.js docs/coloros-folder-material.md
+```
+
+搜索栏整体表面修正：17 项相关测试通过，新增组件语义测试覆盖三种搜索来源的单一材质容器以及输入、焦点、键盘、筛选回调。执行 `pnpm.cmd exec eslint src/components/launchpad/LaunchpadSearchBar.tsx --max-warnings 0`、改动文件 Prettier、文件规模检查及生产构建；未启动应用进行实机验证。
+
+搜索栏材质一致性与焦点环修正：移除搜索栏独有的雾面填色，纹理同步恢复单层背景；焦点轮廓的 `outline-offset` 从 2px 改为 0。回归检查覆盖三种表面共享同一纹理及回退色、禁止搜索栏单独覆盖材质、焦点环无外间距、辅助显示模式，以及筛选按钮玻璃样式不被覆盖。验证命令如下；测试检查结构、绘制命令与状态，不代表实机观感验证。
+
+```powershell
+node --experimental-strip-types --import ./scripts/register-ts-test-loader.mjs --test src/components/launchpad/LaunchpadSearchBar.test.js src/lib/folderMaterialRendering.test.js src/lib/folderMaterial.test.js src/lib/settingsStore.folderMaterial.test.js
+pnpm.cmd exec eslint src/components/launchpad/LaunchpadSearchBar.tsx src/lib/folderMaterialSurfaceSync.ts --max-warnings 0
+pnpm.cmd exec prettier --check src/styles/folder-material.css src/lib/folderMaterialSurfaceSync.ts src/lib/folderMaterialRendering.test.js src/components/launchpad/LaunchpadSearchBar.test.js docs/coloros-folder-material.md
+pnpm.cmd build
+node .codex/skills/maintain-modular-code/scripts/check-changed-files.mjs
+git diff --check
+```
+
+以上检查通过。全项目 lint 未重复运行；此前记录的存量错误仍待处理，生产构建仍有上述既有警告。
+
+## 2026-11-11 运行实例只读检查
+
+经用户授权，在现有开发实例通过临时热更新诊断读取 DOM、计算样式和 Canvas 绘制命令，并写入本机日志；没有截图、像素比较、启动或重启应用。诊断模块和临时导入已移除，检查时打开的 DevTools 已关闭。
+
+- 搜索框、文件夹、Dock 的计算背景图片均与根节点共享纹理完全一致；纹理解码尺寸为 1024×576，三个表面均为 opacity 1、background-blend-mode normal，无额外 filter。
+- 壁纸绘制区域为 1280×720，左上角为 (16,16)。搜索框为 (344,40,624,44)，其背景位置为 (-328,-24)、背景尺寸为 1280×720，坐标与壁纸吻合。
+- 当前为浅色主题、普通壁纸分支，背景蒙版和背景模糊设置均为 0；三者回退底色都是 rgba(224,224,224,0.4)。搜索框输入元素为透明背景，由外层容器承载纹理。
+- 重新生成纹理时，运行中的 Canvas 接受并在 drawImage 时使用 blur(25.6px)，按 0.8 的纹理缩放对应 32 CSS px；重新生成的 PNG 与当前共享纹理完全一致。
+- 以上排除了缺少纹理、解码失败、坐标错位和搜索框单独透明覆盖等假设。不同区域取样是事实，但尚不能单凭计算样式和绘制命令认定它就是用户感知差异的全部原因；此次检查没有声称最终屏幕观感已修复，也没有再次调整填色。

@@ -648,7 +648,7 @@ export function DockBar({
       <div
         ref={panelRef}
         data-dock-panel
-        className="launchpad-glass-panel relative overflow-hidden rounded-dock px-4 py-3 transition-[width] duration-[220ms]"
+        className="launchpad-glass-panel launchpad-material-surface relative overflow-hidden rounded-dock px-4 py-3 transition-[width] duration-[220ms]"
         style={{
           maxWidth: isVerticalHotseat
             ? `calc(100vw - ${DOCK_PANEL_VIEWPORT_MARGIN * 2}px)`

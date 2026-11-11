@@ -1,11 +1,11 @@
 export const EN_APPEARANCE_MESSAGES: Record<string, string> = {
   主题色: 'Accent color',
   自定义背景: 'Custom background',
-  文件夹材质: 'Folder material',
+  启动台材质: 'Launchpad material',
   默认玻璃: 'Default glass',
   柔雾: 'Frost',
-  '用于图标网格和 Dock 中的文件夹。柔雾随壁纸明暗调整半透明底色。':
-    'Applies to folders in the icon grid and Dock. Frost adapts its translucent tint to the wallpaper brightness.',
+  '统一设置文件夹、Dock 栏和顶部搜索框的材质。柔雾随壁纸明暗调整底色。':
+    'Use the same material for folders, the Dock, and the top search bar. Frost adapts its tint to the wallpaper brightness.',
   '选择用于主要按钮、选中状态和聚焦框的强调色。':
     'Choose the accent color used for primary buttons, selected states, and focus rings.',
   选中态前景色: 'Selected foreground',

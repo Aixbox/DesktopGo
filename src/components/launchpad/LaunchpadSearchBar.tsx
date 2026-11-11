@@ -44,7 +44,7 @@ export function LaunchpadSearchBar({
   onFilterSelect,
 }: LaunchpadSearchBarProps) {
   return (
-    <>
+    <div className="launchpad-search-bar launchpad-glass-panel launchpad-material-surface relative h-11 w-full rounded-full text-foreground/90">
       <input
         ref={inputRef}
         data-search-placeholder
@@ -67,7 +67,7 @@ export function LaunchpadSearchBar({
               ? translate('搜索文件')
               : translate('搜索快捷入口')
         }
-        className={`launchpad-glass-panel h-11 w-full rounded-full px-4 text-sm text-foreground/90 outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 ${
+        className={`launchpad-search-input h-full w-full appearance-none rounded-full border-0 bg-transparent px-4 text-sm text-inherit shadow-none outline-none placeholder:text-muted-foreground ${
           searchSource !== 'icons' ? 'pr-36' : ''
         }`}
       />
@@ -78,7 +78,7 @@ export function LaunchpadSearchBar({
             ref={filterButtonRef}
             data-search-placeholder
             type="button"
-            className="launchpad-glass-button inline-flex h-8 items-center gap-1 rounded-full px-3 text-xs transition-colors"
+            className="launchpad-search-filter launchpad-glass-button inline-flex h-8 items-center gap-1 rounded-full px-3 text-xs transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
             onClick={onFilterToggle}
           >
             <span className="truncate">
@@ -110,14 +110,12 @@ export function LaunchpadSearchBar({
                 onClick={() => onFilterSelect(entry.value)}
               >
                 <span>{entry.label}</span>
-                {filter === entry.value ? (
-                  <Check className="accent-foreground h-4 w-4" />
-                ) : null}
+                {filter === entry.value ? <Check className="accent-foreground h-4 w-4" /> : null}
               </button>
             ))}
           </SearchFloatingMenu>
         </div>
       ) : null}
-    </>
+    </div>
   )
 }

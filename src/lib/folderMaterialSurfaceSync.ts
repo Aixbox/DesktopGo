@@ -1,10 +1,11 @@
 import { getFolderTexturePlacement, type FolderBackdropTone } from './folderMaterialPolicy'
 import { renderFolderMaterialTexture, type FolderTextureOptions } from './folderMaterialTexture'
 
-const SURFACE_SELECTOR = '.folder-icon-surface'
+// Existing folder markers and explicit opt-ins share one texture and lifecycle.
+const SURFACE_SELECTOR = '.folder-icon-surface, .launchpad-material-surface'
 const PLACEMENT_PROPERTIES = ['background-position', 'background-size', 'background-image']
 
-/** Paint-only adapter. Covers React surfaces, drag portals and focused-item DOM mirrors alike. */
+/** Paint-only adapter for folders, Dock, search and their animation/focus mirrors. */
 class FolderMaterialSurfaceSync {
   private image: HTMLImageElement
   private tone: FolderBackdropTone

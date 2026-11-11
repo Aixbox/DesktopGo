@@ -1,5 +1,5 @@
 /* ColorOS 16 material blur + mix/blend, without an always-on decorative outline.
- * Geometry belongs to the existing folder surfaces. No radius/layout overrides here.
+ * Folders, Dock and search share this surface. Geometry stays with their existing styles.
  * A shared Canvas texture replaces backdrop-filter on the transparent WebView2 surface. */
 [data-folder-material='coloros'] {
   --coloros-folder-fill: #a6a6a666;
@@ -13,7 +13,7 @@
   --coloros-folder-fill: #0000004c;
 }
 
-[data-folder-material='coloros'] .folder-icon-surface {
+[data-folder-material='coloros'] :is(.folder-icon-surface, .launchpad-material-surface) {
   transition-property:
     transform, translate, scale, rotate, opacity, left, top, width, height, border-radius,
     box-shadow;
@@ -30,13 +30,40 @@
   -webkit-backdrop-filter: none;
 }
 
+/* The focus indicator touches the painted surface in both materials. */
+.launchpad-search-bar:has(.launchpad-search-input:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: 0;
+}
+
+/* Search text now sits on the wallpaper material, like the launchpad's icon labels. */
+[data-folder-material='coloros'][data-launchpad-background='custom'] .launchpad-search-bar {
+  color: var(--launchpad-label-color, var(--foreground));
+  caret-color: currentColor;
+  text-shadow: var(--launchpad-label-text-shadow, none);
+}
+
+[data-folder-material='coloros'][data-launchpad-background='custom']
+  .launchpad-search-input::placeholder {
+  color: color-mix(in srgb, currentColor 75%, transparent);
+}
+
+/* Keep the filter's original glass fill, border and hover styles. */
+.launchpad-search-filter {
+  text-shadow: none;
+}
+
 @media (prefers-reduced-transparency: reduce) {
   [data-folder-material='coloros'] {
     --folder-material-texture: none !important;
   }
-  [data-folder-material='coloros'] .folder-icon-surface {
+  [data-folder-material='coloros'] :is(.folder-icon-surface, .launchpad-material-surface) {
     background: color-mix(in srgb, var(--background) 88%, var(--foreground) 12%);
     background-image: none !important;
+  }
+  [data-folder-material='coloros'][data-launchpad-background='custom'] .launchpad-search-bar {
+    color: var(--foreground);
+    text-shadow: none;
   }
 }
 
@@ -44,10 +71,14 @@
   [data-folder-material='coloros'] {
     --folder-material-texture: none !important;
   }
-  [data-folder-material='coloros'] .folder-icon-surface {
+  [data-folder-material='coloros'] :is(.folder-icon-surface, .launchpad-material-surface) {
     background: Canvas;
     background-image: none !important;
     border-color: CanvasText;
     box-shadow: none;
+  }
+  [data-folder-material='coloros'][data-launchpad-background='custom'] .launchpad-search-bar {
+    color: CanvasText;
+    text-shadow: none;
   }
 }

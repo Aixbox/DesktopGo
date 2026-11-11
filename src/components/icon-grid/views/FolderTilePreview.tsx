@@ -99,7 +99,8 @@ export function FolderTilePreview(props: FolderTilePreviewProps) {
       ))}
       {icons.map((slot, index) => {
         const child = folder.children[index]
-        const launchable = folder.size === '1x2' || folder.size === '2x1'
+        // Every expanded folder exposes direct shortcuts; compact previews only open the folder.
+        const launchable = folder.size !== '1x1'
         return (
           <motion.button
             key={child.key}

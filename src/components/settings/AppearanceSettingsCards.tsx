@@ -171,7 +171,7 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
       applyLocally({ ...appearanceRef.current, folderMaterial: previousMaterial })
       toast.error(translate('保存设置失败：{error}', { error: String(error) }), {
         key: 'settings-folder-material',
-        title: translate('文件夹材质'),
+        title: translate('启动台材质'),
       })
     } finally {
       folderMaterialSaveRef.current = false
@@ -568,12 +568,12 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
       </SettingCard>
 
       <SettingCard
-        label={translate('文件夹材质')}
-        desc={translate('用于图标网格和 Dock 中的文件夹。柔雾随壁纸明暗调整半透明底色。')}
+        label={translate('启动台材质')}
+        desc={translate('统一设置文件夹、Dock 栏和顶部搜索框的材质。柔雾随壁纸明暗调整底色。')}
       >
         <fieldset disabled={isSavingFolderMaterial} aria-busy={isSavingFolderMaterial}>
           <SegmentedControl<FolderMaterial>
-            ariaLabel={translate('文件夹材质')}
+            ariaLabel={translate('启动台材质')}
             value={appearance.folderMaterial}
             options={[
               { label: translate('默认玻璃'), value: 'glass' },
