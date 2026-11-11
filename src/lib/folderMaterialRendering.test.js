@@ -6,7 +6,7 @@ import { getColorOsMaterialLayers, getFolderTexturePlacement } from './folderMat
 import { renderFolderMaterialTexture } from './folderMaterialTexture.ts'
 import { syncFolderMaterialSurfaces } from './folderMaterialSurfaceSync.ts'
 
-test('material uses separate native day/night mixing instead of placeholder tint', () => {
+test('native reference parameters preserve separate day/night recipes and placeholder distinction', () => {
   assert.deepEqual(getColorOsMaterialLayers(false, 'bright'), {
     mode: 'color-dodge',
     mix: '#00000000',
@@ -145,6 +145,15 @@ function installRenderer(t) {
               mode: this.globalCompositeOperation,
             })
           },
+          getImageData(_x, _y, width, height) {
+            calls.push({ operation: 'getImageData', filter: this.filter })
+            const data = new Uint8ClampedArray(width * height * 4)
+            for (let i = 0; i < data.length; i += 4) data.set([9, 102, 146, 255], i)
+            return { data }
+          },
+          putImageData(image, x, y) {
+            calls.push({ operation: 'putImageData', channels: [...image.data.slice(0, 4)], x, y })
+          },
         }
         const canvas = {
           width: 0,
@@ -216,12 +225,12 @@ test('texture applies cover crop, edge extension and blur before material mixing
   assert.deepEqual([padded.width, padded.height], [992, 992])
   assert.equal(texture.calls[0].filter, 'blur(32px)')
   assert.deepEqual(
-    texture.calls.slice(1).map(call => [call.mode, call.color]),
-    [
-      ['color-dodge', '#37393eff'],
-      ['source-over', '#2e30333d'],
-    ]
+    texture.calls.slice(1).map(call => call.operation),
+    ['getImageData', 'putImageData'],
+    'apply the shared soft-mist color transform once after blur'
   )
+  assert.equal(texture.calls[1].filter, 'none')
+  assert.deepEqual(texture.calls[2].channels, [95, 151, 177, 255])
   assert.equal(texture.context.filter, 'none')
 })
 
@@ -247,6 +256,7 @@ test('one shared texture tracks scroll, transformed portals, theme, resize and c
   const portal = h.element({ left: 210, top: 310, width: 50, height: 40 })
   portal.style.setProperty('background-image', 'url("stale-focus-copy")')
   portal.style.setProperty('--folder-material-texture', 'url("stale-focus-copy")')
+  portal.style.setProperty('--folder-material-shading', 'linear-gradient(white, black)')
   portal.offsetWidth = 100
   portal.offsetHeight = 80
   h.surfaces.push(portal)
@@ -259,10 +269,15 @@ test('one shared texture tracks scroll, transformed portals, theme, resize and c
     'var(--folder-material-texture, none)'
   )
   assert.equal(portal.style.getPropertyValue('--folder-material-texture'), '')
+  assert.equal(portal.style.getPropertyValue('--folder-material-shading'), '')
   h.root.classList.contains = () => true
   h.mutate(h.root, 'class')
   h.flush()
-  assert.equal(h.canvases.at(-1).calls[1].mode, 'overlay')
+  assert.deepEqual(
+    h.canvases.at(-1).calls.at(-1).channels,
+    [12, 59, 81, 255],
+    'theme switching must regenerate the dark translucent tint over the wallpaper'
+  )
   h.wallpaper.rect.width = 800
   h.observers[0].callback()
   h.flush()
@@ -295,6 +310,11 @@ test('folders, Dock and search share one texture while other glass panels are ex
   const stop = syncFolderMaterialSurfaces({ naturalWidth: 1600, naturalHeight: 900 }, 'bright')
   h.flush()
   assert.equal(h.canvases.length, 3, 'one texture pipeline for all three surfaces')
+  assert.deepEqual(
+    h.canvases.at(-1).calls.at(-1).channels,
+    [95, 151, 177, 255],
+    'light material uses the same finish regardless of the whole-wallpaper brightness branch'
+  )
   for (const surface of [h.surface, dock, search]) {
     assert.equal(
       surface.style.getPropertyValue('background-image'),
@@ -310,6 +330,23 @@ test('folders, Dock and search share one texture while other glass panels are ex
   h.observers[0].callback()
   h.flush()
   assert.equal(h.canvases.length, 3, 'Dock resizing reuses the wallpaper texture')
+  h.root.classList.contains = () => true
+  h.mutate(h.root, 'class')
+  h.flush()
+  assert.equal(h.canvases.length, 6, 'dark mode rebuilds one shared texture')
+  assert.deepEqual(h.canvases.at(-1).calls.at(-1).channels, [12, 59, 81, 255])
+  for (const surface of [h.surface, dock, search]) {
+    assert.equal(
+      surface.style.getPropertyValue('background-image'),
+      'var(--folder-material-texture, none)',
+      'folders, Dock and search must all follow the translucent dark finish'
+    )
+  }
+  h.root.classList.contains = () => false
+  h.mutate(h.root, 'class')
+  h.flush()
+  assert.equal(h.canvases.length, 9, 'switching back to light rebuilds one shared texture')
+  assert.deepEqual(h.canvases.at(-1).calls.at(-1).channels, [95, 151, 177, 255])
   stop()
   for (const surface of [h.surface, dock, search]) {
     assert.equal(surface.style.getPropertyValue('background-image'), '')
@@ -371,6 +408,7 @@ test('material keeps its texture without decorative outlines or corner overrides
   css.walkDecls(decl => declarations.push(decl))
   for (const decl of declarations) {
     if (decl.prop.includes('backdrop-filter')) assert.equal(decl.value, 'none')
+    assert.notEqual(decl.prop, 'opacity', 'material must not fade the icons or search text')
     assert.equal(decl.prop.includes('radius'), false)
     assert.notEqual(decl.prop, 'corner-shape')
     if (decl.prop === 'box-shadow') assert.equal(decl.value, 'none')
@@ -405,7 +443,29 @@ test('material keeps its texture without decorative outlines or corner overrides
   )
 })
 
-test('search uses the shared material without extra tint and preserves the filter glass', () => {
+test('unavailable color readback uses the fallback and recovers after a theme change', t => {
+  const h = installRenderer(t)
+  const createCanvas = document.createElement
+  document.createElement = () => {
+    const canvas = createCanvas()
+    canvas.context.getImageData = () => {
+      throw new Error('readback unavailable')
+    }
+    return canvas
+  }
+  const stop = syncFolderMaterialSurfaces({ naturalWidth: 1600, naturalHeight: 900 }, 'dark')
+  h.flush()
+  assert.equal(h.root.style.getPropertyValue('--folder-material-texture'), '')
+  assert.equal(h.frames.size, 0)
+  document.createElement = createCanvas
+  h.root.classList.contains = () => true
+  h.mutate(h.root, 'class')
+  h.flush()
+  assert.match(h.root.style.getPropertyValue('--folder-material-texture'), /data:image\/png/)
+  stop()
+})
+
+test('search uses the shared material without search-only tint and preserves the filter glass', () => {
   const material = postcss.parse(
     readFileSync(new URL('../styles/folder-material.css', import.meta.url), 'utf8')
   )
@@ -422,12 +482,39 @@ test('search uses the shared material without extra tint and preserves the filte
     'var(--coloros-folder-fill)',
     'search must retain the same fallback fill as folders and Dock'
   )
+  const lightMaterial = material.nodes.find(
+    node => node.selector === "[data-folder-material='coloros']"
+  )
+  assert.equal(
+    lightMaterial?.nodes.find(decl => decl.prop === '--coloros-folder-fill')?.value,
+    '#e0e0e066',
+    'light fallback retains the translucent tint instead of replacing wallpaper with solid gray'
+  )
+  material.walkRules(rule => {
+    assert.ok(
+      !rule.selector.includes('data-folder-backdrop'),
+      'fallback does not change with wallpaper tone'
+    )
+  })
+  const darkMaterial = material.nodes.find(
+    node => node.selector === ":root.dark[data-folder-material='coloros']"
+  )
+  assert.equal(
+    darkMaterial?.nodes.find(decl => decl.prop === '--coloros-folder-fill')?.value,
+    'rgb(16 16 16 / 50%)',
+    'dark fallback must transmit the wallpaper instead of replacing it with solid gray'
+  )
   material.walkDecls(decl => {
+    assert.doesNotMatch(
+      decl.value,
+      /gradient\(|--folder-material-shading/,
+      'neither theme should add artificial surface lighting above the texture'
+    )
     if (decl.prop === 'background-image' && decl.value !== 'none') {
       assert.deepEqual(
         postcss.list.comma(decl.value),
         ['var(--folder-material-texture, none)'],
-        'all surfaces use one texture without a second tint layer'
+        'all surfaces use one opaque wallpaper texture without an extra lighting layer'
       )
     }
     if (decl.parent.selector?.includes('.launchpad-search-bar')) {
@@ -455,5 +542,6 @@ test('search uses the shared material without extra tint and preserves the filte
       if (decl.value === 'none' && decl.important) disabled.add(decl.prop)
     })
     assert.ok(disabled.has('--folder-material-texture'))
+    assert.ok(disabled.has('background-image'), 'accessible display modes disable the texture')
   }
 })

@@ -23,8 +23,9 @@ test('wallpaper classification handles brightness, alpha and empty samples', () 
   assert.equal(getFolderBackdropTone([0, 0, 0, 0]), null)
   assert.equal(getFolderBackdropTone([]), null)
   assert.equal(getFolderBackdropTone([255, 255, 255]), null)
-  assert.equal(getFolderBackdropTone([152, 152, 152, 255]), 'dark')
-  assert.equal(getFolderBackdropTone([154, 154, 154, 255]), 'bright')
+  assert.equal(getFolderBackdropTone([154, 154, 154, 255]), 'dark')
+  assert.equal(getFolderBackdropTone([195, 195, 195, 255]), 'dark')
+  assert.equal(getFolderBackdropTone([196, 196, 196, 255]), 'bright')
 })
 
 function installWallpaperDecoder(t) {

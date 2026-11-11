@@ -1,4 +1,5 @@
-import { getColorOsMaterialLayers, type FolderBackdropTone } from './folderMaterialPolicy'
+import type { FolderBackdropTone } from './folderMaterialPolicy'
+import { applyFolderMaterialColors } from './folderMaterialColor'
 
 export interface FolderTextureOptions {
   width: number
@@ -78,13 +79,9 @@ export function renderFolderMaterialTexture(
   context.drawImage(padded, -padding, -padding)
   context.filter = 'none'
 
-  const layers = getColorOsMaterialLayers(options.dark, options.tone)
-  context.globalCompositeOperation = layers.mode
-  context.fillStyle = layers.mix
-  context.fillRect(0, 0, width, height)
-  context.globalCompositeOperation = 'source-over'
-  context.fillStyle = layers.blend
-  context.fillRect(0, 0, width, height)
+  const colors = context.getImageData(0, 0, width, height)
+  applyFolderMaterialColors(colors.data, options.dark)
+  context.putImageData(colors, 0, 0)
   const result = canvas.toDataURL('image/png')
   if (!result.startsWith('data:image/png;')) throw new Error('Folder material encoding failed')
   return result

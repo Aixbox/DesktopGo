@@ -144,6 +144,8 @@ class FolderMaterialSurfaceSync {
         'var(--folder-material-texture, none)',
       ]
       surface.style.removeProperty('--folder-material-texture')
+      // Discard lighting copied from a mirror created before the single-layer material.
+      surface.style.removeProperty('--folder-material-shading')
       PLACEMENT_PROPERTIES.forEach((name, index) => {
         const value = values[index]
         if (surface.style.getPropertyValue(name) !== value)

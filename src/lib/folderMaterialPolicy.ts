@@ -10,23 +10,27 @@ export function isFolderMaterial(value: unknown): value is FolderMaterial {
 
 /**
  * Approximate the launcher's wallpaper-brightness branch with one small image sample.
- * The 60% threshold is a DesktopGo adaptation, not an Oplus renderer parameter.
+ * WallpaperResolver.resolveWorkspaceEditModeForStatic uses a 196/255 threshold.
+ * Sampling/luma remain a DesktopGo approximation of the native ImageProcess metric.
  * Ignore invisible pixels so transparent image padding cannot bias the result.
  */
 export function getFolderBackdropTone(pixels: ArrayLike<number>): FolderBackdropTone | null {
   let brightness = 0
   let weight = 0
   for (let index = 0; index + 3 < pixels.length; index += 4) {
-    const alpha = pixels[index + 3] / 255
+    const alpha = pixels[index + 3]
+    // Integer coefficients keep an exact gray 196 sample on the bright side.
     brightness +=
-      (pixels[index] * 0.2126 + pixels[index + 1] * 0.7152 + pixels[index + 2] * 0.0722) * alpha
+      (pixels[index] * 2126 + pixels[index + 1] * 7152 + pixels[index + 2] * 722) * alpha
     weight += alpha
   }
   if (weight === 0) return null
-  return brightness / (weight * 255) >= 0.6 ? 'bright' : 'dark'
+  return brightness >= weight * 196 * 10000 ? 'bright' : 'dark'
 }
 
-/** OplusLauncher BlurMaterialColor; ARGB converted to CSS RGBA. */
+/** OplusLauncher BlurMaterialColor; ARGB converted to CSS RGBA.
+ * BlurParam stores blend as A and mix as B: MIX(A), then DODGE_BG/OVERLAY(B).
+ */
 export function getColorOsMaterialLayers(dark: boolean, tone: FolderBackdropTone) {
   if (dark) return { mode: 'overlay' as const, mix: '#737373a3', blend: '#99999933' }
   return tone === 'bright'

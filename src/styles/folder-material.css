@@ -1,16 +1,14 @@
-/* ColorOS 16 material blur + mix/blend, without an always-on decorative outline.
+/* Soft mist: translucent light or near-black tint over blurred wallpaper.
  * Folders, Dock and search share this surface. Geometry stays with their existing styles.
  * A shared Canvas texture replaces backdrop-filter on the transparent WebView2 surface. */
 [data-folder-material='coloros'] {
-  --coloros-folder-fill: #a6a6a666;
-}
-
-[data-folder-material='coloros'][data-folder-backdrop='dark'] {
+  /* Match the light texture's tint, allowing wallpaper through during fallback. */
   --coloros-folder-fill: #e0e0e066;
 }
 
 :root.dark[data-folder-material='coloros'] {
-  --coloros-folder-fill: #0000004c;
+  /* Use the same near-black tint without replacing the wallpaper with solid gray. */
+  --coloros-folder-fill: rgb(16 16 16 / 50%);
 }
 
 [data-folder-material='coloros'] :is(.folder-icon-surface, .launchpad-material-surface) {
@@ -18,6 +16,7 @@
     transform, translate, scale, rotate, opacity, left, top, width, height, border-radius,
     box-shadow;
   background-color: var(--coloros-folder-fill);
+  /* The opaque, pre-mixed texture covers the fallback without another color coat. */
   background-image: var(--folder-material-texture, none);
   background-repeat: no-repeat;
   background-origin: border-box;
