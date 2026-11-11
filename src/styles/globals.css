@@ -2,6 +2,7 @@
 @import 'tw-animate-css';
 @import './corners.css';
 @import './window-frame.css';
+@import './folder-material.css';
 
 @custom-variant dark (&:is(.dark *));
 

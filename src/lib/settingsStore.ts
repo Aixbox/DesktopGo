@@ -21,6 +21,11 @@ import {
 } from '@/types'
 import { isIconManagerViewMode } from './iconManager'
 import {
+  DEFAULT_FOLDER_MATERIAL,
+  isFolderMaterial,
+  type FolderMaterial,
+} from './folderMaterialPolicy'
+import {
   DEFAULT_BUILTIN_WALLPAPER_IMAGE,
   DEFAULT_BUILTIN_WALLPAPER_SOURCE,
 } from './builtinWallpapers'
@@ -52,6 +57,7 @@ type SettingKey =
   | 'launchpadGridViewMode'
   | 'themeMode'
   | 'themeAccentColor'
+  | 'folderMaterial'
   | 'launchpadBackgroundImage'
   | 'launchpadBackgroundOverlay'
   | 'launchpadBackgroundBlur'
@@ -82,6 +88,7 @@ type SettingValueMap = {
   launchpadGridViewMode: LaunchpadGridViewMode
   themeMode: ThemeMode
   themeAccentColor: string
+  folderMaterial: FolderMaterial
   launchpadBackgroundImage: string
   launchpadBackgroundOverlay: number
   launchpadBackgroundBlur: number
@@ -106,7 +113,7 @@ type SettingValueMap = {
   deleteNewFileSource: boolean
 }
 
-const SETTINGS_STORE_VERSION = 15
+const SETTINGS_STORE_VERSION = 16
 const SETTINGS_VERSION_KEY = 'settingsVersion'
 const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'iconSize',
@@ -117,6 +124,7 @@ const MANAGED_SETTING_KEYS: ExtendedSettingKey[] = [
   'launchpadGridViewMode',
   'themeMode',
   'themeAccentColor',
+  'folderMaterial',
   'launchpadBackgroundImage',
   'launchpadBackgroundOverlay',
   'launchpadBackgroundBlur',
@@ -147,6 +155,7 @@ const DEFAULT_SETTINGS: SettingValueMap = {
   launchpadGridViewMode: 'paged',
   themeMode: 'system',
   themeAccentColor: DEFAULT_THEME_ACCENT_COLOR,
+  folderMaterial: DEFAULT_FOLDER_MATERIAL,
   launchpadBackgroundImage: DEFAULT_BUILTIN_WALLPAPER_IMAGE,
   launchpadBackgroundOverlay: DEFAULT_BACKGROUND_OVERLAY,
   launchpadBackgroundBlur: DEFAULT_BACKGROUND_BLUR,
@@ -233,6 +242,7 @@ const validators: {
   launchpadGridViewMode: isLaunchpadGridViewMode,
   themeMode: isThemeMode,
   themeAccentColor: isThemeAccentColor,
+  folderMaterial: isFolderMaterial,
   launchpadBackgroundImage: isSavedLaunchpadBackgroundImage,
   launchpadBackgroundOverlay: isBackgroundOverlay,
   launchpadBackgroundBlur: isBackgroundBlur,

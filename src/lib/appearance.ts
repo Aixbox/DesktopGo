@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { getSetting } from './settingsStore'
+import { applyFolderMaterial } from './folderMaterialAppearance'
+import type { FolderMaterial } from './folderMaterialPolicy'
 import {
   backgroundBlurToPixels,
   clampBackgroundOverlay,
@@ -64,6 +66,7 @@ const APPEARANCE_CSS_VARIABLES = [
 
 export type AppearanceSettings = {
   accentColor: string
+  folderMaterial: FolderMaterial
   backgroundImage: string
   /** 背景蒙版浓度百分比，越大越接近纯色底。 */
   backgroundOverlay: number
@@ -89,6 +92,7 @@ export class BackgroundImageError extends Error {
 
 export function applyAppearance({
   accentColor,
+  folderMaterial,
   backgroundImage,
   backgroundOverlay,
   backgroundBlur,
@@ -134,11 +138,13 @@ export function applyAppearance({
     root.style.removeProperty('--launchpad-background-blur')
     delete root.dataset.launchpadBackground
   }
+  applyFolderMaterial(folderMaterial, backgroundImage)
 }
 
 export async function getSavedAppearance(): Promise<AppearanceSettings> {
   const [
     accentColor,
+    folderMaterial,
     backgroundImage,
     backgroundOverlay,
     backgroundBlur,
@@ -146,6 +152,7 @@ export async function getSavedAppearance(): Promise<AppearanceSettings> {
     selectedForegroundTone,
   ] = await Promise.all([
     getSetting('themeAccentColor'),
+    getSetting('folderMaterial'),
     getSetting('launchpadBackgroundImage'),
     getSetting('launchpadBackgroundOverlay'),
     getSetting('launchpadBackgroundBlur'),
@@ -154,6 +161,7 @@ export async function getSavedAppearance(): Promise<AppearanceSettings> {
   ])
   return {
     accentColor,
+    folderMaterial,
     backgroundImage,
     backgroundOverlay,
     backgroundBlur,

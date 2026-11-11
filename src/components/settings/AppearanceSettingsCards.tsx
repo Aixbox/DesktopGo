@@ -28,6 +28,7 @@ import {
   type ForegroundTone,
 } from '@/lib/appearance'
 import { getSetting, setSetting } from '@/lib/settingsStore'
+import { DEFAULT_FOLDER_MATERIAL, type FolderMaterial } from '@/lib/folderMaterialPolicy'
 import { translate } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -78,6 +79,7 @@ async function persistSettingWithVerify(key: ToneSettingKey, value: ForegroundTo
 export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettingsCardsProps) {
   const [appearance, setAppearance] = useState<AppearanceSettings>({
     accentColor: DEFAULT_THEME_ACCENT_COLOR,
+    folderMaterial: DEFAULT_FOLDER_MATERIAL,
     backgroundImage: '',
     backgroundOverlay: DEFAULT_BACKGROUND_OVERLAY,
     backgroundBlur: DEFAULT_BACKGROUND_BLUR,
@@ -85,6 +87,8 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
     selectedForegroundTone: DEFAULT_FOREGROUND_TONE,
   })
   const [autoExtractThemeColor, setAutoExtractThemeColor] = useState(true)
+  const [isSavingFolderMaterial, setIsSavingFolderMaterial] = useState(false)
+  const folderMaterialSaveRef = useRef(false)
   const [isProcessingBackground, setIsProcessingBackground] = useState(false)
   const [backgroundSource, setBackgroundSource] = useState('')
   const [cropSource, setCropSource] = useState('')
@@ -152,6 +156,27 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
           title: translate('主题色'),
         })
       })
+  }
+
+  const handleFolderMaterial = async (folderMaterial: FolderMaterial) => {
+    const previousMaterial = appearanceRef.current.folderMaterial
+    if (folderMaterialSaveRef.current || folderMaterial === previousMaterial) return
+    folderMaterialSaveRef.current = true
+    setIsSavingFolderMaterial(true)
+    applyLocally({ ...appearanceRef.current, folderMaterial })
+    try {
+      await setSetting('folderMaterial', folderMaterial)
+      syncMainWindow()
+    } catch (error) {
+      applyLocally({ ...appearanceRef.current, folderMaterial: previousMaterial })
+      toast.error(translate('保存设置失败：{error}', { error: String(error) }), {
+        key: 'settings-folder-material',
+        title: translate('文件夹材质'),
+      })
+    } finally {
+      folderMaterialSaveRef.current = false
+      setIsSavingFolderMaterial(false)
+    }
   }
 
   const handleToneChange = (
@@ -540,6 +565,23 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
             }
           />
         </div>
+      </SettingCard>
+
+      <SettingCard
+        label={translate('文件夹材质')}
+        desc={translate('用于图标网格和 Dock 中的文件夹。柔雾随壁纸明暗调整半透明底色。')}
+      >
+        <fieldset disabled={isSavingFolderMaterial} aria-busy={isSavingFolderMaterial}>
+          <SegmentedControl<FolderMaterial>
+            ariaLabel={translate('文件夹材质')}
+            value={appearance.folderMaterial}
+            options={[
+              { label: translate('默认玻璃'), value: 'glass' },
+              { label: translate('柔雾'), value: 'coloros' },
+            ]}
+            onChange={value => void handleFolderMaterial(value)}
+          />
+        </fieldset>
       </SettingCard>
 
       <SettingCard

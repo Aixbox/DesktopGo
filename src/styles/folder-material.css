@@ -1,0 +1,53 @@
+/* ColorOS 16 material blur + mix/blend, without an always-on decorative outline.
+ * Geometry belongs to the existing folder surfaces. No radius/layout overrides here.
+ * A shared Canvas texture replaces backdrop-filter on the transparent WebView2 surface. */
+[data-folder-material='coloros'] {
+  --coloros-folder-fill: #a6a6a666;
+}
+
+[data-folder-material='coloros'][data-folder-backdrop='dark'] {
+  --coloros-folder-fill: #e0e0e066;
+}
+
+:root.dark[data-folder-material='coloros'] {
+  --coloros-folder-fill: #0000004c;
+}
+
+[data-folder-material='coloros'] .folder-icon-surface {
+  transition-property:
+    transform, translate, scale, rotate, opacity, left, top, width, height, border-radius,
+    box-shadow;
+  background-color: var(--coloros-folder-fill);
+  background-image: var(--folder-material-texture, none);
+  background-repeat: no-repeat;
+  background-origin: border-box;
+  background-clip: border-box;
+  background-position: 0 0;
+  background-size: 100% 100%;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  [data-folder-material='coloros'] {
+    --folder-material-texture: none !important;
+  }
+  [data-folder-material='coloros'] .folder-icon-surface {
+    background: color-mix(in srgb, var(--background) 88%, var(--foreground) 12%);
+    background-image: none !important;
+  }
+}
+
+@media (forced-colors: active) {
+  [data-folder-material='coloros'] {
+    --folder-material-texture: none !important;
+  }
+  [data-folder-material='coloros'] .folder-icon-surface {
+    background: Canvas;
+    background-image: none !important;
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+}
