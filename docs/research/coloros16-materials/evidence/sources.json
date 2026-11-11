@@ -1,0 +1,642 @@
+{
+  "archived_at": "2026-11-11",
+  "kind": "static-analysis-excerpts",
+  "reports": [
+    {
+      "original_path": "D:/Project/other/ColorOS16/analysis/material-light-dark-deep-findings-20261111.md",
+      "source_sha256": "9de6813f5b8c29034f81728ce609bd5727a2342131b8d0d89b77a4cf402b5bff",
+      "archive": "analysis.md"
+    },
+    {
+      "original_path": "D:/Project/other/ColorOS16/analysis/launcher-material-deep-findings-20261111.md",
+      "source_sha256": "20ae97a6f90481b42c5b2964db392b1a789f53e1353ee94276c2b96da9f78b69",
+      "archive": "launcher.md"
+    },
+    {
+      "original_path": "D:/Project/other/ColorOS16/analysis/qs-material-deep-findings-20261111.md",
+      "source_sha256": "62ea17d032e053ebea01e9e70cc9e03291c84ba7e8c9945f17684febb770e1c3",
+      "archive": "systemui.md"
+    }
+  ],
+  "sources": [
+    {
+      "id": "source-001",
+      "original_path": "D:/Project/other/ColorOS16/analysis/decoded/OplusLauncher/resources/res/drawable/folder_icon_bg.xml",
+      "source_sha256": "ef848aa8eeac86cf118ab0f21d87f75a31a622818ca8592d86ae74bd22147af0",
+      "source_lines": 6,
+      "cited_lines": [3],
+      "excerpt_ranges": [[1, 6]],
+      "archive": "evidence/launcher.md#source-001"
+    },
+    {
+      "id": "source-002",
+      "original_path": "D:/Project/other/ColorOS16/analysis/decoded/OplusLauncher/resources/res/drawable/hotseat_bg.xml",
+      "source_sha256": "6287bbb0fbcc840aa9f99e77bd17c74f1020947825890a28348cec8ff2ac1e82",
+      "source_lines": 9,
+      "cited_lines": [4],
+      "excerpt_ranges": [[1, 9]],
+      "archive": "evidence/launcher.md#source-002"
+    },
+    {
+      "id": "source-003",
+      "original_path": "D:/Project/other/ColorOS16/analysis/decoded/OplusLauncher/resources/res/drawable/launcher_folder_content_background.xml",
+      "source_sha256": "179195bb8e5cdb7d97187a5940aee9c7026af6d9b1608aeca8caab1e45e1f821",
+      "source_lines": 9,
+      "cited_lines": [3],
+      "excerpt_ranges": [[1, 9]],
+      "archive": "evidence/launcher.md#source-003"
+    },
+    {
+      "id": "source-004",
+      "original_path": "D:/Project/other/ColorOS16/analysis/decoded/OplusLauncher/resources/res/layout/oplus_user_folder_icon_normalized.xml",
+      "source_sha256": "ce566cde0c64816a988bbacb9bb6380823b361d16b28a4ab886d4564e4463bc2",
+      "source_lines": 136,
+      "cited_lines": [63],
+      "excerpt_ranges": [[57, 91]],
+      "archive": "evidence/launcher.md#source-004"
+    },
+    {
+      "id": "source-005",
+      "original_path": "D:/Project/other/ColorOS16/analysis/decoded/OplusLauncher/resources/res/values-night/colors.xml",
+      "source_sha256": "e7f2f0a180f3e430293d8f1d7ebf24c9ee9d81838a7c2ef700c5b8607f9d48ec",
+      "source_lines": 667,
+      "cited_lines": [499, 500, 522, 590],
+      "excerpt_ranges": [
+        [493, 550],
+        [584, 618]
+      ],
+      "archive": "evidence/launcher.md#source-005"
+    },
+    {
+      "id": "source-006",
+      "original_path": "D:/Project/other/ColorOS16/analysis/decoded/OplusLauncher/resources/res/values/colors.xml",
+      "source_sha256": "a1939693a14a285dd7942dd90c609cf02b7b9db810f00dcc82a6418f5b6a0a9a",
+      "source_lines": 2670,
+      "cited_lines": [1744, 2379, 2380],
+      "excerpt_ranges": [
+        [1738, 1772],
+        [2373, 2408]
+      ],
+      "archive": "evidence/launcher.md#source-006"
+    },
+    {
+      "id": "source-007",
+      "original_path": "D:/Project/other/ColorOS16/analysis/decoded/Settings/resources/res/values-night/colors.xml",
+      "source_sha256": "5fe8a3cbbf1b71c9433264e688ee6520d294e043ba19af5013f8ff1b22a04bcc",
+      "source_lines": 713,
+      "cited_lines": [287],
+      "excerpt_ranges": [[281, 315]],
+      "archive": "evidence/systemui.md#source-007"
+    },
+    {
+      "id": "source-008",
+      "original_path": "D:/Project/other/ColorOS16/analysis/decoded/Settings/resources/res/values/colors.xml",
+      "source_sha256": "74b25b4ea7c58766d91a95bf3d64eee130277cadae0516218eee79f25651e29f",
+      "source_lines": 3040,
+      "cited_lines": [888],
+      "excerpt_ranges": [[882, 916]],
+      "archive": "evidence/systemui.md#source-008"
+    },
+    {
+      "id": "source-009",
+      "original_path": "D:/Project/other/ColorOS16/analysis/decoded/Settings/resources/res/values/styles.xml",
+      "source_sha256": "947670256b925d8b97ea59159b8480f92b9c0712ff9a114dcd617257d5f4c60a",
+      "source_lines": 16643,
+      "cited_lines": [11938],
+      "excerpt_ranges": [[11932, 11966]],
+      "archive": "evidence/systemui.md#source-009"
+    },
+    {
+      "id": "source-010",
+      "original_path": "D:/Project/other/ColorOS16/analysis/decoded/SystemUI/resources/res/drawable/_bg_flashlight_brightness_levelbase_fluid_glass_bg__0_res_0x7f0804c0.xml",
+      "source_sha256": "7cb37a5ef138a36d2065b56d7c63ee835495b1ad8eafa8eaaa4bde216045faab",
+      "source_lines": 20,
+      "cited_lines": [8],
+      "excerpt_ranges": [[2, 20]],
+      "archive": "evidence/systemui.md#source-010"
+    },
+    {
+      "id": "source-011",
+      "original_path": "D:/Project/other/ColorOS16/analysis/decoded/SystemUI/resources/res/drawable/bg_flashlight_brightness_levelbase_fluid_glass_bg.xml",
+      "source_sha256": "18bb3ace0fc55987b3ba34e926645a5ae0f7a931efbe494263d030408d035ced",
+      "source_lines": 17,
+      "cited_lines": [10],
+      "excerpt_ranges": [[4, 17]],
+      "archive": "evidence/systemui.md#source-011"
+    },
+    {
+      "id": "source-012",
+      "original_path": "D:/Project/other/ColorOS16/analysis/decoded/SystemUI/resources/res/drawable/status_bar_qs_highlighttile_active_icon_fluid_glass_bg.xml",
+      "source_sha256": "23818ea3aebed29f8e16df511c328aad766939d0bd0683ed6c38d9299be93bef",
+      "source_lines": 12,
+      "cited_lines": [8],
+      "excerpt_ranges": [[2, 12]],
+      "archive": "evidence/systemui.md#source-012"
+    },
+    {
+      "id": "source-013",
+      "original_path": "D:/Project/other/ColorOS16/analysis/decoded/SystemUI/resources/res/values-night/colors.xml",
+      "source_sha256": "a93f2b97e6ab5ecfa8da393d09462e4f9bfb32bf66b30b950ed17de36edd9919",
+      "source_lines": 635,
+      "cited_lines": [425, 596],
+      "excerpt_ranges": [
+        [419, 453],
+        [590, 624]
+      ],
+      "archive": "evidence/systemui.md#source-013"
+    },
+    {
+      "id": "source-014",
+      "original_path": "D:/Project/other/ColorOS16/analysis/decoded/SystemUI/resources/res/values/colors.xml",
+      "source_sha256": "375213f5e76f120117b77eb6826a93cd0c9d1e78ee5920d1fb64fcc325379a02",
+      "source_lines": 2254,
+      "cited_lines": [562, 1570, 2043],
+      "excerpt_ranges": [
+        [556, 590],
+        [1564, 1598],
+        [2037, 2071]
+      ],
+      "archive": "evidence/systemui.md#source-014"
+    },
+    {
+      "id": "source-015",
+      "original_path": "D:/Project/other/ColorOS16/analysis/decoded/SystemUI/resources/res/values/integers.xml",
+      "source_sha256": "122356f9237d03dae5952fcf90311d50472dc9f5df041549705e1ddb0e69a654",
+      "source_lines": 333,
+      "cited_lines": [19],
+      "excerpt_ranges": [[13, 47]],
+      "archive": "evidence/systemui.md#source-015"
+    },
+    {
+      "id": "source-016",
+      "original_path": "D:/Project/other/ColorOS16/analysis/focused/launcher-material/com/android/launcher3/folder/big/BigFolderUtil.java",
+      "source_sha256": "9026615e9059577a0450770b9496c942098775f9854d2161fc98393ad12e68bb",
+      "source_lines": 108,
+      "cited_lines": [36],
+      "excerpt_ranges": [[30, 64]],
+      "archive": "evidence/launcher.md#source-016"
+    },
+    {
+      "id": "source-017",
+      "original_path": "D:/Project/other/ColorOS16/analysis/focused/launcher-material/com/android/launcher3/hotseat/expand/ExpandUtils.java",
+      "source_sha256": "589f197be1daab359de2147e23fa3d09457249979ab729b5b780cfaa3547df8d",
+      "source_lines": 1024,
+      "cited_lines": [954],
+      "excerpt_ranges": [[948, 982]],
+      "archive": "evidence/launcher.md#source-017"
+    },
+    {
+      "id": "source-018",
+      "original_path": "D:/Project/other/ColorOS16/analysis/focused/launcher-material/com/android/launcher3/uioverrides/states/blurdrawable/BlurMaterialColor.java",
+      "source_sha256": "05e2bfbe838e37e4cfaf2dcb2fd902aabbc8c008a2d77d2fe00ae3835973a781",
+      "source_lines": 35,
+      "cited_lines": [10],
+      "excerpt_ranges": [[4, 35]],
+      "archive": "evidence/launcher.md#source-018"
+    },
+    {
+      "id": "source-019",
+      "original_path": "D:/Project/other/ColorOS16/analysis/focused/launcher/com/android/launcher/theme/LauncherIconConfig.java",
+      "source_sha256": "e1f157f505666678cadbcbc456f46e5cadb971d7f9f668252a55425d22a12f3c",
+      "source_lines": 887,
+      "cited_lines": [201],
+      "excerpt_ranges": [[195, 229]],
+      "archive": "evidence/launcher.md#source-019"
+    },
+    {
+      "id": "source-020",
+      "original_path": "D:/Project/other/ColorOS16/analysis/focused/launcher/com/android/launcher3/folder/OplusFolderAnimationManager.java",
+      "source_sha256": "c8a19106858f2571f3be6ca5fb20c588624e9c046c92845990cb61e7988743d4",
+      "source_lines": 2025,
+      "cited_lines": [677],
+      "excerpt_ranges": [[671, 705]],
+      "archive": "evidence/launcher.md#source-020"
+    },
+    {
+      "id": "source-021",
+      "original_path": "D:/Project/other/ColorOS16/analysis/focused/launcher/com/android/launcher3/OplusHotseat.java",
+      "source_sha256": "f8025c49ceea9cbc13463f316379de3892ca564529959ff85217d36cb0c95eef",
+      "source_lines": 1886,
+      "cited_lines": [443, 1500],
+      "excerpt_ranges": [
+        [437, 471],
+        [1494, 1528]
+      ],
+      "archive": "evidence/launcher.md#source-021"
+    },
+    {
+      "id": "source-022",
+      "original_path": "D:/Project/other/ColorOS16/analysis/focused/launcher/com/android/launcher3/uioverrides/states/blurdrawable/OplusBlurProperties.java",
+      "source_sha256": "7c01a6d26a43107ed324f8d7a7f05736c70950821f4ea022f446094d56b3756a",
+      "source_lines": 1258,
+      "cited_lines": [350, 822],
+      "excerpt_ranges": [
+        [344, 378],
+        [816, 850]
+      ],
+      "archive": "evidence/launcher.md#source-022"
+    },
+    {
+      "id": "source-023",
+      "original_path": "D:/Project/other/ColorOS16/analysis/focused/notification-material-20261111/com/oplus/systemui/notification/blur/ViewBlurManager.java",
+      "source_sha256": "381f7f774daf3c10bf4668683d3730d7b2fb47a3c113a3585cdc856f65514ef1",
+      "source_lines": 1308,
+      "cited_lines": [729, 755, 871, 894],
+      "excerpt_ranges": [
+        [723, 783],
+        [865, 922]
+      ],
+      "archive": "evidence/systemui.md#source-023"
+    },
+    {
+      "id": "source-024",
+      "original_path": "D:/Project/other/ColorOS16/analysis/focused/notification-material-20261111/com/oplus/systemui/notification/lockscreen/effect/BlurStroke.java",
+      "source_sha256": "de48dd6ad3f73b85580e47b48c6a5e27c5e6af1ede301719461a17545ad6596a",
+      "source_lines": 83,
+      "cited_lines": [21],
+      "excerpt_ranges": [[15, 49]],
+      "archive": "evidence/systemui.md#source-024"
+    },
+    {
+      "id": "source-025",
+      "original_path": "D:/Project/other/ColorOS16/analysis/focused/notification-material-20261111/com/oplusos/systemui/common/blurability/platformblur/KeyguardStackingBlurConfig.java",
+      "source_sha256": "28f330a91fdc650b48887eeb2124967649f48071a1a8b97aef05dd89d9d09a83",
+      "source_lines": 68,
+      "cited_lines": [54],
+      "excerpt_ranges": [[48, 68]],
+      "archive": "evidence/systemui.md#source-025"
+    },
+    {
+      "id": "source-026",
+      "original_path": "D:/Project/other/ColorOS16/analysis/focused/notification-material-20261111/com/oplusos/systemui/common/util/NotifiAndQsPlatformBlurExKt.java",
+      "source_sha256": "071ef153e97e681ce8a1cfcdfac631d42f0af23748a4e628f4daaa790202f437",
+      "source_lines": 88,
+      "cited_lines": [16],
+      "excerpt_ranges": [[10, 44]],
+      "archive": "evidence/systemui.md#source-026"
+    },
+    {
+      "id": "source-027",
+      "original_path": "D:/Project/other/ColorOS16/analysis/focused/notification-pipeline-20261111/com/oplus/systemui/notification/lockscreen/effect/NotificationEffectRepository.java",
+      "source_sha256": "59b3a462783592bedb05661aaa696088560d2a2e89e05b410c0e0e313bac76a0",
+      "source_lines": 52,
+      "cited_lines": [17],
+      "excerpt_ranges": [[11, 45]],
+      "archive": "evidence/systemui.md#source-027"
+    },
+    {
+      "id": "source-028",
+      "original_path": "D:/Project/other/ColorOS16/analysis/focused/notification-pipeline-20261111/com/oplusos/systemui/common/blurability/platformblur/PlatformBlurDrawable.java",
+      "source_sha256": "217c255da5704f12e3daa9487b5d0790604befa816fac2b4992bc692112caba0",
+      "source_lines": 317,
+      "cited_lines": [77, 124],
+      "excerpt_ranges": [
+        [71, 105],
+        [118, 152]
+      ],
+      "archive": "evidence/systemui.md#source-028"
+    },
+    {
+      "id": "source-029",
+      "original_path": "D:/Project/other/ColorOS16/analysis/focused/notification-pipeline-20261111/com/oplusos/systemui/common/blurability/ViewBlurProxy.java",
+      "source_sha256": "7b77ccc773c03b1b023f2eb77955f23a6c9b0156190a8969baa44aecff7842b2",
+      "source_lines": 934,
+      "cited_lines": [324],
+      "excerpt_ranges": [[318, 352]],
+      "archive": "evidence/systemui.md#source-029"
+    },
+    {
+      "id": "source-030",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-folder-material-detail-20261111/com/android/launcher/views/AGSLGradientStrokeParam.java",
+      "source_sha256": "b5737c1d3b7ea17aa8d5b03552bacdc20f945debd60d749e4e5d67274251cd69",
+      "source_lines": 586,
+      "cited_lines": [583],
+      "excerpt_ranges": [[577, 586]],
+      "archive": "evidence/launcher.md#source-030"
+    },
+    {
+      "id": "source-031",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-folder-material-detail-20261111/com/android/launcher/views/TextureStrokeController.java",
+      "source_sha256": "d08c871f4dd01c43acce45a20f88350edee98e142227d8437359282b7ab0cfaf",
+      "source_lines": 148,
+      "cited_lines": [38],
+      "excerpt_ranges": [[32, 66]],
+      "archive": "evidence/launcher.md#source-031"
+    },
+    {
+      "id": "source-032",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-folder-material-detail-20261111/com/android/launcher3/folder/OplusPreviewBackground.java",
+      "source_sha256": "4780549ebcde766904b1b9c9ab86688feb87fe4b7431f3118bebd45d20f0721c",
+      "source_lines": 1313,
+      "cited_lines": [263, 732],
+      "excerpt_ranges": [
+        [257, 291],
+        [726, 760]
+      ],
+      "archive": "evidence/launcher.md#source-032"
+    },
+    {
+      "id": "source-033",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-folder-material-reference-20261111/com/android/launcher3/uioverrides/states/blurdrawable/LayerBlurDrawable.java",
+      "source_sha256": "4e8cda390efc69706785aa3660d97252a7c2adad8748772d8a3f42488ac0c7ea",
+      "source_lines": 698,
+      "cited_lines": [116, 380, 427, 624],
+      "excerpt_ranges": [
+        [110, 144],
+        [374, 408],
+        [421, 455],
+        [618, 652]
+      ],
+      "archive": "evidence/launcher.md#source-033"
+    },
+    {
+      "id": "source-034",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-launcher-backend-analysis-20261111/com/oplus/posteffect/BlurDrawable.java",
+      "source_sha256": "e5bc79ddf26dbd5975472ebda14af4332318b43ad51813b27d750bb01fdcd3d8",
+      "source_lines": 74,
+      "cited_lines": [68],
+      "excerpt_ranges": [[62, 74]],
+      "archive": "evidence/launcher.md#source-034"
+    },
+    {
+      "id": "source-035",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-launcher-backend-analysis-20261111/com/oplus/posteffect/BlurParam.java",
+      "source_sha256": "8778234f2c109f58a5b563b387d99b2ac2299aef0c0d6de4997ce3a085e57000",
+      "source_lines": 439,
+      "cited_lines": [346, 436],
+      "excerpt_ranges": [
+        [340, 374],
+        [430, 439]
+      ],
+      "archive": "evidence/launcher.md#source-035"
+    },
+    {
+      "id": "source-036",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-launcher-continuous-analysis-20261111/com/oplus/posteffect/drawable/ContinuousBlurDrawable.java",
+      "source_sha256": "c9d0dfd704b4724a9f23002d0c018716bd5f53245fd065beafa372a5582d0f40",
+      "source_lines": 336,
+      "cited_lines": [83, 164],
+      "excerpt_ranges": [
+        [77, 111],
+        [158, 192]
+      ],
+      "archive": "evidence/launcher.md#source-036"
+    },
+    {
+      "id": "source-037",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-launcher-dark-icons-analysis-20261111/com/android/launcher3/folder/OplusFolder.java",
+      "source_sha256": "d08a8bf6667136526f939d580acc7417990a09b0bed81c18bd6ddb759d4b5cf9",
+      "source_lines": 2184,
+      "cited_lines": [1550],
+      "excerpt_ranges": [[1544, 1578]],
+      "archive": "evidence/launcher.md#source-037"
+    },
+    {
+      "id": "source-038",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-launcher-dark-icons-analysis-20261111/com/oplus/uxicon/ui/morphicon/StylePrefixAdapter.java",
+      "source_sha256": "e569fd77207eb8f503626383de288bf1e3bb3a0aca77cf50725cf1bcc4183633",
+      "source_lines": 35,
+      "cited_lines": [32],
+      "excerpt_ranges": [[26, 35]],
+      "archive": "evidence/launcher.md#source-038"
+    },
+    {
+      "id": "source-039",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-launcher-dark-icons-analysis-20261111/com/oplus/uxicon/ui/util/UxIconLoaderUtil.java",
+      "source_sha256": "03c6a8fb8420378110a83afb5d9b737c27c27bbe1afdac7698ea349d53ef6163",
+      "source_lines": 3430,
+      "cited_lines": [83, 2400, 2434, 2804],
+      "excerpt_ranges": [
+        [77, 111],
+        [2394, 2462],
+        [2798, 2832]
+      ],
+      "archive": "evidence/launcher.md#source-039"
+    },
+    {
+      "id": "source-040",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-launcher-icons-analysis-20261111/com/oplus/uxicon/ui/morphicon/BuildInThemeIconLoaderFactory.java",
+      "source_sha256": "41c0fa30e24659fc4551b71822d56cc1d8c19fd03e6c79681d391a768ef73d3d",
+      "source_lines": 332,
+      "cited_lines": [73, 77, 218, 238],
+      "excerpt_ranges": [
+        [67, 105],
+        [212, 266]
+      ],
+      "archive": "evidence/launcher.md#source-040"
+    },
+    {
+      "id": "source-041",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-launcher-icons-analysis-20261111/com/oplus/uxicon/ui/util/UxIconResPathUtil.java",
+      "source_sha256": "619e9e4ecf26f679880d836452677081464aee6ae1bec48d11448e6ded7dbad2",
+      "source_lines": 93,
+      "cited_lines": [16],
+      "excerpt_ranges": [[10, 44]],
+      "archive": "evidence/launcher.md#source-041"
+    },
+    {
+      "id": "source-042",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-material-shader-20261111/com/oplus/posteffect/agsl/BlurDrawableShader.java",
+      "source_sha256": "3ae398a64d9733327875cec68664916e55677333fa4fc3fab047f56ee7d48a61",
+      "source_lines": 423,
+      "cited_lines": [68, 218],
+      "excerpt_ranges": [
+        [62, 96],
+        [212, 246]
+      ],
+      "archive": "evidence/launcher.md#source-042"
+    },
+    {
+      "id": "source-043",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-material-shader-20261111/com/oplus/posteffect/agsl/BlurDrawableShaderBaseStringKt.java",
+      "source_sha256": "fd5b39812c4f75049b322d7387451cb5a86883d011b6f4d9b45c83a3a49768af",
+      "source_lines": 68,
+      "cited_lines": [14],
+      "excerpt_ranges": [[8, 42]],
+      "archive": "evidence/launcher.md#source-043"
+    },
+    {
+      "id": "source-044",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-material-shader-20261111/com/oplus/posteffect/agsl/BlurDrawableShaderBlendStringKt.java",
+      "source_sha256": "48aa153c809b857423ecb5fb41c4f84d1d2b6dc5f1ebc79d9f8e23372562d510",
+      "source_lines": 119,
+      "cited_lines": [69],
+      "excerpt_ranges": [[63, 97]],
+      "archive": "evidence/launcher.md#source-044"
+    },
+    {
+      "id": "source-045",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-qs-backend-analysis-20261111/com/oplus/posteffect/agsl/ShaderBlendParam.java",
+      "source_sha256": "4ed3afef91000ffc9cf3ab7585212bdf63956739c9c300c0a6017c92d978aec3",
+      "source_lines": 123,
+      "cited_lines": [60, 62],
+      "excerpt_ranges": [[54, 90]],
+      "archive": "evidence/systemui.md#source-045"
+    },
+    {
+      "id": "source-046",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-qs-base-analysis-20261111/com/oplus/posteffect/drawable/BaseDrawable.java",
+      "source_sha256": "8e4caaf57e8e2e8520b34faca4a664c3aadfced2b3739382fa9f1b67efc53bd9",
+      "source_lines": 1097,
+      "cited_lines": [31],
+      "excerpt_ranges": [[25, 59]],
+      "archive": "evidence/systemui.md#source-046"
+    },
+    {
+      "id": "source-047",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-qs-blend-analysis-20261111/com/oplus/posteffect/drawable/BlendDrawable.java",
+      "source_sha256": "6d33f46637ef32e41e2c23b52f9ffdbe3a301da6e783b6b15e1ba30db5510b26",
+      "source_lines": 144,
+      "cited_lines": [111],
+      "excerpt_ranges": [[105, 139]],
+      "archive": "evidence/systemui.md#source-047"
+    },
+    {
+      "id": "source-048",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-qs-continuous-analysis-20261111/com/oplus/posteffect/drawable/ContinuousBlurDrawable.java",
+      "source_sha256": "e898d9d51539ea0f0857e332193fff64330ab1434e06c62eb041f384728fc645",
+      "source_lines": 270,
+      "cited_lines": [127],
+      "excerpt_ranges": [[121, 155]],
+      "archive": "evidence/systemui.md#source-048"
+    },
+    {
+      "id": "source-049",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-qs-drawable-analysis-20261111/com/oplus/systemui/qs/base/res/FluidGlassResPool$$ExternalSyntheticLambda0.java",
+      "source_sha256": "36553a3428958a12b2f0313b585d67f5b3b4fe1fc36bd78d890792f12ba41bda",
+      "source_lines": 34,
+      "cited_lines": [21],
+      "excerpt_ranges": [[15, 34]],
+      "archive": "evidence/systemui.md#source-049"
+    },
+    {
+      "id": "source-050",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-qs-glass-analysis-20261111/com/oplus/systemui/qs/base/res/FluidGlassResPool.java",
+      "source_sha256": "d681963b3b6dcff0cc145a343c2a2ed820572028590b49e83edae0611944bda5",
+      "source_lines": 169,
+      "cited_lines": [93],
+      "excerpt_ranges": [[87, 121]],
+      "archive": "evidence/systemui.md#source-050"
+    },
+    {
+      "id": "source-051",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-qs-glass-analysis-20261111/com/oplus/systemui/qs/res/data/repository/QSFluidGlassRepository$special$$inlined$map$2$2.java",
+      "source_sha256": "bd00a83e7d5d02624053d33009680febe352011603c162a64d5874216ff09660",
+      "source_lines": 73,
+      "cited_lines": [60],
+      "excerpt_ranges": [[54, 73]],
+      "archive": "evidence/systemui.md#source-051"
+    },
+    {
+      "id": "source-052",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-qs-glass-analysis-20261111/com/oplusos/systemui/common/util/ShaderBlendParamHelper$$ExternalSyntheticLambda0.java",
+      "source_sha256": "ab9340cca98329bfeb4003de2d4aaddb98a251e65d3059e1d73ec59a541e1ca8",
+      "source_lines": 15,
+      "cited_lines": [12],
+      "excerpt_ranges": [[6, 15]],
+      "archive": "evidence/systemui.md#source-052"
+    },
+    {
+      "id": "source-053",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-qs-material-analysis-20261111/com/oplusos/systemui/common/blurability/MixColorWithShader.java",
+      "source_sha256": "859f8f49719176d15d1136f045d5280477ab35d65a6e637b10aa193918185515",
+      "source_lines": 67,
+      "cited_lines": [24],
+      "excerpt_ranges": [[18, 52]],
+      "archive": "evidence/systemui.md#source-053"
+    },
+    {
+      "id": "source-054",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-qs-material-analysis-20261111/com/oplusos/systemui/common/util/QSBlurConfigProvider.java",
+      "source_sha256": "3d52ded2c39c0a044b3bd9f272abb51a8b2553a4d74ef751bed0ed45c0d173e0",
+      "source_lines": 167,
+      "cited_lines": [20],
+      "excerpt_ranges": [[14, 48]],
+      "archive": "evidence/systemui.md#source-054"
+    },
+    {
+      "id": "source-055",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-qs-renderer-analysis-20261111/com/oplus/posteffect/agsl/BlurDrawableShaderBaseStringKt.java",
+      "source_sha256": "684f747a697102873a3efd4e05cf2987defd30363497806645bce8ddf9c3b919",
+      "source_lines": 118,
+      "cited_lines": [112],
+      "excerpt_ranges": [[106, 118]],
+      "archive": "evidence/systemui.md#source-055"
+    },
+    {
+      "id": "source-056",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-qs-renderer-analysis-20261111/com/oplus/posteffect/agsl/BlurDrawableShaderBlendStringKt.java",
+      "source_sha256": "b84f0763e2da86e6f308de271eb69f3c23da76b0bf215f394e9eb8a686b6710c",
+      "source_lines": 111,
+      "cited_lines": [12, 50],
+      "excerpt_ranges": [
+        [6, 40],
+        [44, 78]
+      ],
+      "archive": "evidence/systemui.md#source-056"
+    },
+    {
+      "id": "source-057",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-qs-renderer-analysis-20261111/com/oplus/posteffect/agsl/DrawableShader.java",
+      "source_sha256": "5bf4acf928d24da30b47ea973fc856c68aef77d45ce7c6315bfb81e57180e926",
+      "source_lines": 504,
+      "cited_lines": [319],
+      "excerpt_ranges": [[313, 347]],
+      "archive": "evidence/systemui.md#source-057"
+    },
+    {
+      "id": "source-058",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-qs-shader-analysis-20261111/com/oplus/systemui/qs/res/data/repository/QSFluidGlassRepository.java",
+      "source_sha256": "581bcada02bebda247a67713eaeafa0f97e1b4aa875956aa797ab00fac8837e6",
+      "source_lines": 223,
+      "cited_lines": [39],
+      "excerpt_ranges": [[33, 67]],
+      "archive": "evidence/systemui.md#source-058"
+    },
+    {
+      "id": "source-059",
+      "original_path": "D:/Project/SelfProject/DesktopGo/build-script/coloros-qs-shader-analysis-20261111/com/oplusos/systemui/common/util/ShaderBlendParamHelper.java",
+      "source_sha256": "3f931f5703894dc32d5aba8af20711a83b27d9539fd17374e2cd257a711a0e3e",
+      "source_lines": 82,
+      "cited_lines": [20],
+      "excerpt_ranges": [[14, 48]],
+      "archive": "evidence/systemui.md#source-059"
+    },
+    {
+      "id": "source-060",
+      "original_path": "D:/Project/SelfProject/DesktopGo/src/lib/folderMaterialColor.ts",
+      "source_sha256": "9794617cabd250a513a3bb91df6c34a7698172db0065e72a19ef20ba688096ac",
+      "source_lines": 63,
+      "cited_lines": [14, 50],
+      "excerpt_ranges": [
+        [8, 42],
+        [44, 63]
+      ],
+      "archive": "evidence/desktopgo.md#source-060"
+    },
+    {
+      "id": "source-061",
+      "original_path": "D:/Project/SelfProject/DesktopGo/src/lib/folderMaterialTexture.ts",
+      "source_sha256": "5a9434406124efe872dc5c3a3e21ed713023e4b1552442e5903e5e20598edf23",
+      "source_lines": 89,
+      "cited_lines": [15],
+      "excerpt_ranges": [[9, 43]],
+      "archive": "evidence/desktopgo.md#source-061"
+    },
+    {
+      "id": "source-062",
+      "original_path": "D:/Project/SelfProject/DesktopGo/src/styles/folder-material.css",
+      "source_sha256": "16261940161a5e53e35b878fbf20d586c40503d277927c21c6cc5984f9191a4d",
+      "source_lines": 99,
+      "cited_lines": [1],
+      "excerpt_ranges": [[1, 29]],
+      "archive": "evidence/desktopgo.md#source-062"
+    }
+  ],
+  "limitations": [
+    "Excerpts preserve cited context, not complete decompiled files.",
+    "Source hashes identify original full files; excerpt line labels refer to those originals.",
+    "Static analysis does not establish device runtime state or visual parity.",
+    "Markdown formatting trims trailing whitespace in excerpt display; original file hashes remain byte-exact."
+  ]
+}
