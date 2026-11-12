@@ -29,6 +29,7 @@ import { normalizeDockKeys, resolveOuterItemIds } from '../domain/dock'
 import { reconcileHotseatEntries } from '../domain/hotseatLayout'
 import type { DragState, FolderDropFlight, MultiDropFlightItem } from '../state/types'
 import { DROP_FLIGHT_HANDOFF_MS, OUTER_DRAG_RULES } from '../constants'
+import { retainNonFolderDropFlights } from '../domain/dropFlightHandoff'
 import { normalizeOuterSlots } from '../domain/topLevelLayout'
 import { resolveDropFlightTarget, resolveFolderCreateFlightTarget } from './dropFlightGeometry'
 
@@ -372,6 +373,7 @@ export function useDragDropCommit({
       setMultiDropFlight(flights)
       multiDropFlightTimerRef.current = window.setTimeout(() => {
         setHiddenOuterItemIds(prev => prev.filter(id => !session.draggingIds.includes(id)))
+        setMultiDropFlight(retainNonFolderDropFlights)
         multiDropFlightTimerRef.current = window.setTimeout(() => {
           setMultiDropFlight(null)
           multiDropFlightTimerRef.current = null

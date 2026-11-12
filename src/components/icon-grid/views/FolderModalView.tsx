@@ -249,7 +249,7 @@ export function FolderModalView({
         <motion.div
           key={openFolder.id}
           data-folder-modal="true"
-          className="launchpad-overlay-backdrop absolute inset-0 z-40 flex items-center justify-center backdrop-blur-[2px]"
+          className="absolute inset-0 z-40 flex items-center justify-center"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -260,6 +260,10 @@ export function FolderModalView({
           }}
           onKeyDown={handleModalKeyDown}
         >
+          <div
+            aria-hidden="true"
+            className="launchpad-overlay-backdrop pointer-events-none absolute inset-0"
+          />
           {/* Wrapper for title + close + panel */}
           <div
             ref={modalRootRef}
@@ -341,15 +345,19 @@ export function FolderModalView({
               transition={prefersReducedMotion ? { duration: 0 } : FOLDER_SHARED_LAYOUT_TRANSITION}
               data-icon
               ref={folderPanelRef}
-              className="launchpad-glass-panel-strong relative overflow-hidden p-5 will-change-[transform,border-radius]"
+              className="launchpad-folder-panel relative overflow-hidden p-5 will-change-[transform,border-radius]"
               style={{
                 width: `${panelWidth}px`,
                 maxHeight: `min(80vh, ${maxModalHeight}px)`,
-                borderRadius: scaledRadius(18),
+                borderRadius: scaledRadius(32),
               }}
               onPointerDown={onPanelPointerDown}
               onClick={onPanelClick}
             >
+              <div
+                aria-hidden="true"
+                className="launchpad-glass-panel-strong launchpad-material-surface pointer-events-none absolute inset-0 rounded-[inherit]"
+              />
               <motion.div
                 initial={
                   prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 14, scale: 0.985 }
@@ -357,7 +365,7 @@ export function FolderModalView({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.99 }}
                 transition={contentTransition}
-                className="flex max-h-full flex-col"
+                className="relative flex max-h-full flex-col"
               >
                 <p className="sr-only" aria-live="polite">
                   {translate('文件夹共 {count} 项，可滚动浏览', { count: folderItemCount })}

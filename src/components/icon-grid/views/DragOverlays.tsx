@@ -226,6 +226,17 @@ function GhostPreviewIcon({ iconBase64, name, size }: GhostPreviewIconProps) {
   )
 }
 
+/** Match the resting tile: brightness affects glass, while artwork stays above it. */
+function FolderGhostMaterial() {
+  return (
+    <div
+      aria-hidden="true"
+      className={`${DESKTOP_FOLDER_SURFACE_CLASS} pointer-events-none absolute inset-0`}
+      style={{ position: 'absolute', borderRadius: 'inherit' }}
+    />
+  )
+}
+
 function FolderGhost({
   folder,
   slotWidth,
@@ -273,13 +284,14 @@ function FolderGhost({
         style={{ width: `${bodyWidth}px`, height: `${bodyHeight}px` }}
       >
         <div
-          className={`${DESKTOP_FOLDER_SURFACE_CLASS} flex items-center justify-center`}
+          className="relative flex items-center justify-center overflow-hidden"
           style={{
             width: `${shapeWidth}px`,
             height: `${shapeHeight}px`,
             borderRadius: scaledRadius(surfaceRadius),
           }}
         >
+          <FolderGhostMaterial />
           <FolderIconVisual
             icons={preview.standardItems.map(child => child.icon)}
             stackedIcons={preview.stackedItems.map(child => child.icon)}
@@ -302,13 +314,14 @@ function FolderGhost({
         style={{ width: `${bodyWidth}px`, height: `${bodyHeight}px` }}
       >
         <div
-          className={`${DESKTOP_FOLDER_SURFACE_CLASS} flex items-center justify-center transition-[border-radius] duration-200 ease-out motion-reduce:transition-none`}
+          className="relative flex items-center justify-center overflow-hidden transition-[border-radius] duration-200 ease-out motion-reduce:transition-none"
           style={{
             width: `${shapeWidth}px`,
             height: `${shapeHeight}px`,
             borderRadius: scaledRadius(surfaceRadius),
           }}
         >
+          <FolderGhostMaterial />
           <FolderIconVisual
             icons={preview.standardItems.map(child => child.icon)}
             stackedIcons={preview.stackedItems.map(child => child.icon)}
@@ -344,13 +357,14 @@ function FolderGhost({
       style={{ width: `${bodyWidth}px`, height: `${bodyHeight}px` }}
     >
       <div
-        className={`${DESKTOP_FOLDER_SURFACE_CLASS} transition-[border-radius] duration-200 ease-out motion-reduce:transition-none`}
+        className="relative overflow-hidden transition-[border-radius] duration-200 ease-out motion-reduce:transition-none"
         style={{
           width: `${shapeWidth}px`,
           height: `${shapeHeight}px`,
           borderRadius: scaledRadius(surfaceRadius),
         }}
       >
+        <FolderGhostMaterial />
         <div
           className="absolute inset-0 grid place-content-center place-items-center"
           style={{
@@ -854,7 +868,12 @@ export function DragOverlays({
                 left: 0,
                 top: 0,
                 transformOrigin: 'center center',
-                opacity: item.animate ? item.endOpacity : item.startOpacity,
+                opacity:
+                  item.item.kind === 'folder'
+                    ? 1
+                    : item.animate
+                      ? item.endOpacity
+                      : item.startOpacity,
                 transform: `translate3d(${item.animate ? item.endLeft : item.startLeft}px, ${item.animate ? item.endTop : item.startTop}px, 0) scale(${item.animate ? item.endScale : item.startScale})`,
                 transition: reducedMotion
                   ? 'none'

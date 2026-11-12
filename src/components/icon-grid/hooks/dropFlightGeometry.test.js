@@ -212,6 +212,7 @@ for (const [mode, createHook] of Object.entries(hooks)) {
         for (const items of [
           [icon('a')],
           [icon('a'), icon('b')],
+          [folder('2x2'), icon('a')],
           ...['1x1', '1x2', '2x1', '2x2'].map(size => [folder(size)]),
           ...['1x2', '2x1', '2x2'].flatMap(size => [
             [icon('a', size)],
@@ -239,9 +240,19 @@ for (const [mode, createHook] of Object.entries(hooks)) {
               )
             }
           })
-          // The real item is revealed before the flight is removed; their final rectangles must coincide.
+          // Revealing translucent folders must remove their flights in the same render.
           timers.shift()()
-          assert.equal(react.render(hook, props).hiddenOuterItemIds.length, 0)
+          const handoff = react.render(hook, props)
+          assert.equal(handoff.hiddenOuterItemIds.length, 0)
+          for (const item of items) {
+            const flightVisible =
+              handoff.multiDropFlight?.some(flight => flight.id === getId(item)) ?? false
+            assert.equal(
+              flightVisible,
+              item.kind !== 'folder',
+              'folder glass must never overlap its restored tile; other items retain their handoff'
+            )
+          }
           timers.shift()()
           assert.equal(react.render(hook, props).multiDropFlight, null)
         }

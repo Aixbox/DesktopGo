@@ -129,9 +129,23 @@ function renderCase(size, titleLineCount, iconSize) {
     multiDropFlight: [{ id: 'folder', item: props.folder, ...body }],
   })
   const all = nodes(overlay)
+  for (const material of all.filter(node =>
+    node.props.className?.includes('folder-icon-surface')
+  )) {
+    assert.equal(
+      material.props.children,
+      undefined,
+      'glass brightness must not affect preview artwork'
+    )
+  }
   const leader = all.find(node => node.props.className?.includes('launchpad-drag-ghost'))
   const flight = all.find(
     node => node.props.className === 'launchpad-drop-flight pointer-events-none fixed'
+  )
+  assert.equal(
+    flight.props.style.opacity,
+    1,
+    'folder flights must not create an opacity backdrop root'
   )
   const ghostComponent = flight.props.children.props.children
   const ghost = ghostComponent.type(ghostComponent.props)

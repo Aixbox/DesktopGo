@@ -660,6 +660,7 @@ export function IconGrid({
   }, [dragState, draggedFolderChildSelections, itemById])
   const canGoLeft = layoutReady && currentPage > 0
   const canGoRight = currentPage < pageCount - 1
+  const pageNavigationLayer = interactionLocked ? 'z-[55]' : 'z-30'
   return (
     <LayoutGroup id="folder-shell-layout">
       <div
@@ -752,7 +753,7 @@ export function IconGrid({
           <button
             type="button"
             aria-label="Previous page"
-            className="absolute top-1/2 z-[55] flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-background/78 text-foreground/80 shadow-[0_8px_24px_rgba(15,23,42,0.1)] backdrop-blur-sm transition-colors hover:bg-background/92 dark:border-white/25 dark:bg-black/35 dark:text-white/85 dark:hover:bg-black/55"
+            className={`absolute top-1/2 ${pageNavigationLayer} flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-background/78 text-foreground/80 shadow-[0_8px_24px_rgba(15,23,42,0.1)] backdrop-blur-sm transition-colors hover:bg-background/92 dark:border-white/25 dark:bg-black/35 dark:text-white/85 dark:hover:bg-black/55`}
             style={{ left: `calc(50% - ${gridWidth / 2 + SIDE_ARROW_OFFSET}px)` }}
             onClick={() => {
               const nextPage = Math.max(0, currentPage - 1)
@@ -767,7 +768,7 @@ export function IconGrid({
           <button
             type="button"
             aria-label="Next page"
-            className="absolute top-1/2 z-[55] flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-background/78 text-foreground/80 shadow-[0_8px_24px_rgba(15,23,42,0.1)] backdrop-blur-sm transition-colors hover:bg-background/92 dark:border-white/25 dark:bg-black/35 dark:text-white/85 dark:hover:bg-black/55"
+            className={`absolute top-1/2 ${pageNavigationLayer} flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-background/78 text-foreground/80 shadow-[0_8px_24px_rgba(15,23,42,0.1)] backdrop-blur-sm transition-colors hover:bg-background/92 dark:border-white/25 dark:bg-black/35 dark:text-white/85 dark:hover:bg-black/55`}
             style={{ right: `calc(50% - ${gridWidth / 2 + SIDE_ARROW_OFFSET}px)` }}
             onClick={() => {
               const nextPage = Math.min(pageCount - 1, currentPage + 1)
@@ -784,7 +785,7 @@ export function IconGrid({
             paginationBottom 非 0 时以它为准：布局抽屉展开时指示器要抬到抽屉上方。 */}
         <div
           data-pagination
-          className="absolute left-1/2 z-[55] -translate-x-1/2 px-3 py-1.5"
+          className={`absolute left-1/2 ${pageNavigationLayer} -translate-x-1/2 px-3 py-1.5`}
           style={{
             bottom:
               paginationBottom > 0

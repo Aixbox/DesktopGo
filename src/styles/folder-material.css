@@ -23,12 +23,13 @@
   -webkit-backdrop-filter: blur(20px) !important;
 }
 
-/* A filter on the hover wrapper creates a backdrop root and cuts its children's
- * blur off from the wallpaper. Keep brightness on the material surface itself;
- * Dock folders retain their transform motion without the ancestor drop-shadow. */
+/* Ancestor filters cut the live blur off from the wallpaper, including during
+ * drag and landing. Keep brightness on the surface and motion on the wrapper. */
 [data-folder-material='coloros'] .folder-tile-body,
 [data-folder-material='coloros']
-  .launchpad-dock-motion:has(.folder-icon-surface[data-item-focus-visual]) {
+  .launchpad-dock-motion:has(.folder-icon-surface[data-item-focus-visual]),
+[data-folder-material='coloros'] .launchpad-drag-ghost:has(.folder-icon-surface),
+[data-folder-material='coloros'] .launchpad-drop-flight:has(.folder-icon-surface) {
   filter: none !important;
 }
 

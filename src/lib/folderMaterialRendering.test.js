@@ -116,10 +116,12 @@ test('search focus and filter-button states remain available with the new surfac
   }
 })
 
-test('folder hover and press wrappers cannot cut live backdrop sampling off from the wallpaper', () => {
+test('folder hover, drag and landing wrappers keep live backdrop sampling available', () => {
   const wrapperSelectors = [
     "[data-folder-material='coloros'] .folder-tile-body",
     "[data-folder-material='coloros'] .launchpad-dock-motion:has(.folder-icon-surface[data-item-focus-visual])",
+    "[data-folder-material='coloros'] .launchpad-drag-ghost:has(.folder-icon-surface)",
+    "[data-folder-material='coloros'] .launchpad-drop-flight:has(.folder-icon-surface)",
   ]
   for (const selector of wrapperSelectors) {
     const override = material.nodes.find(
@@ -145,6 +147,8 @@ test('folder hover and press wrappers cannot cut live backdrop sampling off from
     '.folder-tile-body:active',
     '.launchpad-dock-motion:hover',
     '.launchpad-dock-motion:active',
+    '.launchpad-drag-ghost',
+    '.launchpad-drop-flight',
   ]) {
     const rule = globals.nodes.find(node => node.selector === selector)
     const filter = declaration(rule, 'filter')
