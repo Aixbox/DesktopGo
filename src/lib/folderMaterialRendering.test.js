@@ -2,546 +2,156 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import postcss from 'postcss'
-import { getColorOsMaterialLayers, getFolderTexturePlacement } from './folderMaterialPolicy.ts'
-import { renderFolderMaterialTexture } from './folderMaterialTexture.ts'
-import { syncFolderMaterialSurfaces } from './folderMaterialSurfaceSync.ts'
 
-test('native reference parameters preserve separate day/night recipes and placeholder distinction', () => {
-  assert.deepEqual(getColorOsMaterialLayers(false, 'bright'), {
-    mode: 'color-dodge',
-    mix: '#00000000',
-    blend: '#0000001a',
+const material = postcss.parse(
+  readFileSync(new URL('../styles/folder-material.css', import.meta.url), 'utf8')
+)
+const globals = postcss.parse(
+  readFileSync(new URL('../styles/globals.css', import.meta.url), 'utf8')
+)
+const surfaceSelector =
+  "[data-folder-material='coloros'] :is(.folder-icon-surface, .launchpad-material-surface)"
+const surface = material.nodes.find(node => node.selector === surfaceSelector)
+const declaration = (rule, property) => rule?.nodes.find(node => node.prop === property)
+
+test('folders, Dock and search opt into native live blur with no precomputed texture', () => {
+  assert.ok(surface)
+  assert.match(declaration(surface, 'filter')?.value ?? '', /^brightness\(\d+(?:\.\d+)?\)$/)
+  assert.equal(declaration(surface, 'background-color')?.value, 'var(--coloros-folder-fill)')
+  assert.equal(declaration(surface, 'background-image')?.value, 'none')
+  assert.equal(declaration(surface, 'border-color')?.value, 'transparent')
+  assert.equal(declaration(surface, 'box-shadow')?.value, 'none')
+  // Blur strength is a visual tuning value, not a fixed behavioral contract.
+  const backdrop = declaration(surface, 'backdrop-filter')?.value ?? ''
+  const blur = backdrop.match(/(?:^|\s)blur\((\d+(?:\.\d+)?)px\)(?=\s|$)/)
+  assert.ok(blur && Number(blur[1]) > 0, 'frost must retain a positive live backdrop blur')
+  assert.equal(declaration(surface, '-webkit-backdrop-filter')?.value, backdrop)
+  for (const property of ['backdrop-filter', '-webkit-backdrop-filter']) {
+    assert.equal(declaration(surface, property)?.important, true)
+  }
+  material.walkDecls(decl => {
+    assert.doesNotMatch(decl.value, /--folder-material-texture|url\(/)
+    assert.notEqual(decl.prop, 'opacity', 'background alpha must not fade the entire control')
+    assert.ok(
+      !['border-radius', 'corner-shape'].includes(decl.prop),
+      'component geometry stays intact'
+    )
   })
-  assert.deepEqual(getColorOsMaterialLayers(false, 'dark'), {
-    mode: 'color-dodge',
-    mix: '#37393eff',
-    blend: '#2e30333d',
-  })
-  for (const tone of ['bright', 'dark']) {
-    assert.deepEqual(getColorOsMaterialLayers(true, tone), {
-      mode: 'overlay',
-      mix: '#737373a3',
-      blend: '#99999933',
+})
+
+test('the material opt-in outranks the launchpad compatibility reset without enabling other panels', () => {
+  // Both rules are unlayered and important. The scoped surface selector has two
+  // class/attribute components; each blanket descendant selector only has one.
+  assert.equal(surface.parent.type, 'root')
+  for (const name of ['launchpad-bg', 'launchpad-scroll-layout']) {
+    const reset = globals.nodes.find(node => {
+      if (!node.selector) return false
+      const selectors = postcss.list.comma(node.selector)
+      return selectors.length === 2 && selectors[0] === `.${name}` && selectors[1] === `.${name} *`
     })
+    assert.ok(reset, `${name} keeps its scoped compatibility rule`)
+    assert.equal(reset.parent.type, 'root')
+    for (const property of ['backdrop-filter', '-webkit-backdrop-filter']) {
+      assert.equal(declaration(reset, property)?.value, 'none')
+      assert.equal(declaration(reset, property)?.important, true)
+      assert.equal(declaration(surface, property)?.important, true)
+    }
+  }
+  const optIns = []
+  material.walkDecls('backdrop-filter', decl => {
+    if (decl.value !== 'none') optIns.push(decl.parent.selector)
+  })
+  assert.deepEqual(optIns, [surfaceSelector])
+})
+
+test('both themes keep translucent tint colors while allowing visual tuning', () => {
+  for (const selector of [
+    "[data-folder-material='coloros']",
+    ":root.dark[data-folder-material='coloros']",
+  ]) {
+    const rule = material.nodes.find(node => node.selector === selector)
+    const fill = declaration(rule, '--coloros-folder-fill')?.value ?? ''
+    const rgba = fill.match(/^rgb\(\s*(\d+)\s+(\d+)\s+(\d+)\s*\/\s*(\d+(?:\.\d+)?)%\s*\)$/)
+    assert.ok(rgba, `${selector} must define an RGB tint with explicit alpha`)
+    assert.ok(rgba.slice(1, 4).every(channel => Number(channel) <= 255))
+    assert.ok(
+      Number(rgba[4]) > 0 && Number(rgba[4]) < 100,
+      'tint must let the blurred backdrop show through'
+    )
   }
 })
 
-test('texture stays in wallpaper coordinates through movement, window insets and scale', () => {
-  const wallpaper = { left: 12, top: 12, width: 960, height: 640 }
-  const surface = { left: 112, top: 212, width: 100, height: 80 }
-  assert.deepEqual(getFolderTexturePlacement(wallpaper, surface, { width: 100, height: 80 }), {
-    x: -100,
-    y: -200,
-    width: 960,
-    height: 640,
-  })
-  assert.deepEqual(
-    getFolderTexturePlacement(
-      wallpaper,
-      { ...surface, width: 50, height: 40 },
-      { width: 100, height: 80 }
-    ),
-    { x: -200, y: -400, width: 1920, height: 1280 }
-  )
-  assert.equal(
-    getFolderTexturePlacement(wallpaper, { ...surface, width: 0 }, { width: 100, height: 80 }),
-    null
-  )
-})
-
-function installRenderer(t) {
-  const canvases = [],
-    frames = new Map(),
-    mutations = [],
-    observers = [],
-    events = new Map()
-  let serial = 0
-  function element(rect, className = 'folder-icon-surface') {
-    const properties = new Map()
-    return {
-      rect,
-      className,
-      isConnected: true,
-      offsetWidth: rect.width,
-      offsetHeight: rect.height,
-      classList: { contains: () => false },
-      style: {
-        getPropertyValue: key => properties.get(key) ?? '',
-        setProperty: (key, value) => properties.set(key, value),
-        removeProperty: key => properties.delete(key),
-      },
-      getAttribute: () => JSON.stringify([...properties]),
-      getBoundingClientRect() {
-        return this.rect
-      },
-      contains(node) {
-        return node === this
-      },
-      matches(selector) {
-        return selector.split(',').some(part => part.trim() === `.${this.className}`)
-      },
+for (const condition of ['(prefers-reduced-transparency: reduce)', '(forced-colors: active)']) {
+  test(`${condition} turns off both blur and brightness and uses an opaque background`, () => {
+    const media = material.nodes.find(node => node.type === 'atrule' && node.params === condition)
+    const accessible = media.nodes.find(node => node.selector === surfaceSelector)
+    assert.equal(declaration(accessible, 'filter')?.value, 'none')
+    for (const property of ['backdrop-filter', '-webkit-backdrop-filter']) {
+      assert.equal(declaration(accessible, property)?.value, 'none')
+      assert.equal(declaration(accessible, property)?.important, true)
     }
-  }
-  const root = element({ left: 0, top: 0, width: 1000, height: 700 })
-  const wallpaper = element({ left: 10, top: 10, width: 980, height: 680 })
-  const surface = element({ left: 110, top: 210, width: 100, height: 80 })
-  const surfaces = [surface]
-  const globals = {
-    ResizeObserver: class {
-      targets = new Set()
-      constructor(callback) {
-        this.callback = callback
-        observers.push(this)
-      }
-      observe(target) {
-        this.targets.add(target)
-      }
-      unobserve(target) {
-        this.targets.delete(target)
-      }
-      disconnect() {
-        this.targets.clear()
-      }
-    },
-    MutationObserver: class {
-      constructor(callback) {
-        this.callback = callback
-        mutations.push(this)
-      }
-      observe() {}
-      disconnect() {
-        this.disconnected = true
-      }
-    },
-    requestAnimationFrame: callback => {
-      frames.set(++serial, callback)
-      return serial
-    },
-    cancelAnimationFrame: id => frames.delete(id),
-    getComputedStyle: target => target.style,
-    window: {
-      addEventListener: (name, fn) => events.set(name, fn),
-      removeEventListener: name => events.delete(name),
-    },
-    document: {
-      documentElement: root,
-      querySelector: () => wallpaper,
-      querySelectorAll: selector => surfaces.filter(surface => surface.matches(selector)),
-      addEventListener: (name, fn) => events.set(name, fn),
-      removeEventListener: name => events.delete(name),
-      createElement: () => {
-        const calls = []
-        const context = {
-          filter: 'none',
-          globalCompositeOperation: 'source-over',
-          drawImage(...args) {
-            calls.push({ operation: 'drawImage', args, filter: this.filter })
-          },
-          fillRect(...args) {
-            calls.push({
-              operation: 'fillRect',
-              args,
-              color: this.fillStyle,
-              mode: this.globalCompositeOperation,
-            })
-          },
-          getImageData(_x, _y, width, height) {
-            calls.push({ operation: 'getImageData', filter: this.filter })
-            const data = new Uint8ClampedArray(width * height * 4)
-            for (let i = 0; i < data.length; i += 4) data.set([9, 102, 146, 255], i)
-            return { data }
-          },
-          putImageData(image, x, y) {
-            calls.push({ operation: 'putImageData', channels: [...image.data.slice(0, 4)], x, y })
-          },
-        }
-        const canvas = {
-          width: 0,
-          height: 0,
-          calls,
-          context,
-          getContext: () => context,
-          toDataURL: () => 'data:image/png;base64,material',
-        }
-        canvases.push(canvas)
-        return canvas
-      },
-    },
-  }
-  const originals = Object.entries(globals).map(([name, value]) => {
-    const descriptor = Object.getOwnPropertyDescriptor(globalThis, name)
-    Object.defineProperty(globalThis, name, { configurable: true, writable: true, value })
-    return [name, descriptor]
+    assert.equal(
+      declaration(accessible, 'background')?.value,
+      condition === '(forced-colors: active)'
+        ? 'Canvas'
+        : 'color-mix(in srgb, var(--background) 88%, var(--foreground) 12%)'
+    )
   })
-  t.after(() => {
-    for (const [name, descriptor] of originals) {
-      if (descriptor) Object.defineProperty(globalThis, name, descriptor)
-      else delete globalThis[name]
-    }
-  })
-  return {
-    canvases,
-    root,
-    wallpaper,
-    surface,
-    surfaces,
-    element,
-    observers,
-    mutations,
-    frames,
-    events,
-    flush() {
-      const pending = [...frames.values()]
-      frames.clear()
-      pending.forEach(fn => fn())
-    },
-    mutate(target = surface, attributeName = 'style') {
-      mutations[0].callback([{ type: 'attributes', target, attributeName }])
-    },
-  }
 }
 
-test('texture applies cover crop, edge extension and blur before material mixing', t => {
-  const h = installRenderer(t)
-  const result = renderFolderMaterialTexture(
-    { naturalWidth: 1600, naturalHeight: 800 },
-    {
-      width: 800,
-      height: 800,
-      dark: false,
-      tone: 'dark',
-      overlay: 0.11,
-      backgroundBlur: 0,
-      scrim: '240 240 245',
-    }
+test('search focus and filter-button states remain available with the new surface', () => {
+  const focus = material.nodes.find(
+    node => node.selector === '.launchpad-search-bar:has(.launchpad-search-input:focus-visible)'
   )
-  assert.match(result, /^data:image\/png;/)
-  const [source, padded, texture] = h.canvases
+  assert.equal(declaration(focus, 'outline')?.value, '2px solid var(--ring)')
+  assert.equal(declaration(focus, 'outline-offset')?.value, '0')
+  const filter = material.nodes.find(node => node.selector === '.launchpad-search-filter')
   assert.deepEqual(
-    source.calls.find(call => call.operation === 'drawImage').args.slice(1),
-    [-400, 0, 1600, 800]
+    filter.nodes.map(node => node.prop),
+    ['text-shadow']
   )
-  assert.equal(padded.calls.length, 9, 'copy center, four edges and four corners')
-  assert.deepEqual([padded.width, padded.height], [992, 992])
-  assert.equal(texture.calls[0].filter, 'blur(32px)')
-  assert.deepEqual(
-    texture.calls.slice(1).map(call => call.operation),
-    ['getImageData', 'putImageData'],
-    'apply the shared soft-mist color transform once after blur'
-  )
-  assert.equal(texture.calls[1].filter, 'none')
-  assert.deepEqual(texture.calls[2].channels, [95, 151, 177, 255])
-  assert.equal(texture.context.filter, 'none')
-})
-
-test('one shared texture tracks scroll, transformed portals, theme, resize and cleanup', t => {
-  const h = installRenderer(t)
-  const stop = syncFolderMaterialSurfaces({ naturalWidth: 1600, naturalHeight: 900 }, 'dark')
-  h.flush()
-  assert.match(
-    h.root.style.getPropertyValue('--folder-material-texture'),
-    /^url\("data:image\/png;/
-  )
-  assert.equal(h.surface.style.getPropertyValue('background-position'), '-100.000px -200.000px')
-  assert.equal(h.surface.style.getPropertyValue('background-size'), '980.000px 680.000px')
-  assert.equal(h.frames.size, 0, 'idle grid does not continuously repaint')
-  h.mutate()
-  assert.equal(h.frames.size, 0, 'own CSS writes do not create an observer loop')
-  h.surface.rect.top = 110
-  h.events.get('scroll')()
-  h.flush()
-  assert.equal(h.surface.style.getPropertyValue('background-position'), '-100.000px -100.000px')
-  assert.equal(h.canvases.length, 3, 'movement only updates texture coordinates')
-
-  const portal = h.element({ left: 210, top: 310, width: 50, height: 40 })
-  portal.style.setProperty('background-image', 'url("stale-focus-copy")')
-  portal.style.setProperty('--folder-material-texture', 'url("stale-focus-copy")')
-  portal.style.setProperty('--folder-material-shading', 'linear-gradient(white, black)')
-  portal.offsetWidth = 100
-  portal.offsetHeight = 80
-  h.surfaces.push(portal)
-  h.mutations[0].callback([{ type: 'childList' }])
-  h.flush()
-  assert.equal(portal.style.getPropertyValue('background-size'), '1960.000px 1360.000px')
-  assert.equal(portal.style.getPropertyValue('background-position'), '-400.000px -600.000px')
-  assert.equal(
-    portal.style.getPropertyValue('background-image'),
-    'var(--folder-material-texture, none)'
-  )
-  assert.equal(portal.style.getPropertyValue('--folder-material-texture'), '')
-  assert.equal(portal.style.getPropertyValue('--folder-material-shading'), '')
-  h.root.classList.contains = () => true
-  h.mutate(h.root, 'class')
-  h.flush()
-  assert.deepEqual(
-    h.canvases.at(-1).calls.at(-1).channels,
-    [12, 59, 81, 255],
-    'theme switching must regenerate the dark translucent tint over the wallpaper'
-  )
-  h.wallpaper.rect.width = 800
-  h.observers[0].callback()
-  h.flush()
-  assert.equal(portal.style.getPropertyValue('background-size'), '1600.000px 1360.000px')
-  stop()
-  assert.equal(h.root.style.getPropertyValue('--folder-material-texture'), '')
-  assert.equal(portal.style.getPropertyValue('background-position'), '')
-  assert.equal(h.events.size, 0)
-  assert.equal(h.observers[0].targets.size, 0)
-  assert.equal(h.mutations[0].disconnected, true)
-  h.observers[0].callback()
-  assert.equal(h.frames.size, 0, 'a late observer callback cannot restart a disposed material')
-})
-
-test('folders, Dock and search share one texture while other glass panels are excluded', t => {
-  const h = installRenderer(t)
-  const dock = h.element(
-    { left: 300, top: 580, width: 400, height: 90 },
-    'launchpad-material-surface'
-  )
-  const search = h.element(
-    { left: 200, top: 40, width: 600, height: 44 },
-    'launchpad-material-surface'
-  )
-  const results = h.element(
-    { left: 200, top: 100, width: 600, height: 300 },
-    'search-panel-surface'
-  )
-  h.surfaces.push(dock, search, results)
-  const stop = syncFolderMaterialSurfaces({ naturalWidth: 1600, naturalHeight: 900 }, 'bright')
-  h.flush()
-  assert.equal(h.canvases.length, 3, 'one texture pipeline for all three surfaces')
-  assert.deepEqual(
-    h.canvases.at(-1).calls.at(-1).channels,
-    [95, 151, 177, 255],
-    'light material uses the same finish regardless of the whole-wallpaper brightness branch'
-  )
-  for (const surface of [h.surface, dock, search]) {
-    assert.equal(
-      surface.style.getPropertyValue('background-image'),
-      'var(--folder-material-texture, none)'
-    )
-    assert.equal(h.observers[0].targets.has(surface), true)
-  }
-  assert.equal(dock.style.getPropertyValue('background-position'), '-290.000px -570.000px')
-  assert.equal(search.style.getPropertyValue('background-position'), '-190.000px -30.000px')
-  assert.equal(results.style.getPropertyValue('background-image'), '')
-  assert.equal(h.observers[0].targets.has(results), false)
-  dock.rect.width = dock.offsetWidth = 500
-  h.observers[0].callback()
-  h.flush()
-  assert.equal(h.canvases.length, 3, 'Dock resizing reuses the wallpaper texture')
-  h.root.classList.contains = () => true
-  h.mutate(h.root, 'class')
-  h.flush()
-  assert.equal(h.canvases.length, 6, 'dark mode rebuilds one shared texture')
-  assert.deepEqual(h.canvases.at(-1).calls.at(-1).channels, [12, 59, 81, 255])
-  for (const surface of [h.surface, dock, search]) {
-    assert.equal(
-      surface.style.getPropertyValue('background-image'),
-      'var(--folder-material-texture, none)',
-      'folders, Dock and search must all follow the translucent dark finish'
-    )
-  }
-  h.root.classList.contains = () => false
-  h.mutate(h.root, 'class')
-  h.flush()
-  assert.equal(h.canvases.length, 9, 'switching back to light rebuilds one shared texture')
-  assert.deepEqual(h.canvases.at(-1).calls.at(-1).channels, [95, 151, 177, 255])
-  stop()
-  for (const surface of [h.surface, dock, search]) {
-    assert.equal(surface.style.getPropertyValue('background-image'), '')
-    assert.equal(surface.style.getPropertyValue('background-position'), '')
-    assert.equal(surface.style.getPropertyValue('background-size'), '')
-  }
-})
-
-test('CSS transform transitions repaint only for their active duration', t => {
-  const h = installRenderer(t)
-  const stop = syncFolderMaterialSurfaces({ naturalWidth: 1600, naturalHeight: 900 }, 'bright')
-  h.flush()
-  h.events.get('transitionrun')({
-    type: 'transitionrun',
-    target: h.surface,
-    propertyName: 'transform',
-  })
-  h.flush()
-  assert.equal(h.frames.size, 1)
-  h.surface.rect.left = 160
-  h.flush()
-  assert.equal(h.surface.style.getPropertyValue('background-position'), '-150.000px -200.000px')
-  assert.equal(h.canvases.length, 3)
-  h.events.get('transitionend')({
-    type: 'transitionend',
-    target: h.surface,
-    propertyName: 'transform',
-  })
-  h.flush()
-  assert.equal(h.frames.size, 0)
-  stop()
-})
-
-test('missing Canvas blur safely leaves the material fallback and can recover after a theme change', t => {
-  const h = installRenderer(t)
-  const createCanvas = document.createElement
-  document.createElement = () => {
-    const canvas = createCanvas()
-    delete canvas.context.filter
-    return canvas
-  }
-  const stop = syncFolderMaterialSurfaces({ naturalWidth: 1600, naturalHeight: 900 }, 'bright')
-  h.flush()
-  assert.equal(h.root.style.getPropertyValue('--folder-material-texture'), '')
-  assert.equal(h.frames.size, 0)
-  document.createElement = createCanvas
-  h.root.classList.contains = () => true
-  h.mutate(h.root, 'class')
-  h.flush()
-  assert.match(h.root.style.getPropertyValue('--folder-material-texture'), /data:image\/png/)
-  stop()
-})
-
-test('material keeps its texture without decorative outlines or corner overrides', () => {
-  const css = postcss.parse(
-    readFileSync(new URL('../styles/folder-material.css', import.meta.url), 'utf8')
-  )
-  const declarations = []
-  css.walkDecls(decl => declarations.push(decl))
-  for (const decl of declarations) {
-    if (decl.prop.includes('backdrop-filter')) assert.equal(decl.value, 'none')
-    assert.notEqual(decl.prop, 'opacity', 'material must not fade the icons or search text')
-    assert.equal(decl.prop.includes('radius'), false)
-    assert.notEqual(decl.prop, 'corner-shape')
-    if (decl.prop === 'box-shadow') assert.equal(decl.value, 'none')
-    if (decl.prop === 'border-color') {
-      assert.equal(
-        decl.value,
-        decl.parent.parent.type === 'atrule' &&
-          decl.parent.parent.params === '(forced-colors: active)'
-          ? 'CanvasText'
-          : 'transparent'
-      )
-    }
-  }
-  css.walkRules(rule => assert.equal(/::(?:before|after)/.test(rule.selector), false))
-  assert.ok(
-    declarations.some(
-      decl => decl.prop === 'background-image' && decl.value.includes('--folder-material-texture')
-    )
-  )
-  const focus = declarations.find(
-    decl =>
-      decl.prop === 'outline' &&
-      decl.parent.selector?.includes(
-        '.launchpad-search-bar:has(.launchpad-search-input:focus-visible)'
-      )
-  )
-  assert.equal(focus?.value, '2px solid var(--ring)')
-  assert.equal(
-    focus?.parent.nodes.find(decl => decl.prop === 'outline-offset')?.value,
-    '0',
-    'focus ring must touch the search surface without an outer gap'
-  )
-})
-
-test('unavailable color readback uses the fallback and recovers after a theme change', t => {
-  const h = installRenderer(t)
-  const createCanvas = document.createElement
-  document.createElement = () => {
-    const canvas = createCanvas()
-    canvas.context.getImageData = () => {
-      throw new Error('readback unavailable')
-    }
-    return canvas
-  }
-  const stop = syncFolderMaterialSurfaces({ naturalWidth: 1600, naturalHeight: 900 }, 'dark')
-  h.flush()
-  assert.equal(h.root.style.getPropertyValue('--folder-material-texture'), '')
-  assert.equal(h.frames.size, 0)
-  document.createElement = createCanvas
-  h.root.classList.contains = () => true
-  h.mutate(h.root, 'class')
-  h.flush()
-  assert.match(h.root.style.getPropertyValue('--folder-material-texture'), /data:image\/png/)
-  stop()
-})
-
-test('search uses the shared material without search-only tint and preserves the filter glass', () => {
-  const material = postcss.parse(
-    readFileSync(new URL('../styles/folder-material.css', import.meta.url), 'utf8')
-  )
-  const globals = postcss.parse(
-    readFileSync(new URL('../styles/globals.css', import.meta.url), 'utf8')
-  )
-  const sharedSurface = material.nodes.find(
-    node =>
-      node.selector ===
-      "[data-folder-material='coloros'] :is(.folder-icon-surface, .launchpad-material-surface)"
-  )
-  assert.equal(
-    sharedSurface?.nodes.find(decl => decl.prop === 'background-color')?.value,
-    'var(--coloros-folder-fill)',
-    'search must retain the same fallback fill as folders and Dock'
-  )
-  const lightMaterial = material.nodes.find(
-    node => node.selector === "[data-folder-material='coloros']"
-  )
-  assert.equal(
-    lightMaterial?.nodes.find(decl => decl.prop === '--coloros-folder-fill')?.value,
-    '#e0e0e066',
-    'light fallback retains the translucent tint instead of replacing wallpaper with solid gray'
-  )
-  material.walkRules(rule => {
-    assert.ok(
-      !rule.selector.includes('data-folder-backdrop'),
-      'fallback does not change with wallpaper tone'
-    )
-  })
-  const darkMaterial = material.nodes.find(
-    node => node.selector === ":root.dark[data-folder-material='coloros']"
-  )
-  assert.equal(
-    darkMaterial?.nodes.find(decl => decl.prop === '--coloros-folder-fill')?.value,
-    'rgb(16 16 16 / 50%)',
-    'dark fallback must transmit the wallpaper instead of replacing it with solid gray'
-  )
-  material.walkDecls(decl => {
-    assert.doesNotMatch(
-      decl.value,
-      /gradient\(|--folder-material-shading/,
-      'neither theme should add artificial surface lighting above the texture'
-    )
-    if (decl.prop === 'background-image' && decl.value !== 'none') {
-      assert.deepEqual(
-        postcss.list.comma(decl.value),
-        ['var(--folder-material-texture, none)'],
-        'all surfaces use one opaque wallpaper texture without an extra lighting layer'
-      )
-    }
-    if (decl.parent.selector?.includes('.launchpad-search-bar')) {
-      assert.ok(
-        !/^(background|--folder-material|filter|opacity|mix-blend-mode|box-shadow)/.test(decl.prop),
-        'search must not override the shared material paint'
-      )
-    }
-    if (decl.parent.selector?.includes('.launchpad-search-filter')) {
-      assert.ok(
-        !/^(background|border|color|opacity|box-shadow)/.test(decl.prop),
-        'material must not override filter glass or its interactive states'
-      )
-    }
-  })
   for (const selector of ['.launchpad-glass-button', '.launchpad-glass-button:hover']) {
     const rule = globals.nodes.find(node => node.selector === selector)
-    const background = rule?.nodes.find(decl => decl.prop === 'background')
-    assert.match(background?.value ?? '', /var\(--background\) (64|78)%/)
+    assert.match(declaration(rule, 'background')?.value ?? '', /var\(--background\) (64|78)%/)
   }
-  for (const condition of ['(prefers-reduced-transparency: reduce)', '(forced-colors: active)']) {
-    const media = material.nodes.find(node => node.type === 'atrule' && node.params === condition)
-    const disabled = new Set()
-    media.walkDecls(decl => {
-      if (decl.value === 'none' && decl.important) disabled.add(decl.prop)
-    })
-    assert.ok(disabled.has('--folder-material-texture'))
-    assert.ok(disabled.has('background-image'), 'accessible display modes disable the texture')
+})
+
+test('folder hover and press wrappers cannot cut live backdrop sampling off from the wallpaper', () => {
+  const wrapperSelectors = [
+    "[data-folder-material='coloros'] .folder-tile-body",
+    "[data-folder-material='coloros'] .launchpad-dock-motion:has(.folder-icon-surface[data-item-focus-visual])",
+  ]
+  for (const selector of wrapperSelectors) {
+    const override = material.nodes.find(
+      node =>
+        node.selector &&
+        postcss.list
+          .comma(node.selector)
+          .map(value => value.replace(/\s+/g, ' '))
+          .includes(selector)
+    )
+    assert.ok(override, `${selector} must keep its descendants' backdrop accessible`)
+    assert.equal(declaration(override, 'filter')?.value, 'none')
+    assert.equal(declaration(override, 'filter')?.important, true)
+    assert.equal(
+      declaration(override, 'transform'),
+      undefined,
+      'Dock lift and press movement stay intact'
+    )
+    assert.equal(declaration(override, 'opacity'), undefined)
+  }
+  for (const selector of [
+    '.folder-tile-body:hover',
+    '.folder-tile-body:active',
+    '.launchpad-dock-motion:hover',
+    '.launchpad-dock-motion:active',
+  ]) {
+    const rule = globals.nodes.find(node => node.selector === selector)
+    const filter = declaration(rule, 'filter')
+    assert.ok(
+      filter && filter.value !== 'none',
+      'other materials keep their original interaction effects'
+    )
+    assert.ok(!filter.important, 'the frost wrapper override must win for hover and press')
   }
 })

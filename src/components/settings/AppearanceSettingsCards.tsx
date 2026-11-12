@@ -569,7 +569,9 @@ export function AppearanceSettingsCards({ onAppearanceChange }: AppearanceSettin
 
       <SettingCard
         label={translate('启动台材质')}
-        desc={translate('统一设置文件夹、Dock 栏和顶部搜索框的材质。柔雾随壁纸明暗调整底色。')}
+        desc={translate(
+          '统一设置文件夹、Dock 栏和顶部搜索框的材质。柔雾实时模糊背景，并叠加半透明底色。'
+        )}
       >
         <fieldset disabled={isSavingFolderMaterial} aria-busy={isSavingFolderMaterial}>
           <SegmentedControl<FolderMaterial>

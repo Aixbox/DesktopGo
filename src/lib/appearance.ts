@@ -138,7 +138,7 @@ export function applyAppearance({
     root.style.removeProperty('--launchpad-background-blur')
     delete root.dataset.launchpadBackground
   }
-  applyFolderMaterial(folderMaterial, backgroundImage)
+  applyFolderMaterial(folderMaterial)
 }
 
 export async function getSavedAppearance(): Promise<AppearanceSettings> {

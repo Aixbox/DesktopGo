@@ -1,13 +1,10 @@
-/* Soft mist: translucent light or near-black tint over blurred wallpaper.
- * Folders, Dock and search share this surface. Geometry stays with their existing styles.
- * A shared Canvas texture replaces backdrop-filter on the transparent WebView2 surface. */
+/* Live frost: folders, Dock and search sample the actual backdrop in the browser.
+ * Geometry stays with the existing component styles; no wallpaper texture is needed. */
 [data-folder-material='coloros'] {
-  /* Match the light texture's tint, allowing wallpaper through during fallback. */
-  --coloros-folder-fill: #e0e0e066;
+  --coloros-folder-fill: rgb(255 255 255 / 30%);
 }
 
 :root.dark[data-folder-material='coloros'] {
-  /* Use the same near-black tint without replacing the wallpaper with solid gray. */
   --coloros-folder-fill: rgb(16 16 16 / 50%);
 }
 
@@ -16,17 +13,23 @@
     transform, translate, scale, rotate, opacity, left, top, width, height, border-radius,
     box-shadow;
   background-color: var(--coloros-folder-fill);
-  /* The opaque, pre-mixed texture covers the fallback without another color coat. */
-  background-image: var(--folder-material-texture, none);
-  background-repeat: no-repeat;
-  background-origin: border-box;
-  background-clip: border-box;
-  background-position: 0 0;
-  background-size: 100% 100%;
+  background-image: none;
   border-color: transparent;
   box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  filter: brightness(1.2);
+  /* Explicit material opt-in overrides the launchpad's blanket compatibility rule.
+   * Keep other launchpad panels under that rule; only these surfaces sample the backdrop. */
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+}
+
+/* A filter on the hover wrapper creates a backdrop root and cuts its children's
+ * blur off from the wallpaper. Keep brightness on the material surface itself;
+ * Dock folders retain their transform motion without the ancestor drop-shadow. */
+[data-folder-material='coloros'] .folder-tile-body,
+[data-folder-material='coloros']
+  .launchpad-dock-motion:has(.folder-icon-surface[data-item-focus-visual]) {
+  filter: none !important;
 }
 
 /* The focus indicator touches the painted surface in both materials. */
@@ -35,7 +38,7 @@
   outline-offset: 0;
 }
 
-/* Search text now sits on the wallpaper material, like the launchpad's icon labels. */
+/* Search text sits on the translucent backdrop, like the launchpad's icon labels. */
 [data-folder-material='coloros'][data-launchpad-background='custom'] .launchpad-search-bar {
   color: var(--launchpad-label-color, var(--foreground));
   caret-color: currentColor;
@@ -47,18 +50,17 @@
   color: color-mix(in srgb, currentColor 75%, transparent);
 }
 
-/* Keep the filter's original glass fill, border and hover styles. */
+/* Keep the filter button's original fill, border and hover styles. */
 .launchpad-search-filter {
   text-shadow: none;
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  [data-folder-material='coloros'] {
-    --folder-material-texture: none !important;
-  }
   [data-folder-material='coloros'] :is(.folder-icon-surface, .launchpad-material-surface) {
     background: color-mix(in srgb, var(--background) 88%, var(--foreground) 12%);
-    background-image: none !important;
+    filter: none;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
   [data-folder-material='coloros'][data-launchpad-background='custom'] .launchpad-search-bar {
     color: var(--foreground);
@@ -67,14 +69,13 @@
 }
 
 @media (forced-colors: active) {
-  [data-folder-material='coloros'] {
-    --folder-material-texture: none !important;
-  }
   [data-folder-material='coloros'] :is(.folder-icon-surface, .launchpad-material-surface) {
     background: Canvas;
-    background-image: none !important;
     border-color: CanvasText;
     box-shadow: none;
+    filter: none;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
   [data-folder-material='coloros'][data-launchpad-background='custom'] .launchpad-search-bar {
     color: CanvasText;

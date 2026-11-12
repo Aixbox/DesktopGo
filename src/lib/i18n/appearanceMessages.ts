@@ -4,8 +4,8 @@ export const EN_APPEARANCE_MESSAGES: Record<string, string> = {
   启动台材质: 'Launchpad material',
   默认玻璃: 'Default glass',
   柔雾: 'Frost',
-  '统一设置文件夹、Dock 栏和顶部搜索框的材质。柔雾随壁纸明暗调整底色。':
-    'Use the same material for folders, the Dock, and the top search bar. Frost adapts its tint to the wallpaper brightness.',
+  '统一设置文件夹、Dock 栏和顶部搜索框的材质。柔雾实时模糊背景，并叠加半透明底色。':
+    'Use the same material for folders, the Dock, and the top search bar. Frost blurs the backdrop in real time with a translucent tint.',
   '选择用于主要按钮、选中状态和聚焦框的强调色。':
     'Choose the accent color used for primary buttons, selected states, and focus rings.',
   选中态前景色: 'Selected foreground',
