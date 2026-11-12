@@ -39,7 +39,7 @@ export function resolveDropFlightTarget(
       ? (tileNode.querySelector<HTMLElement>('[data-folder-visual-body]') ?? tileNode)
       : (tileNode.querySelector<HTMLElement>('.icon-image') ?? tileNode)
   const rect = resolveUntransformedGridRect(targetNode, tileNode)
-  const measuredSize = item.kind === 'folder' || isMultiCellGridItem(item)
+  const measuredSize = item.kind !== 'icon' || isMultiCellGridItem(item)
   const width = measuredSize ? rect.width : iconImageSize
   const height = measuredSize ? rect.height : iconImageSize
   const motionGrid = targetNode.closest<HTMLElement>('.launchpad-edit-grid-motion')

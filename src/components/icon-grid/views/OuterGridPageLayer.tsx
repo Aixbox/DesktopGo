@@ -196,11 +196,7 @@ export function OuterGridPageLayer({
         {...(itemInteractive ? sortable?.attributes : {})}
         {...(itemInteractive ? sortable?.listeners : {})}
         className={`relative overflow-visible justify-self-center self-start ${
-          hideItem
-            ? 'opacity-0'
-            : entry.item.kind === 'folder'
-              ? 'opacity-100'
-              : 'opacity-100 transition-opacity duration-150'
+          hideItem ? 'opacity-0' : 'opacity-100'
         }`}
         style={{
           gridColumn: `${entry.col + 1} / span ${entry.span.cols}`,

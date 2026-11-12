@@ -92,8 +92,6 @@ export interface MultiDropFlightItem {
   height: number
   startScale: number
   endScale: number
-  startOpacity: number
-  endOpacity: number
   animate: boolean
   zIndex: number
 }

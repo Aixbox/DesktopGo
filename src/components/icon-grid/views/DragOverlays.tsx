@@ -848,7 +848,6 @@ export function DragOverlays({
                   slotWidth={slotWidth}
                   slotHeight={slotHeight}
                   gridGap={gridGap}
-                  dragPreview
                 />
               )}
             </div>
@@ -868,16 +867,10 @@ export function DragOverlays({
                 left: 0,
                 top: 0,
                 transformOrigin: 'center center',
-                opacity:
-                  item.item.kind === 'folder'
-                    ? 1
-                    : item.animate
-                      ? item.endOpacity
-                      : item.startOpacity,
                 transform: `translate3d(${item.animate ? item.endLeft : item.startLeft}px, ${item.animate ? item.endTop : item.startTop}px, 0) scale(${item.animate ? item.endScale : item.startScale})`,
                 transition: reducedMotion
                   ? 'none'
-                  : `transform ${reorderAnimationMs}ms ${folderPreviewEasing}, opacity ${reorderAnimationMs}ms ease-out`,
+                  : `transform ${reorderAnimationMs}ms ${folderPreviewEasing}`,
               }}
             >
               <div
@@ -905,7 +898,6 @@ export function DragOverlays({
                     slotWidth={slotWidth}
                     slotHeight={slotHeight}
                     gridGap={gridGap}
-                    dragPreview
                   />
                 ) : (
                   <IconGhostArtwork
@@ -928,12 +920,11 @@ export function DragOverlays({
             top: folderDropFlight.startY - folderDropFlight.startSize / 2,
             width: folderDropFlight.startSize,
             height: folderDropFlight.startSize,
-            opacity: folderDropFlight.animate ? 0.92 : 1,
             transformOrigin: 'center center',
             transform: `translate3d(${folderDropFlight.animate ? folderDropFlight.endX - folderDropFlight.startX : 0}px, ${folderDropFlight.animate ? folderDropFlight.endY - folderDropFlight.startY : 0}px, 0) scale(${folderDropFlight.animate ? folderDropFlight.endSize / Math.max(1, folderDropFlight.startSize) : 1})`,
             transition: reducedMotion
               ? 'none'
-              : `transform ${reorderAnimationMs}ms ${folderPreviewEasing}, opacity ${reorderAnimationMs}ms ease-out`,
+              : `transform ${reorderAnimationMs}ms ${folderPreviewEasing}`,
           }}
         >
           <div

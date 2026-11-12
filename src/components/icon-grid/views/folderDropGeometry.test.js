@@ -144,7 +144,7 @@ function renderCase(size, titleLineCount, iconSize) {
   )
   assert.equal(
     flight.props.style.opacity,
-    1,
+    undefined,
     'folder flights must not create an opacity backdrop root'
   )
   const ghostComponent = flight.props.children.props.children
@@ -229,7 +229,10 @@ for (const size of ['1x1', '1x2', '2x1', '2x2']) {
       'launchpad-drop-flight pointer-events-none',
       'launchpad-drag-ghost pointer-events-none',
     ]) {
-      const rect = rectFromStyle(all.find(node => node.props.className?.includes(classPart)))
+      const preview = all.find(node => node.props.className?.includes(classPart))
+      assert.equal(preview.props.style.opacity, undefined, 'preview must retain the artwork alpha')
+      assert.doesNotMatch(preview.props.style.transition ?? '', /opacity/)
+      const rect = rectFromStyle(preview)
       assert.equal(rect.width, width)
       assert.equal(rect.height, height)
     }

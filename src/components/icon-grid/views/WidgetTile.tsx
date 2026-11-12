@@ -24,7 +24,6 @@ interface WidgetTileProps {
   gridGap: number
   onPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void
   onResize?: (widgetId: string, spanX: number, spanY: number) => void
-  dragPreview?: boolean
 }
 
 const clampSpan = (value: number, min: number, max: number): number =>
@@ -58,7 +57,6 @@ export const WidgetTile = memo(function WidgetTile({
   gridGap,
   onPointerDown,
   onResize,
-  dragPreview = false,
 }: WidgetTileProps) {
   const resizeSessionRef = useRef<ResizeSession | null>(null)
   const suppressResizeClickRef = useRef(false)
@@ -178,9 +176,7 @@ export const WidgetTile = memo(function WidgetTile({
       data-widget-provider={widget.provider}
       data-widget-span={`${effectiveSpanX}x${effectiveSpanY}`}
       data-widget-resize-frame={resizePreview ? 'active' : 'idle'}
-      className={`relative flex h-full w-full touch-none flex-col overflow-hidden rounded-[var(--radius-folder-surface)] border bg-background/52 p-3 text-foreground shadow-[0_8px_22px_rgba(15,23,42,0.12)] backdrop-blur-lg dark:border-white/16 dark:bg-black/28 dark:text-white/90 ${
-        dragPreview ? 'opacity-85' : ''
-      }`}
+      className="relative flex h-full w-full touch-none flex-col overflow-hidden rounded-[var(--radius-folder-surface)] border bg-background/52 p-3 text-foreground shadow-[0_8px_22px_rgba(15,23,42,0.12)] backdrop-blur-lg dark:border-white/16 dark:bg-black/28 dark:text-white/90"
       style={{ width, height, borderRadius: scaledRadius(18) }}
       onPointerDown={onPointerDown}
       role="group"

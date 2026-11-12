@@ -338,9 +338,7 @@ export function ScrollableOuterGridView({
                                   ? 'pointer-events-none opacity-0'
                                   : hideItem
                                     ? 'opacity-0'
-                                    : entry.item.kind === 'folder'
-                                      ? 'opacity-100'
-                                      : 'opacity-100 transition-opacity duration-[220ms]'
+                                    : 'opacity-100'
                               } ${sortable.isDragging ? 'z-20 cursor-grabbing' : 'z-10'}`}
                               style={{
                                 gridColumn: `${entry.col + 1} / span ${entry.span.cols}`,
@@ -477,7 +475,6 @@ export function ScrollableOuterGridView({
                             slotWidth={itemWidth}
                             slotHeight={itemHeight}
                             gridGap={gridGap}
-                            dragPreview
                           />
                         )}
                       </div>

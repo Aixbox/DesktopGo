@@ -414,7 +414,7 @@ export function FolderModalView({
                             }}
                             data-folder-grid-item
                             data-folder-rank={index}
-                            className={`relative touch-none transition-opacity duration-150 ${
+                            className={`relative touch-none ${
                               hiddenItem ? 'pointer-events-none opacity-0' : 'opacity-100'
                             }`}
                             onPointerDown={event =>

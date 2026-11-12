@@ -28,8 +28,7 @@ import {
 import { normalizeDockKeys, resolveOuterItemIds } from '../domain/dock'
 import { reconcileHotseatEntries } from '../domain/hotseatLayout'
 import type { DragState, FolderDropFlight, MultiDropFlightItem } from '../state/types'
-import { DROP_FLIGHT_HANDOFF_MS, OUTER_DRAG_RULES } from '../constants'
-import { retainNonFolderDropFlights } from '../domain/dropFlightHandoff'
+import { OUTER_DRAG_RULES } from '../constants'
 import { normalizeOuterSlots } from '../domain/topLevelLayout'
 import { resolveDropFlightTarget, resolveFolderCreateFlightTarget } from './dropFlightGeometry'
 
@@ -309,11 +308,6 @@ export function useDragDropCommit({
     return Math.max(0.72, 0.94 - (index - 1) * 0.06)
   }
 
-  const getMultiDragStackOpacity = (index: number) => {
-    if (index <= 0) return 1
-    return Math.max(0.38, 0.8 - (index - 1) * 0.12)
-  }
-
   const scheduleMultiDropFlight = (session: DragState) => {
     if (multiDropFlightTimerRef.current !== null) {
       window.clearTimeout(multiDropFlightTimerRef.current)
@@ -356,8 +350,6 @@ export function useDragDropCommit({
             height: target.height,
             startScale: getMultiDragStackScale(index),
             endScale: target.scale,
-            startOpacity: getMultiDragStackOpacity(index),
-            endOpacity: 1,
             animate: false,
             zIndex: 50 - index,
           },
@@ -372,12 +364,10 @@ export function useDragDropCommit({
 
       setMultiDropFlight(flights)
       multiDropFlightTimerRef.current = window.setTimeout(() => {
+        // React batches this handoff: never paint the flight over its restored item.
         setHiddenOuterItemIds(prev => prev.filter(id => !session.draggingIds.includes(id)))
-        setMultiDropFlight(retainNonFolderDropFlights)
-        multiDropFlightTimerRef.current = window.setTimeout(() => {
-          setMultiDropFlight(null)
-          multiDropFlightTimerRef.current = null
-        }, DROP_FLIGHT_HANDOFF_MS)
+        setMultiDropFlight(null)
+        multiDropFlightTimerRef.current = null
       }, reorderAnimationMs + 60)
     })
   }
