@@ -1032,7 +1032,7 @@ body:focus-visible {
   inset: 0;
   z-index: -1;
   border-radius: inherit;
-  background: color-mix(in srgb, var(--background) 34%, transparent);
+  background: color-mix(in srgb, var(--background) 2%, transparent);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   opacity: 0;
