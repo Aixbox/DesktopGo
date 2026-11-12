@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import type { WindowMode } from '@/types'
+import { DRAG_PENDING_MOVE_TOLERANCE } from '../icon-grid/constants'
 
 const LONG_PRESS_MS = 420
 const SEARCH_FLOATING_MENU_SELECTOR = '[data-search-floating-menu="true"]'
@@ -52,6 +53,11 @@ export function useLaunchpadSurfaceInteractions({
 }: UseLaunchpadSurfaceInteractionsParams) {
   const longPressTimerRef = useRef<number | null>(null)
   const longPressTriggeredRef = useRef(false)
+  const backgroundPressRef = useRef<{
+    pointerId: number
+    startX: number
+    startY: number
+  } | null>(null)
   const backgroundPointerStartedRef = useRef(false)
   const marqueeJustEndedRef = useRef(false)
   const marqueeStateRef = useRef<{
@@ -65,6 +71,7 @@ export function useLaunchpadSurfaceInteractions({
   const [marquee, setMarquee] = useState<MarqueeState | null>(null)
 
   const clearBackgroundLongPressTimer = () => {
+    backgroundPressRef.current = null
     if (longPressTimerRef.current === null) return
     window.clearTimeout(longPressTimerRef.current)
     longPressTimerRef.current = null
@@ -85,6 +92,15 @@ export function useLaunchpadSurfaceInteractions({
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
+      const press = backgroundPressRef.current
+      if (
+        press?.pointerId === event.pointerId &&
+        Math.hypot(event.clientX - press.startX, event.clientY - press.startY) >
+          DRAG_PENDING_MOVE_TOLERANCE
+      ) {
+        clearBackgroundLongPressTimer()
+        backgroundPointerStartedRef.current = false
+      }
       const state = marqueeStateRef.current
       if (!state?.active || state.pointerId !== event.pointerId) return
       setMarquee(previous => {
@@ -96,6 +112,9 @@ export function useLaunchpadSurfaceInteractions({
       })
     }
     const handlePointerUp = (event: PointerEvent) => {
+      if (backgroundPressRef.current?.pointerId === event.pointerId) {
+        clearBackgroundLongPressTimer()
+      }
       const state = marqueeStateRef.current
       if (!state?.active || state.pointerId !== event.pointerId) return
       state.active = false
@@ -141,12 +160,27 @@ export function useLaunchpadSurfaceInteractions({
     setSelectedIconKeys(nextKeys)
   }, [marquee, setSelectedIconKeys])
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const cancelBackgroundPress = () => {
       clearBackgroundLongPressTimer()
-    },
-    []
-  )
+      backgroundPointerStartedRef.current = false
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') cancelBackgroundPress()
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') cancelBackgroundPress()
+    }
+    window.addEventListener('blur', cancelBackgroundPress)
+    window.addEventListener('keydown', onKeyDown)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      clearBackgroundLongPressTimer()
+      window.removeEventListener('blur', cancelBackgroundPress)
+      window.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [])
 
   const handleBackgroundPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement
@@ -173,6 +207,11 @@ export function useLaunchpadSurfaceInteractions({
     if (!startedOnBackground) return
     longPressTriggeredRef.current = false
     clearBackgroundLongPressTimer()
+    backgroundPressRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+    }
     longPressTimerRef.current = window.setTimeout(() => {
       longPressTriggeredRef.current = true
       enterSelectionMode()

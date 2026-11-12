@@ -9,6 +9,7 @@ import * as geometry from './focusedItemMenuGeometry.ts'
 import * as folderVisuals from '../icon-grid/views/folderVisualPolicy.ts'
 import * as gridTypes from '../../types/index.ts'
 import * as resizePolicy from '../icon-grid/domain/folderResizePolicy.ts'
+import * as gridConstants from '../icon-grid/constants.ts'
 
 const require = createRequire(import.meta.url)
 const compiled = new Map()
@@ -861,8 +862,8 @@ test('focused menu interactions do not close the search panel in the launchpad c
   let closed = 0
   const { useLaunchpadSurfaceInteractions } = loadModule(
     '../launchpad/useLaunchpadSurfaceInteractions.ts',
-    { react: runtime.react },
-    { window: eventHub() }
+    { react: runtime.react, '../icon-grid/constants': gridConstants },
+    { window: eventHub(), document: eventHub() }
   )
   const handlers = runtime.render(() =>
     useLaunchpadSurfaceInteractions({

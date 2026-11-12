@@ -348,3 +348,117 @@ test('edge hovering suppresses reorder but preserves an explicit anchor for drop
     assert.equal(cleared, 1)
   }
 })
+
+for (const [direction, toPage, offset] of [
+  ['ltr', 2, -235],
+  ['ltr', 0, 180],
+  ['rtl', 2, 235],
+  ['rtl', 0, -180],
+]) {
+  for (const reduced of [false, true]) {
+    test(`mouse page handoff preserves both page positions: ${direction}, page ${toPage}, reduced ${reduced}`, async () => {
+      const hooks = hookRunner(),
+        motions = [],
+        frames = []
+      let data = { page: 1, dragContext: null },
+        busy = false
+      let handoff = { page: 1, toPage, offset, width: 1000 }
+      const node = () => ({
+        style: {},
+        x: 0,
+        closest: () => ({ getBoundingClientRect: () => ({ width: 1000 }) }),
+      })
+      const nodes = { oldPageLayerRef: node(), currentPageLayerRef: node(), peekLayerRef: node() }
+      const swipe = {
+        takeHandoff(from, to) {
+          const value = handoff
+          handoff = null
+          return value?.page === from && value.toPage === to ? value : null
+        },
+        setPageTransitioning: value => {
+          busy = value
+        },
+      }
+      const { useOuterPageMotion } = load(
+        './useOuterPageMotion.ts',
+        {
+          react: hooks.react,
+          'framer-motion': { useReducedMotion: () => reduced },
+          '../constants': { COLOROS_MOTION: { workspacePageSnapMs: 600 } },
+          '../domain/edgePagingPolicy': policy,
+          '../views/pageTranslationMotion': {
+            readTranslationX: n => n.x,
+            animatePageTranslation(n, from, to, duration) {
+              let resolve
+              const motion = {
+                n,
+                from,
+                to,
+                duration,
+                finished: new Promise(r => {
+                  resolve = r
+                }),
+                cancel: () => resolve(),
+                finish: () => {
+                  n.x = to
+                  resolve()
+                },
+              }
+              motions.push(motion)
+              return motion
+            },
+          },
+        },
+        {
+          getComputedStyle: () => ({ direction }),
+          window: {
+            requestAnimationFrame: fn => {
+              frames.push(fn)
+              return frames.length
+            },
+            cancelAnimationFrame: () => {},
+          },
+        }
+      )
+      const render = () =>
+        hooks.render(
+          () => useOuterPageMotion(data, 872, undefined, swipe),
+          result => {
+            Object.entries(nodes).forEach(([key, value]) => {
+              result[key].current = value
+            })
+          }
+        )
+      render()
+      data = { page: toPage, dragContext: null }
+      render()
+      const [outgoing, incoming, peek] = motions.slice(-3)
+      const distance = (toPage > 1 ? 1 : -1) * (direction === 'rtl' ? -1 : 1) * 1000
+      assert.equal(outgoing.from, offset, 'current page starts at the last pointer offset')
+      assert.equal(
+        incoming.from,
+        distance + offset,
+        'neighbor starts exactly where dragging left it'
+      )
+      assert.equal(outgoing.to, -distance)
+      assert.equal(incoming.to, 0)
+      assert.equal(incoming.from - outgoing.from, distance, 'pages remain one viewport apart')
+      assert.equal(peek.from, 0)
+      assert.equal(busy, true)
+      assert.equal(handoff, null)
+      assert.equal(
+        outgoing.duration,
+        reduced ? 0 : Math.max(120, 280 * (1 - Math.abs(offset) / 1000))
+      )
+      const count = motions.length
+      render()
+      assert.equal(motions.length, count, 'unrelated render cannot restart the snap')
+      ;[outgoing, incoming, peek].forEach(motion => motion.finish())
+      await new Promise(resolve => setImmediate(resolve))
+      frames.splice(0).forEach(fn => fn())
+      render()
+      assert.equal(busy, false)
+      hooks.unmount()
+    })
+  }
+}

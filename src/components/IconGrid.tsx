@@ -1,4 +1,5 @@
 import { useWheelPageStep } from './icon-grid/hooks/useWheelPageStep'
+import { useMousePageSwipe } from './icon-grid/hooks/useMousePageSwipe'
 import { LayoutGroup } from 'framer-motion'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
@@ -515,6 +516,16 @@ export function IconGrid({
     clearOuterDragInteractionForPageSwitch,
   })
 
+  const mousePageSwipe = useMousePageSwipe({
+    currentPage,
+    enabled: layoutReady && !selectionMode && !openFolder && !interactionLocked,
+    pageCount,
+    currentPageRef,
+    setCurrentPage,
+    dragRef,
+    clearEdgeSwitchTimer,
+  })
+
   const handleWheelPageSwitch = (event: ReactWheelEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null
     if (target?.closest('[data-dock]')) return
@@ -661,6 +672,7 @@ export function IconGrid({
           paddingTop: `var(--paged-grid-top, ${gridInsets.top}px)`,
           paddingBottom: `var(--paged-grid-bottom, ${gridInsets.bottom}px)`,
         }}
+        {...mousePageSwipe.handlers}
         onWheel={handleWheelPageSwitch}
       >
         <DragAnnouncementLiveRegion
@@ -683,6 +695,8 @@ export function IconGrid({
           style={{ visibility: layoutReady ? 'visible' : 'hidden' }}
         >
           <OuterGridView
+            pageSwipe={mousePageSwipe.visual}
+            itemById={outerViewItemById}
             edgePaging={edgePaging}
             gridRef={gridRef}
             gridWidth={gridWidth}

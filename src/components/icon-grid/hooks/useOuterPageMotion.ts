@@ -5,6 +5,7 @@ import { EDGE_PAGING } from '../domain/edgePagingPolicy'
 import { animatePageTranslation, readTranslationX } from '../views/pageTranslationMotion'
 import type { OuterGridPageData } from '../views/OuterGridPageLayer'
 import type { EdgePagingControl } from './useEdgeAutoPaging'
+import type { PageSwipeVisual } from './usePageSwipePreview'
 
 type Motion = ReturnType<typeof animatePageTranslation>
 interface PageTransition {
@@ -13,12 +14,15 @@ interface PageTransition {
   direction: number
   duration: number
   reveal: boolean
+  offset: number
+  width?: number
 }
 
 export function useOuterPageMotion(
   data: OuterGridPageData,
   width: number,
-  edge?: EdgePagingControl
+  edge?: EdgePagingControl,
+  swipe?: PageSwipeVisual
 ) {
   const reduced = useReducedMotion() ?? false
   const previous = useRef(data)
@@ -31,16 +35,22 @@ export function useOuterPageMotion(
   const end = edge?.onTransitionEnd
   const phase = edge?.state.phase
   const direction = edge?.state.target?.direction
+  const takeHandoff = swipe?.takeHandoff
+  const setPageTransitioning = swipe?.setPageTransitioning
 
   useLayoutEffect(() => {
     if (previous.current.page !== data.page) {
+      const released = takeHandoff?.(previous.current.page, data.page)
       const rtl = peekLayerRef.current && getComputedStyle(peekLayerRef.current).direction === 'rtl'
       setPageTransition({
         from: previous.current,
         toPage: data.page,
+        offset: released?.offset ?? 0,
+        width: released?.width,
         reveal: data.dragContext === 'outer',
-        duration:
-          data.dragContext === 'outer'
+        duration: released
+          ? Math.max(120, 280 * (1 - Math.min(1, Math.abs(released.offset) / released.width)))
+          : data.dragContext === 'outer'
             ? EDGE_PAGING.pageDuration
             : COLOROS_MOTION.workspacePageSnapMs,
         direction: (data.page > previous.current.page ? 1 : -1) * (rtl ? -1 : 1),
@@ -48,7 +58,14 @@ export function useOuterPageMotion(
       start?.(data.page)
     }
     previous.current = data
-  }, [data, start])
+  }, [data, start, takeHandoff])
+
+  useLayoutEffect(() => {
+    setPageTransitioning?.(pageTransition !== null)
+    return () => {
+      setPageTransitioning?.(false)
+    }
+  }, [pageTransition, setPageTransitioning])
 
   useLayoutEffect(() => {
     const node = peekLayerRef.current
@@ -78,12 +95,14 @@ export function useOuterPageMotion(
     peekMotion.current?.cancel()
     const duration = reduced ? 0 : pageTransition.duration
     const viewport = peek.closest('[data-edge-paging-viewport]')
-    const distance = pageTransition.direction * (viewport?.getBoundingClientRect().width || width)
+    const distance =
+      pageTransition.direction *
+      (pageTransition.width ?? (viewport?.getBoundingClientRect().width || width))
     const motions = [
-      animatePageTranslation(old, 0, -distance, duration),
+      animatePageTranslation(old, pageTransition.offset, -distance, duration),
       animatePageTranslation(
         current,
-        distance,
+        distance + pageTransition.offset,
         0,
         duration,
         pageTransition.reveal ? { from: 0, to: 1 } : undefined

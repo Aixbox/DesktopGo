@@ -9,13 +9,15 @@ import {
 } from '@dnd-kit/core'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
+  useMemo,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
   type ComponentProps,
 } from 'react'
-import type { FolderSize, GridSpan } from '../model'
-import type { PageAnchorEntry } from '../domain/topLevelLayout'
+import type { FolderSize, GridSpan, GridItem } from '../model'
+import { getPageAnchorEntries, type PageAnchorEntry } from '../domain/topLevelLayout'
+import type { PageSwipeVisual } from '../hooks/usePageSwipePreview'
 import { OuterGridPageLayer, type OuterGridPageData } from './OuterGridPageLayer'
 import { useOuterPageMotion } from '../hooks/useOuterPageMotion'
 import type { EdgePagingControl } from '../hooks/useEdgeAutoPaging'
@@ -26,6 +28,8 @@ interface IconConfigLike {
 }
 
 interface OuterGridViewProps {
+  pageSwipe?: PageSwipeVisual
+  itemById?: ReadonlyMap<string, GridItem>
   edgePaging?: EdgePagingControl
   resizeActions?: GridItemResizeActions
   gridRef: RefObject<HTMLDivElement | null>
@@ -92,6 +96,8 @@ interface OuterGridViewProps {
 }
 
 export function OuterGridView({
+  pageSwipe,
+  itemById,
   edgePaging,
   resizeActions,
   gridRef,
@@ -168,8 +174,53 @@ export function OuterGridView({
   const { pageTransition, oldPageLayerRef, currentPageLayerRef, peekLayerRef } = useOuterPageMotion(
     currentPageData,
     gridWidth,
-    edgePaging
+    edgePaging,
+    pageSwipe
   )
+
+  const preview = pageSwipe?.preview
+  const adjacentPages = useMemo(() => {
+    if (!preview || preview.page !== currentPage || !itemById) return []
+    return [currentPage - 1, currentPage + 1]
+      .filter(page => page >= 0 && page < preview.pageCount)
+      .map(page => ({
+        page,
+        x: (page - currentPage) * preview.width * preview.direction,
+        entries: getPageAnchorEntries(
+          pageOrder,
+          Array.from(itemById.values()),
+          page,
+          pageCellCount,
+          columns
+        ),
+      }))
+  }, [preview, currentPage, itemById, pageOrder, pageCellCount, columns])
+  const layerProps = {
+    columns,
+    rows,
+    itemWidth,
+    itemHeight,
+    gridGap,
+    pageCellCount,
+    iconConfig,
+    selectionMode,
+    selectedSet,
+    openFolderId,
+    activeFolderSharedLayoutId,
+    onToggleSelectIcon,
+    onTilePointerDown,
+    onTileClickCapture,
+    onOpenFolder,
+    onLaunchIcon,
+    onResizeFolder,
+    folderResizePreview,
+    onPreviewFolderResize,
+    onCancelFolderResize,
+    onResizeWidget,
+    onDissolveFolder,
+    bindTileRef,
+    reorderAnimationMs,
+  }
 
   return (
     <GridItemResizeContext.Provider value={resizeActions ?? null}>
@@ -199,79 +250,57 @@ export function OuterGridView({
               方向键移动，Enter 或 Space 确认，Esc 取消
             </div>
           ) : null}
-          <div ref={peekLayerRef} className="relative h-full w-full">
-            {pageTransition ? (
+          <div
+            ref={pageSwipe?.trackRef}
+            data-page-swipe-track
+            data-page-swipe-active={preview ? 'true' : undefined}
+            className="relative h-full w-full"
+            style={{ willChange: preview ? 'transform' : undefined }}
+          >
+            <div ref={peekLayerRef} className="relative h-full w-full">
+              {pageTransition ? (
+                <div
+                  ref={oldPageLayerRef}
+                  key={`page-transition-from-${pageTransition.from.page}`}
+                  className="absolute inset-0 z-10 pointer-events-none"
+                >
+                  <OuterGridPageLayer
+                    {...layerProps}
+                    data={pageTransition.from}
+                    interactive={false}
+                  />
+                </div>
+              ) : null}
               <div
-                ref={oldPageLayerRef}
-                key={`page-transition-from-${pageTransition.from.page}`}
-                className="absolute inset-0 z-10 pointer-events-none"
+                ref={currentPageLayerRef}
+                key={`page-${currentPage}`}
+                className={pageTransition ? 'absolute inset-0 z-20' : 'relative h-full w-full'}
               >
                 <OuterGridPageLayer
-                  data={pageTransition.from}
-                  interactive={false}
-                  columns={columns}
-                  rows={rows}
-                  itemWidth={itemWidth}
-                  itemHeight={itemHeight}
-                  gridGap={gridGap}
-                  pageCellCount={pageCellCount}
-                  iconConfig={iconConfig}
-                  selectionMode={selectionMode}
-                  selectedSet={selectedSet}
-                  openFolderId={openFolderId}
-                  activeFolderSharedLayoutId={activeFolderSharedLayoutId}
-                  onToggleSelectIcon={onToggleSelectIcon}
-                  onTilePointerDown={onTilePointerDown}
-                  onTileClickCapture={onTileClickCapture}
-                  onOpenFolder={onOpenFolder}
-                  onLaunchIcon={onLaunchIcon}
-                  onResizeFolder={onResizeFolder}
-                  folderResizePreview={folderResizePreview}
-                  onPreviewFolderResize={onPreviewFolderResize}
-                  onCancelFolderResize={onCancelFolderResize}
-                  onResizeWidget={onResizeWidget}
-                  onDissolveFolder={onDissolveFolder}
-                  bindTileRef={bindTileRef}
-                  reorderAnimationMs={reorderAnimationMs}
+                  {...layerProps}
+                  data={currentPageData}
+                  interactive
+                  pageOrder={pageOrder}
+                  gridRef={gridRef}
                 />
               </div>
-            ) : null}
-            <div
-              ref={currentPageLayerRef}
-              key={`page-${currentPage}`}
-              className={pageTransition ? 'absolute inset-0 z-20' : 'relative h-full w-full'}
-            >
-              <OuterGridPageLayer
-                data={currentPageData}
-                interactive
-                pageOrder={pageOrder}
-                gridRef={gridRef}
-                columns={columns}
-                rows={rows}
-                itemWidth={itemWidth}
-                itemHeight={itemHeight}
-                gridGap={gridGap}
-                pageCellCount={pageCellCount}
-                iconConfig={iconConfig}
-                selectionMode={selectionMode}
-                selectedSet={selectedSet}
-                openFolderId={openFolderId}
-                activeFolderSharedLayoutId={activeFolderSharedLayoutId}
-                onToggleSelectIcon={onToggleSelectIcon}
-                onTilePointerDown={onTilePointerDown}
-                onTileClickCapture={onTileClickCapture}
-                onOpenFolder={onOpenFolder}
-                onLaunchIcon={onLaunchIcon}
-                onResizeFolder={onResizeFolder}
-                folderResizePreview={folderResizePreview}
-                onPreviewFolderResize={onPreviewFolderResize}
-                onCancelFolderResize={onCancelFolderResize}
-                onResizeWidget={onResizeWidget}
-                onDissolveFolder={onDissolveFolder}
-                bindTileRef={bindTileRef}
-                reorderAnimationMs={reorderAnimationMs}
-              />
             </div>
+            {adjacentPages.map(neighbor => (
+              <div
+                key={`swipe-preview-${neighbor.page}`}
+                data-page-swipe-neighbor={neighbor.page}
+                className="pointer-events-none absolute inset-0"
+                style={{ transform: `translate3d(${neighbor.x}px, 0, 0)` }}
+                inert
+                aria-hidden="true"
+              >
+                <OuterGridPageLayer
+                  {...layerProps}
+                  data={{ ...currentPageData, page: neighbor.page, entries: neighbor.entries }}
+                  interactive={false}
+                />
+              </div>
+            ))}
           </div>
           {canGoLeft ? (
             <button

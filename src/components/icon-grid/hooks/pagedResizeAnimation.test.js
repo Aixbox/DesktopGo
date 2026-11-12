@@ -34,6 +34,7 @@ const mocks = {
   './icon-grid/hooks/useGridGeometryKey': { useGridGeometryKey: () => 'stable' },
   './icon-grid/hooks/usePageBounds': { usePageBounds: noop },
   './icon-grid/hooks/useWheelPageStep': { useWheelPageStep: noop },
+  './icon-grid/hooks/useMousePageSwipe': { useMousePageSwipe: () => ({ handlers: {} }) },
 }
 for (const name of [
   'OuterGridView',
